@@ -1,13 +1,23 @@
 import type {
   EditorId,
   EnvironmentId,
+  ProjectEntry,
   ResolvedKeybindingsConfig,
   ScopedThreadRef,
 } from "@t3tools/contracts";
 import type { SelectedLineRange } from "@pierre/diffs";
 import { Editor } from "@pierre/diffs/editor";
 import { EditorProvider, File, Virtualizer } from "@pierre/diffs/react";
-import { ChevronRight, Code2, Eye, FolderTree, Globe2, LoaderCircle } from "lucide-react";
+import {
+  ChevronRight,
+  Code2,
+  Eye,
+  FileText,
+  Folder,
+  FolderTree,
+  Globe2,
+  LoaderCircle,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { isBrowserPreviewFile, openFileInPreview } from "~/browser/openFileInPreview";
@@ -21,6 +31,7 @@ import { cn } from "~/lib/utils";
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
 import { resolvePathLinkTarget } from "~/terminal-links";
 import { ScrollArea } from "~/components/ui/scroll-area";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { Toggle } from "~/components/ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
@@ -40,13 +51,25 @@ import {
 import { installFileEditorDismissal } from "./fileEditorDismissal";
 import { LocalCommentAnnotation } from "./LocalCommentAnnotation";
 import { projectFileCacheKey } from "./fileContentRevision";
-import { fileBreadcrumbs } from "./filePath";
-import { isMarkdownPreviewFile, setMarkdownTaskChecked } from "./filePreviewMode";
+import {
+  directChildProjectEntries,
+  fileBreadcrumbs,
+  firstFileInDirectory,
+  parentDirectoryPath,
+} from "./filePath";
+import {
+  readMarkdownPreviewMode,
+  isMarkdownPreviewFile,
+  setMarkdownTaskChecked,
+  shouldRenderMarkdownPreview,
+  writeMarkdownPreviewMode,
+} from "./filePreviewMode";
 import { FileSaveCoordinator } from "./fileSaveCoordinator";
 import {
   confirmProjectFileQueryData,
   getOptimisticProjectFileQueryData,
   setProjectFileQueryData,
+  useProjectEntriesQuery,
   useProjectFileQuery,
 } from "./projectFilesQueryState";
 
@@ -65,6 +88,7 @@ interface FilePreviewPanelProps {
 
 const FILE_EXPLORER_STORAGE_KEY = "t3code.fileExplorerOpen";
 const FILE_SAVE_DEBOUNCE_MS = 500;
+const MAX_BREADCRUMB_CHILDREN = 80;
 
 interface EditableFileSurfaceProps {
   environmentId: EnvironmentId;
@@ -375,6 +399,12 @@ function initialExplorerOpen(): boolean {
   }
 }
 
+function projectEntryName(entry: ProjectEntry): string {
+  const trimmedPath = entry.path.replace(/\/+$/, "");
+  const lastSeparatorIndex = trimmedPath.lastIndexOf("/");
+  return lastSeparatorIndex === -1 ? trimmedPath : trimmedPath.slice(lastSeparatorIndex + 1);
+}
+
 export default function FilePreviewPanel({
   environmentId,
   cwd,
@@ -390,11 +420,18 @@ export default function FilePreviewPanel({
   const { resolvedTheme } = useTheme();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const file = useProjectFileQuery(environmentId, cwd, relativePath);
+  const projectEntriesQuery = useProjectEntriesQuery(environmentId, cwd);
+  const projectEntries = projectEntriesQuery.data?.entries ?? [];
   const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
-  const [renderedMarkdownPath, setRenderedMarkdownPath] = useState<string | null>(null);
+  const [markdownPreviewMode, setMarkdownPreviewMode] = useState(readMarkdownPreviewMode);
+  const [treeRevealRequest, setTreeRevealRequest] = useState<{
+    readonly id: number;
+    readonly path: string;
+  } | null>(null);
   const breadcrumbRef = useRef<HTMLDivElement>(null);
+  const treeRevealRequestIdRef = useRef(0);
   const isMarkdown = relativePath ? isMarkdownPreviewFile(relativePath) : false;
-  const renderMarkdown = isMarkdown && renderedMarkdownPath === relativePath;
+  const renderMarkdown = shouldRenderMarkdownPreview(relativePath, markdownPreviewMode);
   const canOpenInBrowser =
     relativePath !== null && isPreviewSupportedInRuntime() && isBrowserPreviewFile(relativePath);
   const absolutePath = relativePath ? resolvePathLinkTarget(relativePath, cwd) : null;
@@ -418,6 +455,46 @@ export default function FilePreviewPanel({
       } catch {}
       return next;
     });
+  };
+
+  const setRenderMarkdown = (rendered: boolean) => {
+    const nextMode = rendered ? "rendered" : "source";
+    setMarkdownPreviewMode(nextMode);
+    writeMarkdownPreviewMode(nextMode);
+  };
+
+  const revealDirectoryInTree = (path: string) => {
+    setExplorerOpen(true);
+    setTreeRevealRequest({
+      id: ++treeRevealRequestIdRef.current,
+      path,
+    });
+  };
+
+  const openEntryFromBreadcrumb = (entry: ProjectEntry) => {
+    if (entry.kind === "file") {
+      onOpenFile(entry.path);
+      return;
+    }
+    const firstFile = firstFileInDirectory(projectEntries, entry.path);
+    if (firstFile) {
+      onOpenFile(firstFile);
+      return;
+    }
+    revealDirectoryInTree(entry.path);
+  };
+
+  const handleBreadcrumbModifiedNavigation = (
+    event: Pick<MouseEvent, "ctrlKey" | "metaKey" | "preventDefault" | "stopPropagation">,
+    crumb: (typeof breadcrumbs)[number],
+  ): boolean => {
+    if (!event.metaKey && !event.ctrlKey) {
+      return false;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    revealDirectoryInTree(crumb.kind === "file" ? parentDirectoryPath(crumb.path) : crumb.path);
+    return true;
   };
 
   const handleOpenInBrowser = () => {
@@ -454,17 +531,61 @@ export default function FilePreviewPanel({
                   {index > 0 ? (
                     <ChevronRight className="mx-1 size-3.5 shrink-0 text-muted-foreground/60" />
                   ) : null}
-                  <span
-                    className={cn(
-                      "max-w-40 truncate",
-                      crumb.kind === "file"
-                        ? "font-medium text-foreground"
-                        : "text-muted-foreground",
-                    )}
-                    title={crumb.path || projectName}
-                  >
-                    {crumb.label}
-                  </span>
+                  {crumb.kind === "file" ? (
+                    <button
+                      type="button"
+                      className="max-w-40 truncate rounded px-1 py-0.5 text-left font-medium text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      title={crumb.path || projectName}
+                      onClick={(event) => {
+                        handleBreadcrumbModifiedNavigation(event, crumb);
+                      }}
+                    >
+                      {crumb.label}
+                    </button>
+                  ) : (
+                    <Menu>
+                      <MenuTrigger
+                        render={
+                          <button
+                            type="button"
+                            className="max-w-40 truncate rounded px-1 py-0.5 text-left text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            title={crumb.path || projectName}
+                            onClick={(event) => {
+                              handleBreadcrumbModifiedNavigation(event, crumb);
+                            }}
+                            onPointerDown={(event) => {
+                              handleBreadcrumbModifiedNavigation(event, crumb);
+                            }}
+                          />
+                        }
+                      >
+                        {crumb.label}
+                      </MenuTrigger>
+                      <MenuPopup align="start" className="w-72">
+                        {directChildProjectEntries(projectEntries, crumb.path)
+                          .slice(0, MAX_BREADCRUMB_CHILDREN)
+                          .map((entry) => (
+                            <MenuItem
+                              key={entry.path}
+                              className="min-w-0"
+                              onClick={() => openEntryFromBreadcrumb(entry)}
+                            >
+                              {entry.kind === "directory" ? (
+                                <Folder className="size-4" />
+                              ) : (
+                                <FileText className="size-4" />
+                              )}
+                              <span className="min-w-0 flex-1 truncate">
+                                {projectEntryName(entry)}
+                              </span>
+                            </MenuItem>
+                          ))}
+                        {directChildProjectEntries(projectEntries, crumb.path).length === 0 ? (
+                          <MenuItem disabled>No children</MenuItem>
+                        ) : null}
+                      </MenuPopup>
+                    </Menu>
+                  )}
                 </div>
               ))}
             </div>
@@ -485,9 +606,7 @@ export default function FilePreviewPanel({
                   <Toggle
                     className="shrink-0"
                     pressed={renderMarkdown}
-                    onPressedChange={(pressed) =>
-                      setRenderedMarkdownPath(pressed ? relativePath : null)
-                    }
+                    onPressedChange={setRenderMarkdown}
                     aria-label={renderMarkdown ? "Show markdown source" : "Show rendered markdown"}
                     variant="ghost"
                     size="sm"
@@ -623,6 +742,7 @@ export default function FilePreviewPanel({
               environmentId={environmentId}
               cwd={cwd}
               projectName={projectName}
+              revealRequest={treeRevealRequest}
               onOpenFile={onOpenFile}
             />
           </aside>

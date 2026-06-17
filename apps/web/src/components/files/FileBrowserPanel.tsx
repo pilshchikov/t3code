@@ -1,6 +1,6 @@
 import type { EnvironmentId, ProjectEntry } from "@t3tools/contracts";
 import { FileTree, useFileTree } from "@pierre/trees/react";
-import { RefreshCw, Search } from "lucide-react";
+import { Maximize2, Minimize2, RefreshCw, Search } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 
 import { useTheme } from "~/hooks/useTheme";
@@ -13,6 +13,7 @@ interface FileBrowserPanelProps {
   environmentId: EnvironmentId;
   cwd: string;
   projectName: string;
+  revealRequest?: { readonly id: number; readonly path: string } | null;
   onOpenFile: (relativePath: string) => void;
 }
 
@@ -36,6 +37,7 @@ export default function FileBrowserPanel({
   environmentId,
   cwd,
   projectName,
+  revealRequest,
   onOpenFile,
 }: FileBrowserPanelProps) {
   const { resolvedTheme } = useTheme();
@@ -47,6 +49,10 @@ export default function FileBrowserPanel({
   );
   const entryKindsRef = useRef<ReadonlyMap<string, ProjectEntry["kind"]>>(entryKinds);
   const treePaths = useMemo(() => entries.map(treePath), [entries]);
+  const directoryTreePaths = useMemo(
+    () => entries.filter((entry) => entry.kind === "directory").map(treePath),
+    [entries],
+  );
   const previousTreePathsRef = useRef<readonly string[]>([]);
 
   const { model } = useFileTree({
@@ -73,6 +79,44 @@ export default function FileBrowserPanel({
     model.resetPaths(treePaths);
   }, [entryKinds, model, treePaths]);
 
+  useEffect(() => {
+    if (!revealRequest) return;
+    if (revealRequest.path.length === 0) {
+      const firstPath = treePaths[0];
+      if (firstPath) {
+        model.scrollToPath(firstPath, { focus: true, offset: "center" });
+      }
+      return;
+    }
+    const treeRevealPath = revealRequest.path.endsWith("/")
+      ? revealRequest.path
+      : `${revealRequest.path}/`;
+    const item = model.getItem(treeRevealPath) ?? model.getItem(revealRequest.path);
+    if (!item) return;
+    if (item.isDirectory() && "expand" in item) {
+      item.expand();
+    }
+    model.scrollToPath(item.getPath(), { focus: true, offset: "center" });
+  }, [model, revealRequest, treePaths]);
+
+  const expandAllDirectories = () => {
+    for (const path of directoryTreePaths) {
+      const item = model.getItem(path);
+      if (item?.isDirectory() && "expand" in item) {
+        item.expand();
+      }
+    }
+  };
+
+  const collapseAllDirectories = () => {
+    for (const path of directoryTreePaths.toReversed()) {
+      const item = model.getItem(path);
+      if (item?.isDirectory() && "collapse" in item) {
+        item.collapse();
+      }
+    }
+  };
+
   const fileCount = useMemo(
     () => entries.reduce((count, entry) => count + (entry.kind === "file" ? 1 : 0), 0),
     [entries],
@@ -93,6 +137,22 @@ export default function FileBrowserPanel({
             {entriesQuery.data?.truncated ? " · partial" : ""}
           </div>
         </div>
+        <button
+          type="button"
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+          aria-label="Expand all directories"
+          onClick={expandAllDirectories}
+        >
+          <Maximize2 className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+          aria-label="Collapse all directories"
+          onClick={collapseAllDirectories}
+        >
+          <Minimize2 className="size-3.5" />
+        </button>
         <button
           type="button"
           className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"

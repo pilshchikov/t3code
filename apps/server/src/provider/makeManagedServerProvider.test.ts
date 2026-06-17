@@ -118,6 +118,7 @@ describe("makeManagedServerProvider", () => {
               Effect.flatMap(() => Deferred.await(releaseCheck)),
               Effect.as(refreshedSnapshot),
             ),
+            enableBackgroundRefresh: true,
             refreshInterval: "1 hour",
           });
 
@@ -143,6 +144,33 @@ describe("makeManagedServerProvider", () => {
       ),
   );
 
+  it.effect("does not run background provider checks unless explicitly enabled", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const checkCalls = yield* Ref.make(0);
+        const provider = yield* makeManagedServerProvider<TestSettings>({
+          maintenanceCapabilities,
+          getSettings: Effect.succeed({ enabled: true }),
+          streamSettings: Stream.empty,
+          haveSettingsChanged: (previous, next) => previous.enabled !== next.enabled,
+          initialSnapshot: () => Effect.succeed(initialSnapshot),
+          checkProvider: Ref.update(checkCalls, (count) => count + 1).pipe(
+            Effect.as(refreshedSnapshot),
+          ),
+          refreshInterval: "1 hour",
+        });
+
+        yield* Effect.yieldNow;
+        assert.strictEqual(yield* Ref.get(checkCalls), 0);
+        assert.deepStrictEqual(yield* provider.getSnapshot, initialSnapshot);
+
+        yield* provider.refresh;
+        assert.strictEqual(yield* Ref.get(checkCalls), 1);
+        assert.deepStrictEqual(yield* provider.getSnapshot, refreshedSnapshot);
+      }),
+    ),
+  );
+
   it.effect("reruns the provider check when streamed settings change", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -164,6 +192,7 @@ describe("makeManagedServerProvider", () => {
                 : Deferred.await(releaseSettingsCheck).pipe(Effect.as(refreshedSnapshotSecond)),
             ),
           ),
+          enableBackgroundRefresh: true,
           refreshInterval: "1 hour",
         });
 
@@ -204,6 +233,7 @@ describe("makeManagedServerProvider", () => {
             Deferred.await(releaseEnrichment).pipe(
               Effect.flatMap(() => publishSnapshot(enrichedSnapshot)),
             ),
+          enableBackgroundRefresh: true,
           refreshInterval: "1 hour",
         });
 
@@ -256,6 +286,7 @@ describe("makeManagedServerProvider", () => {
                 yield* Deferred.succeed(secondCallbackReady, undefined).pipe(Effect.ignore);
               }
             }),
+          enableBackgroundRefresh: true,
           refreshInterval: "1 hour",
         });
 

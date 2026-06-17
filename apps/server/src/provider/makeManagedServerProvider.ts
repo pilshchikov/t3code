@@ -1,4 +1,5 @@
 import type { ServerProvider } from "@t3tools/contracts";
+import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
@@ -11,6 +12,11 @@ import * as Semaphore from "effect/Semaphore";
 
 import type { ServerProviderShape } from "./Services/ServerProvider.ts";
 import { ServerSettingsError } from "@t3tools/contracts";
+
+const ProviderAutoRefreshConfig = Config.boolean("T3CODE_ENABLE_PROVIDER_AUTO_REFRESH").pipe(
+  Config.withDefault(false),
+  Effect.orElseSucceed(() => false),
+);
 
 interface ProviderSnapshotState {
   readonly snapshot: ServerProvider;
@@ -26,6 +32,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
   readonly haveSettingsChanged: (previous: Settings, next: Settings) => boolean;
   readonly initialSnapshot: (settings: Settings) => Effect.Effect<ServerProvider>;
   readonly checkProvider: Effect.Effect<ServerProvider, ServerSettingsError>;
+  readonly enableBackgroundRefresh?: boolean;
   readonly enrichSnapshot?: (input: {
     readonly settings: Settings;
     readonly snapshot: ServerProvider;
@@ -48,6 +55,8 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
   const settingsRef = yield* Ref.make(initialSettings);
   const enrichmentFiberRef = yield* Ref.make<Fiber.Fiber<void, unknown> | null>(null);
   const scope = yield* Effect.scope;
+  const enableBackgroundRefresh =
+    input.enableBackgroundRefresh ?? (yield* ProviderAutoRefreshConfig);
 
   const publishEnrichedSnapshot = Effect.fn("publishEnrichedSnapshot")(function* (
     generation: number,
@@ -138,17 +147,19 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     Effect.asVoid(applySnapshot(nextSettings)),
   ).pipe(Effect.forkScoped);
 
-  yield* Effect.forever(
-    Effect.sleep(input.refreshInterval ?? "60 seconds").pipe(
-      Effect.flatMap(() => refreshSnapshot()),
-      Effect.ignoreCause({ log: true }),
-    ),
-  ).pipe(Effect.forkScoped);
+  if (enableBackgroundRefresh) {
+    yield* Effect.forever(
+      Effect.sleep(input.refreshInterval ?? "60 seconds").pipe(
+        Effect.flatMap(() => refreshSnapshot()),
+        Effect.ignoreCause({ log: true }),
+      ),
+    ).pipe(Effect.forkScoped);
 
-  yield* applySnapshot(initialSettings, { forceRefresh: true }).pipe(
-    Effect.ignoreCause({ log: true }),
-    Effect.forkScoped,
-  );
+    yield* applySnapshot(initialSettings, { forceRefresh: true }).pipe(
+      Effect.ignoreCause({ log: true }),
+      Effect.forkScoped,
+    );
+  }
 
   return {
     maintenanceCapabilities: input.maintenanceCapabilities,

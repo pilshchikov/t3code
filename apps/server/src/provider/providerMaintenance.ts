@@ -458,6 +458,14 @@ export const resolveLatestProviderVersion = Effect.fn("resolveLatestProviderVers
     return cached.version;
   }
 
+  const versionChecksEnabled = yield* Config.boolean("T3CODE_ENABLE_PROVIDER_VERSION_CHECKS").pipe(
+    Config.withDefault(false),
+    Effect.orElseSucceed(() => false),
+  );
+  if (!versionChecksEnabled) {
+    return null;
+  }
+
   const version = yield* fetchNpmLatestVersion(packageName);
   latestVersionCache.set(packageName, {
     expiresAt: now + LATEST_VERSION_CACHE_TTL_MS,

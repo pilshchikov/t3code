@@ -5,7 +5,14 @@ import {
   normalizeFileCommentRange,
   remapFileCommentAnnotations,
 } from "./fileCommentAnnotations";
-import { isMarkdownPreviewFile, setMarkdownTaskChecked } from "./filePreviewMode";
+import {
+  isMarkdownPreviewFile,
+  normalizeMarkdownPreviewMode,
+  readMarkdownPreviewMode,
+  setMarkdownTaskChecked,
+  shouldRenderMarkdownPreview,
+  writeMarkdownPreviewMode,
+} from "./filePreviewMode";
 
 describe("file comment annotations", () => {
   it("normalizes and formats selected line ranges", () => {
@@ -63,6 +70,45 @@ describe("isMarkdownPreviewFile", () => {
   it("does not treat other text files as markdown", () => {
     expect(isMarkdownPreviewFile("docs/guide.txt")).toBe(false);
     expect(isMarkdownPreviewFile("docs/markdown.ts")).toBe(false);
+  });
+});
+
+describe("markdown preview mode preference", () => {
+  function storage(initial: Record<string, string> = {}) {
+    const values = new Map(Object.entries(initial));
+    return {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        values.set(key, value);
+      },
+    };
+  }
+
+  it("normalizes unknown values to source mode", () => {
+    expect(normalizeMarkdownPreviewMode("rendered")).toBe("rendered");
+    expect(normalizeMarkdownPreviewMode("source")).toBe("source");
+    expect(normalizeMarkdownPreviewMode("path/to/README.md")).toBe("source");
+    expect(normalizeMarkdownPreviewMode(null)).toBe("source");
+  });
+
+  it("reads and writes the global markdown preview mode", () => {
+    const testStorage = storage();
+
+    expect(readMarkdownPreviewMode(testStorage)).toBe("source");
+
+    writeMarkdownPreviewMode("rendered", testStorage);
+    expect(readMarkdownPreviewMode(testStorage)).toBe("rendered");
+
+    writeMarkdownPreviewMode("source", testStorage);
+    expect(readMarkdownPreviewMode(testStorage)).toBe("source");
+  });
+
+  it("applies rendered mode to every markdown path", () => {
+    expect(shouldRenderMarkdownPreview("README.md", "rendered")).toBe(true);
+    expect(shouldRenderMarkdownPreview("docs/new-file.mdx", "rendered")).toBe(true);
+    expect(shouldRenderMarkdownPreview("README.md", "source")).toBe(false);
+    expect(shouldRenderMarkdownPreview("src/main.ts", "rendered")).toBe(false);
+    expect(shouldRenderMarkdownPreview(null, "rendered")).toBe(false);
   });
 });
 
