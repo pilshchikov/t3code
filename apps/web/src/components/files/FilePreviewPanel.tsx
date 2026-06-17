@@ -485,10 +485,10 @@ export default function FilePreviewPanel({
   };
 
   const handleBreadcrumbModifiedNavigation = (
-    event: Pick<MouseEvent, "ctrlKey" | "metaKey" | "preventDefault" | "stopPropagation">,
+    event: Pick<MouseEvent, "metaKey" | "preventDefault" | "stopPropagation">,
     crumb: (typeof breadcrumbs)[number],
   ): boolean => {
-    if (!event.metaKey && !event.ctrlKey) {
+    if (!event.metaKey) {
       return false;
     }
     event.preventDefault();

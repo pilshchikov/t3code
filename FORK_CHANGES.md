@@ -35,7 +35,7 @@ fork-specific behavior so future upstream syncs are easier to review.
   - Selecting a file opens it.
   - Selecting a directory opens the first file under that directory, or reveals the directory in
     the tree if no file exists below it.
-  - Cmd/Ctrl-click on a breadcrumb reveals that parent directory in the file tree.
+  - Cmd-click on a breadcrumb reveals that parent directory in the file tree.
   - Source: `apps/web/src/components/files/FilePreviewPanel.tsx`,
     `apps/web/src/components/files/filePath.ts`.
 
