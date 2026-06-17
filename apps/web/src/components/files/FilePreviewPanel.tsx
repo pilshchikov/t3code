@@ -25,8 +25,9 @@ import ChatMarkdown from "~/components/ChatMarkdown";
 import { OpenInPicker } from "~/components/chat/OpenInPicker";
 import { ensureEnvironmentApi } from "~/environmentApi";
 import { usePrimaryEnvironmentId } from "~/environments/primary/context";
+import { useSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
-import { resolveDiffThemeName } from "~/lib/diffRendering";
+import { resolveEditorDiffTheme, type ResolvedEditorDiffTheme } from "~/lib/diffRendering";
 import { cn } from "~/lib/utils";
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
 import { resolvePathLinkTarget } from "~/terminal-links";
@@ -96,7 +97,7 @@ interface EditableFileSurfaceProps {
   relativePath: string;
   composerDraftTarget: ScopedThreadRef | DraftId;
   contents: string;
-  resolvedTheme: "light" | "dark";
+  editorDiffTheme: ResolvedEditorDiffTheme;
   onPendingChange: (relativePath: string, pending: boolean) => void;
 }
 
@@ -138,7 +139,7 @@ function EditableFileSurface({
   relativePath,
   composerDraftTarget,
   contents,
-  resolvedTheme,
+  editorDiffTheme,
   onPendingChange,
 }: EditableFileSurfaceProps) {
   const addReviewComment = useComposerDraftStore((store) => store.addReviewComment);
@@ -324,8 +325,8 @@ function EditableFileSurface({
               onLineSelectionChange: setSelectedRange,
               onLineSelectionEnd: handleLineSelectionEnd,
               overflow: "scroll",
-              theme: resolveDiffThemeName(resolvedTheme),
-              themeType: resolvedTheme,
+              theme: editorDiffTheme.themeName,
+              themeType: editorDiffTheme.themeType,
             }}
             selectedLines={selectedRange}
             lineAnnotations={lineAnnotations}
@@ -360,7 +361,7 @@ function RenderedMarkdownSurface({
   contents,
   threadRef,
   onPendingChange,
-}: Omit<EditableFileSurfaceProps, "resolvedTheme" | "composerDraftTarget"> & {
+}: Omit<EditableFileSurfaceProps, "editorDiffTheme" | "composerDraftTarget"> & {
   threadRef: ScopedThreadRef;
 }) {
   const saveCoordinator = useFileSaveCoordinator({
@@ -418,6 +419,11 @@ export default function FilePreviewPanel({
   onPendingChange,
 }: FilePreviewPanelProps) {
   const { resolvedTheme } = useTheme();
+  const editorSyntaxTheme = useSettings((settings) => settings.editorSyntaxTheme);
+  const editorDiffTheme = useMemo(
+    () => resolveEditorDiffTheme(editorSyntaxTheme, resolvedTheme),
+    [editorSyntaxTheme, resolvedTheme],
+  );
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const file = useProjectFileQuery(environmentId, cwd, relativePath);
   const projectEntriesQuery = useProjectEntriesQuery(environmentId, cwd);
@@ -692,7 +698,7 @@ export default function FilePreviewPanel({
               />
             ) : file.data.truncated ? (
               <Virtualizer
-                key={`${relativePath}:${resolvedTheme}:${file.data.byteLength}`}
+                key={`${relativePath}:${editorDiffTheme.themeName}:${file.data.byteLength}`}
                 className="file-preview-virtualizer min-h-0 flex-1 overflow-auto"
                 config={{
                   overscrollSize: 600,
@@ -708,21 +714,21 @@ export default function FilePreviewPanel({
                   options={{
                     disableFileHeader: true,
                     overflow: "scroll",
-                    theme: resolveDiffThemeName(resolvedTheme),
-                    themeType: resolvedTheme,
+                    theme: editorDiffTheme.themeName,
+                    themeType: editorDiffTheme.themeType,
                   }}
                   className="min-h-full"
                 />
               </Virtualizer>
             ) : (
               <EditableFileSurface
-                key={`${relativePath}:${resolvedTheme}`}
+                key={`${relativePath}:${editorDiffTheme.themeName}`}
                 environmentId={environmentId}
                 cwd={cwd}
                 relativePath={relativePath}
                 composerDraftTarget={composerDraftTarget}
                 contents={file.data.contents}
-                resolvedTheme={resolvedTheme}
+                editorDiffTheme={editorDiffTheme}
                 onPendingChange={onPendingChange}
               />
             )

@@ -49,6 +49,7 @@ import { ensureLocalApi, readLocalApi } from "../../localApi";
 import { useShallow } from "zustand/react/shallow";
 import { selectProjectsAcrossEnvironments, useStore } from "../../store";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
+import { EDITOR_SYNTAX_THEME_OPTIONS, getEditorSyntaxThemeLabel } from "../../lib/diffRendering";
 import { formatRelativeTime, formatRelativeTimeLabel } from "../../timestampFormat";
 import { Button } from "../ui/button";
 import { DraftInput } from "../ui/draft-input";
@@ -401,6 +402,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.diffWordWrap !== DEFAULT_UNIFIED_SETTINGS.diffWordWrap
         ? ["Diff line wrapping"]
         : []),
+      ...(settings.editorSyntaxTheme !== DEFAULT_UNIFIED_SETTINGS.editorSyntaxTheme
+        ? ["Editor theme"]
+        : []),
       ...(settings.diffIgnoreWhitespace !== DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace
         ? ["Diff whitespace changes"]
         : []),
@@ -437,6 +441,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.defaultThreadEnvMode,
       settings.diffIgnoreWhitespace,
       settings.diffWordWrap,
+      settings.editorSyntaxTheme,
       settings.automaticGitFetchInterval,
       settings.enableAssistantStreaming,
       settings.sidebarThreadPreviewCount,
@@ -459,6 +464,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     updateSettings({
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       diffWordWrap: DEFAULT_UNIFIED_SETTINGS.diffWordWrap,
+      editorSyntaxTheme: DEFAULT_UNIFIED_SETTINGS.editorSyntaxTheme,
       diffIgnoreWhitespace: DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace,
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
       autoOpenPlanSidebar: DEFAULT_UNIFIED_SETTINGS.autoOpenPlanSidebar,
@@ -543,6 +549,45 @@ export function GeneralSettingsPanel() {
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
                 {THEME_OPTIONS.map((option) => (
+                  <SelectItem hideIndicator key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          }
+        />
+
+        <SettingsRow
+          title="Editor theme"
+          description="Choose syntax colors for file previews, diffs, and code blocks."
+          resetAction={
+            settings.editorSyntaxTheme !== DEFAULT_UNIFIED_SETTINGS.editorSyntaxTheme ? (
+              <SettingResetButton
+                label="editor theme"
+                onClick={() =>
+                  updateSettings({
+                    editorSyntaxTheme: DEFAULT_UNIFIED_SETTINGS.editorSyntaxTheme,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={settings.editorSyntaxTheme}
+              onValueChange={(value) => {
+                const option = EDITOR_SYNTAX_THEME_OPTIONS.find((entry) => entry.value === value);
+                if (option) {
+                  updateSettings({ editorSyntaxTheme: option.value });
+                }
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-56" aria-label="Editor theme">
+                <SelectValue>{getEditorSyntaxThemeLabel(settings.editorSyntaxTheme)}</SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                {EDITOR_SYNTAX_THEME_OPTIONS.map((option) => (
                   <SelectItem hideIndicator key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>

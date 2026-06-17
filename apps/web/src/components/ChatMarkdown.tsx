@@ -42,9 +42,14 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "./ui/menu";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { openInPreferredEditor } from "../editorPreferences";
-import { resolveDiffThemeName, type DiffThemeName } from "../lib/diffRendering";
+import {
+  resolveEditorDiffTheme,
+  type DiffThemeName,
+  type ResolvedEditorDiffTheme,
+} from "../lib/diffRendering";
 import { fnv1a32 } from "../lib/diffRendering";
 import { LRUCache } from "../lib/lruCache";
+import { useSettings } from "../hooks/useSettings";
 import { useTheme } from "../hooks/useTheme";
 import {
   chatMarkdownClipboardPayload,
@@ -241,24 +246,28 @@ function estimateHighlightedSize(html: string, code: string): number {
   return Math.max(html.length * 2, code.length * 3);
 }
 
-function getHighlighterPromise(language: string): Promise<DiffsHighlighter> {
-  const cached = highlighterPromiseCache.get(language);
+function getHighlighterPromise(
+  language: string,
+  themeName: DiffThemeName,
+): Promise<DiffsHighlighter> {
+  const highlighterCacheKey = `${language}:${themeName}`;
+  const cached = highlighterPromiseCache.get(highlighterCacheKey);
   if (cached) return cached;
 
   const promise = getSharedHighlighter({
-    themes: [resolveDiffThemeName("dark"), resolveDiffThemeName("light")],
+    themes: [themeName],
     langs: [language as SupportedLanguages],
     preferredHighlighter: "shiki-js",
   }).catch((err) => {
-    highlighterPromiseCache.delete(language);
+    highlighterPromiseCache.delete(highlighterCacheKey);
     if (language === "text") {
       // "text" itself failed — Shiki cannot initialize at all, surface the error
       throw err;
     }
     // Language not supported by Shiki — fall back to "text"
-    return getHighlighterPromise("text");
+    return getHighlighterPromise("text", themeName);
   });
-  highlighterPromiseCache.set(language, promise);
+  highlighterPromiseCache.set(highlighterCacheKey, promise);
   return promise;
 }
 
@@ -484,12 +493,14 @@ function MarkdownCodeBlock({
   language,
   fenceTitle,
   theme,
+  editorDiffTheme,
   children,
 }: {
   code: string;
   language: string;
   fenceTitle: string | null;
   theme: "light" | "dark";
+  editorDiffTheme: ResolvedEditorDiffTheme;
   children: ReactNode;
 }) {
   const [copied, setCopied] = useState(false);
@@ -530,7 +541,14 @@ function MarkdownCodeBlock({
     <div
       className="chat-markdown-codeblock leading-snug"
       data-language={language}
+      data-editor-theme-type={editorDiffTheme.themeType}
       data-wrap={wrapped ? "true" : "false"}
+      style={
+        {
+          "--t3-editor-code-bg": editorDiffTheme.background,
+          "--t3-editor-code-fg": editorDiffTheme.foreground,
+        } as React.CSSProperties
+      }
     >
       <div className="chat-markdown-codeblock-header select-none">
         <span className="chat-markdown-codeblock-title">
@@ -635,7 +653,7 @@ function UncachedShikiCodeBlock({
   cacheKey,
   isStreaming,
 }: UncachedShikiCodeBlockProps) {
-  const highlighter = use(getHighlighterPromise(language));
+  const highlighter = use(getHighlighterPromise(language, themeName));
   const highlightedHtml = useMemo(() => {
     try {
       return highlighter.codeToHtml(code, { lang: language, theme: themeName });
@@ -1189,7 +1207,12 @@ function ChatMarkdown({
   lineBreaks = false,
 }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
-  const diffThemeName = resolveDiffThemeName(resolvedTheme);
+  const editorSyntaxTheme = useSettings((settings) => settings.editorSyntaxTheme);
+  const editorDiffTheme = useMemo(
+    () => resolveEditorDiffTheme(editorSyntaxTheme, resolvedTheme),
+    [editorSyntaxTheme, resolvedTheme],
+  );
+  const diffThemeName = editorDiffTheme.themeName;
   const markdownFileLinkMetaByHref = useMemo(() => {
     const metaByHref = new Map<
       string,
@@ -1359,6 +1382,7 @@ function ChatMarkdown({
             language={language}
             fenceTitle={fenceTitle}
             theme={resolvedTheme}
+            editorDiffTheme={editorDiffTheme}
           >
             <CodeHighlightErrorBoundary fallback={<pre {...props}>{children}</pre>}>
               <Suspense fallback={<pre {...props}>{children}</pre>}>

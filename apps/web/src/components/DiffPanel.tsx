@@ -32,7 +32,7 @@ import {
   buildFileDiffRenderKey,
   getDiffCollapseIconClassName,
   getRenderablePatch,
-  resolveDiffThemeName,
+  resolveEditorDiffTheme,
   resolveFileDiffPath,
 } from "../lib/diffRendering";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
@@ -158,6 +158,7 @@ export default function DiffPanel({ mode = "inline", composerDraftTarget }: Diff
   const navigate = useNavigate();
   const { resolvedTheme } = useTheme();
   const settings = useSettings();
+  const editorDiffTheme = resolveEditorDiffTheme(settings.editorSyntaxTheme, resolvedTheme);
   const [diffRenderMode, setDiffRenderMode] = useState<DiffRenderMode>("stacked");
   const [diffWordWrap, setDiffWordWrap] = useState(settings.diffWordWrap);
   const [diffIgnoreWhitespace, setDiffIgnoreWhitespace] = useState(settings.diffIgnoreWhitespace);
@@ -723,8 +724,8 @@ export default function DiffPanel({ mode = "inline", composerDraftTarget }: Diff
                           diffStyle: diffRenderMode === "split" ? "split" : "unified",
                           lineDiffType: "none",
                           overflow: diffWordWrap ? "wrap" : "scroll",
-                          theme: resolveDiffThemeName(resolvedTheme),
-                          themeType: resolvedTheme as DiffThemeType,
+                          theme: editorDiffTheme.themeName,
+                          themeType: editorDiffTheme.themeType as DiffThemeType,
                           unsafeCSS: DIFF_PANEL_UNSAFE_CSS,
                         }}
                       />

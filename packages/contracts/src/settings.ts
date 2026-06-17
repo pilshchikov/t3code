@@ -13,6 +13,19 @@ export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"])
 export type TimestampFormat = typeof TimestampFormat.Type;
 export const DEFAULT_TIMESTAMP_FORMAT: TimestampFormat = "locale";
 
+export const EditorSyntaxTheme = Schema.Literals([
+  "app",
+  "jetbrains-dracula-night",
+  "dracula",
+  "dark-plus",
+  "github-dark-default",
+  "tokyo-night",
+  "catppuccin-mocha",
+  "vesper",
+]);
+export type EditorSyntaxTheme = typeof EditorSyntaxTheme.Type;
+export const DEFAULT_EDITOR_SYNTAX_THEME: EditorSyntaxTheme = "app";
+
 export const SidebarProjectSortOrder = Schema.Literals(["updated_at", "created_at", "manual"]);
 export type SidebarProjectSortOrder = typeof SidebarProjectSortOrder.Type;
 export const DEFAULT_SIDEBAR_PROJECT_SORT_ORDER: SidebarProjectSortOrder = "updated_at";
@@ -48,6 +61,9 @@ export const ClientSettingsSchema = Schema.Struct({
   ),
   diffIgnoreWhitespace: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   diffWordWrap: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  editorSyntaxTheme: EditorSyntaxTheme.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_EDITOR_SYNTAX_THEME)),
+  ),
   // Model favorites. Historically keyed by provider kind, now
   // widened to `ProviderInstanceId` so users can favorite a specific model
   // on a custom provider instance (e.g. "Codex Personal · gpt-5") without
@@ -512,6 +528,7 @@ export const ClientSettingsPatch = Schema.Struct({
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
   diffIgnoreWhitespace: Schema.optionalKey(Schema.Boolean),
   diffWordWrap: Schema.optionalKey(Schema.Boolean),
+  editorSyntaxTheme: Schema.optionalKey(EditorSyntaxTheme),
   favorites: Schema.optionalKey(
     Schema.Array(
       Schema.Struct({

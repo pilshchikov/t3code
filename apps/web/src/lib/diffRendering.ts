@@ -1,15 +1,149 @@
 import { parsePatchFiles } from "@pierre/diffs/utils/parsePatchFiles";
-import type { FileDiffMetadata } from "@pierre/diffs/types";
+import {
+  registerCustomTheme,
+  resolveTheme,
+  type DiffsThemeNames,
+  type FileDiffMetadata,
+  type ThemeRegistration,
+} from "@pierre/diffs";
+import type { EditorSyntaxTheme } from "@t3tools/contracts/settings";
 
 export const DIFF_THEME_NAMES = {
   light: "pierre-light",
   dark: "pierre-dark",
 } as const;
 
-export type DiffThemeName = (typeof DIFF_THEME_NAMES)[keyof typeof DIFF_THEME_NAMES];
+const JETBRAINS_DRACULA_NIGHT_THEME_NAME = "t3-jetbrains-dracula-night";
+const JETBRAINS_DRACULA_NIGHT_BG = "#0b0d12";
+const JETBRAINS_DRACULA_NIGHT_FG = "#f4f4ee";
+
+export const EDITOR_SYNTAX_THEME_OPTIONS: ReadonlyArray<{
+  value: EditorSyntaxTheme;
+  label: string;
+}> = [
+  { value: "app", label: "Follow app" },
+  { value: "jetbrains-dracula-night", label: "JetBrains Dracula Night" },
+  { value: "dracula", label: "Dracula" },
+  { value: "dark-plus", label: "Dark+" },
+  { value: "github-dark-default", label: "GitHub Dark" },
+  { value: "tokyo-night", label: "Tokyo Night" },
+  { value: "catppuccin-mocha", label: "Catppuccin Mocha" },
+  { value: "vesper", label: "Vesper" },
+];
+
+const EDITOR_SYNTAX_THEME_NAMES = {
+  "jetbrains-dracula-night": JETBRAINS_DRACULA_NIGHT_THEME_NAME,
+  dracula: "dracula",
+  "dark-plus": "dark-plus",
+  "github-dark-default": "github-dark-default",
+  "tokyo-night": "tokyo-night",
+  "catppuccin-mocha": "catppuccin-mocha",
+  vesper: "vesper",
+} satisfies Record<Exclude<EditorSyntaxTheme, "app">, DiffsThemeNames>;
+
+const EDITOR_SYNTAX_THEME_SURFACES = {
+  "jetbrains-dracula-night": {
+    background: JETBRAINS_DRACULA_NIGHT_BG,
+    foreground: JETBRAINS_DRACULA_NIGHT_FG,
+  },
+  dracula: { background: "#282a36", foreground: "#f8f8f2" },
+  "dark-plus": { background: "#1e1e1e", foreground: "#d4d4d4" },
+  "github-dark-default": { background: "#0d1117", foreground: "#e6edf3" },
+  "tokyo-night": { background: "#1a1b26", foreground: "#c0caf5" },
+  "catppuccin-mocha": { background: "#1e1e2e", foreground: "#cdd6f4" },
+  vesper: { background: "#101010", foreground: "#ffffff" },
+} satisfies Record<Exclude<EditorSyntaxTheme, "app">, { background: string; foreground: string }>;
+
+let customEditorThemesRegistered = false;
+
+function ensureCustomEditorThemesRegistered() {
+  if (customEditorThemesRegistered) return;
+  customEditorThemesRegistered = true;
+
+  registerCustomTheme(JETBRAINS_DRACULA_NIGHT_THEME_NAME, async () => {
+    const dracula = await resolveTheme("dracula");
+    const settings = dracula.settings.map((entry, index) =>
+      index === 0
+        ? {
+            ...entry,
+            settings: {
+              ...entry.settings,
+              background: JETBRAINS_DRACULA_NIGHT_BG,
+              foreground: JETBRAINS_DRACULA_NIGHT_FG,
+            },
+          }
+        : entry,
+    );
+
+    return {
+      ...dracula,
+      name: JETBRAINS_DRACULA_NIGHT_THEME_NAME,
+      displayName: "JetBrains Dracula Night",
+      bg: JETBRAINS_DRACULA_NIGHT_BG,
+      fg: JETBRAINS_DRACULA_NIGHT_FG,
+      colors: {
+        ...dracula.colors,
+        "editor.background": JETBRAINS_DRACULA_NIGHT_BG,
+        "editor.foreground": JETBRAINS_DRACULA_NIGHT_FG,
+        "editor.lineHighlightBackground": "#151925",
+        "editor.selectionBackground": "#304057",
+        "editor.inactiveSelectionBackground": "#253044",
+        "editorCursor.foreground": "#bbbbbb",
+        "editorLineNumber.foreground": "#596274",
+        "editorLineNumber.activeForeground": "#aeb7c4",
+        "gitDecoration.addedResourceForeground": "#50fa7b",
+        "gitDecoration.deletedResourceForeground": "#ff5555",
+        "gitDecoration.modifiedResourceForeground": "#8be9fd",
+        "terminal.ansiGreen": "#50fa7b",
+        "terminal.ansiRed": "#ff5555",
+        "terminal.ansiBlue": "#8be9fd",
+      },
+      settings,
+      type: "dark",
+    } satisfies ThemeRegistration;
+  });
+}
+
+export type DiffThemeName = DiffsThemeNames;
+
+export interface ResolvedEditorDiffTheme {
+  readonly themeName: DiffThemeName;
+  readonly themeType: "light" | "dark";
+  readonly background: string;
+  readonly foreground: string;
+}
 
 export function resolveDiffThemeName(theme: "light" | "dark"): DiffThemeName {
   return theme === "dark" ? DIFF_THEME_NAMES.dark : DIFF_THEME_NAMES.light;
+}
+
+export function resolveEditorDiffTheme(
+  editorSyntaxTheme: EditorSyntaxTheme,
+  appResolvedTheme: "light" | "dark",
+): ResolvedEditorDiffTheme {
+  ensureCustomEditorThemesRegistered();
+  if (editorSyntaxTheme === "app") {
+    return {
+      themeName: resolveDiffThemeName(appResolvedTheme),
+      themeType: appResolvedTheme,
+      background: appResolvedTheme === "dark" ? "#0a0a0a" : "#ffffff",
+      foreground: appResolvedTheme === "dark" ? "#ffffff" : "#000000",
+    };
+  }
+
+  const surface = EDITOR_SYNTAX_THEME_SURFACES[editorSyntaxTheme];
+  return {
+    themeName: EDITOR_SYNTAX_THEME_NAMES[editorSyntaxTheme],
+    themeType: "dark",
+    background: surface.background,
+    foreground: surface.foreground,
+  };
+}
+
+export function getEditorSyntaxThemeLabel(theme: EditorSyntaxTheme): string {
+  return (
+    EDITOR_SYNTAX_THEME_OPTIONS.find((option) => option.value === theme)?.label ?? "Follow app"
+  );
 }
 
 const FNV_OFFSET_BASIS_32 = 0x811c9dc5;

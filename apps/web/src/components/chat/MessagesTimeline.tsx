@@ -33,9 +33,11 @@ import { type TurnDiffSummary } from "../../types";
 import { summarizeTurnDiffStats } from "../../lib/turnDiffTree";
 import {
   getRenderablePatch,
-  resolveDiffThemeName,
+  resolveEditorDiffTheme,
+  type ResolvedEditorDiffTheme,
   resolveFileDiffPath,
 } from "../../lib/diffRendering";
+import { useSettings } from "../../hooks/useSettings";
 import ChatMarkdown from "../ChatMarkdown";
 import {
   BotIcon,
@@ -120,6 +122,7 @@ interface TimelineRowSharedState {
   threadRef: ScopedThreadRef | null;
   markdownCwd: string | undefined;
   resolvedTheme: "light" | "dark";
+  editorDiffTheme: ResolvedEditorDiffTheme;
   workspaceRoot: string | undefined;
   skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
   activeThreadEnvironmentId: EnvironmentId;
@@ -194,6 +197,11 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   skills = EMPTY_TIMELINE_SKILLS,
   onIsAtEndChange,
 }: MessagesTimelineProps) {
+  const editorSyntaxTheme = useSettings((settings) => settings.editorSyntaxTheme);
+  const editorDiffTheme = useMemo(
+    () => resolveEditorDiffTheme(editorSyntaxTheme, resolvedTheme),
+    [editorSyntaxTheme, resolvedTheme],
+  );
   const [expandedTurnIds, setExpandedTurnIds] = useState<ReadonlySet<TurnId>>(new Set());
 
   // Toggling a fold inserts/removes rows between the fold row and the final
@@ -317,6 +325,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       threadRef: parseScopedThreadKey(routeThreadKey),
       markdownCwd,
       resolvedTheme,
+      editorDiffTheme,
       workspaceRoot,
       skills,
       activeThreadEnvironmentId,
@@ -330,6 +339,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       routeThreadKey,
       markdownCwd,
       resolvedTheme,
+      editorDiffTheme,
       workspaceRoot,
       skills,
       activeThreadEnvironmentId,
@@ -1309,7 +1319,8 @@ function UserMessageReviewCommentCard({ comment }: { comment: ReviewCommentConte
             options={{
               collapsed: false,
               diffStyle: "unified",
-              theme: resolveDiffThemeName(ctx.resolvedTheme),
+              theme: ctx.editorDiffTheme.themeName,
+              themeType: ctx.editorDiffTheme.themeType,
             }}
           />
         ))}

@@ -569,6 +569,12 @@ label:has(> select#reasoning-effort) select {
   background: color-mix(in srgb, var(--muted) 78%, var(--background));
 }
 
+.chat-markdown .chat-markdown-codeblock[data-editor-theme-type="dark"] {
+  border-color: color-mix(in srgb, var(--t3-editor-code-fg) 16%, var(--t3-editor-code-bg));
+  background: var(--t3-editor-code-bg);
+  color: var(--t3-editor-code-fg);
+}
+
 .chat-markdown .chat-markdown-codeblock-header {
   display: flex;
   align-items: center;
@@ -578,6 +584,14 @@ label:has(> select#reasoning-effort) select {
   background: var(--muted);
   padding: 0.25rem 0.375rem 0.25rem 0.7rem;
   color: var(--muted-foreground);
+}
+
+.chat-markdown
+  .chat-markdown-codeblock[data-editor-theme-type="dark"]
+  .chat-markdown-codeblock-header {
+  border-bottom-color: color-mix(in srgb, var(--t3-editor-code-fg) 12%, var(--t3-editor-code-bg));
+  background: color-mix(in srgb, var(--t3-editor-code-fg) 5%, var(--t3-editor-code-bg));
+  color: color-mix(in srgb, var(--t3-editor-code-fg) 68%, var(--t3-editor-code-bg));
 }
 
 .chat-markdown .chat-markdown-codeblock-title {
@@ -616,6 +630,10 @@ label:has(> select#reasoning-effort) select {
 
 .chat-markdown .chat-markdown-shiki .shiki {
   background: transparent !important;
+}
+
+.chat-markdown .chat-markdown-codeblock[data-editor-theme-type="dark"] .chat-markdown-shiki .shiki {
+  background: var(--t3-editor-code-bg) !important;
 }
 
 /* Diagnostics-style tables: row separators only, uppercase headers, and a

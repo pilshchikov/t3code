@@ -38,6 +38,13 @@ fork-specific behavior so future upstream syncs are easier to review.
   - Cmd-click on a breadcrumb reveals that parent directory in the file tree.
   - Source: `apps/web/src/components/files/FilePreviewPanel.tsx`,
     `apps/web/src/components/files/filePath.ts`.
+- Code rendering has a client-side editor theme selector.
+  - Settings now include `Editor theme` with `Follow app` plus several dark syntax themes.
+  - A custom `JetBrains Dracula Night` theme is registered for a darker Dracula-like editor
+    background.
+  - The selected theme applies to file previews, editable file views, diffs, and chat code blocks.
+  - Source: `packages/contracts/src/settings.ts`, `apps/web/src/lib/diffRendering.ts`,
+    `apps/web/src/components/settings/SettingsPanels.tsx`.
 
 ## Validation Notes
 
