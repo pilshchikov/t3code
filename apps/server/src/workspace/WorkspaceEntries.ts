@@ -14,6 +14,8 @@ import type {
   FilesystemBrowseResult,
   ProjectListEntriesInput,
   ProjectListEntriesResult,
+  ProjectSearchCodeInput,
+  ProjectSearchCodeResult,
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
 } from "@t3tools/contracts";
@@ -56,6 +58,9 @@ export class WorkspaceEntries extends Context.Service<
     readonly search: (
       input: ProjectSearchEntriesInput,
     ) => Effect.Effect<ProjectSearchEntriesResult, WorkspaceEntriesError>;
+    readonly searchCode: (
+      input: ProjectSearchCodeInput,
+    ) => Effect.Effect<ProjectSearchCodeResult, WorkspaceEntriesError>;
     readonly refresh: (cwd: string) => Effect.Effect<void>;
   }
 >()("t3/workspace/WorkspaceEntries") {}
@@ -223,6 +228,31 @@ const make = Effect.gen(function* () {
     },
   );
 
+  const searchCode: WorkspaceEntries["Service"]["searchCode"] = Effect.fn(
+    "WorkspaceEntries.searchCode",
+  )(function* (input) {
+    const normalizedCwd = yield* normalizeWorkspaceRoot(input.cwd);
+    return yield* Effect.gen(function* () {
+      const searchIndex = yield* WorkspaceSearchIndex.WorkspaceSearchIndex;
+      return yield* searchIndex.searchCode({
+        query: input.query.trim(),
+        scope: input.scope,
+        limit: input.limit,
+      });
+    }).pipe(
+      Effect.provide(workspaceSearchIndexes.get(normalizedCwd)),
+      Effect.mapError(
+        (cause) =>
+          new WorkspaceEntriesError({
+            cwd: input.cwd,
+            operation: "workspaceEntries.searchCode",
+            detail: cause.message,
+            cause,
+          }),
+      ),
+    );
+  });
+
   const list: WorkspaceEntries["Service"]["list"] = Effect.fn("WorkspaceEntries.list")(
     function* (input) {
       const normalizedCwd = yield* normalizeWorkspaceRoot(input.cwd);
@@ -244,7 +274,7 @@ const make = Effect.gen(function* () {
     },
   );
 
-  return WorkspaceEntries.of({ browse, list, refresh, search });
+  return WorkspaceEntries.of({ browse, list, refresh, search, searchCode });
 });
 
 export const layer = Layer.effect(WorkspaceEntries, make).pipe(

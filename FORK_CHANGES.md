@@ -22,6 +22,34 @@ fork-specific behavior so future upstream syncs are easier to review.
 
 ## File Preview UX
 
+- Editor surface tabs can be hidden from Settings > General.
+  - Hidden-tab mode keeps a compact surface switcher and add-surface control, so files, terminals,
+    diffs, and browser previews remain reachable without a persistent tab strip.
+  - The setting is persisted with the existing client settings.
+  - Source: `packages/contracts/src/settings.ts`,
+    `apps/web/src/components/RightPanelTabs.tsx`,
+    `apps/web/src/components/settings/SettingsPanels.tsx`.
+- The file editor has JetBrains-style workspace navigation.
+  - Double Shift opens Search Everywhere with All, Classes, Files, Symbols, Actions, and Text
+    scopes. Tab and Shift+Tab cycle scopes.
+  - File names use the existing fuzzy workspace index. Classes, methods, functions, variables,
+    parameters, and text use source-content search through the server workspace index.
+  - The Actions scope exposes relevant T3 Code commands, including settings, command palette,
+    file explorer, workspace refresh, and tab visibility.
+  - Cmd+E opens recent editor files. Recents are persisted per environment and workspace in client
+    storage and survive desktop app updates.
+  - Cmd-clicking an identifier searches exact workspace definitions/usages. A single target opens
+    directly; multiple targets open a searchable chooser and reveal the selected source line.
+  - Navigation is source-index based rather than language-server based. It handles common
+    declaration forms and exact identifiers across ignored-file-aware workspace content, but does
+    not perform full type resolution or overload analysis.
+  - Source: `apps/server/src/workspace/WorkspaceSearchIndex.ts`,
+    `apps/server/src/workspace/WorkspaceEntries.ts`, `apps/server/src/ws.ts`,
+    `apps/web/src/components/files/EditorNavigationDialog.tsx`,
+    `apps/web/src/components/files/SymbolNavigationDialog.tsx`,
+    `apps/web/src/components/files/FilePreviewPanel.tsx`,
+    `apps/web/src/editorNavigationStore.ts`, `packages/contracts/src/project.ts`.
+
 - Markdown preview mode is global across markdown files instead of being tied to one file path.
   - Switching a markdown file to rendered mode applies to other `.md` and `.mdx` files, including
     newly opened or newly created files.
@@ -71,6 +99,6 @@ fork-specific behavior so future upstream syncs are easier to review.
 
 ## Validation Notes
 
-The fork-local changes above were validated with focused tests, formatting/lint checks for touched
-files, TypeScript checks for `apps/web`, and earlier full desktop/provider checks while preparing
-the macOS build.
+The fork-local changes above were validated with focused server tests, the full web unit suite,
+Chromium component tests, formatting/lint checks, TypeScript checks, and earlier full
+desktop/provider checks while preparing the macOS build.

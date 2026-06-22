@@ -72,6 +72,17 @@ const searchWorkspaceEntries = (input: { cwd: string; query: string; limit: numb
     return yield* workspaceEntries.search(input);
   });
 
+const searchWorkspaceCode = (input: {
+  cwd: string;
+  query: string;
+  scope: "classes" | "symbols" | "text" | "navigation";
+  limit: number;
+}) =>
+  Effect.gen(function* () {
+    const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+    return yield* workspaceEntries.searchCode(input);
+  });
+
 const appendSeparator = (input: string) =>
   Effect.map(HostProcessPlatform, (platform) =>
     input.endsWith("/") || input.endsWith("\\")
@@ -282,6 +293,115 @@ it.layer(TestLayer, { excludeTestServices: true })("WorkspaceEntries", (it) => {
 
         yield* workspaceEntries.list({ cwd });
         expect(createSpy).toHaveBeenCalledTimes(2);
+      }),
+    );
+  });
+
+  describe("searchCode", () => {
+    it.effect("finds class and method definitions", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTempDir({ prefix: "t3code-workspace-code-symbols-" });
+        yield* writeTextFile(
+          cwd,
+          "src/TeamService.ts",
+          [
+            "export class TeamService {",
+            "  findMember(memberId: string) {",
+            "    return memberId;",
+            "  }",
+            "}",
+          ].join("\n"),
+        );
+
+        const classes = yield* searchWorkspaceCode({
+          cwd,
+          query: "TeamService",
+          scope: "classes",
+          limit: 10,
+        });
+        const symbols = yield* searchWorkspaceCode({
+          cwd,
+          query: "findMember",
+          scope: "symbols",
+          limit: 10,
+        });
+        const parameters = yield* searchWorkspaceCode({
+          cwd,
+          query: "memberId",
+          scope: "symbols",
+          limit: 10,
+        });
+
+        expect(classes.matches).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              path: "src/TeamService.ts",
+              isDefinition: true,
+              kind: "class",
+            }),
+          ]),
+        );
+        expect(symbols.matches).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              path: "src/TeamService.ts",
+              isDefinition: true,
+              kind: "method",
+            }),
+          ]),
+        );
+        expect(parameters.matches).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              path: "src/TeamService.ts",
+              isDefinition: true,
+              kind: "parameter",
+            }),
+          ]),
+        );
+      }),
+    );
+
+    it.effect("returns exact-identifier definitions and usages for navigation", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTempDir({ prefix: "t3code-workspace-code-navigation-" });
+        yield* writeTextFile(
+          cwd,
+          "src/service.ts",
+          "export function resolveTeam() { return 1; }\nconst value = resolveTeam();\n",
+        );
+        yield* writeTextFile(cwd, "src/unrelated.ts", "const resolveTeams = 2;\n");
+
+        const result = yield* searchWorkspaceCode({
+          cwd,
+          query: "resolveTeam",
+          scope: "navigation",
+          limit: 20,
+        });
+
+        expect(result.matches.filter((match) => match.path === "src/service.ts")).toHaveLength(2);
+        expect(result.matches.some((match) => match.path === "src/unrelated.ts")).toBe(false);
+        expect(result.matches.some((match) => match.isDefinition)).toBe(true);
+        expect(result.matches.some((match) => !match.isDefinition)).toBe(true);
+      }),
+    );
+
+    it.effect("excludes ignored source files", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTempDir({ prefix: "t3code-workspace-code-ignore-", git: true });
+        yield* writeTextFile(cwd, ".gitignore", "ignored/\n");
+        yield* writeTextFile(cwd, "src/visible.ts", "export class VisibleClass {}\n");
+        yield* writeTextFile(cwd, "ignored/hidden.ts", "export class HiddenClass {}\n");
+
+        const result = yield* searchWorkspaceCode({
+          cwd,
+          query: "Class",
+          scope: "text",
+          limit: 20,
+        });
+
+        expect(result.matches.some((match) => match.path === "src/visible.ts")).toBe(true);
+        expect(result.matches.some((match) => match.path.startsWith("ignored/"))).toBe(false);
       }),
     );
   });

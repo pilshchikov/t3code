@@ -28,6 +28,7 @@ const clientSettings: ClientSettings = {
   sidebarProjectSortOrder: "manual",
   sidebarThreadSortOrder: "created_at",
   sidebarThreadPreviewCount: 6,
+  showEditorTabs: true,
   timestampFormat: "24-hour",
 };
 

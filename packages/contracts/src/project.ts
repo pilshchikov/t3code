@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 import { NonNegativeInt, PositiveInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 const PROJECT_SEARCH_ENTRIES_MAX_LIMIT = 200;
+const PROJECT_SEARCH_CODE_MAX_LIMIT = 200;
 const PROJECT_WRITE_FILE_PATH_MAX_LENGTH = 512;
 const PROJECT_READ_FILE_PATH_MAX_LENGTH = 512;
 
@@ -39,6 +40,57 @@ export type ProjectListEntriesResult = typeof ProjectListEntriesResult.Type;
 
 export class ProjectSearchEntriesError extends Schema.TaggedErrorClass<ProjectSearchEntriesError>()(
   "ProjectSearchEntriesError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
+
+export const ProjectCodeSearchScope = Schema.Literals(["classes", "symbols", "text", "navigation"]);
+export type ProjectCodeSearchScope = typeof ProjectCodeSearchScope.Type;
+
+export const ProjectCodeSymbolKind = Schema.Literals([
+  "class",
+  "interface",
+  "enum",
+  "struct",
+  "trait",
+  "type",
+  "function",
+  "method",
+  "parameter",
+  "variable",
+  "symbol",
+  "text",
+]);
+export type ProjectCodeSymbolKind = typeof ProjectCodeSymbolKind.Type;
+
+export const ProjectSearchCodeInput = Schema.Struct({
+  cwd: TrimmedNonEmptyString,
+  query: TrimmedNonEmptyString.check(Schema.isMaxLength(256)),
+  scope: ProjectCodeSearchScope,
+  limit: PositiveInt.check(Schema.isLessThanOrEqualTo(PROJECT_SEARCH_CODE_MAX_LIMIT)),
+});
+export type ProjectSearchCodeInput = typeof ProjectSearchCodeInput.Type;
+
+export const ProjectCodeSearchMatch = Schema.Struct({
+  path: TrimmedNonEmptyString,
+  lineNumber: PositiveInt,
+  column: NonNegativeInt,
+  snippet: Schema.String,
+  isDefinition: Schema.Boolean,
+  kind: ProjectCodeSymbolKind,
+});
+export type ProjectCodeSearchMatch = typeof ProjectCodeSearchMatch.Type;
+
+export const ProjectSearchCodeResult = Schema.Struct({
+  matches: Schema.Array(ProjectCodeSearchMatch),
+  truncated: Schema.Boolean,
+});
+export type ProjectSearchCodeResult = typeof ProjectSearchCodeResult.Type;
+
+export class ProjectSearchCodeError extends Schema.TaggedErrorClass<ProjectSearchCodeError>()(
+  "ProjectSearchCodeError",
   {
     message: TrimmedNonEmptyString,
     cause: Schema.optional(Schema.Defect()),

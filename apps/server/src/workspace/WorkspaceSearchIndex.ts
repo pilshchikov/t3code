@@ -1,4 +1,9 @@
-import { FileFinder, type MixedItem, type MixedSearchResult } from "@ff-labs/fff-node";
+import {
+  FileFinder,
+  type GrepMatch,
+  type MixedItem,
+  type MixedSearchResult,
+} from "@ff-labs/fff-node";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,7 +13,11 @@ import * as Schema from "effect/Schema";
 
 import type {
   ProjectEntry,
+  ProjectCodeSearchMatch,
+  ProjectCodeSymbolKind,
   ProjectListEntriesResult,
+  ProjectSearchCodeInput,
+  ProjectSearchCodeResult,
   ProjectSearchEntriesResult,
 } from "@t3tools/contracts";
 
@@ -80,6 +89,9 @@ export class WorkspaceSearchIndex extends Context.Service<
       query: string,
       limit: number,
     ) => Effect.Effect<ProjectSearchEntriesResult, WorkspaceSearchIndexSearchFailed>;
+    readonly searchCode: (
+      input: Omit<ProjectSearchCodeInput, "cwd">,
+    ) => Effect.Effect<ProjectSearchCodeResult, WorkspaceSearchIndexSearchFailed>;
     readonly refresh: () => Effect.Effect<
       void,
       WorkspaceSearchIndexRefreshFailed | WorkspaceSearchIndexScanTimedOut
@@ -150,6 +162,129 @@ function withDirectoryAncestors(entries: ReadonlyArray<ProjectEntry>): ProjectEn
     }
   }
   return [...entryByPath.values()];
+}
+
+function isLikelyParameterDeclaration(line: string, query: string): boolean {
+  const openParenIndex = line.indexOf("(");
+  const closeParenIndex = line.lastIndexOf(")");
+  if (openParenIndex < 0 || closeParenIndex <= openParenIndex) return false;
+  const prefix = line.slice(0, openParenIndex);
+  if (/\b(?:if|for|while|switch|catch|with)\s*$/u.test(prefix)) return false;
+  const suffix = line.slice(closeParenIndex + 1).trimStart();
+  const isDeclaration =
+    /\b(?:function|func|fn|def)\s+[A-Za-z_$][\w$]*\s*$/u.test(prefix) ||
+    (/\b[A-Za-z_$][\w$]*\s*$/u.test(prefix) && /^(?:\{|=>|:)/u.test(suffix));
+  if (!isDeclaration) return false;
+
+  return line
+    .slice(openParenIndex + 1, closeParenIndex)
+    .split(",")
+    .some((parameter) => {
+      const identifiers = [...parameter.matchAll(/[A-Za-z_$][\w$]*/gu)].map((match) => match[0]);
+      if (identifiers.length === 0) return false;
+      const candidate =
+        /^[\s*]*(?:\.\.\.)?([A-Za-z_$][\w$]*)\s*[?:=]/u.exec(parameter)?.[1] ?? identifiers.at(-1)!;
+      return fuzzyIdentifierMatches(candidate, query);
+    });
+}
+
+function fuzzyIdentifierMatches(identifier: string, query: string): boolean {
+  const normalizedIdentifier = identifier.toLowerCase();
+  const normalizedQuery = query.toLowerCase();
+  let queryIndex = 0;
+  for (const character of normalizedIdentifier) {
+    if (character === normalizedQuery[queryIndex]) queryIndex += 1;
+    if (queryIndex === normalizedQuery.length) return true;
+  }
+  return normalizedQuery.length === 0;
+}
+
+function declaredIdentifierMatches(line: string, pattern: RegExp, query: string): boolean {
+  const identifier = line.match(pattern)?.[1];
+  return identifier ? fuzzyIdentifierMatches(identifier, query) : false;
+}
+
+function classifyCodeSymbol(match: GrepMatch, query: string): ProjectCodeSymbolKind {
+  const line = match.lineContent;
+  if (declaredIdentifierMatches(line, /\binterface\s+([A-Za-z_$][\w$]*)/u, query)) {
+    return "interface";
+  }
+  if (declaredIdentifierMatches(line, /\benum\s+([A-Za-z_$][\w$]*)/u, query)) return "enum";
+  if (declaredIdentifierMatches(line, /\bstruct\s+([A-Za-z_$][\w$]*)/u, query)) {
+    return "struct";
+  }
+  if (declaredIdentifierMatches(line, /\btrait\s+([A-Za-z_$][\w$]*)/u, query)) return "trait";
+  if (declaredIdentifierMatches(line, /\b(?:class|record|protocol)\s+([A-Za-z_$][\w$]*)/u, query)) {
+    return "class";
+  }
+  if (declaredIdentifierMatches(line, /\btype\s+([A-Za-z_$][\w$]*)\s*(?:=|\{|$)/u, query)) {
+    return "type";
+  }
+  if (declaredIdentifierMatches(line, /^\s+(?:async\s+)?def\s+([A-Za-z_$][\w$]*)\s*\(/u, query)) {
+    return "method";
+  }
+  if (isLikelyParameterDeclaration(line, query)) return "parameter";
+  if (
+    declaredIdentifierMatches(line, /\b(?:function|func|fn|def)\s+([A-Za-z_$][\w$]*)\s*\(/u, query)
+  ) {
+    return "function";
+  }
+  if (
+    declaredIdentifierMatches(
+      line,
+      /^\s*(?:(?:public|private|protected|static|async|final|override|virtual|abstract|export|unsafe|mut)\s+)*([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*(?:\{|=>|:)/u,
+      query,
+    )
+  ) {
+    return "method";
+  }
+  if (declaredIdentifierMatches(line, /\b(?:const|let|var|val)\s+([A-Za-z_$][\w$]*)/u, query)) {
+    return "variable";
+  }
+  return "text";
+}
+
+function isCodeDefinition(match: GrepMatch, query: string): boolean {
+  const kind = classifyCodeSymbol(match, query);
+  return kind !== "text";
+}
+
+function isClassLikeSymbol(kind: ProjectCodeSymbolKind): boolean {
+  return (
+    kind === "class" ||
+    kind === "interface" ||
+    kind === "enum" ||
+    kind === "struct" ||
+    kind === "trait" ||
+    kind === "type"
+  );
+}
+
+function containsIdentifier(line: string, query: string): boolean {
+  let fromIndex = 0;
+  while (fromIndex <= line.length - query.length) {
+    const index = line.indexOf(query, fromIndex);
+    if (index < 0) return false;
+    const before = index === 0 ? "" : line[index - 1]!;
+    const afterIndex = index + query.length;
+    const after = afterIndex >= line.length ? "" : line[afterIndex]!;
+    if (!/[\p{L}\p{N}_$]/u.test(before) && !/[\p{L}\p{N}_$]/u.test(after)) {
+      return true;
+    }
+    fromIndex = index + 1;
+  }
+  return false;
+}
+
+function toCodeSearchMatch(match: GrepMatch, query: string): ProjectCodeSearchMatch {
+  return {
+    path: toPosixPath(match.relativePath),
+    lineNumber: Math.max(1, match.lineNumber),
+    column: Math.max(0, match.col),
+    snippet: match.lineContent.trimEnd().slice(0, 1_000),
+    isDefinition: isCodeDefinition(match, query),
+    kind: classifyCodeSymbol(match, query),
+  };
 }
 
 const createFinder = Effect.fn("WorkspaceSearchIndex.createFinder")(function* (cwd: string) {
@@ -229,7 +364,42 @@ const makeWorkspaceSearchIndex = (cwd: string) =>
         return mapMixedSearchResult(result, limit);
       });
 
-      return WorkspaceSearchIndex.of({ list, refresh, search });
+      const searchCode: WorkspaceSearchIndex["Service"]["searchCode"] = Effect.fn(
+        "WorkspaceSearchIndex.searchCode",
+      )(function* (input) {
+        const requestedResultCount = Math.min(1_000, Math.max(100, input.limit * 12));
+        const result = yield* Effect.sync(() =>
+          finder.grep(input.query, {
+            mode: input.scope === "navigation" ? "plain" : "fuzzy",
+            pageSize: requestedResultCount,
+            maxMatchesPerFile: 40,
+            timeBudgetMs: 1_500,
+          }),
+        );
+        if (!result.ok) {
+          return yield* new WorkspaceSearchIndexSearchFailed({ cwd, reason: result.error });
+        }
+
+        const matches = result.value.items
+          .filter((match) => {
+            if (input.scope === "navigation") {
+              return containsIdentifier(match.lineContent, input.query);
+            }
+            const kind = classifyCodeSymbol(match, input.query);
+            if (input.scope === "classes")
+              return isCodeDefinition(match, input.query) && isClassLikeSymbol(kind);
+            if (input.scope === "symbols") return isCodeDefinition(match, input.query);
+            return true;
+          })
+          .map((match) => toCodeSearchMatch(match, input.query));
+
+        return {
+          matches: matches.slice(0, input.limit),
+          truncated: result.value.nextCursor !== null || matches.length > input.limit,
+        };
+      });
+
+      return WorkspaceSearchIndex.of({ list, refresh, search, searchCode });
     }),
   );
 

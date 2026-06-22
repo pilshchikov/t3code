@@ -1,11 +1,12 @@
 import type {
   EditorId,
   EnvironmentId,
+  ProjectCodeSearchMatch,
   ProjectEntry,
   ResolvedKeybindingsConfig,
   ScopedThreadRef,
 } from "@t3tools/contracts";
-import type { SelectedLineRange } from "@pierre/diffs";
+import type { SelectedLineRange, TokenEventBase } from "@pierre/diffs";
 import { Editor } from "@pierre/diffs/editor";
 import { EditorProvider, File, Virtualizer } from "@pierre/diffs/react";
 import {
@@ -24,6 +25,7 @@ import { isBrowserPreviewFile, openFileInPreview } from "~/browser/openFileInPre
 import ChatMarkdown from "~/components/ChatMarkdown";
 import { OpenInPicker } from "~/components/chat/OpenInPicker";
 import { ensureEnvironmentApi } from "~/environmentApi";
+import { editorWorkspaceKey, useEditorNavigationStore } from "~/editorNavigationStore";
 import { usePrimaryEnvironmentId } from "~/environments/primary/context";
 import { useSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
@@ -40,6 +42,7 @@ import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { buildFileReviewComment } from "~/reviewCommentContext";
 
 import FileBrowserPanel from "./FileBrowserPanel";
+import { EditorNavigationDialog } from "./EditorNavigationDialog";
 import {
   type FileCommentAnnotationEntry,
   type FileCommentAnnotationGroup,
@@ -51,6 +54,7 @@ import {
 } from "./fileCommentAnnotations";
 import { installFileEditorDismissal } from "./fileEditorDismissal";
 import { LocalCommentAnnotation } from "./LocalCommentAnnotation";
+import { SymbolNavigationDialog } from "./SymbolNavigationDialog";
 import { projectFileCacheKey } from "./fileContentRevision";
 import {
   directChildProjectEntries,
@@ -98,6 +102,8 @@ interface EditableFileSurfaceProps {
   composerDraftTarget: ScopedThreadRef | DraftId;
   contents: string;
   editorDiffTheme: ResolvedEditorDiffTheme;
+  navigationLine: number | null;
+  onTokenNavigation: (token: TokenEventBase, event: MouseEvent) => void;
   onPendingChange: (relativePath: string, pending: boolean) => void;
 }
 
@@ -140,6 +146,8 @@ function EditableFileSurface({
   composerDraftTarget,
   contents,
   editorDiffTheme,
+  navigationLine,
+  onTokenNavigation,
   onPendingChange,
 }: EditableFileSurfaceProps) {
   const addReviewComment = useComposerDraftStore((store) => store.addReviewComment);
@@ -300,6 +308,9 @@ function EditableFileSurface({
     },
     [beginComment],
   );
+  const navigationRange = navigationLine
+    ? ({ start: navigationLine, end: navigationLine } satisfies SelectedLineRange)
+    : null;
 
   return (
     <EditorProvider editor={editor}>
@@ -324,11 +335,12 @@ function EditableFileSurface({
               onGutterUtilityClick: setSelectedRange,
               onLineSelectionChange: setSelectedRange,
               onLineSelectionEnd: handleLineSelectionEnd,
+              onTokenClick: onTokenNavigation,
               overflow: "scroll",
               theme: editorDiffTheme.themeName,
               themeType: editorDiffTheme.themeType,
             }}
-            selectedLines={selectedRange}
+            selectedLines={selectedRange ?? navigationRange}
             lineAnnotations={lineAnnotations}
             renderAnnotation={(annotation) => (
               <div className="py-1">
@@ -361,7 +373,10 @@ function RenderedMarkdownSurface({
   contents,
   threadRef,
   onPendingChange,
-}: Omit<EditableFileSurfaceProps, "editorDiffTheme" | "composerDraftTarget"> & {
+}: Omit<
+  EditableFileSurfaceProps,
+  "editorDiffTheme" | "composerDraftTarget" | "navigationLine" | "onTokenNavigation"
+> & {
   threadRef: ScopedThreadRef;
 }) {
   const saveCoordinator = useFileSaveCoordinator({
@@ -428,6 +443,13 @@ export default function FilePreviewPanel({
   const file = useProjectFileQuery(environmentId, cwd, relativePath);
   const projectEntriesQuery = useProjectEntriesQuery(environmentId, cwd);
   const projectEntries = projectEntriesQuery.data?.entries ?? [];
+  const workspaceKey = editorWorkspaceKey(environmentId, cwd);
+  const navigationRequest = useEditorNavigationStore((state) => state.navigationRequest);
+  const navigationLine =
+    navigationRequest?.workspaceKey === workspaceKey && navigationRequest.path === relativePath
+      ? navigationRequest.lineNumber
+      : null;
+  const navigationRequestId = navigationLine ? navigationRequest?.requestId : null;
   const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
   const [markdownPreviewMode, setMarkdownPreviewMode] = useState(readMarkdownPreviewMode);
   const [treeRevealRequest, setTreeRevealRequest] = useState<{
@@ -435,6 +457,8 @@ export default function FilePreviewPanel({
     readonly path: string;
   } | null>(null);
   const breadcrumbRef = useRef<HTMLDivElement>(null);
+  const previewRootRef = useRef<HTMLDivElement>(null);
+  const symbolNavigationRequestRef = useRef(0);
   const treeRevealRequestIdRef = useRef(0);
   const isMarkdown = relativePath ? isMarkdownPreviewFile(relativePath) : false;
   const renderMarkdown = shouldRenderMarkdownPreview(relativePath, markdownPreviewMode);
@@ -445,6 +469,41 @@ export default function FilePreviewPanel({
     () => (relativePath ? fileBreadcrumbs(projectName, relativePath) : []),
     [projectName, relativePath],
   );
+  const [symbolChoices, setSymbolChoices] = useState<{
+    readonly symbol: string;
+    readonly mode: "definitions" | "usages";
+    readonly matches: ReadonlyArray<ProjectCodeSearchMatch>;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!relativePath) return;
+    useEditorNavigationStore.getState().recordRecentFile(environmentId, cwd, relativePath);
+  }, [cwd, environmentId, relativePath]);
+
+  useEffect(() => {
+    if (!navigationLine || !previewRootRef.current) return;
+    if (isMarkdown && renderMarkdown) {
+      setMarkdownPreviewMode("source");
+      return;
+    }
+    const root = previewRootRef.current;
+    const scroller = root.querySelector<HTMLElement>(".file-preview-virtualizer");
+    if (!scroller) return;
+    scroller.scrollTop = Math.max(0, (navigationLine - 1) * 20 - scroller.clientHeight / 3);
+    let attempts = 0;
+    let frame = 0;
+    const reveal = () => {
+      const line = root.querySelector<HTMLElement>(`[data-line="${navigationLine}"]`);
+      if (line) {
+        line.scrollIntoView({ block: "center" });
+        return;
+      }
+      attempts += 1;
+      if (attempts < 6) frame = window.requestAnimationFrame(reveal);
+    };
+    frame = window.requestAnimationFrame(reveal);
+    return () => window.cancelAnimationFrame(frame);
+  }, [file.data, isMarkdown, navigationLine, navigationRequestId, renderMarkdown]);
 
   useEffect(() => {
     const currentCrumb = breadcrumbRef.current?.querySelector<HTMLElement>(
@@ -462,6 +521,76 @@ export default function FilePreviewPanel({
       return next;
     });
   };
+
+  const openNavigationTarget = useCallback(
+    (match: ProjectCodeSearchMatch) => {
+      useEditorNavigationStore.getState().navigateTo(environmentId, cwd, {
+        path: match.path,
+        lineNumber: match.lineNumber,
+        column: match.column,
+      });
+      onOpenFile(match.path);
+    },
+    [cwd, environmentId, onOpenFile],
+  );
+
+  const handleTokenNavigation = useCallback(
+    (token: TokenEventBase, event: MouseEvent) => {
+      if (!event.metaKey || !relativePath) return;
+      const symbol = token.tokenText.trim().match(/^[\p{L}_$][\p{L}\p{N}_$]*$/u)?.[0];
+      if (!symbol) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const requestId = ++symbolNavigationRequestRef.current;
+      void ensureEnvironmentApi(environmentId)
+        .projects.searchCode({ cwd, query: symbol, scope: "navigation", limit: 120 })
+        .then((result) => {
+          if (requestId !== symbolNavigationRequestRef.current) return;
+          const sourceMatch = result.matches.find(
+            (match) => match.path === relativePath && match.lineNumber === token.lineNumber,
+          );
+          const mode = sourceMatch?.isDefinition ? "usages" : "definitions";
+          let matches = result.matches.filter((match) =>
+            mode === "usages" ? !match.isDefinition : match.isDefinition,
+          );
+          matches = matches.filter(
+            (match) => !(match.path === relativePath && match.lineNumber === token.lineNumber),
+          );
+          if (matches.length === 0 && mode === "definitions") {
+            matches = result.matches.filter(
+              (match) => !(match.path === relativePath && match.lineNumber === token.lineNumber),
+            );
+          }
+          matches = matches.toSorted((left, right) => {
+            const leftLocal = left.path === relativePath ? 0 : 1;
+            const rightLocal = right.path === relativePath ? 0 : 1;
+            if (leftLocal !== rightLocal) return leftLocal - rightLocal;
+            return left.path.localeCompare(right.path) || left.lineNumber - right.lineNumber;
+          });
+          if (matches.length === 1) {
+            openNavigationTarget(matches[0]!);
+            return;
+          }
+          if (matches.length > 1) {
+            setSymbolChoices({ symbol, mode, matches });
+            return;
+          }
+          toastManager.add({
+            type: "info",
+            title: `No ${mode} found`,
+            description: symbol,
+          });
+        })
+        .catch((error) => {
+          toastManager.add({
+            type: "error",
+            title: "Code navigation failed",
+            description: error instanceof Error ? error.message : "Unable to search this symbol.",
+          });
+        });
+    },
+    [cwd, environmentId, openNavigationTarget, relativePath],
+  );
 
   const setRenderMarkdown = (rendered: boolean) => {
     const nextMode = rendered ? "rendered" : "source";
@@ -517,7 +646,29 @@ export default function FilePreviewPanel({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+    <div
+      ref={previewRootRef}
+      className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
+    >
+      <EditorNavigationDialog
+        environmentId={environmentId}
+        cwd={cwd}
+        projectName={projectName}
+        entries={projectEntries}
+        onOpenFile={onOpenFile}
+        onToggleExplorer={toggleExplorer}
+        onRefreshFiles={projectEntriesQuery.refresh}
+      />
+      <SymbolNavigationDialog
+        open={symbolChoices !== null}
+        symbol={symbolChoices?.symbol ?? ""}
+        mode={symbolChoices?.mode ?? "definitions"}
+        matches={symbolChoices?.matches ?? []}
+        onOpenChange={(open) => {
+          if (!open) setSymbolChoices(null);
+        }}
+        onSelect={openNavigationTarget}
+      />
       {relativePath ? (
         <div className="surface-subheader gap-2 px-3" data-surface-subheader>
           <ScrollArea
@@ -716,7 +867,11 @@ export default function FilePreviewPanel({
                     overflow: "scroll",
                     theme: editorDiffTheme.themeName,
                     themeType: editorDiffTheme.themeType,
+                    onTokenClick: handleTokenNavigation,
                   }}
+                  selectedLines={
+                    navigationLine ? { start: navigationLine, end: navigationLine } : null
+                  }
                   className="min-h-full"
                 />
               </Virtualizer>
@@ -729,6 +884,8 @@ export default function FilePreviewPanel({
                 composerDraftTarget={composerDraftTarget}
                 contents={file.data.contents}
                 editorDiffTheme={editorDiffTheme}
+                navigationLine={navigationLine}
+                onTokenNavigation={handleTokenNavigation}
                 onPendingChange={onPendingChange}
               />
             )

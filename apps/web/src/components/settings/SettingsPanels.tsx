@@ -405,6 +405,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.editorSyntaxTheme !== DEFAULT_UNIFIED_SETTINGS.editorSyntaxTheme
         ? ["Editor theme"]
         : []),
+      ...(settings.showEditorTabs !== DEFAULT_UNIFIED_SETTINGS.showEditorTabs
+        ? ["Editor tabs"]
+        : []),
       ...(settings.diffIgnoreWhitespace !== DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace
         ? ["Diff whitespace changes"]
         : []),
@@ -594,6 +597,28 @@ export function GeneralSettingsPanel() {
                 ))}
               </SelectPopup>
             </Select>
+          }
+        />
+
+        <SettingsRow
+          title="Editor tabs"
+          description="Show open surfaces as tabs above the code editor."
+          resetAction={
+            settings.showEditorTabs !== DEFAULT_UNIFIED_SETTINGS.showEditorTabs ? (
+              <SettingResetButton
+                label="editor tabs"
+                onClick={() =>
+                  updateSettings({ showEditorTabs: DEFAULT_UNIFIED_SETTINGS.showEditorTabs })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.showEditorTabs}
+              onCheckedChange={(checked) => updateSettings({ showEditorTabs: Boolean(checked) })}
+              aria-label="Show editor tabs"
+            />
           }
         />
 
