@@ -154,6 +154,7 @@ function createBaseServerConfig(): ServerConfig {
         claudeAgent: {
           enabled: true,
           binaryPath: "",
+          configDir: "",
           homePath: "",
           customModels: [],
           launchArgs: "",

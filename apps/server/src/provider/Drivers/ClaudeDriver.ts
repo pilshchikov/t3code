@@ -7,8 +7,9 @@
  *
  * Unlike Codex, the Claude snapshot probe may invoke a secondary probe
  * (`probeClaudeCapabilities`) to read Anthropic account + slash-command
- * metadata. That probe is per-instance and keyed by binary + resolved HOME so
- * two concurrent Claude instances don't cross-contaminate account metadata.
+ * metadata. That probe is per-instance and keyed by binary + resolved Claude
+ * config directory / HOME so concurrent instances don't cross-contaminate
+ * account metadata.
  *
  * @module provider/Drivers/ClaudeDriver
  */
@@ -141,8 +142,8 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
       const adapter = yield* makeClaudeAdapter(effectiveConfig, adapterOptions);
       const textGeneration = yield* makeClaudeTextGeneration(effectiveConfig, processEnv);
 
-      // Per-instance capabilities cache: keyed on binary + resolved HOME so
-      // account-specific probes never share auth metadata across instances.
+      // Per-instance capabilities cache: keyed on binary + resolved profile
+      // paths so account-specific probes never share auth metadata.
       const capabilitiesProbeCache = yield* Cache.make({
         capacity: 1,
         timeToLive: CAPABILITIES_PROBE_TTL,

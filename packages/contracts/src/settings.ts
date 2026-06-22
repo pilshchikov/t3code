@@ -231,12 +231,24 @@ export const ClaudeSettings = makeProviderSettingsSchema(
         providerSettingsForm: { placeholder: "claude", clearWhenEmpty: "omit" },
       }),
     ),
+    configDir: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "Claude config directory",
+        description:
+          "Account-specific Claude config directory, passed as CLAUDE_CONFIG_DIR. Use a different directory for each Claude profile.",
+        providerSettingsForm: {
+          placeholder: "~/.claude-work",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
     homePath: TrimmedString.pipe(
       Schema.withDecodingDefault(Effect.succeed("")),
       Schema.annotateKey({
-        title: "Claude HOME path",
+        title: "Process HOME path",
         description:
-          "Custom HOME used when running this Claude instance. Keeps .claude.json and .claude separate.",
+          "Advanced: override the full HOME used when running this Claude instance. Usually leave this empty and use Claude config directory instead.",
         providerSettingsForm: { placeholder: "~", clearWhenEmpty: "omit" },
       }),
     ),
@@ -257,7 +269,7 @@ export const ClaudeSettings = makeProviderSettingsSchema(
     ),
   },
   {
-    order: ["binaryPath", "homePath", "launchArgs"],
+    order: ["binaryPath", "configDir", "homePath", "launchArgs"],
   },
 );
 export type ClaudeSettings = typeof ClaudeSettings.Type;
@@ -466,6 +478,7 @@ const CodexSettingsPatch = Schema.Struct({
 const ClaudeSettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   binaryPath: Schema.optionalKey(TrimmedString),
+  configDir: Schema.optionalKey(TrimmedString),
   homePath: Schema.optionalKey(TrimmedString),
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
   launchArgs: Schema.optionalKey(TrimmedString),

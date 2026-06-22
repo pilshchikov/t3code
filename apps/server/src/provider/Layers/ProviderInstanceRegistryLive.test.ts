@@ -24,6 +24,7 @@
  */
 import { describe, expect, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeOS from "node:os";
 import {
   type ClaudeSettings,
   type CodexSettings,
@@ -67,6 +68,7 @@ const makeCodexConfig = (overrides: Partial<CodexSettings>): CodexSettings => ({
 const makeClaudeConfig = (overrides: Partial<ClaudeSettings>): ClaudeSettings => ({
   enabled: false,
   binaryPath: "claude",
+  configDir: "",
   homePath: "",
   customModels: [],
   launchArgs: "",
@@ -274,7 +276,7 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
           displayName: "Claude",
           enabled: false,
           config: makeClaudeConfig({
-            homePath: "/home/julius/.claude-work",
+            configDir: "/home/julius/.claude-work",
             launchArgs: "--verbose",
           }),
         },
@@ -379,7 +381,9 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       expect(claudeSnapshot.instanceId).toBe(claudeId);
       expect(claudeSnapshot.driver).toBe(claudeDriverKind);
       expect(claudeSnapshot.enabled).toBe(false);
-      expect(claudeSnapshot.continuation?.groupKey).toBe("claude:home:/home/julius/.claude-work");
+      expect(claudeSnapshot.continuation?.groupKey).toBe(
+        `claude:config:/home/julius/.claude-work:home:${NodeOS.homedir()}`,
+      );
 
       const cursorSnapshot = yield* cursor!.snapshot.getSnapshot;
       expect(cursorSnapshot.instanceId).toBe(cursorId);

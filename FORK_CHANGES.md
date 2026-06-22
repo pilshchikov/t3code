@@ -46,6 +46,17 @@ fork-specific behavior so future upstream syncs are easier to review.
   - Source: `packages/contracts/src/settings.ts`, `apps/web/src/lib/diffRendering.ts`,
     `apps/web/src/components/settings/SettingsPanels.tsx`.
 
+## Claude Profiles
+
+- Claude provider instances support a dedicated `Claude config directory` setting.
+  - The path is passed directly as `CLAUDE_CONFIG_DIR`, allowing named instances such as
+    `Claude Personal` (`~/.claude-personal`) and `Claude Work` (`~/.claude-work`) to keep separate
+    authentication and configuration.
+  - Named Claude instances appear independently in the existing provider/model selector.
+  - The older full `HOME` override remains available as an advanced compatibility option.
+  - Source: `packages/contracts/src/settings.ts`,
+    `apps/server/src/provider/Drivers/ClaudeHome.ts`.
+
 ## Validation Notes
 
 The fork-local changes above were validated with focused tests, formatting/lint checks for touched

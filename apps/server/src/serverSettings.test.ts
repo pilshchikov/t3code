@@ -125,6 +125,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       assert.deepEqual(next.providers.claudeAgent, {
         enabled: true,
         binaryPath: "/usr/local/bin/claude",
+        configDir: "",
         homePath: "",
         customModels: ["claude-custom"],
         launchArgs: "",
@@ -347,6 +348,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           },
           claudeAgent: {
             binaryPath: "  /opt/homebrew/bin/claude  ",
+            configDir: "  ~/.claude-work  ",
           },
           opencode: {
             binaryPath: "  /opt/homebrew/bin/opencode  ",
@@ -366,6 +368,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       assert.deepEqual(next.providers.claudeAgent, {
         enabled: true,
         binaryPath: "/opt/homebrew/bin/claude",
+        configDir: "~/.claude-work",
         homePath: "",
         customModels: [],
         launchArgs: "",
