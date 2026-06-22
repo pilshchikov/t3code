@@ -5,9 +5,10 @@ import { LocateFixed, Maximize2, Minimize2, RefreshCw, Search } from "lucide-rea
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useTheme } from "~/hooks/useTheme";
-import { useVcsStatus } from "~/lib/vcsStatusState";
 import { cn } from "~/lib/utils";
 import { T3_PIERRE_ICONS } from "~/pierre-icons";
+import { useEnvironmentQuery } from "~/state/query";
+import { vcsEnvironment } from "~/state/vcs";
 
 import { useGitDetailedStatus } from "./gitChangesState";
 import { useProjectEntriesQuery } from "./projectFilesQueryState";
@@ -107,7 +108,7 @@ export default function FileBrowserPanel({
 }: FileBrowserPanelProps) {
   const { resolvedTheme } = useTheme();
   const [autoReveal, setAutoReveal] = useState(initialAutoReveal);
-  const vcsStatus = useVcsStatus({ environmentId, cwd });
+  const vcsStatus = useEnvironmentQuery(vcsEnvironment.status({ environmentId, input: { cwd } }));
   const gitStatus = useGitDetailedStatus(environmentId, cwd);
   const gitStatusEntries = useMemo<GitStatusEntry[]>(
     () =>

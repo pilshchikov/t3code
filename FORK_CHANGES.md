@@ -95,7 +95,7 @@ fork-specific behavior so future upstream syncs are easier to review.
   - Markers come from the granular `git.detailedStatus` RPC: added/untracked render green, modified
     blue, deleted red, renamed amber (copy→added, typechange/unmerged→modified, since the tree's
     palette has no dedicated colors for those). The detailed status is a pull query, so the panel
-    refreshes it whenever the live `useVcsStatus` stream reports a working-tree change, keeping
+    refreshes it whenever the live `vcsEnvironment.status` stream reports a working-tree change, keeping
     markers current with edits made outside the Commit panel.
   - Source: `apps/web/src/components/files/FileBrowserPanel.tsx`,
     `apps/web/src/components/files/gitChangesState.ts`.
@@ -177,16 +177,17 @@ fork-specific behavior so future upstream syncs are easier to review.
   - Each row has a discard control (confirmed, since discarding untracked files deletes them). A
     commit message box with an "Amend last commit" toggle commits the staged index; the button is
     enabled only when something is staged (or amending) and a message is present.
-  - Backed by the git-index RPCs above via a `useGitDetailedStatus` query (stale-while-revalidate
-    atom) plus stage/unstage/discard/commit mutation helpers. The web RPC client (`wsRpcClient`),
-    the `EnvironmentApi` contract, and `environmentApi` wiring were extended with the new methods.
+  - Backed by the git-index RPCs above via a `useGitDetailedStatus` query plus
+    stage/unstage/discard/commit mutation helpers. The commands use upstream's supervised,
+    environment-scoped client-runtime atoms so they reconnect and report failures consistently with
+    the rest of the current web client.
   - Per-file inline diff and AI commit-message prefill are intentionally not included in this pass
     (no per-file diff RPC exists yet, and message generation is currently bundled inside the stacked
     commit action); the existing whole-tree Diff surface remains available separately.
   - Source: `apps/web/src/components/files/GitChangesPanel.tsx`,
     `apps/web/src/components/files/gitChangesState.ts`,
-    `apps/web/src/components/files/FilePreviewPanel.tsx`, `apps/web/src/environmentApi.ts`,
-    `packages/client-runtime/src/wsRpcClient.ts`, `packages/contracts/src/ipc.ts`.
+    `apps/web/src/components/files/FilePreviewPanel.tsx`,
+    `packages/client-runtime/src/state/git.ts`, `packages/contracts/src/ipc.ts`.
 
 ## Multiwork in the Workspace Picker
 
@@ -208,8 +209,8 @@ fork-specific behavior so future upstream syncs are easier to review.
   - Source: `packages/contracts/src/multiwork.ts`, `packages/contracts/src/settings.ts`,
     `packages/contracts/src/rpc.ts`, `packages/contracts/src/ipc.ts`,
     `apps/server/src/multiwork/MultiworkService.ts`, `apps/server/src/server.ts`,
-    `apps/server/src/ws.ts`, `packages/client-runtime/src/wsRpcClient.ts`,
-    `apps/web/src/environmentApi.ts`, `apps/web/src/components/Sidebar.tsx`,
+    `apps/server/src/ws.ts`, `packages/client-runtime/src/state/multiwork.ts`,
+    `apps/web/src/state/multiwork.ts`, `apps/web/src/components/Sidebar.tsx`,
     `apps/web/src/components/settings/SettingsPanels.tsx`.
   - Validated with `MultiworkService.test.ts` (offline clone against a local bare remote: fresh
     branch + context restore, continuing an existing remote branch, reuse + list, and the

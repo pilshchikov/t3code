@@ -62,7 +62,6 @@ const unitTestProject = {
 const browserTestProject = {
   extends: true,
   server: {
-    // Browser tests need concurrent runs to claim the next available port.
     strictPort: false,
   },
   test: {
@@ -123,6 +122,8 @@ export default defineConfig(() => {
     ],
     optimizeDeps: {
       include: [
+        "@clerk/clerk-js",
+        "@clerk/react/internal",
         "@pierre/diffs",
         "@pierre/diffs/editor",
         "@pierre/diffs/react",
@@ -149,6 +150,7 @@ export default defineConfig(() => {
     },
     resolve: {
       tsconfigPaths: true,
+      dedupe: ["react", "react-dom"],
     },
     server: {
       host,

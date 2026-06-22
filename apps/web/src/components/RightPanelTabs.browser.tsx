@@ -10,7 +10,13 @@ import { RightPanelTabs } from "./RightPanelTabs";
 
 const surfaces: RightPanelSurface[] = [
   { id: "files", kind: "files" },
-  { id: "file:src/index.ts", kind: "file", relativePath: "src/index.ts" },
+  {
+    id: "file:src/index.ts",
+    kind: "file",
+    relativePath: "src/index.ts",
+    revealLine: null,
+    revealRequestId: 0,
+  },
 ];
 
 function renderTabs(showTabs: boolean) {

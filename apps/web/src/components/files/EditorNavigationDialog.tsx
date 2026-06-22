@@ -1,4 +1,5 @@
 import type { EnvironmentId, ProjectCodeSearchMatch, ProjectEntry } from "@t3tools/contracts";
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Braces,
@@ -11,15 +12,16 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useCommandPaletteStore } from "~/commandPaletteStore";
-import { ensureEnvironmentApi } from "~/environmentApi";
+import { isCommandPaletteOpen, useOpenCommandPalette } from "~/commandPaletteContext";
 import {
   editorWorkspaceKey,
   useEditorNavigationStore,
   type RecentEditorFile,
 } from "~/editorNavigationStore";
-import { useSettings, useUpdateSettings } from "~/hooks/useSettings";
+import { useClientSettings, useUpdateClientSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
+import { projectEnvironment } from "~/state/projects";
+import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
 import { Dialog, DialogPopup } from "~/components/ui/dialog";
 import { Kbd } from "~/components/ui/kbd";
 
@@ -167,8 +169,15 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const lastShiftReleasedAtRef = useRef(0);
   const navigate = useNavigate();
-  const settings = useSettings();
-  const { updateSettings } = useUpdateSettings();
+  const openCommandPalette = useOpenCommandPalette();
+  const settings = useClientSettings();
+  const updateSettings = useUpdateClientSettings();
+  const searchEntries = useAtomQueryRunner(projectEnvironment.searchEntries, {
+    reportFailure: false,
+  });
+  const searchCode = useAtomQueryRunner(projectEnvironment.searchCode, {
+    reportFailure: false,
+  });
   const workspaceKey = editorWorkspaceKey(props.environmentId, props.cwd);
   const recentFiles = useEditorNavigationStore(
     (state) => state.recentFilesByWorkspace[workspaceKey] ?? EMPTY_RECENT_FILES,
@@ -208,7 +217,7 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
       if (
         lastShiftReleasedAtRef.current > 0 &&
         now - lastShiftReleasedAtRef.current <= DOUBLE_SHIFT_WINDOW_MS &&
-        !useCommandPaletteStore.getState().open
+        !isCommandPaletteOpen()
       ) {
         event.preventDefault();
         openSearch();
@@ -240,7 +249,7 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
         title: "Open Command Palette",
         detail: "Search all T3 Code commands",
         keywords: "commands actions t3 code palette",
-        run: () => useCommandPaletteStore.getState().setOpen(true),
+        run: openCommandPalette,
       },
       {
         id: "action:settings",
@@ -281,6 +290,7 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
     ],
     [
       navigate,
+      openCommandPalette,
       props.onRefreshFiles,
       props.onToggleExplorer,
       props.projectName,
@@ -316,29 +326,30 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
     let cancelled = false;
     const timeout = window.setTimeout(() => {
       setLoading(true);
-      const api = ensureEnvironmentApi(props.environmentId);
       const requests: Array<Promise<SearchResultItem[]>> = [];
 
       if (scope === "all" || scope === "files") {
         requests.push(
-          api.projects
-            .searchEntries({ cwd: props.cwd, query: trimmedQuery, limit: 40 })
-            .then((result) =>
-              result.entries.flatMap((entry) =>
-                entry.kind === "file"
-                  ? [
-                      {
-                        id: `file:${entry.path}`,
-                        section: "Files" as const,
-                        kind: "file" as const,
-                        path: entry.path,
-                        title: fileName(entry.path),
-                        detail: entry.path,
-                      },
-                    ]
-                  : [],
-              ),
-            ),
+          searchEntries({
+            environmentId: props.environmentId,
+            input: { cwd: props.cwd, query: trimmedQuery, limit: 40 },
+          }).then((result) => {
+            if (result._tag !== "Success") throw squashAtomCommandFailure(result);
+            return result.value.entries.flatMap((entry) =>
+              entry.kind === "file"
+                ? [
+                    {
+                      id: `file:${entry.path}`,
+                      section: "Files" as const,
+                      kind: "file" as const,
+                      path: entry.path,
+                      title: fileName(entry.path),
+                      detail: entry.path,
+                    },
+                  ]
+                : [],
+            );
+          }),
         );
       }
 
@@ -350,28 +361,30 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
             : [];
       for (const codeScope of codeScopes) {
         requests.push(
-          api.projects
-            .searchCode({
+          searchCode({
+            environmentId: props.environmentId,
+            input: {
               cwd: props.cwd,
               query: trimmedQuery,
               scope: codeScope,
               limit: scope === "all" ? 20 : SEARCH_RESULT_LIMIT,
-            })
-            .then((result) =>
-              result.matches.map((match) => ({
-                id: `code:${codeScope}:${match.path}:${match.lineNumber}:${match.column}`,
-                section:
-                  codeScope === "classes"
-                    ? ("Classes" as const)
-                    : codeScope === "symbols"
-                      ? ("Symbols" as const)
-                      : ("Text" as const),
-                kind: "code" as const,
-                match,
-                title: codeScope === "text" ? match.snippet.trim() : symbolTitle(match),
-                detail: `${match.path}:${match.lineNumber}`,
-              })),
-            ),
+            },
+          }).then((result) => {
+            if (result._tag !== "Success") throw squashAtomCommandFailure(result);
+            return result.value.matches.map((match) => ({
+              id: `code:${codeScope}:${match.path}:${match.lineNumber}:${match.column}`,
+              section:
+                codeScope === "classes"
+                  ? ("Classes" as const)
+                  : codeScope === "symbols"
+                    ? ("Symbols" as const)
+                    : ("Text" as const),
+              kind: "code" as const,
+              match,
+              title: codeScope === "text" ? match.snippet.trim() : symbolTitle(match),
+              detail: `${match.path}:${match.lineNumber}`,
+            }));
+          }),
         );
       }
 
@@ -398,7 +411,7 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [mode, open, props.cwd, props.environmentId, query, scope]);
+  }, [mode, open, props.cwd, props.environmentId, query, scope, searchCode, searchEntries]);
 
   const results = useMemo(() => {
     if (mode === "recent") {

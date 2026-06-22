@@ -1,4 +1,4 @@
-import { homedir } from "node:os";
+import * as NodeOS from "node:os";
 
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -43,7 +43,7 @@ export class MultiworkService extends Context.Service<MultiworkService, Multiwor
 
 function resolveBaseDirectory(path: Path.Path, raw: string): string {
   const trimmed = raw.trim();
-  const home = homedir();
+  const home = NodeOS.homedir();
   if (trimmed.length === 0) {
     return path.join(home, "workplace", "git", "multiwork");
   }

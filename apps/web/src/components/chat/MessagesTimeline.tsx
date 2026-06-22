@@ -5,7 +5,7 @@ import {
   type ServerProviderSkill,
   type TurnId,
 } from "@t3tools/contracts";
-import { parseScopedThreadKey } from "@t3tools/client-runtime";
+import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
   createContext,
   Fragment,
@@ -37,7 +37,7 @@ import {
   type ResolvedEditorDiffTheme,
   resolveFileDiffPath,
 } from "../../lib/diffRendering";
-import { useSettings } from "../../hooks/useSettings";
+import { useClientSettings } from "../../hooks/useSettings";
 import ChatMarkdown from "../ChatMarkdown";
 import {
   BotIcon,
@@ -197,7 +197,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   skills = EMPTY_TIMELINE_SKILLS,
   onIsAtEndChange,
 }: MessagesTimelineProps) {
-  const editorSyntaxTheme = useSettings((settings) => settings.editorSyntaxTheme);
+  const editorSyntaxTheme = useClientSettings((settings) => settings.editorSyntaxTheme);
   const editorDiffTheme = useMemo(
     () => resolveEditorDiffTheme(editorSyntaxTheme, resolvedTheme),
     [editorSyntaxTheme, resolvedTheme],
@@ -617,16 +617,10 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
                 <TooltipTrigger
                   render={<p className="text-muted-foreground text-xs tabular-nums" />}
                 >
-                  {formatShortTimestamp(
-                    row.message.completedAt ?? row.message.createdAt,
-                    ctx.timestampFormat,
-                  )}
+                  {formatShortTimestamp(row.message.updatedAt, ctx.timestampFormat)}
                 </TooltipTrigger>
                 <TooltipPopup>
-                  {formatChatTimestampTooltip(
-                    row.message.completedAt ?? row.message.createdAt,
-                    ctx.timestampFormat,
-                  )}
+                  {formatChatTimestampTooltip(row.message.updatedAt, ctx.timestampFormat)}
                 </TooltipPopup>
               </Tooltip>
             )}
@@ -752,7 +746,7 @@ const WorkGroupSection = memo(function WorkGroupSection({
     ? nonEmptyEntries.length === 1
       ? "1 tool call"
       : `${nonEmptyEntries.length} tool calls`
-    : "work log";
+    : "Work Log";
 
   useLayoutEffect(() => {
     const anchorBottomBeforeToggle = anchorBottomBeforeToggleRef.current;

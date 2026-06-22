@@ -1,9 +1,20 @@
 import { WorkerPoolContextProvider, useWorkerPool } from "@pierre/diffs/react";
 import DiffsWorker from "@pierre/diffs/worker/worker.js?worker";
+import * as Schema from "effect/Schema";
 import { useEffect, useMemo, type ReactNode } from "react";
-import { useSettings } from "../hooks/useSettings";
+import { useClientSettings } from "../hooks/useSettings";
 import { useTheme } from "../hooks/useTheme";
 import { resolveEditorDiffTheme, type DiffThemeName } from "../lib/diffRendering";
+
+export class DiffWorkerError extends Schema.TaggedErrorClass<DiffWorkerError>()("DiffWorkerError", {
+  operation: Schema.Literals(["create-worker", "get-render-options", "set-render-options"]),
+  themeName: Schema.String,
+  cause: Schema.Defect(),
+}) {
+  override get message(): string {
+    return `Diff worker operation ${this.operation} failed for theme ${this.themeName}.`;
+  }
+}
 
 function DiffWorkerThemeSync({ themeName }: { themeName: DiffThemeName }) {
   const workerPool = useWorkerPool();
@@ -13,17 +24,23 @@ function DiffWorkerThemeSync({ themeName }: { themeName: DiffThemeName }) {
       return;
     }
 
-    const current = workerPool.getDiffRenderOptions();
-    if (current.theme === themeName) {
-      return;
-    }
+    let operation: DiffWorkerError["operation"] = "get-render-options";
+    void (async () => {
+      try {
+        const current = workerPool.getDiffRenderOptions();
+        if (current.theme === themeName) {
+          return;
+        }
 
-    void workerPool
-      .setRenderOptions({
-        ...current,
-        theme: themeName,
-      })
-      .catch(() => undefined);
+        operation = "set-render-options";
+        await workerPool.setRenderOptions({
+          ...current,
+          theme: themeName,
+        });
+      } catch (cause) {
+        console.error(new DiffWorkerError({ operation, themeName, cause }));
+      }
+    })();
   }, [themeName, workerPool]);
 
   return null;
@@ -31,7 +48,7 @@ function DiffWorkerThemeSync({ themeName }: { themeName: DiffThemeName }) {
 
 export function DiffWorkerPoolProvider({ children }: { children?: ReactNode }) {
   const { resolvedTheme } = useTheme();
-  const editorSyntaxTheme = useSettings((settings) => settings.editorSyntaxTheme);
+  const editorSyntaxTheme = useClientSettings((settings) => settings.editorSyntaxTheme);
   const { themeName } = useMemo(
     () => resolveEditorDiffTheme(editorSyntaxTheme, resolvedTheme),
     [editorSyntaxTheme, resolvedTheme],
@@ -45,7 +62,17 @@ export function DiffWorkerPoolProvider({ children }: { children?: ReactNode }) {
   return (
     <WorkerPoolContextProvider
       poolOptions={{
-        workerFactory: () => new DiffsWorker(),
+        workerFactory: () => {
+          try {
+            return new DiffsWorker();
+          } catch (cause) {
+            throw new DiffWorkerError({
+              operation: "create-worker",
+              themeName,
+              cause,
+            });
+          }
+        },
         poolSize: workerPoolSize,
         totalASTLRUCacheSize: 240,
       }}

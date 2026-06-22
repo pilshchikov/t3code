@@ -16,15 +16,25 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
 }));
 
-vi.mock("~/environmentApi", () => ({
-  ensureEnvironmentApi: () => ({
-    projects: { searchCode, searchEntries },
-  }),
+vi.mock("~/commandPaletteContext", () => ({
+  isCommandPaletteOpen: () => false,
+  useOpenCommandPalette: () => vi.fn(),
 }));
 
 vi.mock("~/hooks/useSettings", () => ({
-  useSettings: () => ({ showEditorTabs: true }),
-  useUpdateSettings: () => ({ updateSettings: vi.fn() }),
+  useClientSettings: () => ({ showEditorTabs: true }),
+  useUpdateClientSettings: () => vi.fn(),
+}));
+
+vi.mock("~/state/projects", () => ({
+  projectEnvironment: {
+    searchCode: "searchCode",
+    searchEntries: "searchEntries",
+  },
+}));
+
+vi.mock("~/state/use-atom-query-runner", () => ({
+  useAtomQueryRunner: (family: string) => (family === "searchCode" ? searchCode : searchEntries),
 }));
 
 import { EditorNavigationDialog } from "./EditorNavigationDialog";
@@ -62,8 +72,14 @@ function renderDialog() {
 
 describe("EditorNavigationDialog", () => {
   beforeEach(() => {
-    searchEntries.mockResolvedValue({ entries: [], truncated: false });
-    searchCode.mockResolvedValue({ matches: [], truncated: false });
+    searchEntries.mockResolvedValue({
+      _tag: "Success",
+      value: { entries: [], truncated: false },
+    });
+    searchCode.mockResolvedValue({
+      _tag: "Success",
+      value: { matches: [], truncated: false },
+    });
     useEditorNavigationStore.setState({ recentFilesByWorkspace: {}, navigationRequest: null });
   });
 
@@ -88,22 +104,25 @@ describe("EditorNavigationDialog", () => {
   });
 
   it("searches symbols and renders their source location", async () => {
-    searchCode.mockImplementation((input: { scope: string }) =>
+    searchCode.mockImplementation((target: { input: { scope: string } }) =>
       Promise.resolve({
-        matches:
-          input.scope === "symbols"
-            ? [
-                {
-                  path: "src/TeamService.ts",
-                  lineNumber: 12,
-                  column: 2,
-                  snippet: "class TeamService {",
-                  isDefinition: true,
-                  kind: "class",
-                },
-              ]
-            : [],
-        truncated: false,
+        _tag: "Success",
+        value: {
+          matches:
+            target.input.scope === "symbols"
+              ? [
+                  {
+                    path: "src/TeamService.ts",
+                    lineNumber: 12,
+                    column: 2,
+                    snippet: "class TeamService {",
+                    isDefinition: true,
+                    kind: "class",
+                  },
+                ]
+              : [],
+          truncated: false,
+        },
       }),
     );
     const screen = await renderDialog();
