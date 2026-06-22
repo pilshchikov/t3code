@@ -177,6 +177,11 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.gitRunStackedAction, AuthOrchestrationOperateScope],
   [WS_METHODS.gitResolvePullRequest, AuthOrchestrationOperateScope],
   [WS_METHODS.gitPreparePullRequestThread, AuthOrchestrationOperateScope],
+  [WS_METHODS.gitDetailedStatus, AuthOrchestrationReadScope],
+  [WS_METHODS.gitStageFiles, AuthOrchestrationOperateScope],
+  [WS_METHODS.gitUnstageFiles, AuthOrchestrationOperateScope],
+  [WS_METHODS.gitDiscardChanges, AuthOrchestrationOperateScope],
+  [WS_METHODS.gitCommitStaged, AuthOrchestrationOperateScope],
   [WS_METHODS.vcsListRefs, AuthOrchestrationReadScope],
   [WS_METHODS.vcsCreateWorktree, AuthOrchestrationOperateScope],
   [WS_METHODS.vcsRemoveWorktree, AuthOrchestrationOperateScope],
@@ -1366,6 +1371,34 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
             gitWorkflow
               .preparePullRequestThread(input)
               .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "git" },
+          ),
+        [WS_METHODS.gitDetailedStatus]: (input) =>
+          observeRpcEffect(WS_METHODS.gitDetailedStatus, gitWorkflow.detailedStatus(input), {
+            "rpc.aggregate": "git",
+          }),
+        [WS_METHODS.gitStageFiles]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.gitStageFiles,
+            gitWorkflow.stageFiles(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "git" },
+          ),
+        [WS_METHODS.gitUnstageFiles]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.gitUnstageFiles,
+            gitWorkflow.unstageFiles(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "git" },
+          ),
+        [WS_METHODS.gitDiscardChanges]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.gitDiscardChanges,
+            gitWorkflow.discardChanges(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "git" },
+          ),
+        [WS_METHODS.gitCommitStaged]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.gitCommitStaged,
+            gitWorkflow.commitStaged(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
             { "rpc.aggregate": "git" },
           ),
         [WS_METHODS.vcsListRefs]: (input) =>

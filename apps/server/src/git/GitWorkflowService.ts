@@ -5,6 +5,12 @@ import * as Layer from "effect/Layer";
 import {
   GitManagerError,
   GitCommandError,
+  type GitCommitStagedInput,
+  type GitCommitStagedResult,
+  type GitDetailedStatusResult,
+  type GitDiscardChangesInput,
+  type GitStageFilesInput,
+  type GitUnstageFilesInput,
   type VcsSwitchRefInput,
   type VcsSwitchRefResult,
   type VcsCreateRefInput,
@@ -72,6 +78,21 @@ export interface GitWorkflowServiceShape {
     readonly oldBranch: string;
     readonly newBranch: string;
   }) => Effect.Effect<{ readonly branch: string }, GitManagerServiceError>;
+  readonly detailedStatus: (
+    input: VcsStatusInput,
+  ) => Effect.Effect<GitDetailedStatusResult, GitCommandError>;
+  readonly stageFiles: (
+    input: GitStageFilesInput,
+  ) => Effect.Effect<GitDetailedStatusResult, GitCommandError>;
+  readonly unstageFiles: (
+    input: GitUnstageFilesInput,
+  ) => Effect.Effect<GitDetailedStatusResult, GitCommandError>;
+  readonly discardChanges: (
+    input: GitDiscardChangesInput,
+  ) => Effect.Effect<GitDetailedStatusResult, GitCommandError>;
+  readonly commitStaged: (
+    input: GitCommitStagedInput,
+  ) => Effect.Effect<GitCommitStagedResult, GitCommandError>;
 }
 
 export class GitWorkflowService extends Context.Service<
@@ -309,6 +330,39 @@ export const make = Effect.fn("makeGitWorkflowService")(function* () {
     renameBranch: (input) =>
       ensureGit("GitWorkflowService.renameBranch", input.cwd).pipe(
         Effect.andThen(git.renameBranch(input)),
+      ),
+    detailedStatus: (input) =>
+      detectGitRepositoryForCommand("GitWorkflowService.detailedStatus", input.cwd).pipe(
+        Effect.flatMap((isGitRepository) =>
+          isGitRepository
+            ? git.detailedStatus(input.cwd)
+            : Effect.succeed<GitDetailedStatusResult>({ isRepo: false, files: [] }),
+        ),
+      ),
+    stageFiles: (input) =>
+      ensureGitCommand("GitWorkflowService.stageFiles", input.cwd).pipe(
+        Effect.andThen(git.stageFiles(input.cwd, input.paths)),
+        Effect.andThen(git.detailedStatus(input.cwd)),
+      ),
+    unstageFiles: (input) =>
+      ensureGitCommand("GitWorkflowService.unstageFiles", input.cwd).pipe(
+        Effect.andThen(git.unstageFiles(input.cwd, input.paths)),
+        Effect.andThen(git.detailedStatus(input.cwd)),
+      ),
+    discardChanges: (input) =>
+      ensureGitCommand("GitWorkflowService.discardChanges", input.cwd).pipe(
+        Effect.andThen(git.discardChanges(input.cwd, input.paths)),
+        Effect.andThen(git.detailedStatus(input.cwd)),
+      ),
+    commitStaged: (input) =>
+      ensureGitCommand("GitWorkflowService.commitStaged", input.cwd).pipe(
+        Effect.andThen(
+          git.commitStaged(
+            input.cwd,
+            input.message,
+            input.amend !== undefined ? { amend: input.amend } : undefined,
+          ),
+        ),
       ),
   });
 });

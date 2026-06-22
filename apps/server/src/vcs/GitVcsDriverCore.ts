@@ -21,6 +21,8 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import {
   GitCommandError,
+  type GitChangeKind,
+  type GitFileChange,
   type ReviewDiffPreviewInput,
   type ReviewDiffPreviewSource,
   type VcsRef,
@@ -156,6 +158,108 @@ function parsePorcelainPath(line: string): string | null {
   const parts = line.trim().split(/\s+/g);
   const filePath = parts.at(-1) ?? "";
   return filePath.length > 0 ? filePath : null;
+}
+
+const GIT_STATUS_KIND_BY_CODE: Readonly<Record<string, GitChangeKind>> = Object.freeze({
+  M: "modified",
+  A: "added",
+  D: "deleted",
+  R: "renamed",
+  C: "copied",
+  T: "typechange",
+  U: "unmerged",
+});
+
+function mapGitStatusCode(code: string | undefined): GitChangeKind | null {
+  return code ? (GIT_STATUS_KIND_BY_CODE[code] ?? null) : null;
+}
+
+/**
+ * Parse `git status --porcelain=2 -z` into per-file staged/unstaged change records. The `-z`
+ * (NUL-separated) form is used so paths with spaces or newlines round-trip safely; rename/copy
+ * (`2`) records consume a following NUL-separated original path token.
+ */
+function parseDetailedStatusEntries(stdout: string): GitFileChange[] {
+  const tokens = stdout.split("\0");
+  const files: GitFileChange[] = [];
+  let index = 0;
+
+  const pushXyEntry = (xy: string, filePath: string, origPath: string | null) => {
+    if (filePath.length === 0) return;
+    const indexCode = xy[0] ?? ".";
+    const worktreeCode = xy[1] ?? ".";
+    files.push({
+      path: filePath,
+      origPath: origPath && origPath.length > 0 ? origPath : null,
+      staged: indexCode !== ".",
+      unstaged: worktreeCode !== ".",
+      untracked: false,
+      indexStatus: mapGitStatusCode(indexCode),
+      worktreeStatus: mapGitStatusCode(worktreeCode),
+    });
+  };
+
+  while (index < tokens.length) {
+    const token = tokens[index];
+    if (token === undefined || token.length === 0) {
+      index += 1;
+      continue;
+    }
+
+    if (token.startsWith("1 ")) {
+      const match = /^1 (..) \S+ \S+ \S+ \S+ \S+ \S+ (.*)$/s.exec(token);
+      index += 1;
+      if (match) pushXyEntry(match[1] ?? "..", match[2] ?? "", null);
+      continue;
+    }
+
+    if (token.startsWith("2 ")) {
+      const match = /^2 (..) \S+ \S+ \S+ \S+ \S+ \S+ \S+ (.*)$/s.exec(token);
+      const origPath = tokens[index + 1] ?? null;
+      index += 2;
+      if (match) pushXyEntry(match[1] ?? "..", match[2] ?? "", origPath);
+      continue;
+    }
+
+    if (token.startsWith("u ")) {
+      const match = /^u (..) (?:\S+ ){8}(.*)$/s.exec(token);
+      index += 1;
+      if (match && (match[2]?.length ?? 0) > 0) {
+        files.push({
+          path: match[2]!,
+          origPath: null,
+          staged: false,
+          unstaged: true,
+          untracked: false,
+          indexStatus: "unmerged",
+          worktreeStatus: "unmerged",
+        });
+      }
+      continue;
+    }
+
+    if (token.startsWith("? ")) {
+      const filePath = token.slice(2);
+      index += 1;
+      if (filePath.length > 0) {
+        files.push({
+          path: filePath,
+          origPath: null,
+          staged: false,
+          unstaged: true,
+          untracked: true,
+          indexStatus: null,
+          worktreeStatus: "untracked",
+        });
+      }
+      continue;
+    }
+
+    // "! " ignored entries and anything unrecognized are skipped.
+    index += 1;
+  }
+
+  return files.toSorted((a, b) => a.path.localeCompare(b.path));
 }
 
 function parseBranchLine(line: string): { name: string; current: boolean } | null {
@@ -1448,6 +1552,158 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     return yield* readStatusDetailsRemote(cwd);
   });
 
+  const hasHeadCommit = (cwd: string): Effect.Effect<boolean, GitCommandError> =>
+    executeGit("GitVcsDriver.hasHeadCommit", cwd, ["rev-parse", "--verify", "--quiet", "HEAD"], {
+      allowNonZeroExit: true,
+      timeoutMs: 5_000,
+    }).pipe(Effect.map((result) => result.exitCode === 0));
+
+  const detailedStatus: GitVcsDriver.GitVcsDriverShape["detailedStatus"] = Effect.fn(
+    "detailedStatus",
+  )(function* (cwd) {
+    const statusResult = yield* executeGit(
+      "GitVcsDriver.detailedStatus",
+      cwd,
+      ["status", "--porcelain=2", "-z"],
+      {
+        allowNonZeroExit: true,
+        maxOutputBytes: WORKSPACE_FILES_MAX_OUTPUT_BYTES,
+        appendTruncationMarker: true,
+      },
+    ).pipe(Effect.catchIf(isMissingGitCwdError, () => Effect.succeed(null)));
+
+    if (statusResult === null) {
+      return { isRepo: false, files: [] };
+    }
+    if (statusResult.exitCode !== 0) {
+      const stderr = statusResult.stderr.trim();
+      if (stderr.toLowerCase().includes("not a git repository")) {
+        return { isRepo: false, files: [] };
+      }
+      return yield* createGitCommandError(
+        "GitVcsDriver.detailedStatus",
+        cwd,
+        ["status", "--porcelain=2", "-z"],
+        stderr || "git status failed",
+      );
+    }
+    return { isRepo: true, files: parseDetailedStatusEntries(statusResult.stdout) };
+  });
+
+  const stageFiles: GitVcsDriver.GitVcsDriverShape["stageFiles"] = (cwd, paths) =>
+    paths.length === 0
+      ? Effect.void
+      : // `add -A` stages modifications, new files, and removals for the given pathspecs.
+        runGit("GitVcsDriver.stageFiles", cwd, ["add", "-A", "--", ...paths]);
+
+  const unstageFiles: GitVcsDriver.GitVcsDriverShape["unstageFiles"] = Effect.fn("unstageFiles")(
+    function* (cwd, paths) {
+      if (paths.length === 0) return;
+      const headExists = yield* hasHeadCommit(cwd);
+      if (headExists) {
+        yield* runGit("GitVcsDriver.unstageFiles.reset", cwd, [
+          "reset",
+          "-q",
+          "HEAD",
+          "--",
+          ...paths,
+        ]);
+      } else {
+        // No commit yet: there is no HEAD to reset against, so drop the entries from the index.
+        yield* runGit(
+          "GitVcsDriver.unstageFiles.rmCached",
+          cwd,
+          ["rm", "-q", "--cached", "--ignore-unmatch", "--", ...paths],
+          true,
+        );
+      }
+    },
+  );
+
+  const discardChanges: GitVcsDriver.GitVcsDriverShape["discardChanges"] = Effect.fn(
+    "discardChanges",
+  )(function* (cwd, paths) {
+    if (paths.length === 0) return;
+    const headExists = yield* hasHeadCommit(cwd);
+
+    // Files present in HEAD are reverted to HEAD (index + worktree). Files absent from HEAD are
+    // new (staged-add or untracked): unstage them and delete from the worktree.
+    const inHead = new Set<string>();
+    if (headExists) {
+      const headFiles = yield* executeGit(
+        "GitVcsDriver.discardChanges.lsTree",
+        cwd,
+        ["ls-tree", "-r", "-z", "--name-only", "HEAD", "--", ...paths],
+        {
+          allowNonZeroExit: true,
+          maxOutputBytes: WORKSPACE_FILES_MAX_OUTPUT_BYTES,
+          appendTruncationMarker: true,
+        },
+      );
+      for (const filePath of splitNullSeparatedGitStdoutPaths(headFiles)) {
+        inHead.add(filePath);
+      }
+    }
+    const trackedPaths = paths.filter((filePath) => inHead.has(filePath));
+    const newPaths = paths.filter((filePath) => !inHead.has(filePath));
+
+    if (trackedPaths.length > 0) {
+      yield* runGit("GitVcsDriver.discardChanges.checkout", cwd, [
+        "checkout",
+        "-q",
+        "HEAD",
+        "--",
+        ...trackedPaths,
+      ]);
+    }
+    if (newPaths.length > 0) {
+      if (headExists) {
+        yield* runGit(
+          "GitVcsDriver.discardChanges.reset",
+          cwd,
+          ["reset", "-q", "--", ...newPaths],
+          true,
+        );
+      } else {
+        yield* runGit(
+          "GitVcsDriver.discardChanges.rmCached",
+          cwd,
+          ["rm", "-q", "--cached", "--ignore-unmatch", "--", ...newPaths],
+          true,
+        );
+      }
+      yield* runGit(
+        "GitVcsDriver.discardChanges.clean",
+        cwd,
+        ["clean", "-fdq", "--", ...newPaths],
+        true,
+      );
+    }
+  });
+
+  const commitStaged: GitVcsDriver.GitVcsDriverShape["commitStaged"] = Effect.fn("commitStaged")(
+    function* (cwd, message, options) {
+      const trimmed = message.trim();
+      const newlineIndex = trimmed.indexOf("\n");
+      const subject = newlineIndex >= 0 ? trimmed.slice(0, newlineIndex).trim() : trimmed;
+      const body = newlineIndex >= 0 ? trimmed.slice(newlineIndex + 1).trim() : "";
+      const args = ["commit"];
+      if (options?.amend) {
+        args.push("--amend");
+      }
+      args.push("-m", subject);
+      if (body.length > 0) {
+        args.push("-m", body);
+      }
+      yield* executeGit("GitVcsDriver.commitStaged", cwd, args).pipe(Effect.asVoid);
+      const commitSha = yield* runGitStdout("GitVcsDriver.commitStaged.revParseHead", cwd, [
+        "rev-parse",
+        "HEAD",
+      ]).pipe(Effect.map((stdout) => stdout.trim()));
+      return { commitSha };
+    },
+  );
+
   const status: GitVcsDriver.GitVcsDriverShape["status"] = (input) =>
     statusDetails(input.cwd).pipe(
       Effect.map((details) => ({
@@ -2395,6 +2651,11 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     statusDetails,
     statusDetailsLocal,
     statusDetailsRemote,
+    detailedStatus,
+    stageFiles,
+    unstageFiles,
+    discardChanges,
+    commitStaged,
     prepareCommitContext,
     commit,
     pushCurrentBranch,

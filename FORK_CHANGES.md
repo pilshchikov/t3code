@@ -130,6 +130,26 @@ fork-specific behavior so future upstream syncs are easier to review.
   - Source: `packages/contracts/src/settings.ts`, `apps/web/src/lib/diffRendering.ts`,
     `apps/web/src/components/settings/SettingsPanels.tsx`.
 
+## Git Commit Panel
+
+- The server exposes granular git-index operations, additive and git-only (the shared `VcsDriver`
+  contract and the `jj` driver are untouched).
+  - New `GitVcsDriver` capabilities: `detailedStatus` (per-file staged/unstaged state + change kind,
+    parsed from `git status --porcelain=2 -z`, including untracked and rename/copy origins),
+    `stageFiles`, `unstageFiles`, `discardChanges` (reverts tracked paths to HEAD and removes
+    untracked ones, with no-HEAD/initial-commit handling), and `commitStaged` (commits the current
+    index, splitting the message into subject/body, with optional `--amend`).
+  - Exposed through `GitWorkflowService` (gated to git repositories like the other workflow ops) and
+    five additive WebSocket RPCs: `git.detailedStatus`, `git.stageFiles`, `git.unstageFiles`,
+    `git.discardChanges`, `git.commitStaged`. The stage/unstage/discard RPCs return the refreshed
+    detailed status so the client updates in one round trip, and mutations also refresh the VCS
+    status stream.
+  - Source: `packages/contracts/src/git.ts`, `packages/contracts/src/rpc.ts`,
+    `apps/server/src/vcs/GitVcsDriver.ts`, `apps/server/src/vcs/GitVcsDriverCore.ts`,
+    `apps/server/src/git/GitWorkflowService.ts`, `apps/server/src/ws.ts`.
+  - Validated with `GitVcsDriverCore.test.ts` integration tests covering detailed status,
+    stage/unstage/commit round-trips, and discard of tracked + untracked files.
+
 ## Claude Profiles
 
 - Claude provider instances support a dedicated `Claude config directory` setting.

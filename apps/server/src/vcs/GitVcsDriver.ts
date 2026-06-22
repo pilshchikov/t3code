@@ -12,6 +12,7 @@ import { ChildProcessSpawner } from "effect/unstable/process";
 import {
   GitCommandError,
   VcsProcessExitError,
+  type GitDetailedStatusResult,
   type VcsSwitchRefInput,
   type VcsSwitchRefResult,
   type VcsCreateRefInput,
@@ -176,6 +177,24 @@ export interface GitVcsDriverShape {
   readonly statusDetailsRemote: (
     cwd: string,
   ) => Effect.Effect<GitRemoteStatusDetails, GitCommandError>;
+  readonly detailedStatus: (cwd: string) => Effect.Effect<GitDetailedStatusResult, GitCommandError>;
+  readonly stageFiles: (
+    cwd: string,
+    paths: readonly string[],
+  ) => Effect.Effect<void, GitCommandError>;
+  readonly unstageFiles: (
+    cwd: string,
+    paths: readonly string[],
+  ) => Effect.Effect<void, GitCommandError>;
+  readonly discardChanges: (
+    cwd: string,
+    paths: readonly string[],
+  ) => Effect.Effect<void, GitCommandError>;
+  readonly commitStaged: (
+    cwd: string,
+    message: string,
+    options?: { readonly amend?: boolean },
+  ) => Effect.Effect<{ commitSha: string }, GitCommandError>;
   readonly prepareCommitContext: (
     cwd: string,
     filePaths?: readonly string[],

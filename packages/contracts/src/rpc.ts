@@ -16,6 +16,12 @@ import {
 import { AssetAccessError, AssetCreateUrlInput, AssetCreateUrlResult } from "./assets.ts";
 import {
   GitActionProgressEvent,
+  GitCommitStagedInput,
+  GitCommitStagedResult,
+  GitDetailedStatusResult,
+  GitDiscardChangesInput,
+  GitStageFilesInput,
+  GitUnstageFilesInput,
   VcsSwitchRefInput,
   VcsSwitchRefResult,
   GitCommandError,
@@ -177,6 +183,13 @@ export const WS_METHODS = {
   gitRunStackedAction: "git.runStackedAction",
   gitResolvePullRequest: "git.resolvePullRequest",
   gitPreparePullRequestThread: "git.preparePullRequestThread",
+
+  // Git index methods (Commit panel)
+  gitDetailedStatus: "git.detailedStatus",
+  gitStageFiles: "git.stageFiles",
+  gitUnstageFiles: "git.unstageFiles",
+  gitDiscardChanges: "git.discardChanges",
+  gitCommitStaged: "git.commitStaged",
 
   // Review methods
   reviewGetDiffPreview: "review.getDiffPreview",
@@ -439,6 +452,36 @@ export const WsGitPreparePullRequestThreadRpc = Rpc.make(WS_METHODS.gitPreparePu
   payload: GitPreparePullRequestThreadInput,
   success: GitPreparePullRequestThreadResult,
   error: Schema.Union([GitManagerServiceError, EnvironmentAuthorizationError]),
+});
+
+export const WsGitDetailedStatusRpc = Rpc.make(WS_METHODS.gitDetailedStatus, {
+  payload: VcsStatusInput,
+  success: GitDetailedStatusResult,
+  error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
+});
+
+export const WsGitStageFilesRpc = Rpc.make(WS_METHODS.gitStageFiles, {
+  payload: GitStageFilesInput,
+  success: GitDetailedStatusResult,
+  error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
+});
+
+export const WsGitUnstageFilesRpc = Rpc.make(WS_METHODS.gitUnstageFiles, {
+  payload: GitUnstageFilesInput,
+  success: GitDetailedStatusResult,
+  error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
+});
+
+export const WsGitDiscardChangesRpc = Rpc.make(WS_METHODS.gitDiscardChanges, {
+  payload: GitDiscardChangesInput,
+  success: GitDetailedStatusResult,
+  error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
+});
+
+export const WsGitCommitStagedRpc = Rpc.make(WS_METHODS.gitCommitStaged, {
+  payload: GitCommitStagedInput,
+  success: GitCommitStagedResult,
+  error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
 export const WsVcsListRefsRpc = Rpc.make(WS_METHODS.vcsListRefs, {
@@ -720,6 +763,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitRunStackedActionRpc,
   WsGitResolvePullRequestRpc,
   WsGitPreparePullRequestThreadRpc,
+  WsGitDetailedStatusRpc,
+  WsGitStageFilesRpc,
+  WsGitUnstageFilesRpc,
+  WsGitDiscardChangesRpc,
+  WsGitCommitStagedRpc,
   WsVcsListRefsRpc,
   WsVcsCreateWorktreeRpc,
   WsVcsRemoveWorktreeRpc,

@@ -512,4 +512,87 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
       }),
     );
   });
+
+  describe("commit panel index operations", () => {
+    it.effect("reports per-file staged/unstaged kinds and untracked files", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        yield* initRepoWithCommit(cwd);
+        // Commit tracked.ts so both it and README.md are in HEAD before we make changes.
+        yield* writeTextFile(cwd, "tracked.ts", "export const a = 1;\n");
+        yield* git(cwd, ["add", "tracked.ts"]);
+        yield* git(cwd, ["commit", "-m", "add tracked"]);
+        // README.md: modify and stage the modification.
+        yield* writeTextFile(cwd, "README.md", "# test\nmore\n");
+        yield* git(cwd, ["add", "README.md"]);
+        // tracked.ts: modify but leave the change unstaged.
+        yield* writeTextFile(cwd, "tracked.ts", "export const a = 2;\n");
+        // fresh.ts: brand new untracked file.
+        yield* writeTextFile(cwd, "fresh.ts", "export const b = 1;\n");
+
+        const status = yield* driver.detailedStatus(cwd);
+        assert.equal(status.isRepo, true);
+        const byPath = new Map(status.files.map((file) => [file.path, file]));
+
+        const readme = byPath.get("README.md");
+        assert.equal(readme?.staged, true);
+        assert.equal(readme?.indexStatus, "modified");
+
+        const tracked = byPath.get("tracked.ts");
+        assert.equal(tracked?.unstaged, true);
+        assert.equal(tracked?.worktreeStatus, "modified");
+
+        const fresh = byPath.get("fresh.ts");
+        assert.equal(fresh?.untracked, true);
+        assert.equal(fresh?.worktreeStatus, "untracked");
+      }),
+    );
+
+    it.effect("stages, unstages, and commits selected files", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        yield* initRepoWithCommit(cwd);
+        yield* writeTextFile(cwd, "feature.ts", "export const value = 1;\n");
+
+        yield* driver.stageFiles(cwd, ["feature.ts"]);
+        let status = yield* driver.detailedStatus(cwd);
+        assert.equal(status.files.find((file) => file.path === "feature.ts")?.staged, true);
+
+        yield* driver.unstageFiles(cwd, ["feature.ts"]);
+        status = yield* driver.detailedStatus(cwd);
+        const afterUnstage = status.files.find((file) => file.path === "feature.ts");
+        assert.equal(afterUnstage?.staged, false);
+        assert.equal(afterUnstage?.untracked, true);
+
+        yield* driver.stageFiles(cwd, ["feature.ts"]);
+        const { commitSha } = yield* driver.commitStaged(cwd, "Add feature\n\nwith a body");
+        assert.isAbove(commitSha.length, 0);
+        assert.equal(yield* git(cwd, ["log", "-1", "--pretty=%s"]), "Add feature");
+        assert.equal(yield* git(cwd, ["log", "-1", "--pretty=%b"]), "with a body");
+
+        const clean = yield* driver.detailedStatus(cwd);
+        assert.deepStrictEqual(clean.files, []);
+      }),
+    );
+
+    it.effect("discards both tracked modifications and untracked files", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        yield* initRepoWithCommit(cwd);
+        // Modify a committed file and create an untracked one.
+        yield* writeTextFile(cwd, "README.md", "# test\nchanged\n");
+        yield* writeTextFile(cwd, "scratch.ts", "export const tmp = 1;\n");
+
+        yield* driver.discardChanges(cwd, ["README.md", "scratch.ts"]);
+
+        // README is back to its committed contents; scratch.ts is gone.
+        assert.equal(yield* git(cwd, ["show", "HEAD:README.md"]), "# test");
+        const status = yield* driver.detailedStatus(cwd);
+        assert.deepStrictEqual(status.files, []);
+      }),
+    );
+  });
 });

@@ -316,6 +316,69 @@ export const VcsPullResult = Schema.Struct({
 });
 export type VcsPullResult = typeof VcsPullResult.Type;
 
+// Granular git index operations (Commit panel)
+
+/** The kind of change git reports for a file, in either the index or the working tree. */
+export const GitChangeKind = Schema.Literals([
+  "modified",
+  "added",
+  "deleted",
+  "renamed",
+  "copied",
+  "typechange",
+  "unmerged",
+  "untracked",
+]);
+export type GitChangeKind = typeof GitChangeKind.Type;
+
+/**
+ * A single changed path with its staged (index) and unstaged (working-tree) state, parsed from
+ * `git status --porcelain=2`. `staged`/`unstaged` are derived from the X/Y status codes so the UI
+ * can render checkbox state (staged, unstaged, or partially staged when both are set).
+ */
+export const GitFileChange = Schema.Struct({
+  path: TrimmedNonEmptyStringSchema,
+  origPath: Schema.NullOr(TrimmedNonEmptyStringSchema),
+  staged: Schema.Boolean,
+  unstaged: Schema.Boolean,
+  untracked: Schema.Boolean,
+  indexStatus: Schema.NullOr(GitChangeKind),
+  worktreeStatus: Schema.NullOr(GitChangeKind),
+});
+export type GitFileChange = typeof GitFileChange.Type;
+
+export const GitDetailedStatusResult = Schema.Struct({
+  isRepo: Schema.Boolean,
+  files: Schema.Array(GitFileChange),
+});
+export type GitDetailedStatusResult = typeof GitDetailedStatusResult.Type;
+
+const GitFilePathsShape = {
+  cwd: TrimmedNonEmptyStringSchema,
+  paths: Schema.Array(TrimmedNonEmptyStringSchema).check(Schema.isMinLength(1)),
+};
+
+export const GitStageFilesInput = Schema.Struct(GitFilePathsShape);
+export type GitStageFilesInput = typeof GitStageFilesInput.Type;
+
+export const GitUnstageFilesInput = Schema.Struct(GitFilePathsShape);
+export type GitUnstageFilesInput = typeof GitUnstageFilesInput.Type;
+
+export const GitDiscardChangesInput = Schema.Struct(GitFilePathsShape);
+export type GitDiscardChangesInput = typeof GitDiscardChangesInput.Type;
+
+export const GitCommitStagedInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  message: TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(10_000)),
+  amend: Schema.optional(Schema.Boolean),
+});
+export type GitCommitStagedInput = typeof GitCommitStagedInput.Type;
+
+export const GitCommitStagedResult = Schema.Struct({
+  commitSha: TrimmedNonEmptyStringSchema,
+});
+export type GitCommitStagedResult = typeof GitCommitStagedResult.Type;
+
 // RPC / domain errors
 export class GitCommandError extends Schema.TaggedErrorClass<GitCommandError>()("GitCommandError", {
   operation: Schema.String,
