@@ -1,5 +1,6 @@
-import type { EnvironmentId, ProjectEntry } from "@t3tools/contracts";
+import type { EnvironmentId, GitFileChange, ProjectEntry } from "@t3tools/contracts";
 import { FileTree, useFileTree } from "@pierre/trees/react";
+import type { GitStatus, GitStatusEntry } from "@pierre/trees";
 import { LocateFixed, Maximize2, Minimize2, RefreshCw, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -8,6 +9,7 @@ import { useVcsStatus } from "~/lib/vcsStatusState";
 import { cn } from "~/lib/utils";
 import { T3_PIERRE_ICONS } from "~/pierre-icons";
 
+import { useGitDetailedStatus } from "./gitChangesState";
 import { useProjectEntriesQuery } from "./projectFilesQueryState";
 
 interface FileBrowserPanelProps {
@@ -79,6 +81,22 @@ function treePath(entry: ProjectEntry): string {
   return entry.kind === "directory" ? `${entry.path}/` : entry.path;
 }
 
+/** Map a per-file git change to the tree's decoration status (its palette has no copy/typechange). */
+function treeGitStatus(file: GitFileChange): GitStatus {
+  if (file.untracked) return "untracked";
+  switch (file.worktreeStatus ?? file.indexStatus) {
+    case "added":
+    case "copied":
+      return "added";
+    case "deleted":
+      return "deleted";
+    case "renamed":
+      return "renamed";
+    default:
+      return "modified";
+  }
+}
+
 export default function FileBrowserPanel({
   environmentId,
   cwd,
@@ -90,16 +108,28 @@ export default function FileBrowserPanel({
   const { resolvedTheme } = useTheme();
   const [autoReveal, setAutoReveal] = useState(initialAutoReveal);
   const vcsStatus = useVcsStatus({ environmentId, cwd });
-  const gitStatusEntries = useMemo(
+  const gitStatus = useGitDetailedStatus(environmentId, cwd);
+  const gitStatusEntries = useMemo<GitStatusEntry[]>(
     () =>
-      (vcsStatus.data?.workingTree.files ?? []).map((file) => ({
+      (gitStatus.data?.files ?? []).map((file) => ({
         path: file.path,
-        // The working-tree status reports changed files with line counts but not add/delete/rename;
-        // mark them modified so the tree colors them (full per-change kinds come with staging).
-        status: "modified" as const,
+        status: treeGitStatus(file),
       })),
+    [gitStatus.data],
+  );
+  // The detailed status is a pull query, so refresh it whenever the live VCS status stream reports a
+  // working-tree change (file saves, external edits) to keep the tree's change markers current.
+  const refreshGitStatus = gitStatus.refresh;
+  const workingTreeFingerprint = useMemo(
+    () =>
+      (vcsStatus.data?.workingTree.files ?? [])
+        .map((file) => `${file.path}:${file.insertions}:${file.deletions}`)
+        .join("|"),
     [vcsStatus.data],
   );
+  useEffect(() => {
+    refreshGitStatus();
+  }, [refreshGitStatus, workingTreeFingerprint]);
   const entriesQuery = useProjectEntriesQuery(environmentId, cwd);
   const entries = entriesQuery.data?.entries ?? [];
   const entryKinds = useMemo(

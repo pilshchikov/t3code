@@ -91,11 +91,14 @@ fork-specific behavior so future upstream syncs are easier to review.
     active thread/project). After a thread switch or a tree remount, clicks silently no-opped. The
     handler now invokes the callback through a live ref, so it always targets the current thread.
   - Source: `apps/web/src/components/files/FileBrowserPanel.tsx`.
-- The file tree marks files with working-tree changes (VCS status).
-  - Changed files are colored via the tree's native git-status decoration, fed from the existing
-    `useVcsStatus` working-tree data. Current pass marks changed files as modified (blue); add/delete/
-    rename distinction arrives with the staging UI.
-  - Source: `apps/web/src/components/files/FileBrowserPanel.tsx`.
+- The file tree marks files with working-tree changes (VCS status), colored by real change kind.
+  - Markers come from the granular `git.detailedStatus` RPC: added/untracked render green, modified
+    blue, deleted red, renamed amber (copy→added, typechange/unmerged→modified, since the tree's
+    palette has no dedicated colors for those). The detailed status is a pull query, so the panel
+    refreshes it whenever the live `useVcsStatus` stream reports a working-tree change, keeping
+    markers current with edits made outside the Commit panel.
+  - Source: `apps/web/src/components/files/FileBrowserPanel.tsx`,
+    `apps/web/src/components/files/gitChangesState.ts`.
 - The explorer sidebar has a Structure view of the current file, like JetBrains' Structure tool.
   - Lists classes, methods, functions, and top-level declarations with kind badges and nesting,
     derived client-side from the already-loaded file contents (no server round-trip). Clicking a
