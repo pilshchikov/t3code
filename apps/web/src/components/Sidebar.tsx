@@ -39,14 +39,17 @@ import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import {
   type ContextMenuItem,
+  DEFAULT_MODEL,
   type DesktopUpdateState,
   ProjectId,
+  ProviderInstanceId,
   type ScopedThreadRef,
   type SidebarProjectGroupingMode,
   type ThreadEnvMode,
   ThreadId,
 } from "@t3tools/contracts";
 import {
+  inferProjectTitleFromPath,
   parseScopedThreadKey,
   scopedProjectKey,
   scopedThreadKey,
@@ -65,7 +68,7 @@ import { usePrimaryEnvironmentId } from "../environments/primary";
 import { isElectron } from "../env";
 import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
 import { isTerminalFocused } from "../lib/terminalFocus";
-import { isMacPlatform, newCommandId } from "../lib/utils";
+import { isMacPlatform, newCommandId, newProjectId } from "../lib/utils";
 import {
   selectProjectByRef,
   selectProjectsAcrossEnvironments,
@@ -241,6 +244,25 @@ function formatProjectMemberActionLabel(
   }
 
   return member.environmentLabel ? `${member.environmentLabel} — ${member.cwd}` : member.cwd;
+}
+
+/**
+ * Derive a multiwork branch name from a free-text task name: kebab-case it and prefix the owner's
+ * name (`spilshchikov-`), matching the multiwork convention. Names already carrying the prefix pass
+ * through unchanged.
+ */
+function toMultiworkBranch(taskName: string): string {
+  const slug = taskName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .replace(/-+$/g, "");
+  if (slug.length === 0) {
+    return "";
+  }
+  return slug.startsWith("spilshchikov-") ? slug : `spilshchikov-${slug}`;
 }
 
 function projectGroupingModeDescription(mode: SidebarProjectGroupingMode): string {
@@ -1148,6 +1170,13 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     null,
   );
   const [projectRenameTitle, setProjectRenameTitle] = useState("");
+  const [multiworkTarget, setMultiworkTarget] = useState<SidebarProjectGroupMember | null>(null);
+  const [multiworkTaskName, setMultiworkTaskName] = useState("");
+  const [multiworkBusy, setMultiworkBusy] = useState(false);
+  const [multiworkError, setMultiworkError] = useState<string | null>(null);
+  const [multiworkCopies, setMultiworkCopies] = useState<
+    readonly { readonly path: string; readonly name: string }[]
+  >([]);
   const [projectGroupingTarget, setProjectGroupingTarget] =
     useState<SidebarProjectGroupMember | null>(null);
   const [projectGroupingSelection, setProjectGroupingSelection] = useState<
@@ -1360,6 +1389,119 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     setProjectRenameTitle(member.name);
   }, []);
 
+  const openMultiworkDialog = useCallback((member: SidebarProjectGroupMember) => {
+    setMultiworkTarget(member);
+    setMultiworkTaskName("");
+    setMultiworkError(null);
+    setMultiworkCopies([]);
+    const api = readEnvironmentApi(member.environmentId);
+    if (api) {
+      void api.multiwork
+        .list()
+        .then((result) => setMultiworkCopies(result.copies))
+        .catch(() => undefined);
+    }
+  }, []);
+
+  const closeMultiworkDialog = useCallback(() => {
+    setMultiworkTarget(null);
+    setMultiworkTaskName("");
+    setMultiworkError(null);
+    setMultiworkCopies([]);
+  }, []);
+
+  const registerProjectByPath = useCallback(
+    async (api: ReturnType<typeof readEnvironmentApi>, workspaceRoot: string) => {
+      if (!api) return;
+      await api.orchestration.dispatchCommand({
+        type: "project.create",
+        commandId: newCommandId(),
+        projectId: newProjectId(),
+        title: inferProjectTitleFromPath(workspaceRoot),
+        workspaceRoot,
+        createWorkspaceRootIfMissing: false,
+        defaultModelSelection: {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: DEFAULT_MODEL,
+        },
+        createdAt: new Date().toISOString(),
+      });
+    },
+    [],
+  );
+
+  const submitMultiwork = useCallback(async () => {
+    if (!multiworkTarget || multiworkBusy) {
+      return;
+    }
+    const branch = toMultiworkBranch(multiworkTaskName);
+    if (branch.length === 0) {
+      setMultiworkError("Enter a task name.");
+      return;
+    }
+    const api = readEnvironmentApi(multiworkTarget.environmentId);
+    if (!api) {
+      setMultiworkError("Project API unavailable.");
+      return;
+    }
+    setMultiworkBusy(true);
+    setMultiworkError(null);
+    try {
+      const result = await api.multiwork.create({ cwd: multiworkTarget.cwd, branch });
+      // Register freshly created copies as projects; on reuse the copy was likely already added.
+      if (!result.reused) {
+        await registerProjectByPath(api, result.path);
+      }
+      toastManager.add(
+        stackedThreadToast({
+          type: "success",
+          title: result.reused ? "Multiwork copy ready" : "Multiwork copy created",
+          description: `${branch} → ${result.path}`,
+        }),
+      );
+      closeMultiworkDialog();
+    } catch (error) {
+      setMultiworkError(
+        error instanceof Error ? error.message : "Failed to create the multiwork copy.",
+      );
+    } finally {
+      setMultiworkBusy(false);
+    }
+  }, [
+    closeMultiworkDialog,
+    multiworkBusy,
+    multiworkTarget,
+    multiworkTaskName,
+    registerProjectByPath,
+  ]);
+
+  const addExistingMultiworkCopy = useCallback(
+    async (copyPath: string) => {
+      if (!multiworkTarget || multiworkBusy) {
+        return;
+      }
+      const api = readEnvironmentApi(multiworkTarget.environmentId);
+      if (!api) {
+        setMultiworkError("Project API unavailable.");
+        return;
+      }
+      setMultiworkBusy(true);
+      setMultiworkError(null);
+      try {
+        await registerProjectByPath(api, copyPath);
+        toastManager.add(
+          stackedThreadToast({ type: "success", title: "Added project", description: copyPath }),
+        );
+        closeMultiworkDialog();
+      } catch (error) {
+        setMultiworkError(error instanceof Error ? error.message : "Failed to add the project.");
+      } finally {
+        setMultiworkBusy(false);
+      }
+    },
+    [closeMultiworkDialog, multiworkBusy, multiworkTarget, registerProjectByPath],
+  );
+
   const openProjectGroupingDialog = useCallback(
     (member: SidebarProjectGroupMember) => {
       const overrideKey = deriveProjectGroupingOverrideKey(member);
@@ -1518,7 +1660,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
         const actionHandlers = new Map<string, () => Promise<void> | void>();
         const makeLeaf = (
-          action: "rename" | "grouping" | "copy-path" | "delete",
+          action: "rename" | "grouping" | "copy-path" | "multiwork" | "delete",
           member: SidebarProjectGroupMember,
           options?: {
             destructive?: boolean;
@@ -1530,6 +1672,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             switch (action) {
               case "rename":
                 openProjectRenameDialog(member);
+                return;
+              case "multiwork":
+                openMultiworkDialog(member);
                 return;
               case "grouping":
                 openProjectGroupingDialog(member);
@@ -1551,7 +1696,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         };
 
         const buildTargetedItem = (
-          action: "rename" | "grouping" | "copy-path" | "delete",
+          action: "rename" | "grouping" | "copy-path" | "multiwork" | "delete",
           label: string,
           options?: {
             destructive?: boolean;
@@ -1588,6 +1733,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             buildTargetedItem("rename", "Rename"),
             buildTargetedItem("grouping", "Group into..."),
             buildTargetedItem("copy-path", "Copy Path"),
+            buildTargetedItem("multiwork", "New multiwork copy…"),
             buildTargetedItem("delete", "Remove", {
               destructive: true,
             }),
@@ -1608,6 +1754,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     [
       copyPathToClipboard,
       handleRemoveProject,
+      openMultiworkDialog,
       openProjectGroupingDialog,
       openProjectRenameDialog,
       project.groupedProjectCount,
@@ -2257,6 +2404,85 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               Cancel
             </Button>
             <Button onClick={() => void submitProjectRename()}>Save</Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog
+        open={multiworkTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeMultiworkDialog();
+          }
+        }}
+      >
+        <DialogPopup className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New multiwork copy</DialogTitle>
+            <DialogDescription>
+              {multiworkTarget
+                ? `Create an isolated copy of ${multiworkTarget.cwd} on a fresh branch.`
+                : "Create an isolated copy of the repository on a fresh branch."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogPanel className="space-y-4">
+            <div className="grid gap-1.5">
+              <span className="text-xs font-medium text-foreground">Task name</span>
+              <Input
+                aria-label="Multiwork task name"
+                placeholder="e.g. fix login redirect"
+                value={multiworkTaskName}
+                onChange={(event) => setMultiworkTaskName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void submitMultiwork();
+                  }
+                }}
+              />
+              {toMultiworkBranch(multiworkTaskName).length > 0 ? (
+                <span className="text-xs text-muted-foreground">
+                  Branch: {toMultiworkBranch(multiworkTaskName)}
+                </span>
+              ) : null}
+            </div>
+            {multiworkCopies.length > 0 ? (
+              <div className="grid gap-1.5">
+                <span className="text-xs font-medium text-foreground">Existing copies</span>
+                <div className="max-h-40 overflow-y-auto rounded border border-border/60">
+                  {multiworkCopies.map((copy) => (
+                    <div
+                      key={copy.path}
+                      className="flex items-center justify-between gap-2 px-2 py-1 hover:bg-accent/60"
+                    >
+                      <span className="truncate text-xs text-foreground" title={copy.path}>
+                        {copy.name}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={multiworkBusy}
+                        onClick={() => void addExistingMultiworkCopy(copy.path)}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {multiworkError ? <p className="text-xs text-destructive">{multiworkError}</p> : null}
+          </DialogPanel>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeMultiworkDialog} disabled={multiworkBusy}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void submitMultiwork()}
+              disabled={multiworkBusy || toMultiworkBranch(multiworkTaskName).length === 0}
+            >
+              {multiworkBusy ? "Creating…" : "Create copy"}
+            </Button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>

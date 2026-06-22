@@ -24,6 +24,11 @@ import type {
   VcsStatusInput,
   VcsStatusResult,
 } from "./git.ts";
+import type {
+  MultiworkCreateInput,
+  MultiworkCreateResult,
+  MultiworkListResult,
+} from "./multiwork.ts";
 import type { ReviewDiffPreviewInput, ReviewDiffPreviewResult } from "./review.ts";
 import type { FilesystemBrowseInput, FilesystemBrowseResult } from "./filesystem.ts";
 import type { AssetCreateUrlInput, AssetCreateUrlResult } from "./assets.ts";
@@ -1175,6 +1180,10 @@ export interface EnvironmentApi {
   };
   review: {
     getDiffPreview: (input: ReviewDiffPreviewInput) => Promise<ReviewDiffPreviewResult>;
+  };
+  multiwork: {
+    create: (input: MultiworkCreateInput) => Promise<MultiworkCreateResult>;
+    list: () => Promise<MultiworkListResult>;
   };
   orchestration: {
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;

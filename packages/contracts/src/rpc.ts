@@ -46,6 +46,12 @@ import {
   VcsStatusStreamEvent,
 } from "./git.ts";
 import {
+  MultiworkCreateInput,
+  MultiworkCreateResult,
+  MultiworkError,
+  MultiworkListResult,
+} from "./multiwork.ts";
+import {
   ReviewDiffPreviewError,
   ReviewDiffPreviewInput,
   ReviewDiffPreviewResult,
@@ -190,6 +196,10 @@ export const WS_METHODS = {
   gitUnstageFiles: "git.unstageFiles",
   gitDiscardChanges: "git.discardChanges",
   gitCommitStaged: "git.commitStaged",
+
+  // Multiwork methods
+  multiworkCreate: "multiwork.create",
+  multiworkList: "multiwork.list",
 
   // Review methods
   reviewGetDiffPreview: "review.getDiffPreview",
@@ -523,6 +533,18 @@ export const WsVcsInitRpc = Rpc.make(WS_METHODS.vcsInit, {
  * Not the persisted T3 Review model. Future review sessions should use
  * review.open* + review.getSnapshot.
  */
+export const WsMultiworkCreateRpc = Rpc.make(WS_METHODS.multiworkCreate, {
+  payload: MultiworkCreateInput,
+  success: MultiworkCreateResult,
+  error: Schema.Union([MultiworkError, EnvironmentAuthorizationError]),
+});
+
+export const WsMultiworkListRpc = Rpc.make(WS_METHODS.multiworkList, {
+  payload: Schema.Struct({}),
+  success: MultiworkListResult,
+  error: Schema.Union([MultiworkError, EnvironmentAuthorizationError]),
+});
+
 export const WsReviewGetDiffPreviewRpc = Rpc.make(WS_METHODS.reviewGetDiffPreview, {
   payload: ReviewDiffPreviewInput,
   success: ReviewDiffPreviewResult,
@@ -768,6 +790,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitUnstageFilesRpc,
   WsGitDiscardChangesRpc,
   WsGitCommitStagedRpc,
+  WsMultiworkCreateRpc,
+  WsMultiworkListRpc,
   WsVcsListRefsRpc,
   WsVcsCreateWorktreeRpc,
   WsVcsRemoveWorktreeRpc,

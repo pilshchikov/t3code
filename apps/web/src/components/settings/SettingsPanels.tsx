@@ -837,6 +837,33 @@ export function GeneralSettingsPanel() {
         />
 
         <SettingsRow
+          title="Multiwork base directory"
+          description="Where isolated multiwork repo copies are created. Leave empty to use ~/workplace/git/multiwork."
+          resetAction={
+            settings.multiworkBaseDirectory !== DEFAULT_UNIFIED_SETTINGS.multiworkBaseDirectory ? (
+              <SettingResetButton
+                label="multiwork base directory"
+                onClick={() =>
+                  updateSettings({
+                    multiworkBaseDirectory: DEFAULT_UNIFIED_SETTINGS.multiworkBaseDirectory,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <DraftInput
+              className="w-full sm:w-72"
+              value={settings.multiworkBaseDirectory}
+              onCommit={(next) => updateSettings({ multiworkBaseDirectory: next })}
+              placeholder="~/workplace/git/multiwork"
+              spellCheck={false}
+              aria-label="Multiwork base directory"
+            />
+          }
+        />
+
+        <SettingsRow
           title="Archive confirmation"
           description="Require a second click on the inline archive action before a thread is archived."
           resetAction={

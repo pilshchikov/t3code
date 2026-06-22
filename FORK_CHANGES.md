@@ -170,6 +170,33 @@ fork-specific behavior so future upstream syncs are easier to review.
     `apps/web/src/components/files/FilePreviewPanel.tsx`, `apps/web/src/environmentApi.ts`,
     `packages/client-runtime/src/wsRpcClient.ts`, `packages/contracts/src/ipc.ts`.
 
+## Multiwork in the Workspace Picker
+
+- The GUI can create isolated, full repo copies ("multiwork") and open them as projects, mirroring
+  the `multiwork` shell workflow (the owner's alternative to git worktrees).
+  - A persisted `multiworkBaseDirectory` setting (Settings → General) controls where copies live;
+    empty resolves to `~/workplace/git/multiwork`.
+  - Server `MultiworkService` + `multiwork.create` / `multiwork.list` RPCs perform the procedure:
+    resolve the source repo toplevel and origin, object-borrowing clone
+    (`git clone --reference … --dissociate`, falling back to a plain clone), fetch, then
+    `checkout -B <branch>` — continuing an existing remote branch or branching off the default
+    branch — and restore git-ignored project context (`.claude`, `CLAUDE.md`, `AGENTS.md`). It is
+    additive and git-only; the shared `VcsDriver` contract and `jj` are untouched.
+  - The Sidebar project context menu gains "New multiwork copy…", opening a dialog that derives a
+    `spilshchikov-<task>` branch from a task name, creates the copy, registers it as a project (via
+    the existing `project.create` command), and lists existing copies under the base directory for
+    one-click re-adding. The slug is derived client-side (deterministic) rather than via the system
+    text-generation model, which only exposes purpose-built commit/PR helpers today.
+  - Source: `packages/contracts/src/multiwork.ts`, `packages/contracts/src/settings.ts`,
+    `packages/contracts/src/rpc.ts`, `packages/contracts/src/ipc.ts`,
+    `apps/server/src/multiwork/MultiworkService.ts`, `apps/server/src/server.ts`,
+    `apps/server/src/ws.ts`, `packages/client-runtime/src/wsRpcClient.ts`,
+    `apps/web/src/environmentApi.ts`, `apps/web/src/components/Sidebar.tsx`,
+    `apps/web/src/components/settings/SettingsPanels.tsx`.
+  - Validated with `MultiworkService.test.ts` (offline clone against a local bare remote: fresh
+    branch + context restore, continuing an existing remote branch, reuse + list, and the
+    not-a-repo failure).
+
 ## Claude Profiles
 
 - Claude provider instances support a dedicated `Claude config directory` setting.

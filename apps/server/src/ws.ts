@@ -85,6 +85,7 @@ import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePat
 import { VcsStatusBroadcaster } from "./vcs/VcsStatusBroadcaster.ts";
 import { VcsProvisioningService } from "./vcs/VcsProvisioningService.ts";
 import { GitWorkflowService } from "./git/GitWorkflowService.ts";
+import { MultiworkService } from "./multiwork/MultiworkService.ts";
 import { ReviewService } from "./review/ReviewService.ts";
 import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner.ts";
 import { RepositoryIdentityResolver } from "./project/Services/RepositoryIdentityResolver.ts";
@@ -188,6 +189,8 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.vcsCreateRef, AuthOrchestrationOperateScope],
   [WS_METHODS.vcsSwitchRef, AuthOrchestrationOperateScope],
   [WS_METHODS.vcsInit, AuthOrchestrationOperateScope],
+  [WS_METHODS.multiworkCreate, AuthOrchestrationOperateScope],
+  [WS_METHODS.multiworkList, AuthOrchestrationReadScope],
   [WS_METHODS.reviewGetDiffPreview, AuthReviewWriteScope],
   [WS_METHODS.terminalOpen, AuthTerminalOperateScope],
   [WS_METHODS.terminalAttach, AuthTerminalOperateScope],
@@ -266,6 +269,7 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
       const keybindings = yield* Keybindings;
       const externalLauncher = yield* ExternalLauncher.ExternalLauncher;
       const gitWorkflow = yield* GitWorkflowService;
+      const multiwork = yield* MultiworkService;
       const review = yield* ReviewService;
       const vcsProvisioning = yield* VcsProvisioningService;
       const vcsStatusBroadcaster = yield* VcsStatusBroadcaster;
@@ -1436,6 +1440,28 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
               .initRepository(input)
               .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
             { "rpc.aggregate": "vcs" },
+          ),
+        [WS_METHODS.multiworkCreate]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.multiworkCreate,
+            serverSettings.getSettings.pipe(
+              Effect.map((settings) => settings.multiworkBaseDirectory),
+              Effect.orElseSucceed(() => ""),
+              Effect.flatMap((baseDirectory) =>
+                multiwork.create({ cwd: input.cwd, branch: input.branch, baseDirectory }),
+              ),
+            ),
+            { "rpc.aggregate": "multiwork" },
+          ),
+        [WS_METHODS.multiworkList]: () =>
+          observeRpcEffect(
+            WS_METHODS.multiworkList,
+            serverSettings.getSettings.pipe(
+              Effect.map((settings) => settings.multiworkBaseDirectory),
+              Effect.orElseSucceed(() => ""),
+              Effect.flatMap((baseDirectory) => multiwork.list({ baseDirectory })),
+            ),
+            { "rpc.aggregate": "multiwork" },
           ),
         [WS_METHODS.reviewGetDiffPreview]: (input) =>
           observeRpcEffect(WS_METHODS.reviewGetDiffPreview, review.getDiffPreview(input), {
