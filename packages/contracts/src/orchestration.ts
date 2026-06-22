@@ -566,6 +566,9 @@ const ThreadTurnStartBootstrapPrepareWorktree = Schema.Struct({
   baseBranch: TrimmedNonEmptyString,
   branch: Schema.optional(TrimmedNonEmptyString),
   startFromOrigin: Schema.optional(Schema.Boolean),
+  // "worktree" (default) provisions a git worktree; "multiwork" provisions a full isolated repo
+  // copy (clone) checked out on the branch — the fork's worktree alternative.
+  mode: Schema.optional(Schema.Literals(["worktree", "multiwork"])),
 });
 
 const ThreadTurnStartBootstrap = Schema.Struct({

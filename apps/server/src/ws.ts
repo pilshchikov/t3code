@@ -843,7 +843,32 @@ const makeWsRpcLayer = (currentSession: EnvironmentAuth.AuthenticatedSession) =>
               createdThread = true;
             }
 
-            if (bootstrap?.prepareWorktree) {
+            if (bootstrap?.prepareWorktree && bootstrap.prepareWorktree.mode === "multiwork") {
+              // Multiwork provisions a full isolated repo copy (clone) instead of a git worktree.
+              // It reuses the thread's worktreePath/branch fields so the editor, status, and the
+              // first-turn AI branch rename all work exactly as they do for worktrees.
+              const multiworkBranch =
+                bootstrap.prepareWorktree.branch ??
+                (yield* serverCommandId("multiwork-branch")).toString();
+              const baseDirectory = yield* serverSettings.getSettings.pipe(
+                Effect.map((settings) => settings.multiworkBaseDirectory),
+                Effect.orElseSucceed(() => ""),
+              );
+              const copy = yield* multiwork.create({
+                cwd: bootstrap.prepareWorktree.projectCwd,
+                branch: multiworkBranch,
+                baseDirectory,
+              });
+              targetWorktreePath = copy.path;
+              yield* orchestrationEngine.dispatch({
+                type: "thread.meta.update",
+                commandId: yield* serverCommandId("bootstrap-thread-meta-update"),
+                threadId: command.threadId,
+                branch: copy.branch,
+                worktreePath: copy.path,
+              });
+              yield* refreshGitStatus(copy.path);
+            } else if (bootstrap?.prepareWorktree) {
               let worktreeBaseRef = bootstrap.prepareWorktree.baseBranch;
               if (bootstrap.prepareWorktree.startFromOrigin) {
                 yield* gitWorkflow.fetchRemote({

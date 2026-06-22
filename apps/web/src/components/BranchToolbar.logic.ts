@@ -12,8 +12,13 @@ export interface EnvironmentOption {
   isPrimary: boolean;
 }
 
-export const EnvMode = Schema.Literals(["local", "worktree"]);
+export const EnvMode = Schema.Literals(["local", "worktree", "multiwork"]);
 export type EnvMode = typeof EnvMode.Type;
+
+/** Env modes that provision a dedicated, isolated workspace (worktree or multiwork copy). */
+export function isIsolatedEnvMode(mode: EnvMode): boolean {
+  return mode === "worktree" || mode === "multiwork";
+}
 
 const GENERIC_LOCAL_ENVIRONMENT_LABELS = new Set(["local", "local environment"]);
 
@@ -43,7 +48,9 @@ export function resolveEnvironmentOptionLabel(input: {
 }
 
 export function resolveEnvModeLabel(mode: EnvMode): string {
-  return mode === "worktree" ? "New worktree" : "Current checkout";
+  if (mode === "worktree") return "New worktree";
+  if (mode === "multiwork") return "Multiwork copy";
+  return "Current checkout";
 }
 
 export function resolveCurrentWorkspaceLabel(activeWorktreePath: string | null): string {
@@ -64,7 +71,9 @@ export function resolveEffectiveEnvMode(input: {
     if (activeWorktreePath) {
       return "local";
     }
-    return draftThreadEnvMode === "worktree" ? "worktree" : "local";
+    return draftThreadEnvMode && isIsolatedEnvMode(draftThreadEnvMode)
+      ? draftThreadEnvMode
+      : "local";
   }
   return activeWorktreePath ? "worktree" : "local";
 }
@@ -78,8 +87,8 @@ export function resolveDraftEnvModeAfterBranchChange(input: {
   if (nextWorktreePath) {
     return "worktree";
   }
-  if (effectiveEnvMode === "worktree" && !currentWorktreePath) {
-    return "worktree";
+  if (isIsolatedEnvMode(effectiveEnvMode) && !currentWorktreePath) {
+    return effectiveEnvMode;
   }
   return "local";
 }
@@ -91,7 +100,7 @@ export function resolveBranchToolbarValue(input: {
   currentGitBranch: string | null;
 }): string | null {
   const { envMode, activeWorktreePath, activeThreadBranch, currentGitBranch } = input;
-  if (envMode === "worktree" && !activeWorktreePath) {
+  if (isIsolatedEnvMode(envMode) && !activeWorktreePath) {
     return activeThreadBranch ?? currentGitBranch;
   }
   return currentGitBranch ?? activeThreadBranch;

@@ -1,4 +1,4 @@
-import { FolderGit2Icon, FolderGitIcon, FolderIcon } from "lucide-react";
+import { FolderGit2Icon, FolderGitIcon, FolderIcon, FoldersIcon } from "lucide-react";
 import { memo, useMemo } from "react";
 
 import {
@@ -34,6 +34,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
     () => [
       { value: "local", label: resolveCurrentWorkspaceLabel(activeWorktreePath) },
       { value: "worktree", label: resolveEnvModeLabel("worktree") },
+      { value: "multiwork", label: resolveEnvModeLabel("multiwork") },
     ],
     [activeWorktreePath],
   );
@@ -64,7 +65,9 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
       items={envModeItems}
     >
       <SelectTrigger variant="ghost" size="xs" className="font-medium" aria-label="Workspace">
-        {effectiveEnvMode === "worktree" ? (
+        {effectiveEnvMode === "multiwork" ? (
+          <FoldersIcon className="size-3" />
+        ) : effectiveEnvMode === "worktree" ? (
           <FolderGit2Icon className="size-3" />
         ) : activeWorktreePath ? (
           <FolderGitIcon className="size-3" />
@@ -90,6 +93,12 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
             <span className="inline-flex items-center gap-1.5">
               <FolderGit2Icon className="size-3" />
               {resolveEnvModeLabel("worktree")}
+            </span>
+          </SelectItem>
+          <SelectItem value="multiwork">
+            <span className="inline-flex items-center gap-1.5">
+              <FoldersIcon className="size-3" />
+              {resolveEnvModeLabel("multiwork")}
             </span>
           </SelectItem>
         </SelectGroup>

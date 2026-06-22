@@ -64,7 +64,7 @@ interface BranchToolbarBranchSelectorProps {
   threadId: ThreadId;
   draftId?: DraftId;
   envLocked: boolean;
-  effectiveEnvModeOverride?: "local" | "worktree";
+  effectiveEnvModeOverride?: "local" | "worktree" | "multiwork";
   activeThreadBranchOverride?: string | null;
   onActiveThreadBranchOverrideChange?: (refName: string | null) => void;
   startFromOrigin: boolean;
@@ -79,14 +79,14 @@ function toBranchActionErrorMessage(error: unknown): string {
 
 function getBranchTriggerLabel(input: {
   activeWorktreePath: string | null;
-  effectiveEnvMode: "local" | "worktree";
+  effectiveEnvMode: "local" | "worktree" | "multiwork";
   resolvedActiveBranch: string | null;
 }): string {
   const { activeWorktreePath, effectiveEnvMode, resolvedActiveBranch } = input;
   if (!resolvedActiveBranch) {
     return "Select ref";
   }
-  if (effectiveEnvMode === "worktree" && !activeWorktreePath) {
+  if (effectiveEnvMode !== "local" && !activeWorktreePath) {
     return `From ${resolvedActiveBranch}`;
   }
   return resolvedActiveBranch;

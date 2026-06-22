@@ -3650,16 +3650,17 @@ function ChatViewContent(props: ChatViewProps) {
     if (!activeProject) return;
     const threadIdForSend = activeThread.id;
     const isFirstMessage = !isServerThread || activeThread.messages.length === 0;
-    const baseBranchForWorktree =
-      isFirstMessage && sendEnvMode === "worktree" && !activeThread.worktreePath
-        ? activeThreadBranch
-        : null;
-
-    // In worktree mode, require an explicit base branch so we don't silently
-    // fall back to local execution when branch selection is missing.
+    // Both "worktree" and "multiwork" provision a dedicated isolated workspace on the first message.
     const shouldCreateWorktree =
-      isFirstMessage && sendEnvMode === "worktree" && !activeThread.worktreePath;
-    if (shouldCreateWorktree && !activeThreadBranch) {
+      isFirstMessage &&
+      (sendEnvMode === "worktree" || sendEnvMode === "multiwork") &&
+      !activeThread.worktreePath;
+    // Worktree mode needs an explicit base branch; multiwork always clones a fresh copy from origin
+    // (default branch), so it falls back to "master" purely to satisfy the bootstrap contract.
+    const baseBranchForWorktree = shouldCreateWorktree
+      ? (activeThreadBranch ?? (sendEnvMode === "multiwork" ? "master" : null))
+      : null;
+    if (shouldCreateWorktree && sendEnvMode === "worktree" && !activeThreadBranch) {
       setThreadError(threadIdForSend, "Select a base branch before sending in New worktree mode.");
       return;
     }
@@ -3835,6 +3836,7 @@ function ChatViewContent(props: ChatViewProps) {
                       baseBranch: baseBranchForWorktree,
                       branch: buildTemporaryWorktreeBranchName(randomHex),
                       ...(startFromOrigin ? { startFromOrigin: true } : {}),
+                      ...(sendEnvMode === "multiwork" ? { mode: "multiwork" as const } : {}),
                     },
                     runSetupScript: true,
                   }

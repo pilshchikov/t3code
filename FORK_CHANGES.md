@@ -215,10 +215,32 @@ fork-specific behavior so future upstream syncs are easier to review.
     `packages/contracts/src/git.ts`, `packages/contracts/src/rpc.ts`,
     `packages/contracts/src/ipc.ts`.
 
-## Multiwork in the Workspace Picker
+## Multiwork as a first-class workspace mode
 
-- The GUI can create isolated, full repo copies ("multiwork") and open them as projects, mirroring
-  the `multiwork` shell workflow (the owner's alternative to git worktrees).
+- **Multiwork is a thread environment mode**, alongside "Current checkout" (local) and "New
+  worktree", selectable from the composer's **Workspace** dropdown. Picking "Multiwork copy" and
+  sending a first message makes the system provision an isolated full repo copy and run the agent
+  inside it — like a git worktree, but a real decoupled copy.
+  - `ThreadEnvMode`/`EnvMode`/`DraftThreadEnvMode`/`SidebarNewThreadEnvMode` gained a `"multiwork"`
+    value; the env-mode logic treats multiwork like worktree (an isolated workspace that needs a
+    base) via a shared `isIsolatedEnvMode` helper.
+  - The first-turn flow reuses the worktree machinery: the thread's `worktreePath`/`branch` fields
+    hold the copy and its branch, so the file tree/editor, VCS status, and the **first-turn AI
+    branch rename** (which renames the temporary branch into an AI-named one) all work unchanged —
+    i.e. the system "decides" the branch from your request, exactly as worktree mode does. Continuing
+    an existing thread reuses its copy rather than cloning again.
+  - The turn-start bootstrap's `prepareWorktree` gained a `mode: "worktree" | "multiwork"`; when it
+    is `"multiwork"` the server provisions via `MultiworkService.create` (clone + branch) instead of
+    `git worktree add`, reading the base directory from the `multiworkBaseDirectory` setting.
+  - Source: `packages/contracts/src/settings.ts`, `packages/contracts/src/orchestration.ts`,
+    `apps/web/src/composerDraftStore.ts`, `apps/web/src/components/BranchToolbar.logic.ts`,
+    `apps/web/src/components/BranchToolbarEnvModeSelector.tsx`,
+    `apps/web/src/components/BranchToolbarBranchSelector.tsx`,
+    `apps/web/src/components/Sidebar.logic.ts`, `apps/web/src/components/ChatView.tsx`,
+    `apps/server/src/ws.ts`.
+
+- The GUI can also create isolated, full repo copies ("multiwork") directly and open them as
+  projects, mirroring the `multiwork` shell workflow (the owner's alternative to git worktrees).
   - A persisted `multiworkBaseDirectory` setting (Settings → General) controls where copies live;
     empty resolves to `~/workplace/git/multiwork`.
   - Server `MultiworkService` + `multiwork.create` / `multiwork.list` RPCs perform the procedure:
