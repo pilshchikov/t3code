@@ -1898,7 +1898,13 @@ export const make = Effect.gen(function* () {
         })
         .pipe(Effect.map((result) => sanitizeCommitMessage(result)));
 
-      return { message: formatCommitMessage(generated.subject, generated.body) };
+      // The Commit panel wants a single-line message: use the (already concise) subject only and
+      // drop the body. The user can expand it in the editable message box if they want more.
+      const subject = generated.subject.trim();
+      return {
+        message:
+          subject.length > 0 ? subject : formatCommitMessage(generated.subject, generated.body),
+      };
     });
 
   return GitManager.of({

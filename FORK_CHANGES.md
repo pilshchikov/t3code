@@ -92,9 +92,10 @@ fork-specific behavior so future upstream syncs are easier to review.
     handler now invokes the callback through a live ref, so it always targets the current thread.
   - Source: `apps/web/src/components/files/FileBrowserPanel.tsx`.
 - The file tree marks files with working-tree changes (VCS status), colored by real change kind.
-  - Markers come from the granular `git.detailedStatus` RPC: added/untracked render green, modified
-    blue, deleted red, renamed amber (copy→added, typechange/unmerged→modified, since the tree's
-    palette has no dedicated colors for those). The detailed status is a pull query, so the panel
+  - Markers come from the granular `git.detailedStatus` RPC: added renders green, modified blue,
+    deleted red, renamed amber, and untracked/unversioned a pale red (copy→added,
+    typechange/unmerged→modified, since the tree's palette has no dedicated colors for those). The
+    detailed status is a pull query, so the panel
     refreshes it whenever the live `vcsEnvironment.status` stream reports a working-tree change, keeping
     markers current with edits made outside the Commit panel.
   - Source: `apps/web/src/components/files/FileBrowserPanel.tsx`,
@@ -174,16 +175,19 @@ fork-specific behavior so future upstream syncs are easier to review.
   - Lists changed files grouped into Changes (tracked) and Unversioned (untracked) with per-file
     change-kind badges (M/A/D/R/C/T), staged-state checkboxes (checked = fully staged, indeterminate
     = partially staged), and a select-all checkbox per group. Clicking a file opens it in the editor.
+    The two groups are visually separated by a divider, and unversioned file names render in a pale
+    red (matching the file tree's untracked color) to stand out from tracked changes.
   - Each row has a discard control (confirmed, since discarding untracked files deletes them). A
-    commit message box with an "Amend last commit" toggle commits the staged index; the button is
-    enabled only when something is staged (or amending) and a message is present.
+    resizable, multi-line commit message box with an "Amend last commit" toggle commits the staged
+    index; the button is enabled only when something is staged (or amending) and a message is present.
   - Backed by the git-index RPCs above via a `useGitDetailedStatus` query plus
     stage/unstage/discard/commit mutation helpers. The commands use upstream's supervised,
     environment-scoped client-runtime atoms so they reconnect and report failures consistently with
     the rest of the current web client.
   - The commit message box has an icon-only **Generate commit message** button (tooltip only) that
-    drafts a short but comprehensive message from the staged diff using the system text-generation
-    model (`textGenerationModelSelection`). It is enabled only when something is staged.
+    drafts a concise one-line message from the staged diff using the system text-generation model
+    (`textGenerationModelSelection`) — it returns the generated subject only (no body) so the result
+    is a single, comprehensive line you can edit. It is enabled only when something is staged.
     - Server: a git-only `stagedCommitContext` driver capability reads the current index's
       `git diff --cached` summary + patch without modifying it (extracted from `prepareCommitContext`
       so both share one path), `GitManager.generateStagedCommitMessage` runs it through the existing

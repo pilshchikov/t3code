@@ -72,8 +72,8 @@ const TREE_UNSAFE_CSS = `
     background-color: var(--trees-selected-bg-override);
   }
   button[data-item-git-status='modified'] { color: #4c9ffe !important; }
-  button[data-item-git-status='added'],
-  button[data-item-git-status='untracked'] { color: #3fb950 !important; }
+  button[data-item-git-status='added'] { color: #3fb950 !important; }
+  button[data-item-git-status='untracked'] { color: #e0828c !important; }
   button[data-item-git-status='deleted'] { color: #f85149 !important; }
   button[data-item-git-status='renamed'] { color: #d29922 !important; }
 `;

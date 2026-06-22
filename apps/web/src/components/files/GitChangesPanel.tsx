@@ -25,6 +25,9 @@ interface StatusBadge {
   readonly label: string;
 }
 
+// Pale red used to mark unversioned (untracked) files in both the Commit panel and the file tree.
+const UNVERSIONED_COLOR = "#e0828c";
+
 const STATUS_BADGE_BY_KIND: Readonly<Record<GitChangeKind, StatusBadge>> = {
   modified: { letter: "M", color: "#4c9ffe", label: "Modified" },
   added: { letter: "A", color: "#3fb950", label: "Added" },
@@ -33,7 +36,7 @@ const STATUS_BADGE_BY_KIND: Readonly<Record<GitChangeKind, StatusBadge>> = {
   copied: { letter: "C", color: "#d29922", label: "Copied" },
   typechange: { letter: "T", color: "#d29922", label: "Type changed" },
   unmerged: { letter: "U", color: "#f85149", label: "Unmerged" },
-  untracked: { letter: "A", color: "#3fb950", label: "New file" },
+  untracked: { letter: "?", color: UNVERSIONED_COLOR, label: "Unversioned" },
 };
 
 function badgeForFile(file: GitFileChange): StatusBadge {
@@ -95,7 +98,12 @@ function GitChangeRow({
         className="flex min-w-0 flex-1 items-baseline gap-1.5 text-left"
         onClick={() => onOpen(file)}
       >
-        <span className="truncate text-xs text-foreground">{name}</span>
+        <span
+          className={cn("truncate text-xs", !file.untracked && "text-foreground")}
+          style={file.untracked ? { color: UNVERSIONED_COLOR } : undefined}
+        >
+          {name}
+        </span>
         {renameFrom && renameFrom !== name ? (
           <span className="shrink-0 truncate text-[10px] text-muted-foreground">
             ← {renameFrom}
@@ -123,8 +131,9 @@ function GitChangeGroup({
   title,
   files,
   busy,
-  onToggleAll,
   allStaged,
+  separated,
+  onToggleAll,
   onToggleStage,
   onDiscard,
   onOpen,
@@ -133,6 +142,7 @@ function GitChangeGroup({
   files: ReadonlyArray<GitFileChange>;
   busy: boolean;
   allStaged: boolean;
+  separated?: boolean;
   onToggleAll: (files: ReadonlyArray<GitFileChange>, stage: boolean) => void;
   onToggleStage: (file: GitFileChange) => void;
   onDiscard: (file: GitFileChange) => void;
@@ -140,7 +150,7 @@ function GitChangeGroup({
 }) {
   if (files.length === 0) return null;
   return (
-    <div className="flex flex-col">
+    <div className={cn("flex flex-col", separated && "mt-1.5 border-t border-border/60 pt-1.5")}>
       <div className="flex items-center gap-2 px-2 py-1">
         <input
           type="checkbox"
@@ -321,6 +331,7 @@ export default function GitChangesPanel({ environmentId, cwd, onOpenFile }: GitC
               files={unversioned}
               busy={busy}
               allStaged={unversionedAllStaged}
+              separated={changes.length > 0}
               onToggleAll={toggleAll}
               onToggleStage={toggleStage}
               onDiscard={discard}
@@ -336,7 +347,8 @@ export default function GitChangesPanel({ environmentId, cwd, onOpenFile }: GitC
             <div className="text-[11px] leading-snug text-destructive">{actionError}</div>
           ) : null}
           <textarea
-            className="min-h-[3.5rem] resize-y rounded border border-border/60 bg-background px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-border focus:outline-none"
+            className="min-h-[6rem] max-h-[60vh] resize-y rounded border border-border/60 bg-background px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-border focus:outline-none"
+            rows={4}
             placeholder="Commit message"
             value={message}
             disabled={busy || generating}
