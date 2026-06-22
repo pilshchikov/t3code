@@ -16,7 +16,8 @@ import {
 interface GitChangesPanelProps {
   environmentId: EnvironmentId;
   cwd: string;
-  onOpenFile: (relativePath: string) => void;
+  selectedPath?: string | null;
+  onShowDiff: (relativePath: string) => void;
 }
 
 interface StatusBadge {
@@ -56,12 +57,14 @@ function splitPath(path: string): { name: string; directory: string } {
 function GitChangeRow({
   file,
   busy,
+  selected,
   onToggleStage,
   onDiscard,
   onOpen,
 }: {
   file: GitFileChange;
   busy: boolean;
+  selected: boolean;
   onToggleStage: (file: GitFileChange) => void;
   onDiscard: (file: GitFileChange) => void;
   onOpen: (file: GitFileChange) => void;
@@ -73,7 +76,12 @@ function GitChangeRow({
   const renameFrom = file.origPath ? splitPath(file.origPath).name : null;
 
   return (
-    <div className="group flex items-center gap-2 rounded px-2 py-1 hover:bg-accent/60">
+    <div
+      className={cn(
+        "group flex items-center gap-2 rounded px-2 py-1 hover:bg-accent/60",
+        selected && "bg-accent/80",
+      )}
+    >
       <input
         type="checkbox"
         className="size-3.5 shrink-0 cursor-pointer accent-[#4c9ffe]"
@@ -133,6 +141,7 @@ function GitChangeGroup({
   busy,
   allStaged,
   separated,
+  selectedPath,
   onToggleAll,
   onToggleStage,
   onDiscard,
@@ -143,6 +152,7 @@ function GitChangeGroup({
   busy: boolean;
   allStaged: boolean;
   separated?: boolean;
+  selectedPath?: string | null;
   onToggleAll: (files: ReadonlyArray<GitFileChange>, stage: boolean) => void;
   onToggleStage: (file: GitFileChange) => void;
   onDiscard: (file: GitFileChange) => void;
@@ -170,6 +180,7 @@ function GitChangeGroup({
           key={file.path}
           file={file}
           busy={busy}
+          selected={file.path === selectedPath}
           onToggleStage={onToggleStage}
           onDiscard={onDiscard}
           onOpen={onOpen}
@@ -179,7 +190,12 @@ function GitChangeGroup({
   );
 }
 
-export default function GitChangesPanel({ environmentId, cwd, onOpenFile }: GitChangesPanelProps) {
+export default function GitChangesPanel({
+  environmentId,
+  cwd,
+  selectedPath,
+  onShowDiff,
+}: GitChangesPanelProps) {
   const status = useGitDetailedStatus(environmentId, cwd);
   const [message, setMessage] = useState("");
   const [amend, setAmend] = useState(false);
@@ -321,10 +337,11 @@ export default function GitChangesPanel({ environmentId, cwd, onOpenFile }: GitC
               files={changes}
               busy={busy}
               allStaged={changesAllStaged}
+              selectedPath={selectedPath ?? null}
               onToggleAll={toggleAll}
               onToggleStage={toggleStage}
               onDiscard={discard}
-              onOpen={(file) => onOpenFile(file.path)}
+              onOpen={(file) => onShowDiff(file.path)}
             />
             <GitChangeGroup
               title="Unversioned"
@@ -332,10 +349,11 @@ export default function GitChangesPanel({ environmentId, cwd, onOpenFile }: GitC
               busy={busy}
               allStaged={unversionedAllStaged}
               separated={changes.length > 0}
+              selectedPath={selectedPath ?? null}
               onToggleAll={toggleAll}
               onToggleStage={toggleStage}
               onDiscard={discard}
-              onOpen={(file) => onOpenFile(file.path)}
+              onOpen={(file) => onShowDiff(file.path)}
             />
           </>
         )}

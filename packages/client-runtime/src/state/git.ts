@@ -45,6 +45,12 @@ export function createGitEnvironmentAtoms<R, E>(
       scheduler: vcsCommandScheduler,
       concurrency: vcsCommandConcurrency,
     }),
+    fileDiff: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:git:file-diff",
+      tag: WS_METHODS.gitFileDiff,
+      staleTimeMs: 5_000,
+      idleTtlMs: 5 * 60_000,
+    }),
     pullRequestResolution: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:git:resolve-pull-request",
       tag: WS_METHODS.gitResolvePullRequest,

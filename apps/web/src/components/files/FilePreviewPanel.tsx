@@ -24,6 +24,7 @@ import {
   FolderTree,
   Globe2,
   LoaderCircle,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -61,6 +62,7 @@ import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
 import FileBrowserPanel from "./FileBrowserPanel";
 import FileStructurePanel from "./FileStructurePanel";
 import GitChangesPanel from "./GitChangesPanel";
+import { CommitFileDiffView } from "./CommitFileDiffView";
 import { EditorNavigationDialog } from "./EditorNavigationDialog";
 import {
   type FileCommentAnnotationEntry,
@@ -694,6 +696,11 @@ export default function FilePreviewPanel({
   const explorerView = useExplorerViewStore((state) => state.view);
   const selectExplorerView = useExplorerViewStore((state) => state.setView);
   const toggleExplorer = useExplorerViewStore((state) => state.toggleOpen);
+  // Path whose diff is shown (over the editor) when a file is clicked in the Commit view.
+  const [commitDiffPath, setCommitDiffPath] = useState<string | null>(null);
+  useEffect(() => {
+    if (explorerView !== "commit") setCommitDiffPath(null);
+  }, [explorerView]);
   const [markdownPreviewMode, setMarkdownPreviewMode] = useState(readMarkdownPreviewMode);
   const [treeRevealRequest, setTreeRevealRequest] = useState<{
     readonly id: number;
@@ -951,7 +958,7 @@ export default function FilePreviewPanel({
         }}
         onSelect={(match) => openNavigationTarget(match, symbolChoices?.origin)}
       />
-      {relativePath ? (
+      {relativePath && !commitDiffPath ? (
         <div className="surface-subheader gap-2 px-3" data-surface-subheader>
           <div className="flex shrink-0 items-center gap-0.5">
             <Tooltip>
@@ -1137,10 +1144,35 @@ export default function FilePreviewPanel({
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div
           className={cn(
-            "min-w-0 flex-1 flex-col overflow-hidden",
-            relativePath ? "flex" : "hidden",
+            "relative min-w-0 flex-1 flex-col overflow-hidden",
+            relativePath || commitDiffPath ? "flex" : "hidden",
           )}
         >
+          {commitDiffPath ? (
+            <div className="absolute inset-0 z-10 flex min-h-0 flex-col bg-background">
+              <div className="surface-subheader gap-2 px-3" data-surface-subheader>
+                <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
+                  {commitDiffPath}
+                </span>
+                <button
+                  type="button"
+                  className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  aria-label="Close diff"
+                  title="Close diff"
+                  onClick={() => setCommitDiffPath(null)}
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+              <CommitFileDiffView
+                key={`${commitDiffPath}:${environmentId}:${cwd}`}
+                environmentId={environmentId}
+                cwd={cwd}
+                path={commitDiffPath}
+                composerDraftTarget={composerDraftTarget}
+              />
+            </div>
+          ) : null}
           {relativePath && file.error && file.data === null ? (
             <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-xs leading-relaxed text-destructive">
               {file.error}
@@ -1234,7 +1266,8 @@ export default function FilePreviewPanel({
                 key={`commit:${environmentId}:${cwd}`}
                 environmentId={environmentId}
                 cwd={cwd}
-                onOpenFile={onOpenFile}
+                selectedPath={commitDiffPath}
+                onShowDiff={setCommitDiffPath}
               />
             ) : relativePath && explorerView === "structure" ? (
               <FileStructurePanel

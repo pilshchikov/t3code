@@ -231,6 +231,11 @@ export class GitVcsDriver extends Context.Service<
     readonly stagedCommitContext: (
       cwd: string,
     ) => Effect.Effect<GitPreparedCommitContext | null, GitCommandError>;
+    /**
+     * The unified diff of a single path's working-tree changes vs HEAD (covers staged + unstaged),
+     * falling back to a full-file add diff for untracked files. Empty string when there is no diff.
+     */
+    readonly fileDiff: (cwd: string, path: string) => Effect.Effect<string, GitCommandError>;
     readonly commit: (
       cwd: string,
       subject: string,

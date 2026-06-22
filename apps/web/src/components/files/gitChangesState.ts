@@ -8,6 +8,7 @@ import type {
   EnvironmentId,
   GitCommitStagedResult,
   GitDetailedStatusResult,
+  GitFileDiffResult,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
@@ -51,6 +52,29 @@ export function useGitDetailedStatus(
 
 export function refreshGitDetailedStatus(environmentId: EnvironmentId, cwd: string): void {
   appAtomRegistry.refresh(getGitDetailedStatusAtom(environmentId, cwd));
+}
+
+export interface GitFileDiffState {
+  readonly data: GitFileDiffResult | null;
+  readonly error: string | null;
+  readonly isPending: boolean;
+  readonly refresh: () => void;
+}
+
+export function useGitFileDiff(
+  environmentId: EnvironmentId,
+  cwd: string,
+  path: string,
+): GitFileDiffState {
+  const atom = gitEnvironment.fileDiff({ environmentId, input: { cwd, path } });
+  const result = useAtomValue(atom);
+  const refresh = useCallback(() => appAtomRegistry.refresh(atom), [atom]);
+  return {
+    data: Option.getOrNull(AsyncResult.value(result)),
+    error: errorMessage(result),
+    isPending: result.waiting,
+    refresh,
+  };
 }
 
 async function runGitCommand<W, A, E>(command: AtomCommand<W, A, E>, target: W): Promise<A> {

@@ -1803,6 +1803,39 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
   const stagedCommitContext: GitVcsDriver.GitVcsDriver["Service"]["stagedCommitContext"] = (cwd) =>
     readStagedCommitContext(cwd);
 
+  const fileDiff: GitVcsDriver.GitVcsDriver["Service"]["fileDiff"] = Effect.fn("fileDiff")(
+    function* (cwd, path) {
+      // Working-tree changes (staged + unstaged) vs HEAD for the path.
+      const tracked = yield* executeGit(
+        "GitVcsDriver.fileDiff.tracked",
+        cwd,
+        ["diff", "--no-ext-diff", "HEAD", "--", path],
+        {
+          allowNonZeroExit: true,
+          maxOutputBytes: REVIEW_DIFF_PATCH_MAX_OUTPUT_BYTES,
+          appendTruncationMarker: true,
+        },
+      );
+      if (tracked.exitCode === 0 && tracked.stdout.trim().length > 0) {
+        return tracked.stdout;
+      }
+
+      // Untracked (or no-HEAD) file: show it as a full-file addition. `--no-index` exits non-zero
+      // when there is a difference, which is the normal case here.
+      const untracked = yield* executeGit(
+        "GitVcsDriver.fileDiff.untracked",
+        cwd,
+        ["diff", "--no-ext-diff", "--no-index", "--", "/dev/null", path],
+        {
+          allowNonZeroExit: true,
+          maxOutputBytes: REVIEW_DIFF_PATCH_MAX_OUTPUT_BYTES,
+          appendTruncationMarker: true,
+        },
+      );
+      return untracked.stdout;
+    },
+  );
+
   const prepareCommitContext: GitVcsDriver.GitVcsDriver["Service"]["prepareCommitContext"] =
     Effect.fn("prepareCommitContext")(function* (cwd, filePaths) {
       if (filePaths && filePaths.length > 0) {
@@ -2808,6 +2841,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     commitStaged,
     prepareCommitContext,
     stagedCommitContext,
+    fileDiff,
     commit,
     pushCurrentBranch,
     pullCurrentBranch,

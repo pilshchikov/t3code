@@ -388,6 +388,19 @@ export const GitGenerateCommitMessageResult = Schema.Struct({
 });
 export type GitGenerateCommitMessageResult = typeof GitGenerateCommitMessageResult.Type;
 
+export const GitFileDiffInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  path: TrimmedNonEmptyStringSchema,
+});
+export type GitFileDiffInput = typeof GitFileDiffInput.Type;
+
+/** Unified diff of a single file's working-tree changes vs HEAD. Empty when there is no change. */
+export const GitFileDiffResult = Schema.Struct({
+  path: TrimmedNonEmptyStringSchema,
+  diff: Schema.String,
+});
+export type GitFileDiffResult = typeof GitFileDiffResult.Type;
+
 // RPC / domain errors
 export class GitCommandError extends Schema.TaggedErrorClass<GitCommandError>()("GitCommandError", {
   operation: Schema.String,

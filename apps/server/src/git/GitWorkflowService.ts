@@ -9,6 +9,8 @@ import {
   type GitCommitStagedResult,
   type GitDetailedStatusResult,
   type GitDiscardChangesInput,
+  type GitFileDiffInput,
+  type GitFileDiffResult,
   type GitGenerateCommitMessageResult,
   type GitStageFilesInput,
   type GitUnstageFilesInput,
@@ -116,6 +118,9 @@ export class GitWorkflowService extends Context.Service<
     readonly generateCommitMessage: (
       input: VcsStatusInput,
     ) => Effect.Effect<GitGenerateCommitMessageResult, GitManagerServiceError>;
+    readonly fileDiff: (
+      input: GitFileDiffInput,
+    ) => Effect.Effect<GitFileDiffResult, GitCommandError>;
   }
 >()("t3/git/GitWorkflowService") {}
 
@@ -384,6 +389,16 @@ export const make = Effect.gen(function* () {
     generateCommitMessage: (input) =>
       ensureGit("GitWorkflowService.generateCommitMessage", input.cwd).pipe(
         Effect.andThen(gitManager.generateStagedCommitMessage({ cwd: input.cwd })),
+      ),
+    fileDiff: (input) =>
+      detectGitRepositoryForCommand("GitWorkflowService.fileDiff", input.cwd).pipe(
+        Effect.flatMap((isGitRepository) =>
+          isGitRepository
+            ? git
+                .fileDiff(input.cwd, input.path)
+                .pipe(Effect.map((diff) => ({ path: input.path, diff })))
+            : Effect.succeed<GitFileDiffResult>({ path: input.path, diff: "" }),
+        ),
       ),
   });
 });

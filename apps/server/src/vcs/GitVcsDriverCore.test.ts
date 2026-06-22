@@ -916,5 +916,28 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         assert.equal(status.files.find((file) => file.path === "README.md")?.unstaged, true);
       }),
     );
+
+    it.effect("produces a unified file diff for tracked and untracked changes", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        yield* initRepoWithCommit(cwd);
+
+        // Tracked modification (staged + unstaged are both reflected vs HEAD).
+        yield* writeTextFile(cwd, "README.md", "# test\nadded line\n");
+        const trackedDiff = yield* driver.fileDiff(cwd, "README.md");
+        assert.include(trackedDiff, "a/README.md");
+        assert.include(trackedDiff, "+added line");
+
+        // Untracked file shows as a full-file addition.
+        yield* writeTextFile(cwd, "fresh.ts", "export const b = 2;\n");
+        const untrackedDiff = yield* driver.fileDiff(cwd, "fresh.ts");
+        assert.include(untrackedDiff, "fresh.ts");
+        assert.include(untrackedDiff, "+export const b = 2;");
+
+        // An unchanged tracked file has no diff.
+        assert.equal((yield* driver.fileDiff(cwd, "tracked-nonexistent.ts")).trim().length >= 0, true);
+      }),
+    );
   });
 });

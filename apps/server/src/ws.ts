@@ -321,6 +321,7 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.gitDiscardChanges, AuthOrchestrationOperateScope],
   [WS_METHODS.gitCommitStaged, AuthOrchestrationOperateScope],
   [WS_METHODS.gitGenerateCommitMessage, AuthOrchestrationOperateScope],
+  [WS_METHODS.gitFileDiff, AuthOrchestrationReadScope],
   [WS_METHODS.vcsListRefs, AuthOrchestrationReadScope],
   [WS_METHODS.vcsCreateWorktree, AuthOrchestrationOperateScope],
   [WS_METHODS.vcsRemoveWorktree, AuthOrchestrationOperateScope],
@@ -1602,6 +1603,10 @@ const makeWsRpcLayer = (currentSession: EnvironmentAuth.AuthenticatedSession) =>
             gitWorkflow.generateCommitMessage(input),
             { "rpc.aggregate": "git" },
           ),
+        [WS_METHODS.gitFileDiff]: (input) =>
+          observeRpcEffect(WS_METHODS.gitFileDiff, gitWorkflow.fileDiff(input), {
+            "rpc.aggregate": "git",
+          }),
         [WS_METHODS.vcsListRefs]: (input) =>
           observeRpcEffect(WS_METHODS.vcsListRefs, gitWorkflow.listRefs(input), {
             "rpc.aggregate": "vcs",

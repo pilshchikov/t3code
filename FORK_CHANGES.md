@@ -204,8 +204,19 @@ fork-specific behavior so future upstream syncs are easier to review.
       `git.generateCommitMessage` RPC.
     - Client: a `generateCommitMessage` environment command and a `generateGitCommitMessage` helper
       that fills the message box.
-  - Per-file inline diff is intentionally not included in this pass (no per-file diff RPC exists
-    yet); the existing whole-tree Diff surface remains available separately.
+  - Clicking a file in the Commit view opens its **diff** (working-tree changes vs HEAD) over the
+    editor area — not the editable file — with the selected row highlighted and a close (✕) control.
+    Untracked files render as a full-file addition. Backed by a new git-only `git.fileDiff` RPC
+    (`GitVcsDriver.fileDiff` → `git diff HEAD -- <path>`, falling back to `--no-index` for untracked),
+    a `fileDiff` query atom, and a `CommitFileDiffView` that reuses the app's `@pierre/diffs` renderer
+    (`getRenderablePatch` + `AnnotatableCodeView`).
+    - Source: `packages/contracts/src/git.ts`, `packages/contracts/src/rpc.ts`,
+      `apps/server/src/vcs/GitVcsDriver.ts`, `apps/server/src/vcs/GitVcsDriverCore.ts`,
+      `apps/server/src/git/GitWorkflowService.ts`, `apps/server/src/ws.ts`,
+      `packages/client-runtime/src/state/git.ts`,
+      `apps/web/src/components/files/CommitFileDiffView.tsx`,
+      `apps/web/src/components/files/GitChangesPanel.tsx`,
+      `apps/web/src/components/files/FilePreviewPanel.tsx`.
   - Source: `apps/web/src/components/files/GitChangesPanel.tsx`,
     `apps/web/src/components/files/gitChangesState.ts`,
     `apps/web/src/components/files/FilePreviewPanel.tsx`,
