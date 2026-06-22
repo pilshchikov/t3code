@@ -17,6 +17,15 @@ fork-specific behavior so future upstream syncs are easier to review.
   - Opt in with `T3CODE_ENABLE_PROVIDER_AUTO_REFRESH=true`.
   - Explicit/manual provider refresh still works.
   - Source: `apps/server/src/provider/makeManagedServerProvider.ts`.
+- OS-keychain ("Safe Storage") secret encryption is disabled by default.
+  - The local build is ad-hoc signed (no Apple Developer ID), so macOS re-prompts for the Keychain
+    "Safe Storage" key on every launch/reinstall (the app's signature changes each rebuild, so even
+    "Always Allow" never sticks). To avoid that prompt, `ElectronSafeStorage.isEncryptionAvailable`
+    reports `false` without calling Electron; every consumer already degrades gracefully, so no
+    Keychain access happens at all. The trade-off is that secrets for saved remote environments
+    (bearer tokens, connection catalog) are not persisted.
+  - Opt back into real Keychain encryption with `T3CODE_ENABLE_SAFE_STORAGE_KEYCHAIN=true`.
+  - Source: `apps/desktop/src/electron/ElectronSafeStorage.ts`.
 - Validation performed on the installed macOS build showed a clean startup using only loopback
   sockets between Electron and the local backend after these gates were added.
 

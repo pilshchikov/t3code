@@ -63,11 +63,21 @@ export class ElectronSafeStorage extends Context.Service<
   }
 >()("@t3tools/desktop/electron/ElectronSafeStorage") {}
 
+// This fork's desktop build is ad-hoc signed (no Apple Developer ID), so macOS re-prompts for the
+// Keychain "Safe Storage" key on every launch/reinstall because the app's signature keeps changing.
+// To avoid that prompt, OS-keychain secret storage is disabled by default: `isEncryptionAvailable`
+// reports false without touching Electron, and every consumer already degrades gracefully (secrets
+// for saved remote environments just aren't persisted). Re-enable real Keychain encryption with
+// `T3CODE_ENABLE_SAFE_STORAGE_KEYCHAIN=true`.
+const keychainSecretStorageEnabled = process.env.T3CODE_ENABLE_SAFE_STORAGE_KEYCHAIN === "true";
+
 export const make = ElectronSafeStorage.of({
-  isEncryptionAvailable: Effect.try({
-    try: () => Electron.safeStorage.isEncryptionAvailable(),
-    catch: (cause) => new ElectronSafeStorageAvailabilityError({ cause }),
-  }),
+  isEncryptionAvailable: keychainSecretStorageEnabled
+    ? Effect.try({
+        try: () => Electron.safeStorage.isEncryptionAvailable(),
+        catch: (cause) => new ElectronSafeStorageAvailabilityError({ cause }),
+      })
+    : Effect.succeed(false),
   encryptString: (value) =>
     Effect.try({
       try: () => Electron.safeStorage.encryptString(value),
