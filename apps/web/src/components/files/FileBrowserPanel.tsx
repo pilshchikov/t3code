@@ -1,7 +1,7 @@
 import type { EnvironmentId, ProjectEntry } from "@t3tools/contracts";
 import { FileTree, useFileTree } from "@pierre/trees/react";
-import { Maximize2, Minimize2, RefreshCw, Search } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { LocateFixed, Maximize2, Minimize2, RefreshCw, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useTheme } from "~/hooks/useTheme";
 import { cn } from "~/lib/utils";
@@ -14,7 +14,40 @@ interface FileBrowserPanelProps {
   cwd: string;
   projectName: string;
   revealRequest?: { readonly id: number; readonly path: string } | null;
+  activeRelativePath?: string | null;
   onOpenFile: (relativePath: string) => void;
+}
+
+const AUTO_REVEAL_STORAGE_KEY = "t3code.fileTreeAutoReveal";
+
+function initialAutoReveal(): boolean {
+  try {
+    return window.localStorage.getItem(AUTO_REVEAL_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+type TreeModel = ReturnType<typeof useFileTree>["model"];
+
+/** Expand every ancestor directory of `path`, then scroll the entry into view. */
+function revealPathInTree(model: TreeModel, path: string): void {
+  if (!path) return;
+  const segments = path.split("/").filter(Boolean);
+  let accumulated = "";
+  for (let index = 0; index < segments.length - 1; index += 1) {
+    accumulated = accumulated ? `${accumulated}/${segments[index]}` : segments[index]!;
+    const directory = model.getItem(`${accumulated}/`) ?? model.getItem(accumulated);
+    if (directory?.isDirectory() && "expand" in directory) {
+      directory.expand();
+    }
+  }
+  const target = model.getItem(path) ?? model.getItem(`${path}/`);
+  if (!target) return;
+  if (target.isDirectory() && "expand" in target) {
+    target.expand();
+  }
+  model.scrollToPath(target.getPath(), { focus: true, offset: "center" });
 }
 
 const TREE_UNSAFE_CSS = `
@@ -38,9 +71,11 @@ export default function FileBrowserPanel({
   cwd,
   projectName,
   revealRequest,
+  activeRelativePath,
   onOpenFile,
 }: FileBrowserPanelProps) {
   const { resolvedTheme } = useTheme();
+  const [autoReveal, setAutoReveal] = useState(initialAutoReveal);
   const entriesQuery = useProjectEntriesQuery(environmentId, cwd);
   const entries = entriesQuery.data?.entries ?? [];
   const entryKinds = useMemo(
@@ -88,16 +123,26 @@ export default function FileBrowserPanel({
       }
       return;
     }
-    const treeRevealPath = revealRequest.path.endsWith("/")
-      ? revealRequest.path
-      : `${revealRequest.path}/`;
-    const item = model.getItem(treeRevealPath) ?? model.getItem(revealRequest.path);
-    if (!item) return;
-    if (item.isDirectory() && "expand" in item) {
-      item.expand();
-    }
-    model.scrollToPath(item.getPath(), { focus: true, offset: "center" });
+    revealPathInTree(model, revealRequest.path);
   }, [model, revealRequest, treePaths]);
+
+  // Auto-scroll the tree to the file shown in the editor (expanding parents), like JetBrains'
+  // "Always Select Opened File". Depends on treePaths so it also fires once the tree finishes loading.
+  useEffect(() => {
+    if (!autoReveal || !activeRelativePath) return;
+    revealPathInTree(model, activeRelativePath);
+  }, [activeRelativePath, autoReveal, model, treePaths]);
+
+  const toggleAutoReveal = () => {
+    setAutoReveal((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(AUTO_REVEAL_STORAGE_KEY, String(next));
+      } catch {}
+      if (next && activeRelativePath) revealPathInTree(model, activeRelativePath);
+      return next;
+    });
+  };
 
   const expandAllDirectories = () => {
     for (const path of directoryTreePaths) {
@@ -137,6 +182,23 @@ export default function FileBrowserPanel({
             {entriesQuery.data?.truncated ? " · partial" : ""}
           </div>
         </div>
+        <button
+          type="button"
+          aria-pressed={autoReveal}
+          className={cn(
+            "rounded-md p-1.5 hover:bg-accent hover:text-foreground",
+            autoReveal ? "bg-accent text-foreground" : "text-muted-foreground",
+          )}
+          aria-label={
+            autoReveal
+              ? "Stop auto-revealing the open file"
+              : "Auto-reveal the open file in the tree"
+          }
+          title={autoReveal ? "Auto-reveal: on" : "Auto-reveal: off"}
+          onClick={toggleAutoReveal}
+        >
+          <LocateFixed className="size-3.5" />
+        </button>
         <button
           type="button"
           className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"

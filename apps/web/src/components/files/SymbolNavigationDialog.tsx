@@ -98,7 +98,7 @@ export function SymbolNavigationDialog(props: SymbolNavigationDialogProps) {
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogPopup
         aria-label={`${modeLabel} of ${props.symbol}`}
-        className="max-w-3xl overflow-hidden rounded-lg p-0 before:rounded-[7px]"
+        className="max-w-3xl overflow-hidden rounded-lg p-0 duration-100 before:rounded-[7px]"
         showCloseButton={false}
         bottomStickOnMobile={false}
       >

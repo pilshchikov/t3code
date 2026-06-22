@@ -74,6 +74,26 @@ fork-specific behavior so future upstream syncs are easier to review.
     multi-identifier tokens are still ignored so navigation never jumps to the wrong symbol. This
     fixes Cmd-click silently doing nothing on many method/class references.
   - Source: `apps/web/src/components/files/FilePreviewPanel.tsx`.
+- The Search Everywhere dialog (double Shift) is tightened toward JetBrains density.
+  - Narrower popup, faster open animation, and shorter rows/tabs/input. The matched portion of each
+    result label is emphasized.
+  - Source: `apps/web/src/components/files/EditorNavigationDialog.tsx`,
+    `apps/web/src/components/files/SymbolNavigationDialog.tsx`.
+- The workspace file tree auto-reveals the file shown in the editor.
+  - On open, the tree expands the file's parent directories and scrolls it into view, like
+    JetBrains' "Always Select Opened File". A toolbar toggle enables/disables it (persisted, on by
+    default).
+  - Source: `apps/web/src/components/files/FileBrowserPanel.tsx`,
+    `apps/web/src/components/files/FilePreviewPanel.tsx`.
+- The explorer sidebar has a Structure view of the current file, like JetBrains' Structure tool.
+  - Lists classes, methods, functions, and top-level declarations with kind badges and nesting,
+    derived client-side from the already-loaded file contents (no server round-trip). Clicking a
+    symbol scrolls the editor to it. A Files/Structure switch at the top of the sidebar toggles
+    between the tree and the outline (persisted). Python and TypeScript/JavaScript have tuned
+    extractors; other languages use a generic class/function fallback.
+  - Source: `apps/web/src/components/files/fileOutline.ts`,
+    `apps/web/src/components/files/FileStructurePanel.tsx`,
+    `apps/web/src/components/files/FilePreviewPanel.tsx`.
 
 - Markdown preview mode is global across markdown files instead of being tied to one file path.
   - Switching a markdown file to rendered mode applies to other `.md` and `.mdx` files, including

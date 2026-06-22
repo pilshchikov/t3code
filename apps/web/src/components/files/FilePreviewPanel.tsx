@@ -50,6 +50,7 @@ import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { buildFileReviewComment } from "~/reviewCommentContext";
 
 import FileBrowserPanel from "./FileBrowserPanel";
+import FileStructurePanel from "./FileStructurePanel";
 import { EditorNavigationDialog } from "./EditorNavigationDialog";
 import {
   type FileCommentAnnotationEntry,
@@ -100,8 +101,21 @@ interface FilePreviewPanelProps {
 }
 
 const FILE_EXPLORER_STORAGE_KEY = "t3code.fileExplorerOpen";
+const EXPLORER_VIEW_STORAGE_KEY = "t3code.explorerView";
 const FILE_SAVE_DEBOUNCE_MS = 500;
 const MAX_BREADCRUMB_CHILDREN = 80;
+
+type ExplorerView = "files" | "structure";
+
+function initialExplorerView(): ExplorerView {
+  try {
+    return window.localStorage.getItem(EXPLORER_VIEW_STORAGE_KEY) === "structure"
+      ? "structure"
+      : "files";
+  } catch {
+    return "files";
+  }
+}
 
 interface EditableFileSurfaceProps {
   environmentId: EnvironmentId;
@@ -474,6 +488,7 @@ export default function FilePreviewPanel({
       : null;
   const navigationRequestId = navigationLine ? navigationRequest?.requestId : null;
   const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
+  const [explorerView, setExplorerView] = useState<ExplorerView>(initialExplorerView);
   const [markdownPreviewMode, setMarkdownPreviewMode] = useState(readMarkdownPreviewMode);
   const [treeRevealRequest, setTreeRevealRequest] = useState<{
     readonly id: number;
@@ -586,6 +601,23 @@ export default function FilePreviewPanel({
     );
     currentCrumb?.scrollIntoView({ block: "nearest", inline: "end" });
   }, [relativePath]);
+
+  const selectExplorerView = (view: ExplorerView) => {
+    setExplorerView(view);
+    try {
+      window.localStorage.setItem(EXPLORER_VIEW_STORAGE_KEY, view);
+    } catch {}
+  };
+
+  const navigateToLineInCurrentFile = useCallback(
+    (lineNumber: number) => {
+      if (!relativePath) return;
+      useEditorNavigationStore
+        .getState()
+        .navigateTo(environmentId, cwd, { path: relativePath, lineNumber });
+    },
+    [cwd, environmentId, relativePath],
+  );
 
   const toggleExplorer = () => {
     setExplorerOpen((current) => {
@@ -1012,20 +1044,49 @@ export default function FilePreviewPanel({
         {explorerOpen || relativePath === null ? (
           <aside
             className={cn(
-              "flex min-h-0 shrink-0 bg-background",
+              "flex min-h-0 shrink-0 flex-col bg-background",
               relativePath
                 ? "w-[min(22rem,46%)] min-w-64 border-l border-border/60"
                 : "min-w-0 flex-1",
             )}
           >
-            <FileBrowserPanel
-              key={`${environmentId}:${cwd}`}
-              environmentId={environmentId}
-              cwd={cwd}
-              projectName={projectName}
-              revealRequest={treeRevealRequest}
-              onOpenFile={onOpenFile}
-            />
+            {relativePath ? (
+              <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border/60 px-1.5">
+                {(["files", "structure"] as const).map((view) => (
+                  <button
+                    key={view}
+                    type="button"
+                    className={cn(
+                      "h-6 flex-1 rounded text-xs font-medium capitalize",
+                      explorerView === view
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                    )}
+                    onClick={() => selectExplorerView(view)}
+                  >
+                    {view}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {relativePath && explorerView === "structure" ? (
+              <FileStructurePanel
+                relativePath={relativePath}
+                contents={file.data?.contents ?? null}
+                loading={file.data === null}
+                onNavigate={navigateToLineInCurrentFile}
+              />
+            ) : (
+              <FileBrowserPanel
+                key={`${environmentId}:${cwd}`}
+                environmentId={environmentId}
+                cwd={cwd}
+                projectName={projectName}
+                revealRequest={treeRevealRequest}
+                activeRelativePath={relativePath}
+                onOpenFile={onOpenFile}
+              />
+            )}
           </aside>
         ) : null}
       </div>

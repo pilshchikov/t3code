@@ -116,6 +116,23 @@ function resultIcon(item: SearchResultItem) {
   return <Braces className="size-4 text-violet-500" />;
 }
 
+/** Emphasize the matched portion of a result label, like IntelliJ's Search Everywhere. */
+function MatchedText({ text, query }: { text: string; query: string }) {
+  const trimmed = query.trim();
+  if (!trimmed) return text;
+  const index = text.toLowerCase().indexOf(trimmed.toLowerCase());
+  if (index === -1) return text;
+  return (
+    <>
+      {text.slice(0, index)}
+      <span className="font-semibold text-foreground">
+        {text.slice(index, index + trimmed.length)}
+      </span>
+      {text.slice(index + trimmed.length)}
+    </>
+  );
+}
+
 function recentFileItems(
   recentFiles: ReadonlyArray<RecentEditorFile>,
   entries: ReadonlyArray<ProjectEntry>,
@@ -464,18 +481,18 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogPopup
         aria-label={mode === "recent" ? "Recent Files" : "Search Everywhere"}
-        className="max-w-4xl overflow-hidden rounded-lg p-0 before:rounded-[7px]"
+        className="max-w-2xl overflow-hidden rounded-lg p-0 duration-100 before:rounded-[7px]"
         showCloseButton={false}
         bottomStickOnMobile={false}
       >
         {mode === "search" ? (
-          <div className="flex h-11 shrink-0 items-end gap-1 overflow-x-auto border-b border-border px-3">
+          <div className="flex h-9 shrink-0 items-end gap-1 overflow-x-auto border-b border-border px-2">
             {SEARCH_SCOPES.map((entry) => (
               <button
                 key={entry.value}
                 type="button"
                 className={cn(
-                  "h-9 shrink-0 border-b-2 px-3 text-sm text-muted-foreground",
+                  "h-8 shrink-0 border-b-2 px-2.5 text-xs text-muted-foreground",
                   scope === entry.value
                     ? "border-primary text-foreground"
                     : "border-transparent hover:text-foreground",
@@ -487,12 +504,12 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
             ))}
           </div>
         ) : (
-          <div className="flex h-11 items-center border-b border-border px-4 text-sm font-medium">
+          <div className="flex h-9 items-center border-b border-border px-4 text-sm font-medium">
             Recent Files
           </div>
         )}
-        <div className="flex h-14 items-center gap-3 border-b border-border px-4">
-          <Search className="size-5 shrink-0 text-muted-foreground" />
+        <div className="flex h-11 items-center gap-3 border-b border-border px-4">
+          <Search className="size-4 shrink-0 text-muted-foreground" />
           <input
             ref={inputRef}
             type="text"
@@ -502,14 +519,14 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
             placeholder={
               mode === "recent" ? "Search recent files" : "Search files, symbols, text, and actions"
             }
-            className="h-full min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground"
+            className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             aria-label={mode === "recent" ? "Search recent files" : "Search everywhere"}
           />
           {loading ? <LoaderCircle className="size-4 animate-spin text-muted-foreground" /> : null}
         </div>
-        <div className="max-h-[min(34rem,65vh)] min-h-72 overflow-y-auto p-2">
+        <div className="max-h-[min(30rem,62vh)] min-h-56 overflow-y-auto p-1.5">
           {results.length === 0 && !loading ? (
-            <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+            <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
               {query.trim() ? "No matching results" : "Start typing to search this scope"}
             </div>
           ) : (
@@ -519,21 +536,23 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
               return (
                 <div key={item.id}>
                   {showSection ? (
-                    <div className="px-2 pt-2 pb-1 text-[11px] font-medium uppercase text-muted-foreground">
+                    <div className="px-2 pt-1.5 pb-0.5 text-[10px] font-medium uppercase text-muted-foreground">
                       {item.section}
                     </div>
                   ) : null}
                   <button
                     type="button"
                     className={cn(
-                      "flex h-10 w-full min-w-0 items-center gap-3 rounded-md px-2 text-left",
+                      "flex h-8 w-full min-w-0 items-center gap-2.5 rounded-md px-2 text-left",
                       index === selectedIndex ? "bg-accent text-foreground" : "hover:bg-accent/60",
                     )}
                     onMouseEnter={() => setSelectedIndex(index)}
                     onClick={() => execute(item)}
                   >
                     {resultIcon(item)}
-                    <span className="min-w-0 flex-1 truncate text-sm">{item.title}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      <MatchedText text={item.title} query={query} />
+                    </span>
                     <span className="max-w-[45%] truncate text-xs text-muted-foreground">
                       {item.detail}
                     </span>
@@ -543,7 +562,7 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
             })
           )}
         </div>
-        <div className="flex h-9 items-center justify-between border-t border-border px-4 text-xs text-muted-foreground">
+        <div className="flex h-8 items-center justify-between border-t border-border px-4 text-xs text-muted-foreground">
           <span>{props.projectName}</span>
           <span className="flex items-center gap-2">
             <Kbd>↑↓</Kbd> Navigate <Kbd>Enter</Kbd> Open <Kbd>Esc</Kbd> Close
