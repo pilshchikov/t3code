@@ -80,11 +80,16 @@ fork-specific behavior so future upstream syncs are easier to review.
   - Source: `apps/web/src/components/files/EditorNavigationDialog.tsx`,
     `apps/web/src/components/files/SymbolNavigationDialog.tsx`.
 - The workspace file tree auto-reveals the file shown in the editor.
-  - On open, the tree expands the file's parent directories and scrolls it into view, like
-    JetBrains' "Always Select Opened File". A toolbar toggle enables/disables it (persisted, on by
-    default).
+  - On open, the tree expands the file's parent directories, scrolls it into view, and highlights
+    the row (`data-item-focused`), like JetBrains' "Always Select Opened File". A toolbar toggle
+    enables/disables it (persisted, on by default).
   - Source: `apps/web/src/components/files/FileBrowserPanel.tsx`,
     `apps/web/src/components/files/FilePreviewPanel.tsx`.
+- The file tree marks files with working-tree changes (VCS status).
+  - Changed files are colored via the tree's native git-status decoration, fed from the existing
+    `useVcsStatus` working-tree data. Current pass marks changed files as modified (blue); add/delete/
+    rename distinction arrives with the staging UI.
+  - Source: `apps/web/src/components/files/FileBrowserPanel.tsx`.
 - The explorer sidebar has a Structure view of the current file, like JetBrains' Structure tool.
   - Lists classes, methods, functions, and top-level declarations with kind badges and nesting,
     derived client-side from the already-loaded file contents (no server round-trip). Clicking a

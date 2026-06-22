@@ -4,6 +4,7 @@ import { LocateFixed, Maximize2, Minimize2, RefreshCw, Search } from "lucide-rea
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useTheme } from "~/hooks/useTheme";
+import { useVcsStatus } from "~/lib/vcsStatusState";
 import { cn } from "~/lib/utils";
 import { T3_PIERRE_ICONS } from "~/pierre-icons";
 
@@ -47,6 +48,9 @@ function revealPathInTree(model: TreeModel, path: string): void {
   if (target.isDirectory() && "expand" in target) {
     target.expand();
   }
+  // Focus the row so it gets `data-item-focused` (styled below), not just scrolled into view —
+  // mirrors JetBrains highlighting the open file in the tree.
+  model.focusPath(target.getPath());
   model.scrollToPath(target.getPath(), { focus: true, offset: "center" });
 }
 
@@ -60,6 +64,15 @@ const TREE_UNSAFE_CSS = `
     --trees-font-size-override: 12px;
   }
   button[data-type='item'] { border-radius: 5px; }
+  button[data-item-focused='true'],
+  button[data-item-selected='true'] {
+    background-color: var(--trees-selected-bg-override);
+  }
+  button[data-item-git-status='modified'] { color: #4c9ffe !important; }
+  button[data-item-git-status='added'],
+  button[data-item-git-status='untracked'] { color: #3fb950 !important; }
+  button[data-item-git-status='deleted'] { color: #f85149 !important; }
+  button[data-item-git-status='renamed'] { color: #d29922 !important; }
 `;
 
 function treePath(entry: ProjectEntry): string {
@@ -76,6 +89,17 @@ export default function FileBrowserPanel({
 }: FileBrowserPanelProps) {
   const { resolvedTheme } = useTheme();
   const [autoReveal, setAutoReveal] = useState(initialAutoReveal);
+  const vcsStatus = useVcsStatus({ environmentId, cwd });
+  const gitStatusEntries = useMemo(
+    () =>
+      (vcsStatus.data?.workingTree.files ?? []).map((file) => ({
+        path: file.path,
+        // The working-tree status reports changed files with line counts but not add/delete/rename;
+        // mark them modified so the tree colors them (full per-change kinds come with staging).
+        status: "modified" as const,
+      })),
+    [vcsStatus.data],
+  );
   const entriesQuery = useProjectEntriesQuery(environmentId, cwd);
   const entries = entriesQuery.data?.entries ?? [];
   const entryKinds = useMemo(
@@ -113,6 +137,10 @@ export default function FileBrowserPanel({
     previousTreePathsRef.current = treePaths;
     model.resetPaths(treePaths);
   }, [entryKinds, model, treePaths]);
+
+  useEffect(() => {
+    model.setGitStatus(gitStatusEntries);
+  }, [gitStatusEntries, model]);
 
   useEffect(() => {
     if (!revealRequest) return;
