@@ -82,10 +82,14 @@ function treePath(entry: ProjectEntry): string {
   return entry.kind === "directory" ? `${entry.path}/` : entry.path;
 }
 
-/** Map a per-file git change to the tree's decoration status (its palette has no copy/typechange). */
+/**
+ * Map a per-file git change to the tree's decoration status (its palette has no copy/typechange).
+ * Unstaged/unversioned changes use the pale-red "untracked" color so they stand out from staged
+ * changes, which keep their kind color (added=green, deleted=red, renamed=amber, modified=blue).
+ */
 function treeGitStatus(file: GitFileChange): GitStatus {
-  if (file.untracked) return "untracked";
-  switch (file.worktreeStatus ?? file.indexStatus) {
+  if (file.untracked || file.unstaged) return "untracked";
+  switch (file.indexStatus) {
     case "added":
     case "copied":
       return "added";

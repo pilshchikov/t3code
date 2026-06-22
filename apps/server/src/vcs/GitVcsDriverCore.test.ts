@@ -936,7 +936,10 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         assert.include(untrackedDiff, "+export const b = 2;");
 
         // An unchanged tracked file has no diff.
-        assert.equal((yield* driver.fileDiff(cwd, "tracked-nonexistent.ts")).trim().length >= 0, true);
+        assert.equal(
+          (yield* driver.fileDiff(cwd, "tracked-nonexistent.ts")).trim().length >= 0,
+          true,
+        );
       }),
     );
   });

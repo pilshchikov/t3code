@@ -101,9 +101,11 @@ fork-specific behavior so future upstream syncs are easier to review.
     handler now invokes the callback through a live ref, so it always targets the current thread.
   - Source: `apps/web/src/components/files/FileBrowserPanel.tsx`.
 - The file tree marks files with working-tree changes (VCS status), colored by real change kind.
-  - Markers come from the granular `git.detailedStatus` RPC: added renders green, modified blue,
-    deleted red, renamed amber, and untracked/unversioned a pale red (copy→added,
-    typechange/unmerged→modified, since the tree's palette has no dedicated colors for those). The
+  - Markers come from the granular `git.detailedStatus` RPC. Any file with unstaged changes (or an
+    untracked/unversioned file) renders in a pale red so it stands out from fully-staged work, which
+    keeps its kind color: staged-added green, staged-modified blue, staged-deleted red, staged-renamed
+    amber (copy→added, typechange/unmerged→modified, since the tree's palette has no dedicated colors
+    for those). This matches the Commit panel's pale-red unversioned treatment. The
     detailed status is a pull query, so the panel
     refreshes it whenever the live `vcsEnvironment.status` stream reports a working-tree change, keeping
     markers current with edits made outside the Commit panel.
