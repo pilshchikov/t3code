@@ -98,6 +98,7 @@ import {
   type RightPanelSurface,
   useRightPanelStore,
 } from "../rightPanelStore";
+import { useExplorerViewStore } from "../explorerViewStore";
 import {
   isPreviewSupportedInRuntime,
   selectThreadPreviewState,
@@ -3568,6 +3569,25 @@ function ChatViewContent(props: ChatViewProps) {
         return;
       }
 
+      if (command === "editor.toggle") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (activeThreadRef) {
+          useRightPanelStore.getState().toggle(activeThreadRef, "files");
+        }
+        return;
+      }
+
+      if (command === "structure.open") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (activeThreadRef) {
+          useRightPanelStore.getState().open(activeThreadRef, "files");
+          useExplorerViewStore.getState().showView("structure");
+        }
+        return;
+      }
+
       if (command === "terminal.split") {
         event.preventDefault();
         event.stopPropagation();
@@ -3649,6 +3669,7 @@ function ChatViewContent(props: ChatViewProps) {
   }, [
     activeRightPanelSurface,
     activeProject,
+    activeThreadRef,
     addTerminalSurface,
     terminalUiState.terminalOpen,
     terminalUiState.activeTerminalId,

@@ -50,6 +50,13 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
     command,
     when: "modelPickerOpen",
   })),
+  // Surface toggles. These come last so they win over the thread/model-picker jump bindings above
+  // for any overlapping key (the resolver is last-match-wins). `mod+1` therefore opens the file
+  // structure instead of jumping to thread 1, except while the model picker is open.
+  { key: "f1", command: "editor.toggle" },
+  { key: "f2", command: "preview.toggle" },
+  { key: "f3", command: "terminal.toggle" },
+  { key: "mod+1", command: "structure.open", when: "!modelPickerOpen" },
 ];
 
 function normalizeKeyToken(token: string): string {

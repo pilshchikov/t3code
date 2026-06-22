@@ -49,6 +49,8 @@ import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { buildFileReviewComment } from "~/reviewCommentContext";
 
+import { useExplorerViewStore } from "~/explorerViewStore";
+
 import FileBrowserPanel from "./FileBrowserPanel";
 import FileStructurePanel from "./FileStructurePanel";
 import GitChangesPanel from "./GitChangesPanel";
@@ -101,21 +103,8 @@ interface FilePreviewPanelProps {
   onPendingChange: (relativePath: string, pending: boolean) => void;
 }
 
-const FILE_EXPLORER_STORAGE_KEY = "t3code.fileExplorerOpen";
-const EXPLORER_VIEW_STORAGE_KEY = "t3code.explorerView";
 const FILE_SAVE_DEBOUNCE_MS = 500;
 const MAX_BREADCRUMB_CHILDREN = 80;
-
-type ExplorerView = "files" | "structure" | "commit";
-
-function initialExplorerView(): ExplorerView {
-  try {
-    const stored = window.localStorage.getItem(EXPLORER_VIEW_STORAGE_KEY);
-    return stored === "structure" || stored === "commit" ? stored : "files";
-  } catch {
-    return "files";
-  }
-}
 
 interface EditableFileSurfaceProps {
   environmentId: EnvironmentId;
@@ -429,14 +418,6 @@ function RenderedMarkdownSurface({
   );
 }
 
-function initialExplorerOpen(): boolean {
-  try {
-    return window.localStorage.getItem(FILE_EXPLORER_STORAGE_KEY) !== "false";
-  } catch {
-    return true;
-  }
-}
-
 /**
  * Pull a single identifier out of a clicked syntax token. The token text usually is the bare
  * identifier, but some grammars include adjacent punctuation (`.foo`, `foo(`, `foo,`). Accept those
@@ -487,8 +468,10 @@ export default function FilePreviewPanel({
       ? navigationRequest.lineNumber
       : null;
   const navigationRequestId = navigationLine ? navigationRequest?.requestId : null;
-  const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
-  const [explorerView, setExplorerView] = useState<ExplorerView>(initialExplorerView);
+  const explorerOpen = useExplorerViewStore((state) => state.open);
+  const explorerView = useExplorerViewStore((state) => state.view);
+  const selectExplorerView = useExplorerViewStore((state) => state.setView);
+  const toggleExplorer = useExplorerViewStore((state) => state.toggleOpen);
   const [markdownPreviewMode, setMarkdownPreviewMode] = useState(readMarkdownPreviewMode);
   const [treeRevealRequest, setTreeRevealRequest] = useState<{
     readonly id: number;
@@ -602,13 +585,6 @@ export default function FilePreviewPanel({
     currentCrumb?.scrollIntoView({ block: "nearest", inline: "end" });
   }, [relativePath]);
 
-  const selectExplorerView = (view: ExplorerView) => {
-    setExplorerView(view);
-    try {
-      window.localStorage.setItem(EXPLORER_VIEW_STORAGE_KEY, view);
-    } catch {}
-  };
-
   const navigateToLineInCurrentFile = useCallback(
     (lineNumber: number) => {
       if (!relativePath) return;
@@ -618,16 +594,6 @@ export default function FilePreviewPanel({
     },
     [cwd, environmentId, relativePath],
   );
-
-  const toggleExplorer = () => {
-    setExplorerOpen((current) => {
-      const next = !current;
-      try {
-        window.localStorage.setItem(FILE_EXPLORER_STORAGE_KEY, String(next));
-      } catch {}
-      return next;
-    });
-  };
 
   const openNavigationTarget = useCallback(
     (match: ProjectCodeSearchMatch, from?: EditorLocation | null) => {
@@ -715,7 +681,7 @@ export default function FilePreviewPanel({
   };
 
   const revealDirectoryInTree = (path: string) => {
-    setExplorerOpen(true);
+    useExplorerViewStore.getState().setOpen(true);
     setTreeRevealRequest({
       id: ++treeRevealRequestIdRef.current,
       path,

@@ -325,7 +325,10 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
       });
 
       const persisted = yield* readKeybindingsConfig(keybindingsConfigPath);
-      assert.isFalse(persisted.some((entry) => entry.command === "terminal.toggle"));
+      // The conflicting mod+j default is skipped; terminal.toggle's other default (f3) still syncs.
+      assert.isFalse(
+        persisted.some((entry) => entry.command === "terminal.toggle" && entry.key === "mod+j"),
+      );
       assert.isTrue(persisted.some((entry) => entry.command === "script.custom-action.run"));
 
       assert.isTrue(

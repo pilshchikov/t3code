@@ -133,6 +133,24 @@ fork-specific behavior so future upstream syncs are easier to review.
   - Source: `packages/contracts/src/settings.ts`, `apps/web/src/lib/diffRendering.ts`,
     `apps/web/src/components/settings/SettingsPanels.tsx`.
 
+## Surface Keyboard Shortcuts
+
+- Function/`Cmd+1` keys toggle the main workspace surfaces, JetBrains-style.
+  - `Cmd+1` opens the file **Structure** view (opens the files surface and switches the explorer to
+    the outline), `F1` toggles the code-editor (files) surface, `F2` toggles the browser preview,
+    `F3` toggles the terminal.
+  - `F2`/`F3` reuse the existing `preview.toggle`/`terminal.toggle` commands; `editor.toggle` and
+    `structure.open` are new keybinding commands. All four are user-rebindable in Settings →
+    Keybindings.
+  - Note: `Cmd+1` previously jumped to thread 1 (`thread.jump.1`); it now opens the structure view
+    (the new binding wins as the last default). `Cmd+2`–`Cmd+9` still jump to threads, and the
+    model-picker number jumps are preserved (the `Cmd+1` binding is gated `!modelPickerOpen`).
+  - The explorer's open/view state was lifted from `FilePreviewPanel` local state into a shared
+    `explorerViewStore` so it can be driven from the global keyboard handler as well as the panel UI.
+  - Source: `packages/contracts/src/keybindings.ts`, `packages/shared/src/keybindings.ts`,
+    `apps/web/src/explorerViewStore.ts`, `apps/web/src/components/ChatView.tsx`,
+    `apps/web/src/components/files/FilePreviewPanel.tsx`.
+
 ## Git Commit Panel
 
 - The server exposes granular git-index operations, additive and git-only (the shared `VcsDriver`
