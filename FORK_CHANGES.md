@@ -85,6 +85,12 @@ fork-specific behavior so future upstream syncs are easier to review.
     enables/disables it (persisted, on by default).
   - Source: `apps/web/src/components/files/FileBrowserPanel.tsx`,
     `apps/web/src/components/files/FilePreviewPanel.tsx`.
+- Clicking a file in the tree reliably opens it.
+  - `useFileTree` constructs the tree once and never re-reads its option callbacks, so the
+    `onSelectionChange` handler used to hold a stale `onOpenFile` closure (bound to a since-changed
+    active thread/project). After a thread switch or a tree remount, clicks silently no-opped. The
+    handler now invokes the callback through a live ref, so it always targets the current thread.
+  - Source: `apps/web/src/components/files/FileBrowserPanel.tsx`.
 - The file tree marks files with working-tree changes (VCS status).
   - Changed files are colored via the tree's native git-status decoration, fed from the existing
     `useVcsStatus` working-tree data. Current pass marks changed files as modified (blue); add/delete/

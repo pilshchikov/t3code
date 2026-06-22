@@ -107,6 +107,11 @@ export default function FileBrowserPanel({
     [entries],
   );
   const entryKindsRef = useRef<ReadonlyMap<string, ProjectEntry["kind"]>>(entryKinds);
+  // `useFileTree` captures the option callbacks once at mount and never re-reads them, so the tree
+  // would otherwise call a stale `onOpenFile` (one bound to a since-changed active thread/project),
+  // making file clicks silently no-op. Route through a ref that always holds the latest callback.
+  const onOpenFileRef = useRef(onOpenFile);
+  onOpenFileRef.current = onOpenFile;
   const treePaths = useMemo(() => entries.map(treePath), [entries]);
   const directoryTreePaths = useMemo(
     () => entries.filter((entry) => entry.kind === "directory").map(treePath),
@@ -123,7 +128,7 @@ export default function FileBrowserPanel({
     onSelectionChange: (selectedPaths) => {
       const selectedPath = selectedPaths.at(-1)?.replace(/\/$/, "");
       if (selectedPath && entryKindsRef.current.get(selectedPath) === "file") {
-        onOpenFile(selectedPath);
+        onOpenFileRef.current(selectedPath);
       }
     },
     paths: [],
