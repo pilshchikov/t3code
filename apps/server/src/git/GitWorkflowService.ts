@@ -9,6 +9,7 @@ import {
   type GitCommitStagedResult,
   type GitDetailedStatusResult,
   type GitDiscardChangesInput,
+  type GitGenerateCommitMessageResult,
   type GitStageFilesInput,
   type GitUnstageFilesInput,
   type VcsSwitchRefInput,
@@ -112,6 +113,9 @@ export class GitWorkflowService extends Context.Service<
     readonly commitStaged: (
       input: GitCommitStagedInput,
     ) => Effect.Effect<GitCommitStagedResult, GitCommandError>;
+    readonly generateCommitMessage: (
+      input: VcsStatusInput,
+    ) => Effect.Effect<GitGenerateCommitMessageResult, GitManagerServiceError>;
   }
 >()("t3/git/GitWorkflowService") {}
 
@@ -376,6 +380,10 @@ export const make = Effect.gen(function* () {
             input.amend !== undefined ? { amend: input.amend } : undefined,
           ),
         ),
+      ),
+    generateCommitMessage: (input) =>
+      ensureGit("GitWorkflowService.generateCommitMessage", input.cwd).pipe(
+        Effect.andThen(gitManager.generateStagedCommitMessage({ cwd: input.cwd })),
       ),
   });
 });

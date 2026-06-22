@@ -19,6 +19,7 @@ import type {
   GitCommitStagedResult,
   GitDetailedStatusResult,
   GitDiscardChangesInput,
+  GitGenerateCommitMessageResult,
   GitStageFilesInput,
   GitUnstageFilesInput,
   VcsStatusInput,
@@ -1145,6 +1146,7 @@ export interface EnvironmentApi {
     unstageFiles: (input: GitUnstageFilesInput) => Promise<GitDetailedStatusResult>;
     discardChanges: (input: GitDiscardChangesInput) => Promise<GitDetailedStatusResult>;
     commitStaged: (input: GitCommitStagedInput) => Promise<GitCommitStagedResult>;
+    generateCommitMessage: (input: VcsStatusInput) => Promise<GitGenerateCommitMessageResult>;
   };
   review: {
     getDiffPreview: (input: ReviewDiffPreviewInput) => Promise<ReviewDiffPreviewResult>;

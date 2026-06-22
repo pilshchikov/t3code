@@ -181,13 +181,26 @@ fork-specific behavior so future upstream syncs are easier to review.
     stage/unstage/discard/commit mutation helpers. The commands use upstream's supervised,
     environment-scoped client-runtime atoms so they reconnect and report failures consistently with
     the rest of the current web client.
-  - Per-file inline diff and AI commit-message prefill are intentionally not included in this pass
-    (no per-file diff RPC exists yet, and message generation is currently bundled inside the stacked
-    commit action); the existing whole-tree Diff surface remains available separately.
+  - The commit message box has an icon-only **Generate commit message** button (tooltip only) that
+    drafts a short but comprehensive message from the staged diff using the system text-generation
+    model (`textGenerationModelSelection`). It is enabled only when something is staged.
+    - Server: a git-only `stagedCommitContext` driver capability reads the current index's
+      `git diff --cached` summary + patch without modifying it (extracted from `prepareCommitContext`
+      so both share one path), `GitManager.generateStagedCommitMessage` runs it through the existing
+      `TextGeneration` service, exposed via `GitWorkflowService.generateCommitMessage` and the
+      `git.generateCommitMessage` RPC.
+    - Client: a `generateCommitMessage` environment command and a `generateGitCommitMessage` helper
+      that fills the message box.
+  - Per-file inline diff is intentionally not included in this pass (no per-file diff RPC exists
+    yet); the existing whole-tree Diff surface remains available separately.
   - Source: `apps/web/src/components/files/GitChangesPanel.tsx`,
     `apps/web/src/components/files/gitChangesState.ts`,
     `apps/web/src/components/files/FilePreviewPanel.tsx`,
-    `packages/client-runtime/src/state/git.ts`, `packages/contracts/src/ipc.ts`.
+    `apps/server/src/vcs/GitVcsDriver.ts`, `apps/server/src/vcs/GitVcsDriverCore.ts`,
+    `apps/server/src/git/GitManager.ts`, `apps/server/src/git/GitWorkflowService.ts`,
+    `apps/server/src/ws.ts`, `packages/client-runtime/src/state/git.ts`,
+    `packages/contracts/src/git.ts`, `packages/contracts/src/rpc.ts`,
+    `packages/contracts/src/ipc.ts`.
 
 ## Multiwork in the Workspace Picker
 

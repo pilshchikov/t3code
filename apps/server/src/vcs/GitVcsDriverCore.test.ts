@@ -889,5 +889,32 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         assert.deepStrictEqual(status.files, []);
       }),
     );
+
+    it.effect("reads staged commit context without modifying the index", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        yield* initRepoWithCommit(cwd);
+
+        // Nothing staged yet.
+        assert.isNull(yield* driver.stagedCommitContext(cwd));
+
+        // Stage one file; leave another change unstaged.
+        yield* writeTextFile(cwd, "feature.ts", "export const value = 1;\n");
+        yield* writeTextFile(cwd, "README.md", "# test\nunstaged\n");
+        yield* driver.stageFiles(cwd, ["feature.ts"]);
+
+        const context = yield* driver.stagedCommitContext(cwd);
+        assert.isNotNull(context);
+        assert.include(context?.stagedSummary ?? "", "feature.ts");
+        // The unstaged README change is not part of the staged context.
+        assert.notInclude(context?.stagedSummary ?? "", "README.md");
+
+        // Reading context left the index untouched: feature.ts still staged, README still unstaged.
+        const status = yield* driver.detailedStatus(cwd);
+        assert.equal(status.files.find((file) => file.path === "feature.ts")?.staged, true);
+        assert.equal(status.files.find((file) => file.path === "README.md")?.unstaged, true);
+      }),
+    );
   });
 });

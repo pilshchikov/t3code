@@ -1,5 +1,5 @@
 import type { EnvironmentId, GitChangeKind, GitFileChange } from "@t3tools/contracts";
-import { RefreshCw, RotateCcw } from "lucide-react";
+import { RefreshCw, RotateCcw, Sparkles } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { cn } from "~/lib/utils";
@@ -7,6 +7,7 @@ import { cn } from "~/lib/utils";
 import {
   commitGitStaged,
   discardGitChanges,
+  generateGitCommitMessage,
   stageGitFiles,
   unstageGitFiles,
   useGitDetailedStatus,
@@ -173,6 +174,7 @@ export default function GitChangesPanel({ environmentId, cwd, onOpenFile }: GitC
   const [message, setMessage] = useState("");
   const [amend, setAmend] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const files = status.data?.files ?? [];
@@ -245,8 +247,27 @@ export default function GitChangesPanel({ environmentId, cwd, onOpenFile }: GitC
     });
   }, [amend, cwd, environmentId, message, runMutation]);
 
+  const generate = useCallback(() => {
+    if (busy || generating) return;
+    setGenerating(true);
+    setActionError(null);
+    void (async () => {
+      try {
+        setMessage(await generateGitCommitMessage(environmentId, cwd));
+      } catch (error) {
+        setActionError(
+          error instanceof Error ? error.message : "Could not generate a commit message.",
+        );
+      } finally {
+        setGenerating(false);
+      }
+    })();
+  }, [busy, cwd, environmentId, generating]);
+
+  const canGenerate = !busy && !generating && stagedCount > 0;
   const canCommit =
     !busy &&
+    !generating &&
     message.trim().length > 0 &&
     (stagedCount > 0 || amend) &&
     (status.data?.isRepo ?? false);
@@ -318,7 +339,7 @@ export default function GitChangesPanel({ environmentId, cwd, onOpenFile }: GitC
             className="min-h-[3.5rem] resize-y rounded border border-border/60 bg-background px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-border focus:outline-none"
             placeholder="Commit message"
             value={message}
-            disabled={busy}
+            disabled={busy || generating}
             onChange={(event) => setMessage(event.target.value)}
           />
           <div className="flex items-center justify-between gap-2">
@@ -327,24 +348,45 @@ export default function GitChangesPanel({ environmentId, cwd, onOpenFile }: GitC
                 type="checkbox"
                 className="size-3.5 cursor-pointer accent-[#4c9ffe]"
                 checked={amend}
-                disabled={busy}
+                disabled={busy || generating}
                 onChange={(event) => setAmend(event.target.checked)}
               />
               Amend last commit
             </label>
-            <button
-              type="button"
-              className={cn(
-                "rounded px-3 py-1 text-xs font-medium",
-                canCommit
-                  ? "bg-[#4c9ffe] text-white hover:bg-[#3a8ae8]"
-                  : "cursor-not-allowed bg-accent text-muted-foreground",
-              )}
-              disabled={!canCommit}
-              onClick={commit}
-            >
-              {busy ? "Working…" : amend ? "Amend" : "Commit"}
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                className={cn(
+                  "rounded p-1.5",
+                  canGenerate
+                    ? "text-foreground hover:bg-accent"
+                    : "cursor-not-allowed text-muted-foreground",
+                )}
+                disabled={!canGenerate}
+                aria-label="Generate commit message"
+                title="Generate commit message"
+                onClick={generate}
+              >
+                {generating ? (
+                  <RefreshCw className="size-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="size-3.5" />
+                )}
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "rounded px-3 py-1 text-xs font-medium",
+                  canCommit
+                    ? "bg-[#4c9ffe] text-white hover:bg-[#3a8ae8]"
+                    : "cursor-not-allowed bg-accent text-muted-foreground",
+                )}
+                disabled={!canCommit}
+                onClick={commit}
+              >
+                {busy ? "Working…" : amend ? "Amend" : "Commit"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

@@ -20,6 +20,7 @@ import {
   GitCommitStagedResult,
   GitDetailedStatusResult,
   GitDiscardChangesInput,
+  GitGenerateCommitMessageResult,
   GitStageFilesInput,
   GitUnstageFilesInput,
   VcsSwitchRefInput,
@@ -197,6 +198,7 @@ export const WS_METHODS = {
   gitUnstageFiles: "git.unstageFiles",
   gitDiscardChanges: "git.discardChanges",
   gitCommitStaged: "git.commitStaged",
+  gitGenerateCommitMessage: "git.generateCommitMessage",
 
   // Multiwork methods
   multiworkCreate: "multiwork.create",
@@ -495,6 +497,12 @@ export const WsGitCommitStagedRpc = Rpc.make(WS_METHODS.gitCommitStaged, {
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
+export const WsGitGenerateCommitMessageRpc = Rpc.make(WS_METHODS.gitGenerateCommitMessage, {
+  payload: VcsStatusInput,
+  success: GitGenerateCommitMessageResult,
+  error: Schema.Union([GitManagerServiceError, EnvironmentAuthorizationError]),
+});
+
 export const WsVcsListRefsRpc = Rpc.make(WS_METHODS.vcsListRefs, {
   payload: VcsListRefsInput,
   success: VcsListRefsResult,
@@ -791,6 +799,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitUnstageFilesRpc,
   WsGitDiscardChangesRpc,
   WsGitCommitStagedRpc,
+  WsGitGenerateCommitMessageRpc,
   WsMultiworkCreateRpc,
   WsMultiworkListRpc,
   WsVcsListRefsRpc,

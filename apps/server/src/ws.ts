@@ -320,6 +320,7 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.gitUnstageFiles, AuthOrchestrationOperateScope],
   [WS_METHODS.gitDiscardChanges, AuthOrchestrationOperateScope],
   [WS_METHODS.gitCommitStaged, AuthOrchestrationOperateScope],
+  [WS_METHODS.gitGenerateCommitMessage, AuthOrchestrationOperateScope],
   [WS_METHODS.vcsListRefs, AuthOrchestrationReadScope],
   [WS_METHODS.vcsCreateWorktree, AuthOrchestrationOperateScope],
   [WS_METHODS.vcsRemoveWorktree, AuthOrchestrationOperateScope],
@@ -1568,6 +1569,12 @@ const makeWsRpcLayer = (currentSession: EnvironmentAuth.AuthenticatedSession) =>
           observeRpcEffect(
             WS_METHODS.gitCommitStaged,
             gitWorkflow.commitStaged(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "git" },
+          ),
+        [WS_METHODS.gitGenerateCommitMessage]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.gitGenerateCommitMessage,
+            gitWorkflow.generateCommitMessage(input),
             { "rpc.aggregate": "git" },
           ),
         [WS_METHODS.vcsListRefs]: (input) =>

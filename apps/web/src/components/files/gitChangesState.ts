@@ -110,3 +110,14 @@ export async function commitGitStaged(
   refreshGitDetailedStatus(environmentId, cwd);
   return result;
 }
+
+export async function generateGitCommitMessage(
+  environmentId: EnvironmentId,
+  cwd: string,
+): Promise<string> {
+  const result = await runGitCommand(gitEnvironment.generateCommitMessage, {
+    environmentId,
+    input: { cwd },
+  });
+  return result.message;
+}

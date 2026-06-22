@@ -86,6 +86,9 @@ export class GitManager extends Context.Service<
       input: GitRunStackedActionInput,
       options?: GitRunStackedActionOptions,
     ) => Effect.Effect<GitRunStackedActionResult, GitManagerServiceError>;
+    readonly generateStagedCommitMessage: (input: {
+      readonly cwd: string;
+    }) => Effect.Effect<{ readonly message: string }, GitManagerServiceError>;
   }
 >()("t3/git/GitManager") {}
 
@@ -1858,6 +1861,46 @@ export const make = Effect.gen(function* () {
     },
   );
 
+  const generateStagedCommitMessage: GitManager["Service"]["generateStagedCommitMessage"] =
+    Effect.fn("generateStagedCommitMessage")(function* (input) {
+      const context = yield* gitCore.stagedCommitContext(input.cwd);
+      if (!context) {
+        return yield* new GitManagerError({
+          operation: "GitManager.generateStagedCommitMessage",
+          cwd: input.cwd,
+          detail: "No staged changes to generate a commit message from.",
+        });
+      }
+
+      const modelSelection = yield* serverSettingsService.getSettings.pipe(
+        Effect.map((settings) => settings.textGenerationModelSelection),
+        Effect.mapError(
+          (cause) =>
+            new GitManagerError({
+              operation: "GitManager.generateStagedCommitMessage",
+              cwd: input.cwd,
+              detail: "Failed to get server settings.",
+              cause,
+            }),
+        ),
+      );
+
+      const details = yield* gitCore
+        .statusDetails(input.cwd)
+        .pipe(Effect.orElseSucceed(() => null));
+      const generated = yield* textGeneration
+        .generateCommitMessage({
+          cwd: input.cwd,
+          branch: details?.branch ?? null,
+          stagedSummary: limitContext(context.stagedSummary, 8_000),
+          stagedPatch: limitContext(context.stagedPatch, 50_000),
+          modelSelection,
+        })
+        .pipe(Effect.map((result) => sanitizeCommitMessage(result)));
+
+      return { message: formatCommitMessage(generated.subject, generated.body) };
+    });
+
   return GitManager.of({
     localStatus,
     remoteStatus,
@@ -1868,6 +1911,7 @@ export const make = Effect.gen(function* () {
     resolvePullRequest,
     preparePullRequestThread,
     runStackedAction,
+    generateStagedCommitMessage,
   });
 });
 

@@ -224,6 +224,13 @@ export class GitVcsDriver extends Context.Service<
       cwd: string,
       filePaths?: readonly string[],
     ) => Effect.Effect<GitPreparedCommitContext | null, GitCommandError>;
+    /**
+     * Read the currently-staged change context (summary + patch) without modifying the index.
+     * Returns `null` when nothing is staged.
+     */
+    readonly stagedCommitContext: (
+      cwd: string,
+    ) => Effect.Effect<GitPreparedCommitContext | null, GitCommandError>;
     readonly commit: (
       cwd: string,
       subject: string,

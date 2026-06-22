@@ -382,6 +382,12 @@ export const GitCommitStagedResult = Schema.Struct({
 });
 export type GitCommitStagedResult = typeof GitCommitStagedResult.Type;
 
+/** A generated commit message (subject line plus optional body, joined with a blank line). */
+export const GitGenerateCommitMessageResult = Schema.Struct({
+  message: TrimmedNonEmptyStringSchema,
+});
+export type GitGenerateCommitMessageResult = typeof GitGenerateCommitMessageResult.Type;
+
 // RPC / domain errors
 export class GitCommandError extends Schema.TaggedErrorClass<GitCommandError>()("GitCommandError", {
   operation: Schema.String,

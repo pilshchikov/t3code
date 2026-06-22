@@ -1773,6 +1773,36 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       })),
     );
 
+  // Read the current index's staged change context without modifying the index.
+  const readStagedCommitContext = Effect.fn("readStagedCommitContext")(function* (cwd: string) {
+    const stagedSummary = yield* runGitStdout("GitVcsDriver.stagedCommitContext.summary", cwd, [
+      "diff",
+      "--cached",
+      "--name-status",
+    ]).pipe(Effect.map((stdout) => stdout.trim()));
+    if (stagedSummary.length === 0) {
+      return null;
+    }
+
+    const stagedPatch = yield* runGitStdoutWithOptions(
+      "GitVcsDriver.stagedCommitContext.patch",
+      cwd,
+      ["diff", "--no-ext-diff", "--cached", "--patch", "--minimal"],
+      {
+        maxOutputBytes: PREPARED_COMMIT_PATCH_MAX_OUTPUT_BYTES,
+        appendTruncationMarker: true,
+      },
+    );
+
+    return {
+      stagedSummary,
+      stagedPatch,
+    };
+  });
+
+  const stagedCommitContext: GitVcsDriver.GitVcsDriver["Service"]["stagedCommitContext"] = (cwd) =>
+    readStagedCommitContext(cwd);
+
   const prepareCommitContext: GitVcsDriver.GitVcsDriver["Service"]["prepareCommitContext"] =
     Effect.fn("prepareCommitContext")(function* (cwd, filePaths) {
       if (filePaths && filePaths.length > 0) {
@@ -1791,29 +1821,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         yield* runGit("GitVcsDriver.prepareCommitContext.addAll", cwd, ["add", "-A"]);
       }
 
-      const stagedSummary = yield* runGitStdout(
-        "GitVcsDriver.prepareCommitContext.stagedSummary",
-        cwd,
-        ["diff", "--cached", "--name-status"],
-      ).pipe(Effect.map((stdout) => stdout.trim()));
-      if (stagedSummary.length === 0) {
-        return null;
-      }
-
-      const stagedPatch = yield* runGitStdoutWithOptions(
-        "GitVcsDriver.prepareCommitContext.stagedPatch",
-        cwd,
-        ["diff", "--no-ext-diff", "--cached", "--patch", "--minimal"],
-        {
-          maxOutputBytes: PREPARED_COMMIT_PATCH_MAX_OUTPUT_BYTES,
-          appendTruncationMarker: true,
-        },
-      );
-
-      return {
-        stagedSummary,
-        stagedPatch,
-      };
+      return yield* readStagedCommitContext(cwd);
     });
 
   const commit: GitVcsDriver.GitVcsDriver["Service"]["commit"] = Effect.fn("commit")(function* (
@@ -2799,6 +2807,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     discardChanges,
     commitStaged,
     prepareCommitContext,
+    stagedCommitContext,
     commit,
     pushCurrentBranch,
     pullCurrentBranch,
