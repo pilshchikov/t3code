@@ -50,6 +50,31 @@ fork-specific behavior so future upstream syncs are easier to review.
     `apps/web/src/components/files/FilePreviewPanel.tsx`,
     `apps/web/src/editorNavigationStore.ts`, `packages/contracts/src/project.ts`.
 
+- The editor keeps a back/forward navigation history, like a browser or JetBrains.
+  - Back returns to the exact line you jumped from (the clicked identifier's line is captured as the
+    origin), not the top of the previous file.
+  - Shortcuts: Back is `⌘[` or `Ctrl+←`; Forward is `⌘]` or `Ctrl+→`. The shortcuts only act while the
+    editor area owns focus, so chat/composer inputs keep their word navigation. (On macOS, `Ctrl+←/→`
+    may be claimed by Mission Control "switch Spaces"; `⌘[`/`⌘]` always work.)
+  - The file preview subheader also has Back/Forward arrow buttons, enabled per available history.
+  - History is per environment+workspace and lives in the navigation store. The store is the single
+    owner of navigation-driven file switches (the preview panel watches `navigationRequest` and opens
+    the target file), so symbol jumps, the search dialog, and back/forward all share one code path.
+  - Source: `apps/web/src/editorNavigationStore.ts`,
+    `apps/web/src/components/files/FilePreviewPanel.tsx`,
+    `apps/web/src/components/files/EditorNavigationDialog.tsx`.
+- The Cmd-click definition/usage chooser is rendered JetBrains "Find Usages" style.
+  - Each row shows the file name, directory, line number, and the source line with every whole-word
+    occurrence of the symbol emphasized; a header shows the symbol and the match count.
+  - The filter box narrows large result sets, and the keyboard selection scrolls into view.
+  - Source: `apps/web/src/components/files/SymbolNavigationDialog.tsx`.
+- Cmd-click symbol resolution is more forgiving about tokenization.
+  - The clicked token no longer has to be a pristine identifier; a lone identifier is extracted even
+    when the grammar attaches adjacent punctuation (`foo(`, `.foo`, `foo,`). Genuinely ambiguous
+    multi-identifier tokens are still ignored so navigation never jumps to the wrong symbol. This
+    fixes Cmd-click silently doing nothing on many method/class references.
+  - Source: `apps/web/src/components/files/FilePreviewPanel.tsx`.
+
 - Markdown preview mode is global across markdown files instead of being tied to one file path.
   - Switching a markdown file to rendered mode applies to other `.md` and `.mdx` files, including
     newly opened or newly created files.

@@ -419,12 +419,13 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
         props.onOpenFile(item.path);
         return;
       }
+      // The file preview panel owns navigation-driven opens (it watches navigationRequest), so we
+      // only record the jump here and let it switch files and scroll to the target line.
       useEditorNavigationStore.getState().navigateTo(props.environmentId, props.cwd, {
         path: item.match.path,
         lineNumber: item.match.lineNumber,
         column: item.match.column,
       });
-      props.onOpenFile(item.match.path);
     },
     [props.cwd, props.environmentId, props.onOpenFile],
   );

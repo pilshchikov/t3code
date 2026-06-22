@@ -10,6 +10,8 @@ import type { SelectedLineRange, TokenEventBase } from "@pierre/diffs";
 import { Editor } from "@pierre/diffs/editor";
 import { EditorProvider, File, Virtualizer } from "@pierre/diffs/react";
 import {
+  ArrowLeft,
+  ArrowRight,
   ChevronRight,
   Code2,
   Eye,
@@ -25,7 +27,13 @@ import { isBrowserPreviewFile, openFileInPreview } from "~/browser/openFileInPre
 import ChatMarkdown from "~/components/ChatMarkdown";
 import { OpenInPicker } from "~/components/chat/OpenInPicker";
 import { ensureEnvironmentApi } from "~/environmentApi";
-import { editorWorkspaceKey, useEditorNavigationStore } from "~/editorNavigationStore";
+import {
+  canGoBack as historyCanGoBack,
+  canGoForward as historyCanGoForward,
+  editorWorkspaceKey,
+  useEditorNavigationStore,
+  type EditorLocation,
+} from "~/editorNavigationStore";
 import { usePrimaryEnvironmentId } from "~/environments/primary/context";
 import { useSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
@@ -415,6 +423,21 @@ function initialExplorerOpen(): boolean {
   }
 }
 
+/**
+ * Pull a single identifier out of a clicked syntax token. The token text usually is the bare
+ * identifier, but some grammars include adjacent punctuation (`.foo`, `foo(`, `foo,`). Accept those
+ * by extracting the lone identifier; bail on genuinely ambiguous multi-identifier tokens so we never
+ * navigate to the wrong symbol.
+ */
+function extractNavigationSymbol(tokenText: string): string | null {
+  const trimmed = tokenText.trim();
+  const exact = trimmed.match(/^[\p{L}_$][\p{L}\p{N}_$]*$/u);
+  if (exact) return exact[0];
+  const identifiers = trimmed.match(/[\p{L}_$][\p{L}\p{N}_$]*/gu);
+  if (identifiers && identifiers.length === 1) return identifiers[0]!;
+  return null;
+}
+
 function projectEntryName(entry: ProjectEntry): string {
   const trimmedPath = entry.path.replace(/\/+$/, "");
   const lastSeparatorIndex = trimmedPath.lastIndexOf("/");
@@ -473,12 +496,64 @@ export default function FilePreviewPanel({
     readonly symbol: string;
     readonly mode: "definitions" | "usages";
     readonly matches: ReadonlyArray<ProjectCodeSearchMatch>;
+    readonly origin: EditorLocation | null;
   } | null>(null);
+  const canGoBack = useEditorNavigationStore((state) =>
+    historyCanGoBack(state, environmentId, cwd),
+  );
+  const canGoForward = useEditorNavigationStore((state) =>
+    historyCanGoForward(state, environmentId, cwd),
+  );
 
   useEffect(() => {
     if (!relativePath) return;
-    useEditorNavigationStore.getState().recordRecentFile(environmentId, cwd, relativePath);
+    const store = useEditorNavigationStore.getState();
+    store.recordRecentFile(environmentId, cwd, relativePath);
+    store.recordActiveLocation(environmentId, cwd, { path: relativePath });
   }, [cwd, environmentId, relativePath]);
+
+  // Single owner for navigation-driven file switches: any back/forward jump or symbol jump that
+  // targets a different file opens it here. Same-file jumps fall through to the scroll effect.
+  const pendingNavigationPath =
+    navigationRequest?.workspaceKey === workspaceKey ? navigationRequest.path : null;
+  const pendingNavigationRequestId =
+    navigationRequest?.workspaceKey === workspaceKey ? navigationRequest.requestId : null;
+  useEffect(() => {
+    if (pendingNavigationPath && pendingNavigationPath !== relativePath) {
+      onOpenFile(pendingNavigationPath);
+    }
+  }, [onOpenFile, pendingNavigationPath, pendingNavigationRequestId, relativePath]);
+
+  const goBack = useCallback(() => {
+    useEditorNavigationStore.getState().goBack(environmentId, cwd);
+  }, [cwd, environmentId]);
+  const goForward = useCallback(() => {
+    useEditorNavigationStore.getState().goForward(environmentId, cwd);
+  }, [cwd, environmentId]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.altKey || event.shiftKey) return;
+      const root = previewRootRef.current;
+      if (!root) return;
+      // Only act while the editor area owns focus, so chat/composer inputs keep word navigation.
+      const active = document.activeElement;
+      if (active && active !== document.body && !root.contains(active)) return;
+      const back =
+        (event.ctrlKey && !event.metaKey && event.key === "ArrowLeft") ||
+        (event.metaKey && !event.ctrlKey && event.key === "[");
+      const forward =
+        (event.ctrlKey && !event.metaKey && event.key === "ArrowRight") ||
+        (event.metaKey && !event.ctrlKey && event.key === "]");
+      if (!back && !forward) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (back) goBack();
+      else goForward();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [goBack, goForward]);
 
   useEffect(() => {
     if (!navigationLine || !previewRootRef.current) return;
@@ -523,24 +598,33 @@ export default function FilePreviewPanel({
   };
 
   const openNavigationTarget = useCallback(
-    (match: ProjectCodeSearchMatch) => {
-      useEditorNavigationStore.getState().navigateTo(environmentId, cwd, {
-        path: match.path,
-        lineNumber: match.lineNumber,
-        column: match.column,
-      });
-      onOpenFile(match.path);
+    (match: ProjectCodeSearchMatch, from?: EditorLocation | null) => {
+      useEditorNavigationStore.getState().navigateTo(
+        environmentId,
+        cwd,
+        {
+          path: match.path,
+          lineNumber: match.lineNumber,
+          column: match.column,
+        },
+        from ?? undefined,
+      );
     },
-    [cwd, environmentId, onOpenFile],
+    [cwd, environmentId],
   );
 
   const handleTokenNavigation = useCallback(
     (token: TokenEventBase, event: MouseEvent) => {
       if (!event.metaKey || !relativePath) return;
-      const symbol = token.tokenText.trim().match(/^[\p{L}_$][\p{L}\p{N}_$]*$/u)?.[0];
+      const symbol = extractNavigationSymbol(token.tokenText);
       if (!symbol) return;
       event.preventDefault();
       event.stopPropagation();
+      const origin: EditorLocation = {
+        path: relativePath,
+        lineNumber: token.lineNumber,
+        column: 0,
+      };
       const requestId = ++symbolNavigationRequestRef.current;
       void ensureEnvironmentApi(environmentId)
         .projects.searchCode({ cwd, query: symbol, scope: "navigation", limit: 120 })
@@ -568,11 +652,11 @@ export default function FilePreviewPanel({
             return left.path.localeCompare(right.path) || left.lineNumber - right.lineNumber;
           });
           if (matches.length === 1) {
-            openNavigationTarget(matches[0]!);
+            openNavigationTarget(matches[0]!, origin);
             return;
           }
           if (matches.length > 1) {
-            setSymbolChoices({ symbol, mode, matches });
+            setSymbolChoices({ symbol, mode, matches, origin });
             return;
           }
           toastManager.add({
@@ -667,10 +751,44 @@ export default function FilePreviewPanel({
         onOpenChange={(open) => {
           if (!open) setSymbolChoices(null);
         }}
-        onSelect={openNavigationTarget}
+        onSelect={(match) => openNavigationTarget(match, symbolChoices?.origin)}
       />
       {relativePath ? (
         <div className="surface-subheader gap-2 px-3" data-surface-subheader>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    onClick={goBack}
+                    disabled={!canGoBack}
+                    aria-label="Go back to previous location"
+                    className="flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:text-muted-foreground/40"
+                  >
+                    <ArrowLeft className="size-4" />
+                  </button>
+                }
+              />
+              <TooltipPopup>Back (⌘[ / Ctrl+←)</TooltipPopup>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    onClick={goForward}
+                    disabled={!canGoForward}
+                    aria-label="Go forward to next location"
+                    className="flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:text-muted-foreground/40"
+                  >
+                    <ArrowRight className="size-4" />
+                  </button>
+                }
+              />
+              <TooltipPopup>Forward (⌘] / Ctrl+→)</TooltipPopup>
+            </Tooltip>
+          </div>
           <ScrollArea
             ref={breadcrumbRef}
             hideScrollbars
