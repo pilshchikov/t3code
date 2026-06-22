@@ -57,6 +57,18 @@ fork-specific behavior so future upstream syncs are easier to review.
   - Source: `packages/contracts/src/settings.ts`,
     `apps/server/src/provider/Drivers/ClaudeHome.ts`.
 
+## Update-Safe Persistence
+
+- Desktop updates reuse stable, version-independent storage locations.
+  - Projects, threads, messages, provider session bindings, settings, and attachments remain under
+    `~/.t3/userdata`.
+  - Electron UI state, drafts, and browser preferences remain under the stable `t3code` user-data
+    directory (on macOS, `~/Library/Application Support/t3code`).
+  - Regression tests cover app version, update channel, bundle path, and legacy user-data behavior.
+  - Source: `apps/desktop/src/app/DesktopEnvironment.ts`,
+    `apps/desktop/src/app/DesktopEnvironment.test.ts`,
+    `apps/desktop/src/app/DesktopAppIdentity.test.ts`.
+
 ## Validation Notes
 
 The fork-local changes above were validated with focused tests, formatting/lint checks for touched

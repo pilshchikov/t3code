@@ -95,6 +95,34 @@ describe("DesktopEnvironment", () => {
     }),
   );
 
+  it.effect("keeps production persistence paths stable across app updates", () =>
+    Effect.gen(function* () {
+      const beforeUpdate = yield* makeEnvironment({
+        appVersion: "0.0.27",
+        appPath: "/Applications/T3 Code (Alpha).app/Contents/Resources/app.asar",
+        isPackaged: true,
+      });
+      const afterUpdate = yield* makeEnvironment({
+        appVersion: "0.0.28-nightly.20260621.1",
+        appPath: "/Applications/T3 Code (Nightly).app/Contents/Resources/app.asar",
+        isPackaged: true,
+      });
+
+      assert.equal(beforeUpdate.baseDir, "/Users/alice/.t3");
+      assert.equal(beforeUpdate.stateDir, "/Users/alice/.t3/userdata");
+      assert.equal(beforeUpdate.userDataDirName, "t3code");
+      assert.equal(afterUpdate.baseDir, beforeUpdate.baseDir);
+      assert.equal(afterUpdate.stateDir, beforeUpdate.stateDir);
+      assert.equal(afterUpdate.serverSettingsPath, beforeUpdate.serverSettingsPath);
+      assert.equal(afterUpdate.clientSettingsPath, beforeUpdate.clientSettingsPath);
+      assert.equal(
+        afterUpdate.savedEnvironmentRegistryPath,
+        beforeUpdate.savedEnvironmentRegistryPath,
+      );
+      assert.equal(afterUpdate.userDataDirName, beforeUpdate.userDataDirName);
+    }),
+  );
+
   it.effect("uses a configured app user model id override", () =>
     Effect.gen(function* () {
       const environment = yield* makeEnvironment(
