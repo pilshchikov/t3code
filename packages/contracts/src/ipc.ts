@@ -15,6 +15,12 @@ import type {
   GitPreparePullRequestThreadResult,
   GitPullRequestRefInput,
   GitResolvePullRequestResult,
+  GitCommitStagedInput,
+  GitCommitStagedResult,
+  GitDetailedStatusResult,
+  GitDiscardChangesInput,
+  GitStageFilesInput,
+  GitUnstageFilesInput,
   VcsStatusInput,
   VcsStatusResult,
 } from "./git.ts";
@@ -1161,6 +1167,11 @@ export interface EnvironmentApi {
     preparePullRequestThread: (
       input: GitPreparePullRequestThreadInput,
     ) => Promise<GitPreparePullRequestThreadResult>;
+    detailedStatus: (input: VcsStatusInput) => Promise<GitDetailedStatusResult>;
+    stageFiles: (input: GitStageFilesInput) => Promise<GitDetailedStatusResult>;
+    unstageFiles: (input: GitUnstageFilesInput) => Promise<GitDetailedStatusResult>;
+    discardChanges: (input: GitDiscardChangesInput) => Promise<GitDetailedStatusResult>;
+    commitStaged: (input: GitCommitStagedInput) => Promise<GitCommitStagedResult>;
   };
   review: {
     getDiffPreview: (input: ReviewDiffPreviewInput) => Promise<ReviewDiffPreviewResult>;

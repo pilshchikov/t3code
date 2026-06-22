@@ -51,6 +51,7 @@ import { buildFileReviewComment } from "~/reviewCommentContext";
 
 import FileBrowserPanel from "./FileBrowserPanel";
 import FileStructurePanel from "./FileStructurePanel";
+import GitChangesPanel from "./GitChangesPanel";
 import { EditorNavigationDialog } from "./EditorNavigationDialog";
 import {
   type FileCommentAnnotationEntry,
@@ -105,13 +106,12 @@ const EXPLORER_VIEW_STORAGE_KEY = "t3code.explorerView";
 const FILE_SAVE_DEBOUNCE_MS = 500;
 const MAX_BREADCRUMB_CHILDREN = 80;
 
-type ExplorerView = "files" | "structure";
+type ExplorerView = "files" | "structure" | "commit";
 
 function initialExplorerView(): ExplorerView {
   try {
-    return window.localStorage.getItem(EXPLORER_VIEW_STORAGE_KEY) === "structure"
-      ? "structure"
-      : "files";
+    const stored = window.localStorage.getItem(EXPLORER_VIEW_STORAGE_KEY);
+    return stored === "structure" || stored === "commit" ? stored : "files";
   } catch {
     return "files";
   }
@@ -1050,26 +1050,31 @@ export default function FilePreviewPanel({
                 : "min-w-0 flex-1",
             )}
           >
-            {relativePath ? (
-              <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border/60 px-1.5">
-                {(["files", "structure"] as const).map((view) => (
-                  <button
-                    key={view}
-                    type="button"
-                    className={cn(
-                      "h-6 flex-1 rounded text-xs font-medium capitalize",
-                      explorerView === view
-                        ? "bg-accent text-foreground"
-                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                    )}
-                    onClick={() => selectExplorerView(view)}
-                  >
-                    {view}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {relativePath && explorerView === "structure" ? (
+            <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border/60 px-1.5">
+              {(["files", "structure", "commit"] as const).map((view) => (
+                <button
+                  key={view}
+                  type="button"
+                  className={cn(
+                    "h-6 flex-1 rounded text-xs font-medium capitalize",
+                    explorerView === view
+                      ? "bg-accent text-foreground"
+                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                  )}
+                  onClick={() => selectExplorerView(view)}
+                >
+                  {view}
+                </button>
+              ))}
+            </div>
+            {explorerView === "commit" ? (
+              <GitChangesPanel
+                key={`commit:${environmentId}:${cwd}`}
+                environmentId={environmentId}
+                cwd={cwd}
+                onOpenFile={onOpenFile}
+              />
+            ) : relativePath && explorerView === "structure" ? (
               <FileStructurePanel
                 relativePath={relativePath}
                 contents={file.data?.contents ?? null}

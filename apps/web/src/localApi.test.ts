@@ -107,6 +107,11 @@ const rpcClientMock = {
     runStackedAction: vi.fn(),
     resolvePullRequest: vi.fn(),
     preparePullRequestThread: vi.fn(),
+    detailedStatus: vi.fn(),
+    stageFiles: vi.fn(),
+    unstageFiles: vi.fn(),
+    discardChanges: vi.fn(),
+    commitStaged: vi.fn(),
   },
   review: {
     getDiffPreview: vi.fn(),

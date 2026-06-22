@@ -149,6 +149,23 @@ fork-specific behavior so future upstream syncs are easier to review.
     `apps/server/src/git/GitWorkflowService.ts`, `apps/server/src/ws.ts`.
   - Validated with `GitVcsDriverCore.test.ts` integration tests covering detailed status,
     stage/unstage/commit round-trips, and discard of tracked + untracked files.
+- The explorer sidebar has a JetBrains-style **Commit** view alongside Files and Structure.
+  - Lists changed files grouped into Changes (tracked) and Unversioned (untracked) with per-file
+    change-kind badges (M/A/D/R/C/T), staged-state checkboxes (checked = fully staged, indeterminate
+    = partially staged), and a select-all checkbox per group. Clicking a file opens it in the editor.
+  - Each row has a discard control (confirmed, since discarding untracked files deletes them). A
+    commit message box with an "Amend last commit" toggle commits the staged index; the button is
+    enabled only when something is staged (or amending) and a message is present.
+  - Backed by the git-index RPCs above via a `useGitDetailedStatus` query (stale-while-revalidate
+    atom) plus stage/unstage/discard/commit mutation helpers. The web RPC client (`wsRpcClient`),
+    the `EnvironmentApi` contract, and `environmentApi` wiring were extended with the new methods.
+  - Per-file inline diff and AI commit-message prefill are intentionally not included in this pass
+    (no per-file diff RPC exists yet, and message generation is currently bundled inside the stacked
+    commit action); the existing whole-tree Diff surface remains available separately.
+  - Source: `apps/web/src/components/files/GitChangesPanel.tsx`,
+    `apps/web/src/components/files/gitChangesState.ts`,
+    `apps/web/src/components/files/FilePreviewPanel.tsx`, `apps/web/src/environmentApi.ts`,
+    `packages/client-runtime/src/wsRpcClient.ts`, `packages/contracts/src/ipc.ts`.
 
 ## Claude Profiles
 

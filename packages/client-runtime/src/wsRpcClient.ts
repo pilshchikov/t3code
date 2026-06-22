@@ -143,6 +143,11 @@ export interface WsRpcClient {
     readonly preparePullRequestThread: RpcUnaryMethod<
       typeof WS_METHODS.gitPreparePullRequestThread
     >;
+    readonly detailedStatus: RpcUnaryMethod<typeof WS_METHODS.gitDetailedStatus>;
+    readonly stageFiles: RpcUnaryMethod<typeof WS_METHODS.gitStageFiles>;
+    readonly unstageFiles: RpcUnaryMethod<typeof WS_METHODS.gitUnstageFiles>;
+    readonly discardChanges: RpcUnaryMethod<typeof WS_METHODS.gitDiscardChanges>;
+    readonly commitStaged: RpcUnaryMethod<typeof WS_METHODS.gitCommitStaged>;
   };
   readonly review: {
     readonly getDiffPreview: RpcUnaryMethod<typeof WS_METHODS.reviewGetDiffPreview>;
@@ -348,6 +353,15 @@ export function createWsRpcClient(
         transport.request((client) => client[WS_METHODS.gitResolvePullRequest](input)),
       preparePullRequestThread: (input) =>
         transport.request((client) => client[WS_METHODS.gitPreparePullRequestThread](input)),
+      detailedStatus: (input) =>
+        transport.request((client) => client[WS_METHODS.gitDetailedStatus](input)),
+      stageFiles: (input) => transport.request((client) => client[WS_METHODS.gitStageFiles](input)),
+      unstageFiles: (input) =>
+        transport.request((client) => client[WS_METHODS.gitUnstageFiles](input)),
+      discardChanges: (input) =>
+        transport.request((client) => client[WS_METHODS.gitDiscardChanges](input)),
+      commitStaged: (input) =>
+        transport.request((client) => client[WS_METHODS.gitCommitStaged](input)),
     },
     review: {
       getDiffPreview: (input) =>

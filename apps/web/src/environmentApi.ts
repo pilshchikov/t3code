@@ -50,6 +50,11 @@ export function createEnvironmentApi(rpcClient: WsRpcClient): EnvironmentApi {
     git: {
       resolvePullRequest: rpcClient.git.resolvePullRequest,
       preparePullRequestThread: rpcClient.git.preparePullRequestThread,
+      detailedStatus: rpcClient.git.detailedStatus,
+      stageFiles: rpcClient.git.stageFiles,
+      unstageFiles: rpcClient.git.unstageFiles,
+      discardChanges: rpcClient.git.discardChanges,
+      commitStaged: rpcClient.git.commitStaged,
     },
     review: {
       getDiffPreview: rpcClient.review.getDiffPreview,
