@@ -19,6 +19,7 @@ import {
   ThreadStatusLabel,
   ThreadWorktreeIndicator,
 } from "./ThreadStatusIndicators";
+import { ResumeSessionsSection } from "./sidebar/ResumeSessionsSection";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { useAtomValue } from "@effect/atom-react";
 import { autoAnimate } from "@formkit/auto-animate";
@@ -2480,6 +2481,14 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         expandThreadListForProject={expandThreadListForProject}
         collapseThreadListForProject={collapseThreadListForProject}
       />
+
+      {projectExpanded ? (
+        <ResumeSessionsSection
+          environmentId={project.environmentId}
+          cwd={project.workspaceRoot}
+          projectRef={scopeProjectRef(project.environmentId, project.id)}
+        />
+      ) : null}
 
       <Dialog
         open={projectRenameTarget !== null}

@@ -25,6 +25,8 @@ export const ResumableSession = Schema.Struct({
   providerLabel: TrimmedNonEmptyString,
   /** Provider session id (Claude session UUID; Codex thread/rollout id). */
   sessionId: TrimmedNonEmptyString,
+  /** Model slug the session last used, when recoverable from the store (used to preset the picker). */
+  model: Schema.NullOr(TrimmedNonEmptyString),
   /**
    * Opaque resume cursor passed straight to the provider when continuing: a bare session-id string
    * for Claude, or `{ threadId }` for Codex. The web echoes this back unmodified on turn start.

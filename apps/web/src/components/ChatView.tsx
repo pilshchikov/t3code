@@ -120,6 +120,7 @@ import {
   type RightPanelSurface,
   useRightPanelStore,
 } from "../rightPanelStore";
+import { useResumeSeedStore } from "../resumeSeedStore";
 import { useExplorerViewStore } from "../explorerViewStore";
 import {
   isPreviewSupportedInRuntime,
@@ -3886,6 +3887,10 @@ function ChatViewContent(props: ChatViewProps) {
             }
           : undefined;
       beginLocalDispatch({ preparingWorktree: false });
+      // Continue an existing on-disk CLI session if this draft was created from the sidebar's
+      // "Resume from CLI" list. Only the thread's first turn carries it; the model picker was already
+      // preset to the session's provider instance so routing matches the cursor.
+      const resumeSeed = useResumeSeedStore.getState().peekSeed(threadIdForSend);
       const startResult = await startThreadTurn({
         environmentId,
         input: {
@@ -3901,6 +3906,7 @@ function ChatViewContent(props: ChatViewProps) {
           runtimeMode,
           interactionMode,
           ...(bootstrap ? { bootstrap } : {}),
+          ...(resumeSeed ? { resumeSession: { resumeCursor: resumeSeed.resumeCursor } } : {}),
           createdAt: messageCreatedAt,
         },
       });
@@ -3908,6 +3914,9 @@ function ChatViewContent(props: ChatViewProps) {
         failure = startResult;
       } else {
         turnStartSucceeded = true;
+        if (resumeSeed) {
+          useResumeSeedStore.getState().clearSeed(threadIdForSend);
+        }
       }
     }
 

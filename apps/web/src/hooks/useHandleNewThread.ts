@@ -47,6 +47,10 @@ export function useNewThreadHandler() {
         worktreePath?: string | null;
         envMode?: DraftThreadEnvMode;
         startFromOrigin?: boolean;
+        // Always mint a fresh draft (skip reusing an existing one) and report its ids. Used when a
+        // draft must carry one-off context such as a resume seed, so it is never an existing draft.
+        forceNew?: boolean;
+        onDraftCreated?: (ids: { draftId: string; threadId: string }) => void;
       },
     ): Promise<void> => {
       const {
@@ -77,7 +81,8 @@ export function useNewThreadHandler() {
         ? scopeThreadRef(storedDraftThread.environmentId, storedDraftThread.threadId)
         : null;
       const reusableStoredDraftThread =
-        storedDraftThreadRef && readThreadShell(storedDraftThreadRef) !== null
+        options?.forceNew ||
+        (storedDraftThreadRef && readThreadShell(storedDraftThreadRef) !== null)
           ? null
           : storedDraftThread;
       if (storedDraftThreadRef && reusableStoredDraftThread === null) {
@@ -125,6 +130,7 @@ export function useNewThreadHandler() {
       }
 
       if (
+        !options?.forceNew &&
         latestActiveDraftThread &&
         currentRouteTarget?.kind === "draft" &&
         latestActiveDraftThread.logicalProjectKey === logicalProjectKey &&
@@ -176,6 +182,7 @@ export function useNewThreadHandler() {
           runtimeMode: DEFAULT_RUNTIME_MODE,
         });
         applyStickyState(draftId);
+        options?.onDraftCreated?.({ draftId, threadId });
 
         await router.navigate({
           to: "/draft/$draftId",

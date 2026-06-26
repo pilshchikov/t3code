@@ -101,6 +101,7 @@ interface ParsedClaudeSession {
   readonly title: string | null;
   readonly messageCount: number;
   readonly lastTimestamp: string | null;
+  readonly model: string | null;
 }
 
 export function parseClaudeSession(contents: string): ParsedClaudeSession {
@@ -108,6 +109,7 @@ export function parseClaudeSession(contents: string): ParsedClaudeSession {
   let messageCount = 0;
   let lastTimestamp: string | null = null;
   let summaryFallback: string | null = null;
+  let model: string | null = null;
   for (const line of contents.split("\n")) {
     const entry = parseJsonLine(line);
     if (!entry) continue;
@@ -118,17 +120,20 @@ export function parseClaudeSession(contents: string): ParsedClaudeSession {
     }
     if (type === "user" || type === "assistant") {
       messageCount += 1;
-      if (title === null && type === "user") {
-        const message = entry.message;
-        const text =
-          message !== null && typeof message === "object"
-            ? textFromContent((message as Record<string, unknown>).content)
-            : null;
-        if (text !== null && isMeaningfulUserText(text)) title = text;
+      const message = entry.message;
+      if (message !== null && typeof message === "object") {
+        const record = message as Record<string, unknown>;
+        if (type === "assistant" && typeof record.model === "string" && record.model.length > 0) {
+          model = record.model;
+        }
+        if (title === null && type === "user") {
+          const text = textFromContent(record.content);
+          if (text !== null && isMeaningfulUserText(text)) title = text;
+        }
       }
     }
   }
-  return { title: title ?? summaryFallback, messageCount, lastTimestamp };
+  return { title: title ?? summaryFallback, messageCount, lastTimestamp, model };
 }
 
 interface ParsedCodexSession {
@@ -137,6 +142,7 @@ interface ParsedCodexSession {
   readonly headerTimestamp: string | null;
   readonly title: string | null;
   readonly messageCount: number;
+  readonly model: string | null;
 }
 
 export function parseCodexSession(contents: string): ParsedCodexSession {
@@ -145,6 +151,7 @@ export function parseCodexSession(contents: string): ParsedCodexSession {
   let headerTimestamp: string | null = null;
   let title: string | null = null;
   let messageCount = 0;
+  let model: string | null = null;
   const lines = contents.split("\n");
   const header = parseJsonLine(lines[0] ?? "");
   if (header) {
@@ -157,6 +164,7 @@ export function parseCodexSession(contents: string): ParsedCodexSession {
       if (typeof payload.id === "string") id = payload.id;
       if (typeof payload.cwd === "string") cwd = payload.cwd;
       if (typeof payload.timestamp === "string") headerTimestamp = payload.timestamp;
+      if (typeof payload.model === "string" && payload.model.length > 0) model = payload.model;
     } else {
       // Legacy rollout header: `{ id, timestamp, git }` without a cwd we can match on.
       if (typeof header.id === "string") id = header.id;
@@ -178,7 +186,7 @@ export function parseCodexSession(contents: string): ParsedCodexSession {
       if (text !== null && isMeaningfulUserText(text)) title = text;
     }
   }
-  return { id, cwd, headerTimestamp, title, messageCount };
+  return { id, cwd, headerTimestamp, title, messageCount, model };
 }
 
 function isoFromMillis(millis: number): string {
@@ -293,6 +301,7 @@ export const make: Effect.Effect<
           providerLabel: label,
           sessionId,
           resumeCursor: sessionId,
+          model: parsed.model,
           title: truncateTitle(parsed.title ?? "Untitled session"),
           updatedAt,
           messageCount: parsed.messageCount,
@@ -368,6 +377,7 @@ export const make: Effect.Effect<
         providerLabel: "Codex",
         sessionId: parsed.id,
         resumeCursor: { threadId: parsed.id },
+        model: parsed.model,
         title: truncateTitle(parsed.title ?? "Untitled session"),
         updatedAt,
         messageCount: parsed.messageCount,

@@ -347,6 +347,23 @@ fork-specific behavior so future upstream syncs are easier to review.
     `apps/server/src/orchestration/Layers/ProviderCommandReactor.ts`, `apps/server/src/server.ts`.
   - Validated with `ResumableSessionDiscovery.test.ts` (Claude + Codex header/prompt/count parsing,
     project-dir encoding) and a manual run against the real `~/.claude*`/`~/.codex` stores.
+- The project sidebar surfaces these sessions under a collapsible "Resume from CLI" group beneath
+  each expanded project's own threads.
+  - The list scans on demand — it mounts (and hits the disk) only when the user expands the group,
+    not on every sidebar render. Rows show the session title, source provider/instance, relative
+    time, and a green dot for recently-active sessions.
+  - Clicking a row mints a fresh draft thread for the project, presets the model picker to the
+    session's provider instance (using the model recovered from the session, so routing matches the
+    resume cursor), and stashes a one-off resume seed keyed by the draft. The seed is consumed by the
+    composer on that thread's first turn (`thread.turn.start.resumeSession`) and then cleared, so the
+    new thread attaches to the existing CLI session and the conversation round-trips.
+  - The model slug is also discovered per session (`ResumableSession.model`, parsed from the Claude
+    assistant events / Codex `session_meta`) to drive the picker preset.
+  - Source: `apps/web/src/components/sidebar/ResumeSessionsSection.tsx`,
+    `apps/web/src/resumeSeedStore.ts`, `apps/web/src/hooks/useHandleNewThread.ts` (a `forceNew` +
+    `onDraftCreated` option), `apps/web/src/components/ChatView.tsx` (turn-start seed),
+    `apps/web/src/components/Sidebar.tsx`,
+    `packages/client-runtime/src/state/projectCommands.ts` (the `listResumableSessions` query atom).
 
 ## Claude Profiles
 

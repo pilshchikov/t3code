@@ -60,6 +60,12 @@ export function createProjectEnvironmentAtoms<R, E>(
       tag: WS_METHODS.projectsSearchEntries,
       staleTimeMs: 15_000,
     }),
+    listResumableSessions: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:sessions:list-resumable",
+      tag: WS_METHODS.sessionsListResumable,
+      staleTimeMs: 15_000,
+      idleTtlMs: 5 * 60_000,
+    }),
     searchCode: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:projects:search-code",
       tag: WS_METHODS.projectsSearchCode,
