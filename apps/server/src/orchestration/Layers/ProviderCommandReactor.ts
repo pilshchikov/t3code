@@ -354,6 +354,9 @@ const make = Effect.gen(function* () {
     createdAt: string,
     options?: {
       readonly modelSelection?: ModelSelection;
+      // Opaque provider resume cursor used only when starting this thread's first session, so a new
+      // t3 thread can attach to an existing on-disk CLI session (Claude session id / Codex threadId).
+      readonly resumeCursor?: unknown;
     },
   ) {
     const thread = yield* resolveThread(threadId);
@@ -578,7 +581,9 @@ const make = Effect.gen(function* () {
       return restartedSession.threadId;
     }
 
-    const startedSession = yield* startProviderSession(undefined);
+    const startedSession = yield* startProviderSession(
+      options?.resumeCursor !== undefined ? { resumeCursor: options.resumeCursor } : undefined,
+    );
     yield* bindSessionToThread(startedSession);
     return startedSession.threadId;
   });
@@ -589,6 +594,8 @@ const make = Effect.gen(function* () {
     readonly attachments?: ReadonlyArray<ChatAttachment>;
     readonly modelSelection?: ModelSelection;
     readonly interactionMode?: "default" | "plan";
+    // Seed for continuing an existing on-disk provider session — only honored on a fresh start.
+    readonly resumeCursor?: unknown;
     readonly createdAt: string;
   }) {
     const thread = yield* resolveThread(input.threadId);
@@ -597,11 +604,10 @@ const make = Effect.gen(function* () {
         new Error(`Thread '${input.threadId}' was not found in read model.`),
       );
     }
-    yield* ensureSessionForThread(
-      input.threadId,
-      input.createdAt,
-      input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {},
-    );
+    yield* ensureSessionForThread(input.threadId, input.createdAt, {
+      ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
+      ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
+    });
     if (input.modelSelection !== undefined) {
       threadModelSelections.set(input.threadId, input.modelSelection);
     }
@@ -843,6 +849,9 @@ const make = Effect.gen(function* () {
       ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
       ...(event.payload.modelSelection !== undefined
         ? { modelSelection: event.payload.modelSelection }
+        : {}),
+      ...(event.payload.resumeSession !== undefined
+        ? { resumeCursor: event.payload.resumeSession.resumeCursor }
         : {}),
       interactionMode: event.payload.interactionMode,
       createdAt: event.payload.createdAt,

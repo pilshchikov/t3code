@@ -117,6 +117,7 @@ import type {
   OrchestrationThreadStreamItem,
 } from "./orchestration.ts";
 import { EnvironmentId } from "./baseSchemas.ts";
+import { ListResumableSessionsInput, ListResumableSessionsResult } from "./resumableSessions.ts";
 import { AuthAccessTokenResult, AuthSessionState, AuthWebSocketTicketResult } from "./auth.ts";
 import { AdvertisedEndpoint } from "./remoteAccess.ts";
 import { EditorId } from "./editor.ts";
@@ -1108,6 +1109,9 @@ export interface EnvironmentApi {
     searchCode: (input: ProjectSearchCodeInput) => Promise<ProjectSearchCodeResult>;
     writeFile: (input: ProjectWriteFileInput) => Promise<ProjectWriteFileResult>;
     deleteEntry: (input: ProjectDeleteEntryInput) => Promise<ProjectDeleteEntryResult>;
+  };
+  sessions: {
+    listResumable: (input: ListResumableSessionsInput) => Promise<ListResumableSessionsResult>;
   };
   filesystem: {
     browse: (input: FilesystemBrowseInput) => Promise<FilesystemBrowseResult>;

@@ -66,6 +66,7 @@ import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as GitWorkflowService from "./git/GitWorkflowService.ts";
 import * as MultiworkService from "./multiwork/MultiworkService.ts";
+import * as ResumableSessionDiscovery from "./sessions/ResumableSessionDiscovery.ts";
 import * as ReviewService from "./review/ReviewService.ts";
 import * as SourceControlProviderRegistry from "./sourceControl/SourceControlProviderRegistry.ts";
 import * as SourceControlRepositoryService from "./sourceControl/SourceControlRepositoryService.ts";
@@ -255,6 +256,12 @@ const PreviewLayerLive = Layer.empty.pipe(
 
 const WorkspaceEntriesLayerLive = WorkspaceEntries.layer.pipe(Layer.provide(WorkspacePaths.layer));
 
+// ServerSettings + resumable-session discovery as one unit so the discovery service resolves the
+// shared ServerSettings instance, while the runtime dependency chain keeps a single `provideMerge`.
+const ServerSettingsAndSessionsLayerLive = ResumableSessionDiscovery.layer.pipe(
+  Layer.provideMerge(ServerSettings.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+);
+
 const WorkspaceFileSystemLayerLive = WorkspaceFileSystem.layer.pipe(
   Layer.provide(WorkspacePaths.layer),
   Layer.provide(WorkspaceEntriesLayerLive),
@@ -317,7 +324,11 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   // no longer transitively provides it. Exposing it at the runtime level
   // keeps a single Live for all opencode consumers.
   Layer.provideMerge(OpenCodeRuntime.OpenCodeRuntimeLive),
-  Layer.provideMerge(ServerSettings.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+  // ServerSettings, with the resumable-session discovery service stacked on top so it reads the
+  // same settings instance (Claude config dirs + labels). Combined into one `provideMerge` so this
+  // chain stays within `pipe`'s 20-argument overload limit. The discovery service also needs the
+  // platform filesystem (NodeServices), provided at the runtime root.
+  Layer.provideMerge(ServerSettingsAndSessionsLayerLive),
   Layer.provideMerge(WorkspaceLayerLive),
   Layer.provideMerge(ProjectFaviconResolverLayerLive),
   Layer.provideMerge(RepositoryIdentityResolver.layer),

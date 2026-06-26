@@ -550,6 +550,13 @@ const ThreadInteractionModeSetCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+// Cursor for resuming an existing on-disk provider session discovered in the repo. Opaque here: a
+// bare session-id string for Claude, `{ threadId }` for Codex — the value the provider expects.
+export const ThreadResumeSessionSeed = Schema.Struct({
+  resumeCursor: Schema.Unknown,
+});
+export type ThreadResumeSessionSeed = typeof ThreadResumeSessionSeed.Type;
+
 const ThreadTurnStartBootstrapCreateThread = Schema.Struct({
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
@@ -597,6 +604,11 @@ export const ThreadTurnStartCommand = Schema.Struct({
   ),
   bootstrap: Schema.optional(ThreadTurnStartBootstrap),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
+  // Seed for continuing an existing on-disk provider session (Claude/Codex) discovered in the repo.
+  // Used only when the thread has no provider session yet (its first turn); the cursor is passed
+  // straight to the provider so the new t3 thread attaches to that session and round-trips with the
+  // CLI. The provider/instance/model come from `modelSelection` (or the created thread's).
+  resumeSession: Schema.optional(ThreadResumeSessionSeed),
   createdAt: IsoDateTime,
 });
 
@@ -616,6 +628,7 @@ const ClientThreadTurnStartCommand = Schema.Struct({
   interactionMode: ProviderInteractionMode,
   bootstrap: Schema.optional(ThreadTurnStartBootstrap),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
+  resumeSession: Schema.optional(ThreadResumeSessionSeed),
   createdAt: IsoDateTime,
 });
 
@@ -915,6 +928,7 @@ export const ThreadTurnStartRequestedPayload = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
   ),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
+  resumeSession: Schema.optional(ThreadResumeSessionSeed),
   createdAt: IsoDateTime,
 });
 

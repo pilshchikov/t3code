@@ -167,6 +167,11 @@ import {
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
+import {
+  ListResumableSessionsError,
+  ListResumableSessionsInput,
+  ListResumableSessionsResult,
+} from "./resumableSessions.ts";
 
 export const WS_METHODS = {
   // Project registry methods
@@ -179,6 +184,7 @@ export const WS_METHODS = {
   projectsSearchCode: "projects.searchCode",
   projectsWriteFile: "projects.writeFile",
   projectsDeleteEntry: "projects.deleteEntry",
+  sessionsListResumable: "sessions.listResumable",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -399,6 +405,12 @@ export const WsProjectsSearchEntriesRpc = Rpc.make(WS_METHODS.projectsSearchEntr
   payload: ProjectSearchEntriesInput,
   success: ProjectSearchEntriesResult,
   error: Schema.Union([ProjectSearchEntriesError, EnvironmentAuthorizationError]),
+});
+
+export const WsSessionsListResumableRpc = Rpc.make(WS_METHODS.sessionsListResumable, {
+  payload: ListResumableSessionsInput,
+  success: ListResumableSessionsResult,
+  error: Schema.Union([ListResumableSessionsError, EnvironmentAuthorizationError]),
 });
 
 export const WsProjectsSearchCodeRpc = Rpc.make(WS_METHODS.projectsSearchCode, {
@@ -821,6 +833,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsListEntriesRpc,
   WsProjectsReadFileRpc,
   WsProjectsSearchEntriesRpc,
+  WsSessionsListResumableRpc,
   WsProjectsSearchCodeRpc,
   WsProjectsWriteFileRpc,
   WsProjectsDeleteEntryRpc,

@@ -318,6 +318,36 @@ fork-specific behavior so future upstream syncs are easier to review.
     branch + context restore, continuing an existing remote branch, reuse + list, and the
     not-a-repo failure).
 
+## Resumable agent sessions (Claude Code / Codex)
+
+- The server discovers existing CLI coding-agent sessions for a repo so they can be continued in t3,
+  round-tripping with the CLIs (continuing writes back to the same on-disk session, so Claude Code →
+  t3 → Claude Code stays one conversation).
+  - `ResumableSessionDiscovery` (`apps/server/src/sessions/ResumableSessionDiscovery.ts`) scans, for a
+    given cwd:
+    - **Claude**: every configured Claude instance's config dir (`$CLAUDE_CONFIG_DIR`/`~/.claude`
+      plus each `claudeAgent` provider instance's `configDir`, labeled by its display name) at
+      `projects/<cwd-with-non-alphanumerics-as-dashes>/<session-id>.jsonl`. The session id is the
+      filename; resume cursor is that id (the Claude Agent SDK resumes by session id).
+    - **Codex**: `$CODEX_HOME`/`~/.codex/sessions/<yyyy>/<mm>/<dd>/rollout-*.jsonl`, newest-first and
+      bounded, matched to the repo by the `session_meta` header's `cwd`. Resume cursor is
+      `{ threadId: <id> }` (Codex `thread/resume`). Legacy rollouts without a `cwd` are skipped.
+    - Each row carries title (first real user prompt, or a Claude `summary` fallback), `updatedAt`,
+      message count, and a best-effort `active`/`idle` status from file mtime (the CLIs persist no
+      definitive running/awaiting/completed flag, so live "background agent" state is approximated by
+      recency rather than true attach).
+  - Exposed over `sessions.listResumable` (`packages/contracts/src/resumableSessions.ts`, `rpc.ts`,
+    `ipc.ts`, `ws.ts`, read scope), merged across providers and sorted by recency.
+  - **Resume seam**: `thread.turn.start` gained an optional `resumeSession` seed
+    (`packages/contracts/src/orchestration.ts`); the decider forwards it on
+    `thread.turn-start-requested`, and `ProviderCommandReactor.ensureSessionForThread` honors it only
+    on a thread's first (fresh) provider-session start — so a new t3 thread attaches to the chosen
+    on-disk CLI session. Existing-thread turns are unaffected.
+  - Source: the files above plus `apps/server/src/orchestration/decider.ts`,
+    `apps/server/src/orchestration/Layers/ProviderCommandReactor.ts`, `apps/server/src/server.ts`.
+  - Validated with `ResumableSessionDiscovery.test.ts` (Claude + Codex header/prompt/count parsing,
+    project-dir encoding) and a manual run against the real `~/.claude*`/`~/.codex` stores.
+
 ## Claude Profiles
 
 - Claude provider instances support a dedicated `Claude config directory` setting.
