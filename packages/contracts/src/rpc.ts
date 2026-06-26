@@ -23,6 +23,7 @@ import {
   GitFileDiffInput,
   GitFileDiffResult,
   GitGenerateCommitMessageResult,
+  GitResolveConflictInput,
   GitStageFilesInput,
   GitUnstageFilesInput,
   VcsSwitchRefInput,
@@ -32,6 +33,8 @@ import {
   VcsCreateRefResult,
   VcsCreateWorktreeInput,
   VcsCreateWorktreeResult,
+  VcsFetchInput,
+  VcsFetchResult,
   VcsInitInput,
   VcsListRefsInput,
   VcsListRefsResult,
@@ -80,6 +83,9 @@ import {
   RelayClientStatusSchema,
 } from "./relayClient.ts";
 import {
+  ProjectDeleteEntryError,
+  ProjectDeleteEntryInput,
+  ProjectDeleteEntryResult,
   ProjectListEntriesError,
   ProjectListEntriesInput,
   ProjectListEntriesResult,
@@ -172,6 +178,7 @@ export const WS_METHODS = {
   projectsSearchEntries: "projects.searchEntries",
   projectsSearchCode: "projects.searchCode",
   projectsWriteFile: "projects.writeFile",
+  projectsDeleteEntry: "projects.deleteEntry",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -182,6 +189,7 @@ export const WS_METHODS = {
 
   // VCS methods
   vcsPull: "vcs.pull",
+  vcsFetch: "vcs.fetch",
   vcsRefreshStatus: "vcs.refreshStatus",
   vcsListRefs: "vcs.listRefs",
   vcsCreateWorktree: "vcs.createWorktree",
@@ -200,6 +208,7 @@ export const WS_METHODS = {
   gitStageFiles: "git.stageFiles",
   gitUnstageFiles: "git.unstageFiles",
   gitDiscardChanges: "git.discardChanges",
+  gitResolveConflict: "git.resolveConflict",
   gitCommitStaged: "git.commitStaged",
   gitGenerateCommitMessage: "git.generateCommitMessage",
   gitFileDiff: "git.fileDiff",
@@ -416,6 +425,12 @@ export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
   error: Schema.Union([ProjectWriteFileError, EnvironmentAuthorizationError]),
 });
 
+export const WsProjectsDeleteEntryRpc = Rpc.make(WS_METHODS.projectsDeleteEntry, {
+  payload: ProjectDeleteEntryInput,
+  success: ProjectDeleteEntryResult,
+  error: Schema.Union([ProjectDeleteEntryError, EnvironmentAuthorizationError]),
+});
+
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: LaunchEditorInput,
   error: Schema.Union([ExternalLauncherError, EnvironmentAuthorizationError]),
@@ -443,6 +458,12 @@ export const WsSubscribeVcsStatusRpc = Rpc.make(WS_METHODS.subscribeVcsStatus, {
 export const WsVcsPullRpc = Rpc.make(WS_METHODS.vcsPull, {
   payload: VcsPullInput,
   success: VcsPullResult,
+  error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
+});
+
+export const WsVcsFetchRpc = Rpc.make(WS_METHODS.vcsFetch, {
+  payload: VcsFetchInput,
+  success: VcsFetchResult,
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
@@ -491,6 +512,12 @@ export const WsGitUnstageFilesRpc = Rpc.make(WS_METHODS.gitUnstageFiles, {
 
 export const WsGitDiscardChangesRpc = Rpc.make(WS_METHODS.gitDiscardChanges, {
   payload: GitDiscardChangesInput,
+  success: GitDetailedStatusResult,
+  error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
+});
+
+export const WsGitResolveConflictRpc = Rpc.make(WS_METHODS.gitResolveConflict, {
+  payload: GitResolveConflictInput,
   success: GitDetailedStatusResult,
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
@@ -796,11 +823,13 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsSearchEntriesRpc,
   WsProjectsSearchCodeRpc,
   WsProjectsWriteFileRpc,
+  WsProjectsDeleteEntryRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsAssetsCreateUrlRpc,
   WsSubscribeVcsStatusRpc,
   WsVcsPullRpc,
+  WsVcsFetchRpc,
   WsVcsRefreshStatusRpc,
   WsGitRunStackedActionRpc,
   WsGitResolvePullRequestRpc,
@@ -809,6 +838,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitStageFilesRpc,
   WsGitUnstageFilesRpc,
   WsGitDiscardChangesRpc,
+  WsGitResolveConflictRpc,
   WsGitCommitStagedRpc,
   WsGitGenerateCommitMessageRpc,
   WsGitFileDiffRpc,

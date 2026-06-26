@@ -12,6 +12,7 @@ import {
   type GitFileDiffInput,
   type GitFileDiffResult,
   type GitGenerateCommitMessageResult,
+  type GitResolveConflictInput,
   type GitStageFilesInput,
   type GitUnstageFilesInput,
   type VcsSwitchRefInput,
@@ -20,6 +21,7 @@ import {
   type VcsCreateRefResult,
   type VcsCreateWorktreeInput,
   type VcsCreateWorktreeResult,
+  type VcsFetchResult,
   type VcsListRefsInput,
   type VcsListRefsResult,
   type GitManagerServiceError,
@@ -58,6 +60,7 @@ export class GitWorkflowService extends Context.Service<
     readonly invalidateRemoteStatus: (cwd: string) => Effect.Effect<void, never>;
     readonly invalidateStatus: (cwd: string) => Effect.Effect<void, never>;
     readonly pullCurrentBranch: (cwd: string) => Effect.Effect<VcsPullResult, GitCommandError>;
+    readonly fetchCurrentBranch: (cwd: string) => Effect.Effect<VcsFetchResult, GitCommandError>;
     readonly runStackedAction: (
       input: GitRunStackedActionInput,
       options?: GitManager.GitRunStackedActionOptions,
@@ -111,6 +114,9 @@ export class GitWorkflowService extends Context.Service<
     ) => Effect.Effect<GitDetailedStatusResult, GitCommandError>;
     readonly discardChanges: (
       input: GitDiscardChangesInput,
+    ) => Effect.Effect<GitDetailedStatusResult, GitCommandError>;
+    readonly resolveConflict: (
+      input: GitResolveConflictInput,
     ) => Effect.Effect<GitDetailedStatusResult, GitCommandError>;
     readonly commitStaged: (
       input: GitCommitStagedInput,
@@ -307,6 +313,10 @@ export const make = Effect.gen(function* () {
       ensureGitCommand("GitWorkflowService.pullCurrentBranch", cwd).pipe(
         Effect.andThen(git.pullCurrentBranch(cwd)),
       ),
+    fetchCurrentBranch: (cwd) =>
+      ensureGitCommand("GitWorkflowService.fetchCurrentBranch", cwd).pipe(
+        Effect.andThen(git.fetchCurrentBranch(cwd)),
+      ),
     runStackedAction: (input, options) =>
       ensureGit("GitWorkflowService.runStackedAction", input.cwd).pipe(
         Effect.andThen(gitManager.runStackedAction(input, options)),
@@ -374,6 +384,11 @@ export const make = Effect.gen(function* () {
     discardChanges: (input) =>
       ensureGitCommand("GitWorkflowService.discardChanges", input.cwd).pipe(
         Effect.andThen(git.discardChanges(input.cwd, input.paths)),
+        Effect.andThen(git.detailedStatus(input.cwd)),
+      ),
+    resolveConflict: (input) =>
+      ensureGitCommand("GitWorkflowService.resolveConflict", input.cwd).pipe(
+        Effect.andThen(git.resolveConflict(input.cwd, input.path, input.resolution)),
         Effect.andThen(git.detailedStatus(input.cwd)),
       ),
     commitStaged: (input) =>

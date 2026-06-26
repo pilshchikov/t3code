@@ -1,13 +1,50 @@
-import type { EnvironmentId, GitChangeKind, GitFileChange } from "@t3tools/contracts";
-import { RefreshCw, RotateCcw, Sparkles } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useAtomValue } from "@effect/atom-react";
+import {
+  DEFAULT_PROVIDER_INTERACTION_MODE,
+  DEFAULT_RUNTIME_MODE,
+  type EnvironmentId,
+  type GitChangeKind,
+  type GitFileChange,
+  type ModelSelection,
+  type ProviderInstanceId,
+  type ScopedThreadRef,
+} from "@t3tools/contracts";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import { createModelSelection } from "@t3tools/shared/model";
+import {
+  Check,
+  PanelLeft,
+  PanelRight,
+  RefreshCw,
+  RotateCcw,
+  Sparkles,
+  WandSparkles,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { cn } from "~/lib/utils";
+import { ProviderModelPicker } from "~/components/chat/ProviderModelPicker";
+import { toastManager } from "~/components/ui/toast";
+import { useClientSettings } from "~/hooks/useSettings";
+import { useThread } from "~/state/entities";
+import { serverEnvironment } from "~/state/server";
+import { threadEnvironment } from "~/state/threads";
+import { useAtomCommand } from "~/state/use-atom-command";
+import { getAppModelOptionsForInstance } from "~/modelSelection";
+import {
+  applyProviderInstanceSettings,
+  deriveProviderInstanceEntries,
+  sortProviderInstanceEntries,
+} from "~/providerInstances";
+import { cn, newMessageId } from "~/lib/utils";
 
 import {
   commitGitStaged,
   discardGitChanges,
   generateGitCommitMessage,
+  resolveGitConflict,
   stageGitFiles,
   unstageGitFiles,
   useGitDetailedStatus,
@@ -16,6 +53,7 @@ import {
 interface GitChangesPanelProps {
   environmentId: EnvironmentId;
   cwd: string;
+  threadRef: ScopedThreadRef;
   selectedPath?: string | null;
   onShowDiff: (relativePath: string) => void;
 }
@@ -28,6 +66,44 @@ interface StatusBadge {
 
 // Pale red used to mark unversioned (untracked) files in both the Commit panel and the file tree.
 const UNVERSIONED_COLOR = "#e0828c";
+const CONFLICT_MODEL_STORAGE_KEY = "t3code.gitConflictModelSelection";
+const REMEMBER_CONFLICT_MODEL_STORAGE_KEY = "t3code.rememberGitConflictModel";
+
+function readRememberedConflictModel(): ModelSelection | null {
+  try {
+    const raw = window.localStorage.getItem(CONFLICT_MODEL_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ModelSelection>;
+    if (typeof parsed.instanceId !== "string" || typeof parsed.model !== "string") return null;
+    return createModelSelection(
+      parsed.instanceId as ProviderInstanceId,
+      parsed.model,
+      Array.isArray(parsed.options) ? parsed.options : undefined,
+    );
+  } catch {
+    return null;
+  }
+}
+
+function readRememberConflictModel(): boolean {
+  try {
+    return window.localStorage.getItem(REMEMBER_CONFLICT_MODEL_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writeRememberedConflictModel(selection: ModelSelection | null): void {
+  try {
+    if (selection) {
+      window.localStorage.setItem(CONFLICT_MODEL_STORAGE_KEY, JSON.stringify(selection));
+    } else {
+      window.localStorage.removeItem(CONFLICT_MODEL_STORAGE_KEY);
+    }
+  } catch {
+    // Storage is optional; the active in-memory selection still works.
+  }
+}
 
 const STATUS_BADGE_BY_KIND: Readonly<Record<GitChangeKind, StatusBadge>> = {
   modified: { letter: "M", color: "#4c9ffe", label: "Modified" },
@@ -60,6 +136,7 @@ function GitChangeRow({
   selected,
   onToggleStage,
   onDiscard,
+  onResolveConflict,
   onOpen,
 }: {
   file: GitFileChange;
@@ -67,6 +144,7 @@ function GitChangeRow({
   selected: boolean;
   onToggleStage: (file: GitFileChange) => void;
   onDiscard: (file: GitFileChange) => void;
+  onResolveConflict: (file: GitFileChange, resolution: "ours" | "theirs" | "mark_resolved") => void;
   onOpen: (file: GitFileChange) => void;
 }) {
   const fullyStaged = file.staged && !file.unstaged;
@@ -121,6 +199,40 @@ function GitChangeRow({
           <span className="truncate text-[10px] text-muted-foreground">{directory}</span>
         ) : null}
       </button>
+      {badge.letter === "U" ? (
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            disabled={busy}
+            aria-label={`Use current branch version of ${file.path}`}
+            title="Use ours"
+            onClick={() => onResolveConflict(file, "ours")}
+          >
+            <PanelLeft className="size-3" />
+          </button>
+          <button
+            type="button"
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            disabled={busy}
+            aria-label={`Use incoming branch version of ${file.path}`}
+            title="Use theirs"
+            onClick={() => onResolveConflict(file, "theirs")}
+          >
+            <PanelRight className="size-3" />
+          </button>
+          <button
+            type="button"
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            disabled={busy}
+            aria-label={`Mark ${file.path} resolved`}
+            title="Mark edited file resolved"
+            onClick={() => onResolveConflict(file, "mark_resolved")}
+          >
+            <Check className="size-3" />
+          </button>
+        </div>
+      ) : null}
       <button
         type="button"
         className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -145,6 +257,7 @@ function GitChangeGroup({
   onToggleAll,
   onToggleStage,
   onDiscard,
+  onResolveConflict,
   onOpen,
 }: {
   title: string;
@@ -156,6 +269,7 @@ function GitChangeGroup({
   onToggleAll: (files: ReadonlyArray<GitFileChange>, stage: boolean) => void;
   onToggleStage: (file: GitFileChange) => void;
   onDiscard: (file: GitFileChange) => void;
+  onResolveConflict: (file: GitFileChange, resolution: "ours" | "theirs" | "mark_resolved") => void;
   onOpen: (file: GitFileChange) => void;
 }) {
   if (files.length === 0) return null;
@@ -183,6 +297,7 @@ function GitChangeGroup({
           selected={file.path === selectedPath}
           onToggleStage={onToggleStage}
           onDiscard={onDiscard}
+          onResolveConflict={onResolveConflict}
           onOpen={onOpen}
         />
       ))}
@@ -193,17 +308,70 @@ function GitChangeGroup({
 export default function GitChangesPanel({
   environmentId,
   cwd,
+  threadRef,
   selectedPath,
   onShowDiff,
 }: GitChangesPanelProps) {
   const status = useGitDetailedStatus(environmentId, cwd);
+  const clientSettings = useClientSettings();
+  const activeThread = useThread(threadRef);
+  const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
+  const startThreadTurn = useAtomCommand(threadEnvironment.startTurn, {
+    reportFailure: false,
+  });
   const [message, setMessage] = useState("");
   const [amend, setAmend] = useState(false);
   const [busy, setBusy] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [startingConflictResolution, setStartingConflictResolution] = useState(false);
+  const [rememberConflictModel, setRememberConflictModel] = useState(readRememberConflictModel);
+  const [conflictModelSelection, setConflictModelSelection] = useState<ModelSelection | null>(
+    readRememberedConflictModel,
+  );
   const [actionError, setActionError] = useState<string | null>(null);
 
   const files = status.data?.files ?? [];
+  const unifiedSettings = useMemo(
+    () => (serverConfig ? { ...serverConfig.settings, ...clientSettings } : null),
+    [clientSettings, serverConfig],
+  );
+  const conflicts = useMemo(
+    () =>
+      files.filter((file) => file.indexStatus === "unmerged" || file.worktreeStatus === "unmerged"),
+    [files],
+  );
+  const modelInstanceEntries = useMemo(
+    () =>
+      serverConfig
+        ? sortProviderInstanceEntries(
+            applyProviderInstanceSettings(
+              deriveProviderInstanceEntries(serverConfig.providers),
+              unifiedSettings!,
+            ),
+          )
+        : [],
+    [serverConfig, unifiedSettings],
+  );
+  const modelOptionsByInstance = useMemo(
+    () =>
+      new Map(
+        modelInstanceEntries.map((entry) => [
+          entry.instanceId,
+          getAppModelOptionsForInstance(unifiedSettings!, entry),
+        ]),
+      ),
+    [modelInstanceEntries, unifiedSettings],
+  );
+  const effectiveConflictModelSelection =
+    conflictModelSelection ??
+    activeThread?.modelSelection ??
+    serverConfig?.settings.textGenerationModelSelection ??
+    null;
+
+  useEffect(() => {
+    if (conflictModelSelection !== null || effectiveConflictModelSelection === null) return;
+    setConflictModelSelection(effectiveConflictModelSelection);
+  }, [conflictModelSelection, effectiveConflictModelSelection]);
   const { changes, unversioned } = useMemo(() => {
     const tracked: GitFileChange[] = [];
     const untracked: GitFileChange[] = [];
@@ -263,6 +431,103 @@ export default function GitChangesPanel({
     [cwd, environmentId, runMutation],
   );
 
+  const resolveConflict = useCallback(
+    (file: GitFileChange, resolution: "ours" | "theirs" | "mark_resolved") => {
+      const confirmation =
+        resolution === "mark_resolved"
+          ? `Stage ${file.path} as resolved?`
+          : `Replace ${file.path} with the ${resolution} version and stage it as resolved?`;
+      if (!window.confirm(confirmation)) return;
+      void runMutation(() => resolveGitConflict(environmentId, cwd, file.path, resolution));
+    },
+    [cwd, environmentId, runMutation],
+  );
+
+  const selectConflictModel = useCallback(
+    (instanceId: ProviderInstanceId, model: string) => {
+      const selection = createModelSelection(instanceId, model);
+      setConflictModelSelection(selection);
+      if (rememberConflictModel) writeRememberedConflictModel(selection);
+    },
+    [rememberConflictModel],
+  );
+
+  const toggleRememberConflictModel = useCallback(
+    (checked: boolean) => {
+      setRememberConflictModel(checked);
+      try {
+        window.localStorage.setItem(REMEMBER_CONFLICT_MODEL_STORAGE_KEY, String(checked));
+      } catch {
+        // Storage is optional.
+      }
+      writeRememberedConflictModel(checked ? effectiveConflictModelSelection : null);
+    },
+    [effectiveConflictModelSelection],
+  );
+
+  const resolveConflictsWithAgent = useCallback(() => {
+    if (
+      conflicts.length === 0 ||
+      !activeThread ||
+      !effectiveConflictModelSelection ||
+      startingConflictResolution
+    ) {
+      return;
+    }
+    setStartingConflictResolution(true);
+    setActionError(null);
+    const conflictList = conflicts.map((file) => `- ${file.path}`).join("\n");
+    const prompt = [
+      "Resolve the current Git merge conflicts in this workspace.",
+      "Inspect and resolve only these unmerged files:",
+      conflictList,
+      "",
+      "Preserve the intended behavior from both sides, remove all conflict markers, and run relevant focused tests when practical.",
+      "Stage each successfully resolved file with git add.",
+      "Do not commit, push, reset, abort the merge, or discard unrelated changes.",
+    ].join("\n");
+    void (async () => {
+      const result = await startThreadTurn({
+        environmentId,
+        input: {
+          threadId: threadRef.threadId,
+          message: {
+            messageId: newMessageId(),
+            role: "user",
+            text: prompt,
+            attachments: [],
+          },
+          modelSelection: effectiveConflictModelSelection,
+          runtimeMode: activeThread.runtimeMode ?? DEFAULT_RUNTIME_MODE,
+          interactionMode: activeThread.interactionMode ?? DEFAULT_PROVIDER_INTERACTION_MODE,
+        },
+      });
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        setActionError(
+          error instanceof Error ? error.message : "Could not start conflict resolution.",
+        );
+      } else if (result._tag === "Success") {
+        toastManager.add({
+          type: "success",
+          title: "Conflict resolution started",
+          description: `${conflicts.length.toLocaleString()} conflicted ${
+            conflicts.length === 1 ? "file" : "files"
+          } sent to the selected model.`,
+        });
+      }
+      setStartingConflictResolution(false);
+    })();
+  }, [
+    activeThread,
+    conflicts,
+    effectiveConflictModelSelection,
+    environmentId,
+    startThreadTurn,
+    startingConflictResolution,
+    threadRef.threadId,
+  ]);
+
   const commit = useCallback(() => {
     const trimmed = message.trim();
     if (trimmed.length === 0) return;
@@ -320,6 +585,64 @@ export default function GitChangesPanel({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
+        {conflicts.length > 0 ? (
+          <div className="border-b border-border/60 px-2 pb-2">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <div className="text-[11px] font-semibold text-destructive">
+                {conflicts.length.toLocaleString()} merge{" "}
+                {conflicts.length === 1 ? "conflict" : "conflicts"}
+              </div>
+              <button
+                type="button"
+                className={cn(
+                  "inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium",
+                  activeThread && effectiveConflictModelSelection
+                    ? "bg-accent text-foreground hover:bg-accent/80"
+                    : "cursor-not-allowed text-muted-foreground",
+                )}
+                disabled={
+                  !activeThread || !effectiveConflictModelSelection || startingConflictResolution
+                }
+                title={
+                  activeThread
+                    ? "Ask the selected coding model to resolve and stage all conflicted files"
+                    : "Start the thread before using AI conflict resolution"
+                }
+                onClick={resolveConflictsWithAgent}
+              >
+                {startingConflictResolution ? (
+                  <RefreshCw className="size-3 animate-spin" />
+                ) : (
+                  <WandSparkles className="size-3" />
+                )}
+                Resolve with AI
+              </button>
+            </div>
+            {effectiveConflictModelSelection && modelInstanceEntries.length > 0 ? (
+              <div className="flex min-w-0 items-center gap-2">
+                <ProviderModelPicker
+                  compact
+                  activeInstanceId={effectiveConflictModelSelection.instanceId}
+                  model={effectiveConflictModelSelection.model}
+                  lockedProvider={null}
+                  instanceEntries={modelInstanceEntries}
+                  modelOptionsByInstance={modelOptionsByInstance}
+                  triggerClassName="h-7 min-w-0 flex-1 border border-border/60 bg-background"
+                  onInstanceModelChange={selectConflictModel}
+                />
+                <label className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    className="size-3 accent-[#4c9ffe]"
+                    checked={rememberConflictModel}
+                    onChange={(event) => toggleRememberConflictModel(event.target.checked)}
+                  />
+                  Remember
+                </label>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {status.error && status.data === null ? (
           <div className="p-4 text-xs leading-relaxed text-destructive">{status.error}</div>
         ) : status.data && !status.data.isRepo ? (
@@ -341,6 +664,7 @@ export default function GitChangesPanel({
               onToggleAll={toggleAll}
               onToggleStage={toggleStage}
               onDiscard={discard}
+              onResolveConflict={resolveConflict}
               onOpen={(file) => onShowDiff(file.path)}
             />
             <GitChangeGroup
@@ -353,6 +677,7 @@ export default function GitChangesPanel({
               onToggleAll={toggleAll}
               onToggleStage={toggleStage}
               onDiscard={discard}
+              onResolveConflict={resolveConflict}
               onOpen={(file) => onShowDiff(file.path)}
             />
           </>

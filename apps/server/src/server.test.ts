@@ -4669,6 +4669,34 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect("routes websocket rpc projects.deleteEntry", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const workspaceDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-ws-project-delete-" });
+      yield* fs.makeDirectory(path.join(workspaceDir, "nested"), { recursive: true });
+      yield* fs.writeFileString(path.join(workspaceDir, "nested", "remove.txt"), "remove\n");
+
+      yield* buildAppUnderTest();
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const response = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.projectsDeleteEntry]({
+            cwd: workspaceDir,
+            relativePath: "nested/remove.txt",
+          }),
+        ),
+      );
+
+      assert.equal(response.relativePath, "nested/remove.txt");
+      const stat = yield* fs
+        .stat(path.join(workspaceDir, "nested", "remove.txt"))
+        .pipe(Effect.orElseSucceed(() => null));
+      assert.isNull(stat);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("creates a missing workspace root during websocket project.create dispatch", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -4910,12 +4938,19 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
               }),
           },
           gitVcsDriver: {
+            fetchCurrentBranch: () =>
+              Effect.succeed({
+                refName: "main",
+                upstreamRef: "origin/main",
+              }),
             pullCurrentBranch: () =>
               Effect.succeed({
                 status: "pulled",
                 refName: "main",
                 upstreamRef: "origin/main",
               }),
+            resolveConflict: () => Effect.void,
+            detailedStatus: () => Effect.succeed({ isRepo: true, files: [] }),
             listRefs: () =>
               Effect.succeed({
                 refs: [
@@ -4992,6 +5027,22 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         withWsRpcClient(wsUrl, (client) => client[WS_METHODS.vcsPull]({ cwd: "/tmp/repo" })),
       );
       assert.equal(pull.status, "pulled");
+
+      const fetched = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) => client[WS_METHODS.vcsFetch]({ cwd: "/tmp/repo" })),
+      );
+      assert.equal(fetched.upstreamRef, "origin/main");
+
+      const resolvedConflict = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.gitResolveConflict]({
+            cwd: "/tmp/repo",
+            path: "src/conflict.ts",
+            resolution: "ours",
+          }),
+        ),
+      );
+      assert.deepEqual(resolvedConflict.files, []);
 
       const refreshedStatus = yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>

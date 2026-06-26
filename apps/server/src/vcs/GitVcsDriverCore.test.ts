@@ -623,6 +623,38 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
   });
 
   describe("remote operations", () => {
+    it.effect("fetches the current branch upstream without changing the local branch", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const remote = yield* makeTmpDir("git-remote-");
+        const peer = yield* makeTmpDir("git-peer-");
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        yield* git(remote, ["init", "--bare"]);
+        yield* git(cwd, ["remote", "add", "origin", remote]);
+        yield* git(cwd, ["push", "-u", "origin", initialBranch]);
+        yield* git(remote, ["symbolic-ref", "HEAD", `refs/heads/${initialBranch}`]);
+        const localHead = yield* git(cwd, ["rev-parse", "HEAD"]);
+
+        yield* git(peer, ["clone", remote, "."]);
+        yield* git(peer, ["config", "user.email", "test@test.com"]);
+        yield* git(peer, ["config", "user.name", "Test"]);
+        yield* writeTextFile(peer, "remote-change.txt", "remote\n");
+        yield* git(peer, ["add", "remote-change.txt"]);
+        yield* git(peer, ["commit", "-m", "remote change"]);
+        yield* git(peer, ["push", "origin", initialBranch]);
+        const remoteHead = yield* git(peer, ["rev-parse", "HEAD"]);
+
+        const result = yield* (yield* GitVcsDriver.GitVcsDriver).fetchCurrentBranch(cwd);
+
+        assert.deepEqual(result, {
+          refName: initialBranch,
+          upstreamRef: `origin/${initialBranch}`,
+        });
+        assert.equal(yield* git(cwd, ["rev-parse", "HEAD"]), localHead);
+        assert.equal(yield* git(cwd, ["rev-parse", `origin/${initialBranch}`]), remoteHead);
+      }),
+    );
+
     it.effect("creates a worktree from the latest fetched remote commit", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();
@@ -887,6 +919,51 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         assert.equal(yield* git(cwd, ["show", "HEAD:README.md"]), "# test");
         const status = yield* driver.detailedStatus(cwd);
         assert.deepStrictEqual(status.files, []);
+      }),
+    );
+
+    it.effect("resolves an unmerged file with the selected side and stages it", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+
+        yield* git(cwd, ["checkout", "-b", "feature/conflict"]);
+        yield* writeTextFile(cwd, "README.md", "# incoming\n");
+        yield* git(cwd, ["add", "README.md"]);
+        yield* git(cwd, ["commit", "-m", "incoming change"]);
+
+        yield* git(cwd, ["checkout", initialBranch]);
+        yield* writeTextFile(cwd, "README.md", "# current\n");
+        yield* git(cwd, ["add", "README.md"]);
+        yield* git(cwd, ["commit", "-m", "current change"]);
+
+        const merge = yield* driver.execute({
+          operation: "GitVcsDriver.test.createConflict",
+          cwd,
+          args: ["merge", "feature/conflict"],
+          allowNonZeroExit: true,
+          timeoutMs: 10_000,
+        });
+        assert.notEqual(merge.exitCode, 0);
+        assert.equal(
+          (yield* driver.detailedStatus(cwd)).files.find((file) => file.path === "README.md")
+            ?.indexStatus,
+          "unmerged",
+        );
+
+        yield* driver.resolveConflict(cwd, "README.md", "theirs");
+
+        const resolved = yield* driver.detailedStatus(cwd);
+        const readme = resolved.files.find((file) => file.path === "README.md");
+        assert.equal(readme?.indexStatus, "modified");
+        assert.notEqual(readme?.indexStatus, "unmerged");
+        const fileSystem = yield* FileSystem.FileSystem;
+        const pathService = yield* Path.Path;
+        assert.equal(
+          yield* fileSystem.readFileString(pathService.join(cwd, "README.md")),
+          "# incoming\n",
+        );
       }),
     );
 

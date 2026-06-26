@@ -109,6 +109,11 @@ export const VcsPullInput = Schema.Struct({
 });
 export type VcsPullInput = typeof VcsPullInput.Type;
 
+export const VcsFetchInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+});
+export type VcsFetchInput = typeof VcsFetchInput.Type;
+
 export const GitRunStackedActionInput = Schema.Struct({
   actionId: TrimmedNonEmptyStringSchema,
   cwd: TrimmedNonEmptyStringSchema,
@@ -319,6 +324,12 @@ export const VcsPullResult = Schema.Struct({
 });
 export type VcsPullResult = typeof VcsPullResult.Type;
 
+export const VcsFetchResult = Schema.Struct({
+  refName: TrimmedNonEmptyStringSchema,
+  upstreamRef: TrimmedNonEmptyStringSchema,
+});
+export type VcsFetchResult = typeof VcsFetchResult.Type;
+
 // Granular git index operations (Commit panel)
 
 /** The kind of change git reports for a file, in either the index or the working tree. */
@@ -369,6 +380,13 @@ export type GitUnstageFilesInput = typeof GitUnstageFilesInput.Type;
 
 export const GitDiscardChangesInput = Schema.Struct(GitFilePathsShape);
 export type GitDiscardChangesInput = typeof GitDiscardChangesInput.Type;
+
+export const GitResolveConflictInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  path: TrimmedNonEmptyStringSchema,
+  resolution: Schema.Literals(["ours", "theirs", "mark_resolved"]),
+});
+export type GitResolveConflictInput = typeof GitResolveConflictInput.Type;
 
 export const GitCommitStagedInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,

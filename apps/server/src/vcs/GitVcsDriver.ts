@@ -22,6 +22,7 @@ import {
   type ReviewDiffPreviewInput,
   type ReviewDiffPreviewResult,
   type VcsInitInput,
+  type VcsFetchResult,
   type VcsListRefsInput,
   type VcsListRefsResult,
   type VcsPullResult,
@@ -215,6 +216,11 @@ export class GitVcsDriver extends Context.Service<
       cwd: string,
       paths: readonly string[],
     ) => Effect.Effect<void, GitCommandError>;
+    readonly resolveConflict: (
+      cwd: string,
+      path: string,
+      resolution: "ours" | "theirs" | "mark_resolved",
+    ) => Effect.Effect<void, GitCommandError>;
     readonly commitStaged: (
       cwd: string,
       message: string,
@@ -262,6 +268,7 @@ export class GitVcsDriver extends Context.Service<
       input: VcsListRefsInput,
     ) => Effect.Effect<VcsListRefsResult, GitCommandError>;
     readonly pullCurrentBranch: (cwd: string) => Effect.Effect<VcsPullResult, GitCommandError>;
+    readonly fetchCurrentBranch: (cwd: string) => Effect.Effect<VcsFetchResult, GitCommandError>;
     readonly createWorktree: (
       input: VcsCreateWorktreeInput,
     ) => Effect.Effect<VcsCreateWorktreeResult, GitCommandError>;

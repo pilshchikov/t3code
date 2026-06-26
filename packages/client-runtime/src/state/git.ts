@@ -33,6 +33,12 @@ export function createGitEnvironmentAtoms<R, E>(
       scheduler: vcsCommandScheduler,
       concurrency: vcsCommandConcurrency,
     }),
+    resolveConflict: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:git:resolve-conflict",
+      tag: WS_METHODS.gitResolveConflict,
+      scheduler: vcsCommandScheduler,
+      concurrency: vcsCommandConcurrency,
+    }),
     commitStaged: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:git:commit-staged",
       tag: WS_METHODS.gitCommitStaged,

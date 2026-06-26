@@ -121,6 +121,19 @@ export async function discardGitChanges(
   refreshGitDetailedStatus(environmentId, cwd);
 }
 
+export async function resolveGitConflict(
+  environmentId: EnvironmentId,
+  cwd: string,
+  path: string,
+  resolution: "ours" | "theirs" | "mark_resolved",
+): Promise<void> {
+  await runGitCommand(gitEnvironment.resolveConflict, {
+    environmentId,
+    input: { cwd, path, resolution },
+  });
+  refreshGitDetailedStatus(environmentId, cwd);
+}
+
 export async function commitGitStaged(
   environmentId: EnvironmentId,
   cwd: string,

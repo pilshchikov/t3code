@@ -1648,6 +1648,39 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       : // `add -A` stages modifications, new files, and removals for the given pathspecs.
         runGit("GitVcsDriver.stageFiles", cwd, ["add", "-A", "--", ...paths]);
 
+  const resolveConflict: GitVcsDriver.GitVcsDriver["Service"]["resolveConflict"] = Effect.fn(
+    "resolveConflict",
+  )(function* (cwd, path, resolution) {
+    if (resolution !== "mark_resolved") {
+      const stage = resolution === "ours" ? "2" : "3";
+      const unmergedEntries = yield* runGitStdout(
+        "GitVcsDriver.resolveConflict.listUnmerged",
+        cwd,
+        ["ls-files", "-u", "--", path],
+        true,
+      );
+      const hasSelectedSide = unmergedEntries
+        .split(/\r?\n/u)
+        .some((line) => line.includes(` ${stage}\t`));
+      if (hasSelectedSide) {
+        yield* runGit("GitVcsDriver.resolveConflict.checkout", cwd, [
+          "checkout",
+          `--${resolution}`,
+          "--",
+          path,
+        ]);
+      } else {
+        yield* runGit(
+          "GitVcsDriver.resolveConflict.removeDeletedSide",
+          cwd,
+          ["rm", "-f", "--ignore-unmatch", "--", path],
+          true,
+        );
+      }
+    }
+    yield* runGit("GitVcsDriver.resolveConflict.add", cwd, ["add", "-A", "--", path]);
+  });
+
   const unstageFiles: GitVcsDriver.GitVcsDriver["Service"]["unstageFiles"] = Effect.fn(
     "unstageFiles",
   )(function* (cwd, paths) {
@@ -2059,6 +2092,38 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       status: beforeSha.length > 0 && beforeSha === afterSha ? "skipped_up_to_date" : "pulled",
       refName,
       upstreamRef: refreshed.upstreamRef,
+    };
+  });
+
+  const fetchCurrentBranch: GitVcsDriver.GitVcsDriver["Service"]["fetchCurrentBranch"] = Effect.fn(
+    "fetchCurrentBranch",
+  )(function* (cwd) {
+    const details = yield* statusDetailsLocal(cwd);
+    if (!details.branch) {
+      return yield* new GitCommandError({
+        ...gitCommandContext({
+          operation: "GitVcsDriver.fetchCurrentBranch",
+          cwd,
+          args: ["fetch"],
+        }),
+        detail: "Cannot fetch for a detached HEAD.",
+      });
+    }
+    const upstream = yield* resolveCurrentUpstream(cwd);
+    if (!upstream) {
+      return yield* new GitCommandError({
+        ...gitCommandContext({
+          operation: "GitVcsDriver.fetchCurrentBranch",
+          cwd,
+          args: ["fetch"],
+        }),
+        detail: "Current branch has no upstream configured.",
+      });
+    }
+    yield* fetchRemote({ cwd, remoteName: upstream.remoteName });
+    return {
+      refName: details.branch,
+      upstreamRef: upstream.upstreamRef,
     };
   });
 
@@ -2836,6 +2901,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     statusDetailsRemote,
     detailedStatus,
     stageFiles,
+    resolveConflict,
     unstageFiles,
     discardChanges,
     commitStaged,
@@ -2845,6 +2911,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     commit,
     pushCurrentBranch,
     pullCurrentBranch,
+    fetchCurrentBranch,
     readRangeContext,
     getReviewDiffPreview,
     readConfigValue,

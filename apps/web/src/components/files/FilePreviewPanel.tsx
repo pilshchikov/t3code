@@ -1271,6 +1271,7 @@ export default function FilePreviewPanel({
                 key={`commit:${environmentId}:${cwd}`}
                 environmentId={environmentId}
                 cwd={cwd}
+                threadRef={threadRef}
                 selectedPath={commitDiffPath}
                 onShowDiff={setCommitDiffPath}
               />

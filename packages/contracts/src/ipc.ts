@@ -20,8 +20,11 @@ import type {
   GitDetailedStatusResult,
   GitDiscardChangesInput,
   GitGenerateCommitMessageResult,
+  GitResolveConflictInput,
   GitStageFilesInput,
   GitUnstageFilesInput,
+  VcsFetchInput,
+  VcsFetchResult,
   VcsStatusInput,
   VcsStatusResult,
 } from "./git.ts";
@@ -34,6 +37,8 @@ import type { ReviewDiffPreviewInput, ReviewDiffPreviewResult } from "./review.t
 import type { FilesystemBrowseInput, FilesystemBrowseResult } from "./filesystem.ts";
 import type { AssetCreateUrlInput, AssetCreateUrlResult } from "./assets.ts";
 import type {
+  ProjectDeleteEntryInput,
+  ProjectDeleteEntryResult,
   ProjectListEntriesInput,
   ProjectListEntriesResult,
   ProjectReadFileInput,
@@ -1102,6 +1107,7 @@ export interface EnvironmentApi {
     searchEntries: (input: ProjectSearchEntriesInput) => Promise<ProjectSearchEntriesResult>;
     searchCode: (input: ProjectSearchCodeInput) => Promise<ProjectSearchCodeResult>;
     writeFile: (input: ProjectWriteFileInput) => Promise<ProjectWriteFileResult>;
+    deleteEntry: (input: ProjectDeleteEntryInput) => Promise<ProjectDeleteEntryResult>;
   };
   filesystem: {
     browse: (input: FilesystemBrowseInput) => Promise<FilesystemBrowseResult>;
@@ -1127,6 +1133,7 @@ export interface EnvironmentApi {
     createRef: (input: VcsCreateRefInput) => Promise<VcsCreateRefResult>;
     switchRef: (input: VcsSwitchRefInput) => Promise<VcsSwitchRefResult>;
     init: (input: VcsInitInput) => Promise<void>;
+    fetch: (input: VcsFetchInput) => Promise<VcsFetchResult>;
     pull: (input: VcsPullInput) => Promise<VcsPullResult>;
     refreshStatus: (input: VcsStatusInput) => Promise<VcsStatusResult>;
     onStatus: (
@@ -1146,6 +1153,7 @@ export interface EnvironmentApi {
     stageFiles: (input: GitStageFilesInput) => Promise<GitDetailedStatusResult>;
     unstageFiles: (input: GitUnstageFilesInput) => Promise<GitDetailedStatusResult>;
     discardChanges: (input: GitDiscardChangesInput) => Promise<GitDetailedStatusResult>;
+    resolveConflict: (input: GitResolveConflictInput) => Promise<GitDetailedStatusResult>;
     commitStaged: (input: GitCommitStagedInput) => Promise<GitCommitStagedResult>;
     generateCommitMessage: (input: VcsStatusInput) => Promise<GitGenerateCommitMessageResult>;
   };

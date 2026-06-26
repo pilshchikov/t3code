@@ -5,7 +5,13 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, VcsRef, ThreadId } from "@t3tools/contracts";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
-import { ChevronDownIcon, GitBranchIcon, RefreshCwIcon, SearchIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  DownloadIcon,
+  GitBranchIcon,
+  RefreshCwIcon,
+  SearchIcon,
+} from "lucide-react";
 import {
   useCallback,
   useDeferredValue,
@@ -116,6 +122,12 @@ export function BranchToolbarBranchSelector({
     reportFailure: false,
   });
   const createRefMutation = useAtomCommand(vcsEnvironment.createRef, {
+    reportFailure: false,
+  });
+  const fetchCurrentBranch = useAtomCommand(vcsEnvironment.fetch, {
+    reportFailure: false,
+  });
+  const pullCurrentBranch = useAtomCommand(vcsEnvironment.pull, {
     reportFailure: false,
   });
   // ---------------------------------------------------------------------------
@@ -422,6 +434,60 @@ export function BranchToolbarBranchSelector({
     });
   };
 
+  const fetchBranch = () => {
+    if (!branchCwd || isBranchActionPending) return;
+    runBranchAction(async () => {
+      const result = await fetchCurrentBranch({
+        environmentId,
+        input: { cwd: branchCwd },
+      });
+      if (result._tag === "Success") {
+        toastManager.add({
+          type: "success",
+          title: "Fetched remote changes",
+          description: result.value.upstreamRef,
+        });
+        return;
+      }
+      if (!isAtomCommandInterrupted(result)) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Fetch failed",
+            description: toBranchActionErrorMessage(squashAtomCommandFailure(result)),
+          }),
+        );
+      }
+    });
+  };
+
+  const pullBranch = () => {
+    if (!branchCwd || isBranchActionPending) return;
+    runBranchAction(async () => {
+      const result = await pullCurrentBranch({
+        environmentId,
+        input: { cwd: branchCwd },
+      });
+      if (result._tag === "Success") {
+        toastManager.add({
+          type: "success",
+          title: result.value.status === "pulled" ? "Pulled latest changes" : "Already up to date",
+          description: result.value.upstreamRef ?? result.value.refName,
+        });
+        return;
+      }
+      if (!isAtomCommandInterrupted(result)) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Pull failed",
+            description: toBranchActionErrorMessage(squashAtomCommandFailure(result)),
+          }),
+        );
+      }
+    });
+  };
+
   useEffect(() => {
     if (
       effectiveEnvMode !== "worktree" ||
@@ -668,6 +734,40 @@ export function BranchToolbarBranchSelector({
           <span className="min-w-0 max-w-[240px] truncate">{triggerLabel}</span>
           <ChevronDownIcon className="size-3 shrink-0 opacity-50" />
         </ComboboxTrigger>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                disabled={isBranchActionPending || !(branchStatusQuery.data?.hasUpstream ?? false)}
+                aria-label="Fetch remote changes"
+                onClick={fetchBranch}
+              />
+            }
+          >
+            <RefreshCwIcon className={cn("size-3.5", isBranchActionPending && "animate-spin")} />
+          </TooltipTrigger>
+          <TooltipPopup side="top">Fetch remote changes</TooltipPopup>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                disabled={isBranchActionPending || !(branchStatusQuery.data?.hasUpstream ?? false)}
+                aria-label="Pull current branch"
+                onClick={pullBranch}
+              />
+            }
+          >
+            <DownloadIcon className="size-3.5" />
+          </TooltipTrigger>
+          <TooltipPopup side="top">Pull current branch (fast-forward only)</TooltipPopup>
+        </Tooltip>
       </div>
       <ComboboxPopup align="end" side="top" className="flex w-80 flex-col">
         <div className="shrink-0 px-3 pt-2.5">

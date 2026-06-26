@@ -95,11 +95,20 @@ fork-specific behavior so future upstream syncs are easier to review.
   - Source: `apps/web/src/components/files/FileBrowserPanel.tsx`,
     `apps/web/src/components/files/FilePreviewPanel.tsx`.
 - Clicking a file in the tree reliably opens it.
-  - `useFileTree` constructs the tree once and never re-reads its option callbacks, so the
-    `onSelectionChange` handler used to hold a stale `onOpenFile` closure (bound to a since-changed
-    active thread/project). After a thread switch or a tree remount, clicks silently no-opped. The
-    handler now invokes the callback through a live ref, so it always targets the current thread.
+  - Opening no longer depends on the tree library's selection callback. File-row clicks and Enter
+    resolve the row path explicitly and invoke the current `onOpenFile` callback through a live ref.
+    This keeps opening reliable after switching between Files and Structure or after auto-reveal
+    scrolls the tree.
+  - Auto-reveal expands and scrolls to the active file without stealing tree focus.
   - Source: `apps/web/src/components/files/FileBrowserPanel.tsx`.
+- Files and directories can be deleted from the workspace tree.
+  - Delete/Backspace removes the focused entry after confirmation, and right-click exposes the same
+    action in a context menu. Directory deletion is recursive.
+  - A workspace-root-safe `projects.deleteEntry` RPC rejects paths outside the workspace and does not
+    follow a symlink target outside the workspace. Successful deletion refreshes file and Git state.
+  - Source: `apps/web/src/components/files/FileBrowserPanel.tsx`,
+    `apps/server/src/workspace/WorkspaceFileSystem.ts`, `apps/server/src/ws.ts`,
+    `packages/client-runtime/src/state/projectCommands.ts`, `packages/contracts/src/project.ts`.
 - The file tree marks files with working-tree changes (VCS status), colored by real change kind.
   - Markers come from the granular `git.detailedStatus` RPC. Any file with unstaged changes (or an
     untracked/unversioned file) renders in a pale red so it stands out from fully-staged work, which
@@ -165,6 +174,25 @@ fork-specific behavior so future upstream syncs are easier to review.
 
 ## Git Commit Panel
 
+- The branch selector has explicit Fetch and Pull controls.
+  - Fetch always contacts the current local branch's configured upstream remote and refreshes branch
+    status without moving the local branch.
+  - Pull uses the existing fast-forward-only operation, so it never creates an implicit merge commit.
+  - Source: `apps/web/src/components/BranchToolbarBranchSelector.tsx`,
+    `apps/server/src/vcs/GitVcsDriverCore.ts`, `apps/server/src/ws.ts`,
+    `packages/client-runtime/src/state/vcs.ts`, `packages/contracts/src/git.ts`.
+- The Commit view exposes merge-conflict resolution controls.
+  - Unmerged files can use the current side, use the incoming side, or stage the manually edited file
+    as resolved. Delete/modify conflicts are handled when one selected side has no file.
+  - **Resolve with AI** starts a normal coding-agent turn scoped to the listed unmerged files. The
+    model picker is shown whenever conflicts exist, and its selection can optionally be remembered.
+    The generated task explicitly stages resolved files but forbids commit, push, reset, merge abort,
+    and unrelated-file changes.
+  - Source: `apps/web/src/components/files/GitChangesPanel.tsx`,
+    `apps/web/src/components/files/gitChangesState.ts`,
+    `apps/server/src/vcs/GitVcsDriverCore.ts`, `apps/server/src/git/GitWorkflowService.ts`,
+    `apps/server/src/ws.ts`, `packages/client-runtime/src/state/git.ts`,
+    `packages/contracts/src/git.ts`.
 - The server exposes granular git-index operations, additive and git-only (the shared `VcsDriver`
   contract and the `jj` driver are untouched).
   - New `GitVcsDriver` capabilities: `detailedStatus` (per-file staged/unstaged state + change kind,

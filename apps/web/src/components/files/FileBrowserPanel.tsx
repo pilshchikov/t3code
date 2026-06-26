@@ -1,17 +1,32 @@
 import type { EnvironmentId, GitFileChange, ProjectEntry } from "@t3tools/contracts";
 import { FileTree, useFileTree } from "@pierre/trees/react";
-import type { GitStatus, GitStatusEntry } from "@pierre/trees";
-import { LocateFixed, Maximize2, Minimize2, RefreshCw, Search } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import type { ContextMenuItem, GitStatus, GitStatusEntry } from "@pierre/trees";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import { LocateFixed, Maximize2, Minimize2, RefreshCw, Search, Trash2 } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 
 import { useTheme } from "~/hooks/useTheme";
 import { cn } from "~/lib/utils";
 import { T3_PIERRE_ICONS } from "~/pierre-icons";
+import { projectEnvironment } from "~/state/projects";
 import { useEnvironmentQuery } from "~/state/query";
+import { useAtomCommand } from "~/state/use-atom-command";
 import { vcsEnvironment } from "~/state/vcs";
+import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 
 import { useGitDetailedStatus } from "./gitChangesState";
-import { useProjectEntriesQuery } from "./projectFilesQueryState";
+import { clearProjectFileQueryData, useProjectEntriesQuery } from "./projectFilesQueryState";
 
 interface FileBrowserPanelProps {
   environmentId: EnvironmentId;
@@ -51,10 +66,7 @@ function revealPathInTree(model: TreeModel, path: string): void {
   if (target.isDirectory() && "expand" in target) {
     target.expand();
   }
-  // Focus the row so it gets `data-item-focused` (styled below), not just scrolled into view —
-  // mirrors JetBrains highlighting the open file in the tree.
-  model.focusPath(target.getPath());
-  model.scrollToPath(target.getPath(), { focus: true, offset: "center" });
+  model.scrollToPath(target.getPath(), { focus: false, offset: "center" });
 }
 
 const TREE_UNSAFE_CSS = `
@@ -80,6 +92,34 @@ const TREE_UNSAFE_CSS = `
 
 function treePath(entry: ProjectEntry): string {
   return entry.kind === "directory" ? `${entry.path}/` : entry.path;
+}
+
+function normalizeTreeItemPath(path: string): string {
+  return path.replace(/\/$/, "");
+}
+
+function isEditableEventTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable ||
+      target.closest("input, textarea, select, [contenteditable='true']") !== null)
+  );
+}
+
+function findTreeItemFromEvent(event: Pick<MouseEvent, "composedPath">): {
+  readonly path: string;
+  readonly kind: ProjectEntry["kind"];
+} | null {
+  for (const item of event.composedPath()) {
+    if (!(item instanceof HTMLElement)) continue;
+    const path = item.dataset.itemPath;
+    if (!path) continue;
+    return {
+      path: normalizeTreeItemPath(path),
+      kind: item.dataset.itemType === "folder" ? "directory" : "file",
+    };
+  }
+  return null;
 }
 
 /**
@@ -114,6 +154,9 @@ export default function FileBrowserPanel({
   const [autoReveal, setAutoReveal] = useState(initialAutoReveal);
   const vcsStatus = useEnvironmentQuery(vcsEnvironment.status({ environmentId, input: { cwd } }));
   const gitStatus = useGitDetailedStatus(environmentId, cwd);
+  const deleteEntryCommand = useAtomCommand(projectEnvironment.deleteEntry, {
+    reportFailure: false,
+  });
   const gitStatusEntries = useMemo<GitStatusEntry[]>(
     () =>
       (gitStatus.data?.files ?? []).map((file) => ({
@@ -155,21 +198,127 @@ export default function FileBrowserPanel({
   const previousTreePathsRef = useRef<readonly string[]>([]);
 
   const { model } = useFileTree({
+    composition: {
+      contextMenu: {
+        enabled: true,
+        triggerMode: "right-click",
+      },
+    },
     density: "compact",
     fileTreeSearchMode: "hide-non-matches",
     flattenEmptyDirectories: true,
     initialExpansion: 1,
     icons: T3_PIERRE_ICONS,
-    onSelectionChange: (selectedPaths) => {
-      const selectedPath = selectedPaths.at(-1)?.replace(/\/$/, "");
-      if (selectedPath && entryKindsRef.current.get(selectedPath) === "file") {
-        onOpenFileRef.current(selectedPath);
-      }
-    },
     paths: [],
     search: true,
     unsafeCSS: TREE_UNSAFE_CSS,
   });
+
+  const deleteEntry = useCallback(
+    async (path: string, kind: ProjectEntry["kind"]) => {
+      const normalizedPath = normalizeTreeItemPath(path);
+      const label = kind === "directory" ? "directory" : "file";
+      const confirmed = window.confirm(
+        kind === "directory"
+          ? `Delete directory ${normalizedPath} and all of its contents? This cannot be undone.`
+          : `Delete file ${normalizedPath}? This cannot be undone.`,
+      );
+      if (!confirmed) return;
+
+      const result = await deleteEntryCommand({
+        environmentId,
+        input: { cwd, relativePath: normalizedPath },
+      });
+      if (result._tag === "Success") {
+        model.remove(kind === "directory" ? `${normalizedPath}/` : normalizedPath, {
+          recursive: kind === "directory",
+        });
+        clearProjectFileQueryData(environmentId, cwd, normalizedPath);
+        entriesQuery.refresh();
+        refreshGitStatus();
+        toastManager.add({
+          type: "success",
+          title: `Deleted ${label}`,
+          description: normalizedPath,
+        });
+        return;
+      }
+      if (isAtomCommandInterrupted(result)) return;
+      const error = squashAtomCommandFailure(result);
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: `Could not delete ${label}`,
+          description: error instanceof Error ? error.message : "An unexpected error occurred.",
+        }),
+      );
+    },
+    [cwd, deleteEntryCommand, entriesQuery, environmentId, model, refreshGitStatus],
+  );
+
+  const openTreeFile = useCallback((path: string, kind: ProjectEntry["kind"]) => {
+    if (kind !== "file") return;
+    onOpenFileRef.current(normalizeTreeItemPath(path));
+  }, []);
+
+  const handleTreeClick = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest("[data-type='context-menu-trigger']")) {
+        return;
+      }
+      const item = findTreeItemFromEvent(event.nativeEvent);
+      if (!item) return;
+      openTreeFile(item.path, item.kind);
+    },
+    [openTreeFile],
+  );
+
+  const handleTreeKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLElement>) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isEditableEventTarget(event.target)) return;
+      if (event.key === "Enter") {
+        const focusedPath = model.getFocusedPath();
+        if (!focusedPath) return;
+        const normalizedPath = normalizeTreeItemPath(focusedPath);
+        const kind = entryKindsRef.current.get(normalizedPath);
+        if (kind !== "file") return;
+        event.preventDefault();
+        openTreeFile(normalizedPath, kind);
+        return;
+      }
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      const focusedPath = model.getFocusedPath();
+      if (!focusedPath) return;
+      const normalizedPath = normalizeTreeItemPath(focusedPath);
+      const kind = entryKindsRef.current.get(normalizedPath);
+      if (!kind) return;
+      event.preventDefault();
+      void deleteEntry(normalizedPath, kind);
+    },
+    [deleteEntry, model, openTreeFile],
+  );
+
+  const renderContextMenu = useCallback(
+    (item: ContextMenuItem) => {
+      const normalizedPath = normalizeTreeItemPath(item.path);
+      return (
+        <div className="min-w-40 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md">
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-destructive hover:bg-destructive/10"
+            onClick={() => void deleteEntry(normalizedPath, item.kind)}
+          >
+            <Trash2 className="size-3.5" />
+            Delete
+          </button>
+        </div>
+      );
+    },
+    [deleteEntry],
+  );
 
   useEffect(() => {
     if (previousTreePathsRef.current === treePaths) return;
@@ -307,6 +456,9 @@ export default function FileBrowserPanel({
           model={model}
           aria-label={`${projectName} files`}
           className="min-h-0 flex-1 overflow-hidden"
+          onClick={handleTreeClick}
+          onKeyDown={handleTreeKeyDown}
+          renderContextMenu={renderContextMenu}
           style={{
             colorScheme: resolvedTheme,
             ["--trees-fg-override" as string]: "var(--foreground)",

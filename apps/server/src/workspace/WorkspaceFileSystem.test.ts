@@ -244,24 +244,97 @@ it.layer(TestLayer, { excludeTestServices: true })("WorkspaceFileSystemLive", (i
         const cwd = yield* makeTempDir;
         const path = yield* Path.Path;
         const fileSystem = yield* FileSystem.FileSystem;
+        const escapeName = `escape-${path.basename(cwd)}.md`;
 
         const error = yield* workspaceFileSystem
           .writeFile({
             cwd,
-            relativePath: "../escape.md",
+            relativePath: `../${escapeName}`,
             contents: "# nope\n",
           })
           .pipe(Effect.flip);
 
         expect(error.message).toContain(
-          "Workspace file path must be relative to the project root: ../escape.md",
+          `Workspace file path must be relative to the project root: ../${escapeName}`,
         );
 
-        const escapedPath = path.resolve(cwd, "..", "escape.md");
+        const escapedPath = path.resolve(cwd, "..", escapeName);
         const escapedStat = yield* fileSystem
           .stat(escapedPath)
           .pipe(Effect.orElseSucceed(() => null));
         expect(escapedStat).toBeNull();
+      }),
+    );
+  });
+
+  describe("deleteEntry", () => {
+    it.effect("deletes files relative to the workspace root", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        const path = yield* Path.Path;
+        const fileSystem = yield* FileSystem.FileSystem;
+        yield* writeTextFile(cwd, "src/remove.ts", "remove me\n");
+
+        const result = yield* workspaceFileSystem.deleteEntry({
+          cwd,
+          relativePath: "src/remove.ts",
+        });
+        const stat = yield* fileSystem
+          .stat(path.join(cwd, "src/remove.ts"))
+          .pipe(Effect.orElseSucceed(() => null));
+
+        expect(result).toEqual({ relativePath: "src/remove.ts" });
+        expect(stat).toBeNull();
+      }),
+    );
+
+    it.effect("deletes directories and invalidates workspace entry search cache", () =>
+      Effect.gen(function* () {
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        yield* writeTextFile(cwd, "nested/remove/a.ts", "a\n");
+
+        const beforeDelete = yield* workspaceEntries.list({ cwd });
+        expect(beforeDelete.entries.some((entry) => entry.path === "nested/remove/a.ts")).toBe(
+          true,
+        );
+
+        yield* workspaceFileSystem.deleteEntry({
+          cwd,
+          relativePath: "nested/remove",
+        });
+
+        const afterDelete = yield* workspaceEntries.list({ cwd });
+        expect(afterDelete.entries.some((entry) => entry.path === "nested/remove/a.ts")).toBe(
+          false,
+        );
+      }),
+    );
+
+    it.effect("rejects deletes outside the workspace root", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        const path = yield* Path.Path;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const escapeName = `escape-${path.basename(cwd)}.md`;
+        const escapedPath = path.resolve(cwd, "..", escapeName);
+        yield* fileSystem.writeFileString(escapedPath, "keep\n").pipe(Effect.orDie);
+
+        const error = yield* workspaceFileSystem
+          .deleteEntry({
+            cwd,
+            relativePath: `../${escapeName}`,
+          })
+          .pipe(Effect.flip);
+
+        expect(error.message).toContain(
+          `Workspace file path must be relative to the project root: ../${escapeName}`,
+        );
+        expect(yield* fileSystem.readFileString(escapedPath).pipe(Effect.orDie)).toBe("keep\n");
+        yield* fileSystem.remove(escapedPath).pipe(Effect.orDie);
       }),
     );
   });
