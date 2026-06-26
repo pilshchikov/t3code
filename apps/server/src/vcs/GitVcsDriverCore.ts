@@ -2111,14 +2111,16 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     }
     const upstream = yield* resolveCurrentUpstream(cwd);
     if (!upstream) {
-      return yield* new GitCommandError({
-        ...gitCommandContext({
-          operation: "GitVcsDriver.fetchCurrentBranch",
-          cwd,
-          args: ["fetch"],
-        }),
-        detail: "Current branch has no upstream configured.",
-      });
+      // No tracking branch (e.g. a freshly created local branch): fall back to fetching the
+      // repository's primary remote so the control still refreshes remote-tracking refs, like a
+      // plain `git fetch`. resolvePrimaryRemoteName errors when no remote exists at all, which
+      // surfaces to the UI as a fetch failure rather than a permanently disabled button.
+      const remoteName = yield* resolvePrimaryRemoteName(cwd);
+      yield* fetchRemote({ cwd, remoteName });
+      return {
+        refName: details.branch,
+        upstreamRef: null,
+      };
     }
     yield* fetchRemote({ cwd, remoteName: upstream.remoteName });
     return {

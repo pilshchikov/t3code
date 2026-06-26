@@ -326,7 +326,8 @@ export type VcsPullResult = typeof VcsPullResult.Type;
 
 export const VcsFetchResult = Schema.Struct({
   refName: TrimmedNonEmptyStringSchema,
-  upstreamRef: TrimmedNonEmptyStringSchema,
+  // Null when the current branch has no upstream and we fell back to fetching the primary remote.
+  upstreamRef: TrimmedNonEmptyStringSchema.pipe(Schema.NullOr),
 });
 export type VcsFetchResult = typeof VcsFetchResult.Type;
 

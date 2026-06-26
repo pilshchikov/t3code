@@ -445,7 +445,7 @@ export function BranchToolbarBranchSelector({
         toastManager.add({
           type: "success",
           title: "Fetched remote changes",
-          description: result.value.upstreamRef,
+          description: result.value.upstreamRef ?? "Updated remote-tracking refs",
         });
         return;
       }
@@ -741,7 +741,7 @@ export function BranchToolbarBranchSelector({
                 type="button"
                 variant="ghost"
                 size="icon-xs"
-                disabled={isBranchActionPending || !(branchStatusQuery.data?.hasUpstream ?? false)}
+                disabled={isBranchActionPending}
                 aria-label="Fetch remote changes"
                 onClick={fetchBranch}
               />

@@ -41,6 +41,11 @@ fork-specific behavior so future upstream syncs are easier to review.
 - The file editor has JetBrains-style workspace navigation.
   - Double Shift opens Search Everywhere with All, Classes, Files, Symbols, Actions, and Text
     scopes. Tab and Shift+Tab cycle scopes.
+  - With an empty query, the All and Files scopes list the workspace's files (recent files first,
+    then the rest of the project, deduped and capped) so there is always something to select
+    immediately — previously a freshly opened workspace with no recent files showed an empty dialog
+    and you had to type before any file appeared. Typing still narrows via the server `searchEntries`
+    index. Regression-guarded by Chromium tests that select a file with and without typing.
   - File names use the existing fuzzy workspace index. Classes, methods, functions, variables,
     parameters, and text use source-content search through the server workspace index.
   - The Actions scope exposes relevant T3 Code commands, including settings, command palette,
@@ -175,9 +180,17 @@ fork-specific behavior so future upstream syncs are easier to review.
 ## Git Commit Panel
 
 - The branch selector has explicit Fetch and Pull controls.
-  - Fetch always contacts the current local branch's configured upstream remote and refreshes branch
-    status without moving the local branch.
+  - Fetch contacts the repository's remote and refreshes remote-tracking refs without moving the
+    local branch. It is enabled whenever no branch action is in flight. When the current branch has
+    an upstream it fetches that upstream's remote; when it has none (e.g. a freshly created local
+    branch) the server falls back to fetching the primary remote (`origin`, else the first
+    configured remote), returning a null `upstreamRef`. So the control is never permanently greyed
+    out for upstream-less branches. A repository with no remote at all surfaces as a failure toast.
+    Covered by `GitVcsDriverCore.test.ts` (with-upstream fetch, no-upstream primary-remote fallback,
+    and no-remote failure).
   - Pull uses the existing fast-forward-only operation, so it never creates an implicit merge commit.
+    It stays disabled until the current branch has an upstream, since fast-forward needs a tracking
+    branch.
   - Source: `apps/web/src/components/BranchToolbarBranchSelector.tsx`,
     `apps/server/src/vcs/GitVcsDriverCore.ts`, `apps/server/src/ws.ts`,
     `packages/client-runtime/src/state/vcs.ts`, `packages/contracts/src/git.ts`.

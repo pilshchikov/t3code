@@ -655,6 +655,49 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
       }),
     );
 
+    it.effect("falls back to fetching the primary remote when the branch has no upstream", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const remote = yield* makeTmpDir("git-remote-");
+        const peer = yield* makeTmpDir("git-peer-");
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        yield* git(remote, ["init", "--bare"]);
+        yield* git(cwd, ["remote", "add", "origin", remote]);
+        // Push WITHOUT -u so the local branch tracks no upstream.
+        yield* git(cwd, ["push", "origin", initialBranch]);
+        const localHead = yield* git(cwd, ["rev-parse", "HEAD"]);
+
+        yield* git(peer, ["clone", remote, "."]);
+        yield* git(peer, ["config", "user.email", "test@test.com"]);
+        yield* git(peer, ["config", "user.name", "Test"]);
+        yield* writeTextFile(peer, "remote-change.txt", "remote\n");
+        yield* git(peer, ["add", "remote-change.txt"]);
+        yield* git(peer, ["commit", "-m", "remote change"]);
+        yield* git(peer, ["push", "origin", initialBranch]);
+        const remoteHead = yield* git(peer, ["rev-parse", "HEAD"]);
+
+        const result = yield* (yield* GitVcsDriver.GitVcsDriver).fetchCurrentBranch(cwd);
+
+        // No upstream: refName is reported, upstreamRef is null, and remote-tracking refs advance.
+        assert.deepEqual(result, { refName: initialBranch, upstreamRef: null });
+        assert.equal(yield* git(cwd, ["rev-parse", "HEAD"]), localHead);
+        assert.equal(yield* git(cwd, ["rev-parse", `origin/${initialBranch}`]), remoteHead);
+      }),
+    );
+
+    it.effect("fails to fetch when no remote is configured", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        yield* initRepoWithCommit(cwd);
+
+        const error = yield* (yield* GitVcsDriver.GitVcsDriver)
+          .fetchCurrentBranch(cwd)
+          .pipe(Effect.flip);
+
+        assert.equal(error._tag, "GitCommandError");
+      }),
+    );
+
     it.effect("creates a worktree from the latest fetched remote commit", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();

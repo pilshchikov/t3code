@@ -158,6 +158,37 @@ function recentFileItems(
   );
 }
 
+/**
+ * Files to list before the user types: recent files first, then the rest of the project (deduped,
+ * capped). A freshly opened workspace has no recent files, so without this the Double-Shift dialog
+ * would open empty in the All/Files scopes and there'd be nothing to select until you typed — the
+ * tree, by contrast, shows everything. This makes Double Shift immediately useful like VS Code's
+ * quick-open. Typing then narrows via the server-side `searchEntries` query (remoteResults).
+ */
+function emptyQueryFileItems(
+  recentFiles: ReadonlyArray<RecentEditorFile>,
+  entries: ReadonlyArray<ProjectEntry>,
+  limit: number,
+): SearchResultItem[] {
+  const recent = recentFileItems(recentFiles, entries);
+  if (recent.length >= limit) return recent.slice(0, limit);
+  const recentPaths = new Set(recent.flatMap((item) => (item.kind === "file" ? [item.path] : [])));
+  const fileItems: SearchResultItem[] = [];
+  for (const entry of entries) {
+    if (entry.kind !== "file" || recentPaths.has(entry.path)) continue;
+    fileItems.push({
+      id: `file:${entry.path}`,
+      section: "Files",
+      kind: "file",
+      path: entry.path,
+      title: fileName(entry.path),
+      detail: entry.path,
+    });
+    if (recent.length + fileItems.length >= limit) break;
+  }
+  return [...recent, ...fileItems];
+}
+
 export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<DialogMode>("search");
@@ -423,7 +454,7 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
       return scope === "actions"
         ? filteredActions
         : scope === "all" || scope === "files"
-          ? recentFileItems(recentFiles, props.entries)
+          ? emptyQueryFileItems(recentFiles, props.entries, SEARCH_RESULT_LIMIT)
           : [];
     }
     return scope === "actions" || scope === "all"

@@ -139,6 +139,64 @@ describe("EditorNavigationDialog", () => {
     await screen.unmount();
   });
 
+  it("lists project files on Double Shift before typing and opens the clicked file", async () => {
+    const onOpenFile = vi.fn();
+    const screen = await render(
+      <EditorNavigationDialog
+        environmentId={environmentId}
+        cwd={cwd}
+        projectName="workspace"
+        entries={entries}
+        onOpenFile={onOpenFile}
+        onToggleExplorer={vi.fn()}
+        onRefreshFiles={vi.fn()}
+      />,
+    );
+
+    dispatchShiftRelease();
+    dispatchShiftRelease();
+
+    // No recent files and an empty query: the dialog must still surface the workspace's files so
+    // there is something to select (regression guard for the empty Double-Shift dialog bug).
+    await page.getByText("TeamService.ts", { exact: true }).click();
+
+    expect(onOpenFile).toHaveBeenCalledWith("src/TeamService.ts");
+
+    await screen.unmount();
+  });
+
+  it("opens a file result via Double Shift search", async () => {
+    searchEntries.mockResolvedValue({
+      _tag: "Success",
+      value: {
+        entries: [{ path: "src/TeamService.ts", kind: "file" }],
+        truncated: false,
+      },
+    });
+    const onOpenFile = vi.fn();
+    const screen = await render(
+      <EditorNavigationDialog
+        environmentId={environmentId}
+        cwd={cwd}
+        projectName="workspace"
+        entries={entries}
+        onOpenFile={onOpenFile}
+        onToggleExplorer={vi.fn()}
+        onRefreshFiles={vi.fn()}
+      />,
+    );
+
+    dispatchShiftRelease();
+    dispatchShiftRelease();
+
+    await page.getByRole("textbox", { name: "Search everywhere" }).fill("team");
+    await page.getByText("TeamService.ts", { exact: true }).click();
+
+    expect(onOpenFile).toHaveBeenCalledWith("src/TeamService.ts");
+
+    await screen.unmount();
+  });
+
   it("opens persisted recent files with Cmd+E", async () => {
     useEditorNavigationStore.setState({
       recentFilesByWorkspace: {
