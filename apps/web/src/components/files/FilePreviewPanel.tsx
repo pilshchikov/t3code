@@ -287,6 +287,7 @@ interface EditableFileSurfaceProps {
   contents: string;
   editorDiffTheme: ResolvedEditorDiffTheme;
   revealRequestId: number;
+  wordWrap: boolean;
   onPostRender: FilePostRender;
   onTokenNavigation: (token: TokenEventBase, event: MouseEvent) => void;
   onPendingChange: (relativePath: string, pending: boolean) => void;
@@ -336,6 +337,7 @@ function EditableFileSurface({
   contents,
   editorDiffTheme,
   revealRequestId,
+  wordWrap,
   onPostRender,
   onTokenNavigation,
   onPendingChange,
@@ -558,9 +560,9 @@ function EditableFileSurface({
               onLineSelectionChange: setSelectedRange,
               onLineSelectionEnd: handleLineSelectionEnd,
               onTokenClick: onTokenNavigation,
-              overflow: "scroll",
               theme: editorDiffTheme.themeName,
               themeType: editorDiffTheme.themeType,
+              overflow: wordWrap ? "wrap" : "scroll",
               unsafeCSS: FILE_LINK_REVEAL_UNSAFE_CSS,
               onPostRender: handlePostRender,
             }}
@@ -602,6 +604,7 @@ function RenderedMarkdownSurface({
   | "editorDiffTheme"
   | "composerDraftTarget"
   | "revealRequestId"
+  | "wordWrap"
   | "onPostRender"
   | "onTokenNavigation"
 > & {
@@ -669,6 +672,7 @@ export default function FilePreviewPanel({
     () => resolveEditorDiffTheme(editorSyntaxTheme, resolvedTheme),
     [editorSyntaxTheme, resolvedTheme],
   );
+  const wordWrap = useClientSettings((settings) => settings.wordWrap);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const environmentHttpBaseUrl = useEnvironmentHttpBaseUrl(environmentId);
   const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
@@ -1208,10 +1212,10 @@ export default function FilePreviewPanel({
                   }}
                   options={{
                     disableFileHeader: true,
-                    overflow: "scroll",
                     theme: editorDiffTheme.themeName,
                     themeType: editorDiffTheme.themeType,
                     onTokenClick: handleTokenNavigation,
+                    overflow: wordWrap ? "wrap" : "scroll",
                     unsafeCSS: FILE_LINK_REVEAL_UNSAFE_CSS,
                     onPostRender: onFilePostRender,
                   }}
@@ -1228,6 +1232,7 @@ export default function FilePreviewPanel({
                 contents={file.data.contents}
                 editorDiffTheme={editorDiffTheme}
                 revealRequestId={effectiveRevealRequestId}
+                wordWrap={wordWrap}
                 onPostRender={onFilePostRender}
                 onTokenNavigation={handleTokenNavigation}
                 onPendingChange={onPendingChange}

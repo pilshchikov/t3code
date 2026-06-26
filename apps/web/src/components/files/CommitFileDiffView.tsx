@@ -93,7 +93,7 @@ export function CommitFileDiffView({
       options={{
         diffStyle: "unified",
         lineDiffType: "none",
-        overflow: settings.diffWordWrap ? "wrap" : "scroll",
+        overflow: settings.wordWrap ? "wrap" : "scroll",
         theme: editorDiffTheme.themeName,
         themeType: editorDiffTheme.themeType,
         stickyHeaders: true,

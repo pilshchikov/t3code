@@ -18,7 +18,6 @@ const clientSettings: ClientSettings = {
   confirmThreadDelete: false,
   dismissedProviderUpdateNotificationKeys: [],
   diffIgnoreWhitespace: true,
-  diffWordWrap: true,
   editorSyntaxTheme: "app",
   favorites: [],
   providerModelPreferences: {},
@@ -31,6 +30,7 @@ const clientSettings: ClientSettings = {
   sidebarThreadPreviewCount: 6,
   showEditorTabs: true,
   timestampFormat: "24-hour",
+  wordWrap: true,
 };
 
 const decodeClientSettingsJson = Schema.decodeEffect(Schema.fromJsonString(ClientSettingsSchema));
