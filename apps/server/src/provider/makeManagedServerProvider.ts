@@ -1,22 +1,25 @@
-import type { ServerProvider } from "@t3tools/contracts";
-import * as Config from "effect/Config";
+import {
+  DEFAULT_PROVIDER_HEALTH_REFRESH_INTERVAL,
+  type ServerProvider,
+  ServerSettingsError,
+} from "@t3tools/contracts";
+import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Fiber from "effect/Fiber";
 import * as PubSub from "effect/PubSub";
+import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Semaphore from "effect/Semaphore";
+import * as Config from "effect/Config";
+import * as Option from "effect/Option";
 
+import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
+import { ServerSettingsService } from "../serverSettings.ts";
 import type { ServerProviderShape } from "./Services/ServerProvider.ts";
-import { ServerSettingsError } from "@t3tools/contracts";
-
-const ProviderAutoRefreshConfig = Config.boolean("T3CODE_ENABLE_PROVIDER_AUTO_REFRESH").pipe(
-  Config.withDefault(false),
-  Effect.orElseSucceed(() => false),
-);
 
 interface ProviderSnapshotState {
   readonly snapshot: ServerProvider;
@@ -40,7 +43,19 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     readonly publishSnapshot: (snapshot: ServerProvider) => Effect.Effect<void>;
   }) => Effect.Effect<void>;
   readonly refreshInterval?: Duration.Input;
-}): Effect.fn.Return<ServerProviderShape, ServerSettingsError, Scope.Scope> {
+}): Effect.fn.Return<
+  ServerProviderShape,
+  ServerSettingsError,
+  Scope.Scope
+> {
+  const backgroundPolicy = yield* Effect.serviceOption(BackgroundPolicy.BackgroundPolicy);
+  const serverSettings = yield* Effect.serviceOption(ServerSettingsService);
+  const enableBackgroundRefresh =
+    input.enableBackgroundRefresh ??
+    (yield* Config.boolean("T3CODE_ENABLE_PROVIDER_AUTO_REFRESH").pipe(
+      Config.withDefault(false),
+      Effect.orElseSucceed(() => false),
+    ));
   const refreshSemaphore = yield* Semaphore.make(1);
   const changesPubSub = yield* Effect.acquireRelease(
     PubSub.unbounded<ServerProvider>(),
@@ -55,8 +70,6 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
   const settingsRef = yield* Ref.make(initialSettings);
   const enrichmentFiberRef = yield* Ref.make<Fiber.Fiber<void, unknown> | null>(null);
   const scope = yield* Effect.scope;
-  const enableBackgroundRefresh =
-    input.enableBackgroundRefresh ?? (yield* ProviderAutoRefreshConfig);
 
   const publishEnrichedSnapshot = Effect.fn("publishEnrichedSnapshot")(function* (
     generation: number,
@@ -143,17 +156,75 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     return yield* applySnapshot(nextSettings, { forceRefresh: true });
   });
 
+  const hasProviderStatusDemand = Effect.gen(function* () {
+    if (Option.isNone(backgroundPolicy)) return true;
+    const state = yield* Ref.get(snapshotStateRef);
+    const instanceId = state.snapshot.instanceId;
+    const [genericDemand, instanceDemand] = yield* Effect.all([
+      backgroundPolicy.value.shouldRunScopeWork({ type: "provider-status" }),
+      backgroundPolicy.value.shouldRunScopeWork({ type: "provider-status", instanceId }),
+    ]);
+    return genericDemand || instanceDemand;
+  });
+
+  const getRefreshInterval =
+    input.refreshInterval !== undefined
+      ? Effect.succeed(input.refreshInterval)
+      : Option.isSome(serverSettings)
+        ? serverSettings.value.getSettings.pipe(
+            Effect.map(
+              (settings) =>
+                resolveServerBackgroundActivitySettings(settings).providerHealthRefreshInterval,
+            ),
+            Effect.orElseSucceed(() => DEFAULT_PROVIDER_HEALTH_REFRESH_INTERVAL),
+          )
+        : Effect.succeed(DEFAULT_PROVIDER_HEALTH_REFRESH_INTERVAL);
+
+  const refreshIntervalChanges = yield* Queue.sliding<void>(1);
+  if (input.refreshInterval === undefined && Option.isSome(serverSettings)) {
+    const serverSettingsChanges = yield* serverSettings.value.subscribeChanges;
+    yield* serverSettingsChanges.pipe(
+      Stream.map((settings) =>
+        Duration.toMillis(
+          resolveServerBackgroundActivitySettings(settings).providerHealthRefreshInterval,
+        ),
+      ),
+      Stream.changes,
+      Stream.runForEach(() => Queue.offer(refreshIntervalChanges, undefined).pipe(Effect.asVoid)),
+      Effect.forkScoped,
+    );
+  }
+
   yield* Stream.runForEach(input.streamSettings, (nextSettings) =>
     Effect.asVoid(applySnapshot(nextSettings)),
   ).pipe(Effect.forkScoped);
 
   if (enableBackgroundRefresh) {
     yield* Effect.forever(
-      Effect.sleep(input.refreshInterval ?? "60 seconds").pipe(
-        Effect.flatMap(() => refreshSnapshot()),
-        Effect.ignoreCause({ log: true }),
+      getRefreshInterval.pipe(
+      Effect.flatMap((refreshInterval) =>
+        Effect.raceFirst(
+          Effect.sleep(
+            Duration.toMillis(Duration.fromInputUnsafe(refreshInterval)) <= 0
+              ? "60 seconds"
+              : refreshInterval,
+          ).pipe(Effect.as(true)),
+          Queue.take(refreshIntervalChanges).pipe(Effect.as(false)),
+        ).pipe(
+          Effect.flatMap((intervalElapsed) =>
+            intervalElapsed && Duration.toMillis(Duration.fromInputUnsafe(refreshInterval)) > 0
+              ? hasProviderStatusDemand.pipe(
+                  Effect.flatMap((shouldRefresh) =>
+                    shouldRefresh ? refreshSnapshot().pipe(Effect.asVoid) : Effect.void,
+                  ),
+                )
+              : Effect.void,
+          ),
+        ),
       ),
-    ).pipe(Effect.forkScoped);
+      Effect.ignoreCause({ log: true }),
+    ),
+      ).pipe(Effect.forkScoped);
 
     yield* applySnapshot(initialSettings, { forceRefresh: true }).pipe(
       Effect.ignoreCause({ log: true }),

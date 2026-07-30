@@ -1,11 +1,5 @@
-import { resolveTheme } from "@pierre/diffs";
 import { describe, expect, it } from "vite-plus/test";
-import {
-  buildPatchCacheKey,
-  getEditorSyntaxThemeLabel,
-  getRenderablePatch,
-  resolveEditorDiffTheme,
-} from "./diffRendering";
+import { buildPatchCacheKey, getDiffLineStat, getRenderablePatch } from "./diffRendering";
 
 describe("buildPatchCacheKey", () => {
   it("returns a stable cache key for identical content", () => {
@@ -33,42 +27,6 @@ describe("buildPatchCacheKey", () => {
     expect(buildPatchCacheKey(patch, "diff-panel:light")).not.toBe(
       buildPatchCacheKey(patch, "diff-panel:dark"),
     );
-  });
-});
-
-describe("resolveEditorDiffTheme", () => {
-  it("follows the app theme by default", () => {
-    expect(resolveEditorDiffTheme("app", "light")).toEqual({
-      themeName: "pierre-light",
-      themeType: "light",
-      background: "#ffffff",
-      foreground: "#000000",
-    });
-    expect(resolveEditorDiffTheme("app", "dark")).toEqual({
-      themeName: "pierre-dark",
-      themeType: "dark",
-      background: "#0a0a0a",
-      foreground: "#ffffff",
-    });
-  });
-
-  it("maps bundled dark editor themes", () => {
-    expect(resolveEditorDiffTheme("github-dark-default", "light")).toEqual({
-      themeName: "github-dark-default",
-      themeType: "dark",
-      background: "#0d1117",
-      foreground: "#e6edf3",
-    });
-  });
-
-  it("registers the JetBrains Dracula Night theme", async () => {
-    const resolved = resolveEditorDiffTheme("jetbrains-dracula-night", "dark");
-    const theme = await resolveTheme(resolved.themeName);
-
-    expect(getEditorSyntaxThemeLabel("jetbrains-dracula-night")).toBe("JetBrains Dracula Night");
-    expect(theme.name).toBe("t3-jetbrains-dracula-night");
-    expect(theme.type).toBe("dark");
-    expect(theme.bg).toBe("#0b0d12");
   });
 });
 
@@ -122,5 +80,35 @@ describe("getRenderablePatch", () => {
     expect(parsed?.kind).toBe("files");
     if (parsed?.kind !== "files") return;
     expect(parsed.files[0]?.hunks[0]?.unifiedLineStart).toBe(47);
+  });
+});
+
+describe("getDiffLineStat", () => {
+  it("totals additions and deletions across every file and hunk", () => {
+    const patch = [
+      "diff --git a/example.ts b/example.ts",
+      "--- a/example.ts",
+      "+++ b/example.ts",
+      "@@ -1,2 +1,3 @@",
+      "-before",
+      "+after",
+      "+added",
+      " context",
+      "@@ -10,2 +11,1 @@",
+      "-removed",
+      " context",
+      "diff --git a/README.md b/README.md",
+      "--- a/README.md",
+      "+++ b/README.md",
+      "@@ -1 +1,2 @@",
+      " title",
+      "+description",
+    ].join("\n");
+
+    const parsed = getRenderablePatch(patch);
+    expect(parsed?.kind).toBe("files");
+    if (parsed?.kind !== "files") return;
+
+    expect(getDiffLineStat(parsed.files)).toEqual({ additions: 3, deletions: 2 });
   });
 });

@@ -1,5 +1,4 @@
 import { useAtomValue } from "@effect/atom-react";
-import { DiffsHighlighter, getSharedHighlighter, SupportedLanguages } from "@pierre/diffs";
 import {
   CheckIcon,
   ChevronRightIcon,
@@ -42,6 +41,10 @@ import remarkGfm from "remark-gfm";
 import { renderSkillInlineMarkdownChildren } from "./chat/SkillInlineText";
 import { CHAT_FILE_TAG_CHIP_CLASS_NAME, FileTagChipContent } from "./chat/FileTagChip";
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
+import {
+  resolveExternalWebLinkHost,
+  showExternalLinkContextMenu,
+} from "./chat/externalLinkContextMenu";
 import { hasSpecificPierreIconForFileName, syntheticFileNameForLanguageId } from "../pierre-icons";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { Button } from "./ui/button";
@@ -50,14 +53,11 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "./ui/menu";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { useOpenInPreferredEditor } from "../editorPreferences";
-import {
-  resolveEditorDiffTheme,
-  type DiffThemeName,
-  type ResolvedEditorDiffTheme,
-} from "../lib/diffRendering";
+import { resolveDiffThemeName, type DiffThemeName } from "../lib/diffRendering";
 import { fnv1a32 } from "../lib/diffRendering";
 import { LRUCache } from "../lib/lruCache";
-import { useClientSettings } from "../hooks/useSettings";
+import { getSyntaxHighlighterPromise } from "../lib/syntaxHighlighting";
+import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import { useTheme } from "../hooks/useTheme";
 import { getClientSettings } from "../hooks/useSettings";
 import {
@@ -68,8 +68,10 @@ import {
 import { remarkNormalizeListItemIndentation } from "../markdown-list-indentation";
 import {
   normalizeMarkdownLinkDestination,
+  resolveInlineCodeFileLinkMeta,
   resolveMarkdownFileLinkMeta,
   rewriteMarkdownFileUriHref,
+  type MarkdownFileLinkMeta,
 } from "../markdown-links";
 import { readLocalApi } from "../localApi";
 import { cn } from "../lib/utils";
@@ -81,6 +83,7 @@ import { usePreparedConnection } from "../state/session";
 import { previewEnvironment } from "../state/preview";
 import { useAtomCommand } from "../state/use-atom-command";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
+import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
 import { isPreviewSupportedInRuntime } from "../previewStateStore";
 import {
   isBrowserPreviewFile,
@@ -88,27 +91,6 @@ import {
   openUrlInPreview,
   BrowserPreviewUnavailableError,
 } from "../browser/openFileInPreview";
-
-class CodeHighlightErrorBoundary extends React.Component<
-  { fallback: ReactNode; children: ReactNode },
-  { hasError: boolean }
-> {
-  constructor(props: { fallback: ReactNode; children: ReactNode }) {
-    super(props);
-    this.state = { hasError: false };
-  }
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  override render() {
-    if (this.state.hasError) {
-      return this.props.fallback;
-    }
-    return this.props.children;
-  }
-}
 
 interface ChatMarkdownProps {
   text: string;
@@ -145,7 +127,6 @@ const highlightedCodeCache = new LRUCache<string>(
   MAX_HIGHLIGHT_CACHE_ENTRIES,
   MAX_HIGHLIGHT_CACHE_MEMORY_BYTES,
 );
-const highlighterPromiseCache = new Map<string, Promise<DiffsHighlighter>>();
 
 function findTaskListMarkerOffset(markdown: string, listItemStart: number): number | null {
   const firstLineEnd = markdown.indexOf("\n", listItemStart);
@@ -162,7 +143,7 @@ const CHAT_MARKDOWN_SANITIZE_SCHEMA = {
   attributes: {
     ...defaultSchema.attributes,
     "*": (defaultSchema.attributes?.["*"] ?? []).filter((attribute) => attribute !== "title"),
-    code: [...(defaultSchema.attributes?.code ?? []), "dataCodeMeta"],
+    code: [...(defaultSchema.attributes?.code ?? []), "dataCodeMeta", "dataInlineCode"],
   },
   protocols: {
     ...defaultSchema.protocols,
@@ -174,6 +155,7 @@ const CHAT_MARKDOWN_REMARK_PLUGINS = [
   remarkGfm,
   remarkNormalizeListItemIndentation,
   remarkPreserveCodeMeta,
+  remarkTagInlineCode,
 ] satisfies NonNullable<ReactMarkdownOptions["remarkPlugins"]>;
 
 const CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS = [
@@ -181,6 +163,7 @@ const CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS = [
   remarkNormalizeListItemIndentation,
   remarkBreaks,
   remarkPreserveCodeMeta,
+  remarkTagInlineCode,
 ] satisfies NonNullable<ReactMarkdownOptions["remarkPlugins"]>;
 
 const CHAT_MARKDOWN_REHYPE_PLUGINS = [
@@ -253,6 +236,33 @@ function remarkPreserveCodeMeta() {
   };
 }
 
+/**
+ * Fenced code also lands on the `code` component, and inline vs block is no
+ * longer distinguishable there once both render `<code>` — so inline spans are
+ * tagged on the mdast, where the distinction still exists. Code inside a link
+ * label stays untagged: linkifying it would nest an anchor inside the link's
+ * anchor and steal its clicks.
+ */
+function remarkTagInlineCode() {
+  return (tree: MarkdownAstNode) => {
+    const visit = (node: MarkdownAstNode, insideLink: boolean) => {
+      if (node.type === "inlineCode" && !insideLink) {
+        node.data = {
+          ...node.data,
+          hProperties: {
+            ...node.data?.hProperties,
+            dataInlineCode: "",
+          },
+        };
+      }
+      const childInsideLink = insideLink || node.type === "link" || node.type === "linkReference";
+      node.children?.forEach((child) => visit(child, childInsideLink));
+    };
+
+    visit(tree, false);
+  };
+}
+
 function nodeToPlainText(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") {
     return String(node);
@@ -276,9 +286,15 @@ function extractCodeBlock(
 
   const onlyChild = childNodes[0];
   if (
-    !isValidElement<{ className?: string; children?: ReactNode }>(onlyChild) ||
-    onlyChild.type !== "code"
+    !isValidElement<{ className?: string; children?: ReactNode; node?: { tagName?: string } }>(
+      onlyChild,
+    )
   ) {
+    return null;
+  }
+  // With a custom `code` component the child's type is that component, not
+  // the "code" tag — the hast node react-markdown attaches still names it.
+  if (onlyChild.type !== "code" && onlyChild.props.node?.tagName !== "code") {
     return null;
   }
 
@@ -294,31 +310,6 @@ function createHighlightCacheKey(code: string, language: string, themeName: Diff
 
 function estimateHighlightedSize(html: string, code: string): number {
   return Math.max(html.length * 2, code.length * 3);
-}
-
-function getHighlighterPromise(
-  language: string,
-  themeName: DiffThemeName,
-): Promise<DiffsHighlighter> {
-  const highlighterCacheKey = `${language}:${themeName}`;
-  const cached = highlighterPromiseCache.get(highlighterCacheKey);
-  if (cached) return cached;
-
-  const promise = getSharedHighlighter({
-    themes: [themeName],
-    langs: [language as SupportedLanguages],
-    preferredHighlighter: "shiki-js",
-  }).catch((err) => {
-    highlighterPromiseCache.delete(highlighterCacheKey);
-    if (language === "text") {
-      // "text" itself failed — Shiki cannot initialize at all, surface the error
-      throw err;
-    }
-    // Language not supported by Shiki — fall back to "text"
-    return getHighlighterPromise("text", themeName);
-  });
-  highlighterPromiseCache.set(highlighterCacheKey, promise);
-  return promise;
 }
 
 function readInitialWordWrapSetting(): boolean {
@@ -549,14 +540,12 @@ function MarkdownCodeBlock({
   language,
   fenceTitle,
   theme,
-  editorDiffTheme,
   children,
 }: {
   code: string;
   language: string;
   fenceTitle: string | null;
   theme: "light" | "dark";
-  editorDiffTheme: ResolvedEditorDiffTheme;
   children: ReactNode;
 }) {
   const [copied, setCopied] = useState(false);
@@ -607,14 +596,7 @@ function MarkdownCodeBlock({
     <div
       className="chat-markdown-codeblock leading-snug"
       data-language={language}
-      data-editor-theme-type={editorDiffTheme.themeType}
       data-wrap={wrapped ? "true" : "false"}
-      style={
-        {
-          "--t3-editor-code-bg": editorDiffTheme.background,
-          "--t3-editor-code-fg": editorDiffTheme.foreground,
-        } as React.CSSProperties
-      }
     >
       <div className="chat-markdown-codeblock-header select-none">
         <span className="chat-markdown-codeblock-title">
@@ -719,7 +701,7 @@ function UncachedShikiCodeBlock({
   cacheKey,
   isStreaming,
 }: UncachedShikiCodeBlockProps) {
-  const highlighter = use(getHighlighterPromise(language, themeName));
+  const highlighter = use(getSyntaxHighlighterPromise(language));
   const highlightedHtml = useMemo(() => {
     try {
       return highlighter.codeToHtml(code, { lang: language, theme: themeName });
@@ -829,6 +811,21 @@ function buildFileLinkParentSuffixByPath(filePaths: ReadonlyArray<string>): Map<
   return suffixByPath;
 }
 
+const FENCED_CODE_SEGMENT_PATTERN = /(```[\s\S]*?(?:```|$))/;
+const INLINE_CODE_SPAN_PATTERN = /`([^`\n]+)`/g;
+
+function extractInlineCodeSpans(text: string): string[] {
+  const spans: string[] = [];
+  const segments = text.split(FENCED_CODE_SEGMENT_PATTERN);
+  for (let index = 0; index < segments.length; index += 2) {
+    for (const match of (segments[index] ?? "").matchAll(INLINE_CODE_SPAN_PATTERN)) {
+      const span = match[1]?.trim();
+      if (span) spans.push(span);
+    }
+  }
+  return spans;
+}
+
 function extractMarkdownLinkHrefs(text: string): string[] {
   const hrefs: string[] = [];
   for (const match of text.matchAll(MARKDOWN_LINK_HREF_PATTERN)) {
@@ -848,17 +845,6 @@ const MARKDOWN_LINK_FAVICON_CLASS_NAME = "block size-full shrink-0 select-none";
 
 /** Hosts whose favicon request already failed this session — skip straight to the globe. */
 const failedFaviconHosts = new Set<string>();
-
-function resolveExternalLinkHost(href: string | undefined): string | null {
-  if (!href) return null;
-  try {
-    const url = new URL(href);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-    return url.hostname || null;
-  } catch {
-    return null;
-  }
-}
 
 const MarkdownLinkFavicon = memo(function MarkdownLinkFavicon({ host }: { host: string }) {
   const [failedHost, setFailedHost] = useState<string | null>(null);
@@ -1276,12 +1262,6 @@ function ChatMarkdown({
   lineBreaks = false,
 }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
-  const editorSyntaxTheme = useClientSettings((settings) => settings.editorSyntaxTheme);
-  const editorDiffTheme = useMemo(
-    () => resolveEditorDiffTheme(editorSyntaxTheme, resolvedTheme),
-    [editorSyntaxTheme, resolvedTheme],
-  );
-  const diffThemeName = editorDiffTheme.themeName;
   const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
     reportFailure: false,
   });
@@ -1295,6 +1275,7 @@ function ChatMarkdown({
     environmentId,
     serverConfig?.availableEditors ?? [],
   );
+  const diffThemeName = resolveDiffThemeName(resolvedTheme);
   const markdownFileLinkMetaByHref = useMemo(() => {
     const metaByHref = new Map<
       string,
@@ -1310,10 +1291,24 @@ function ChatMarkdown({
     }
     return metaByHref;
   }, [cwd, text]);
+  const inlineCodeFileLinkMetaByText = useMemo(() => {
+    const metaByText = new Map<string, MarkdownFileLinkMeta>();
+    for (const span of extractInlineCodeSpans(text)) {
+      if (metaByText.has(span)) continue;
+      const meta = resolveInlineCodeFileLinkMeta(span, cwd);
+      if (meta) {
+        metaByText.set(span, meta);
+      }
+    }
+    return metaByText;
+  }, [cwd, text]);
   const fileLinkParentSuffixByPath = useMemo(() => {
-    const filePaths = [...markdownFileLinkMetaByHref.values()].map((meta) => meta.filePath);
+    const filePaths = [
+      ...[...markdownFileLinkMetaByHref.values()].map((meta) => meta.filePath),
+      ...[...inlineCodeFileLinkMetaByText.values()].map((meta) => meta.filePath),
+    ];
     return buildFileLinkParentSuffixByPath(filePaths);
-  }, [markdownFileLinkMetaByHref]);
+  }, [inlineCodeFileLinkMetaByText, markdownFileLinkMetaByHref]);
   const markdownUrlTransform = useCallback((href: string) => {
     return rewriteMarkdownFileUriHref(href) ?? defaultUrlTransform(href);
   }, []);
@@ -1368,8 +1363,49 @@ function ChatMarkdown({
     },
     [createAssetUrl, openPreview, preparedConnection, threadRef],
   );
-  const markdownComponents = useMemo<Components>(
-    () => ({
+  const markdownComponents = useMemo<Components>(() => {
+    const fileLinkChip = (
+      fileLinkMeta: MarkdownFileLinkMeta,
+      copyMarkdown: string,
+      className?: string,
+    ) => {
+      const parentSuffix = fileLinkParentSuffixByPath.get(fileLinkMeta.filePath);
+      const labelParts = [fileLinkMeta.basename];
+      if (typeof parentSuffix === "string" && parentSuffix.length > 0) {
+        labelParts.push(parentSuffix);
+      }
+      if (fileLinkMeta.line) {
+        labelParts.push(
+          `L${fileLinkMeta.line}${fileLinkMeta.column ? `:C${fileLinkMeta.column}` : ""}`,
+        );
+      }
+
+      return (
+        <MarkdownFileLink
+          href={fileLinkMeta.targetPath}
+          targetPath={fileLinkMeta.targetPath}
+          iconPath={fileLinkMeta.filePath}
+          displayPath={fileLinkMeta.displayPath}
+          workspaceRelativePath={fileLinkMeta.workspaceRelativePath}
+          line={fileLinkMeta.line}
+          label={labelParts.join(" · ")}
+          copyMarkdown={copyMarkdown}
+          theme={resolvedTheme}
+          threadRef={threadRef}
+          onOpen={openInPreferredEditor}
+          onOpenInBrowser={
+            threadRef &&
+            isPreviewSupportedInRuntime() &&
+            isBrowserPreviewFile(fileLinkMeta.filePath)
+              ? () => openMarkdownFileInPreview(fileLinkMeta.filePath)
+              : undefined
+          }
+          className={className}
+        />
+      );
+    };
+
+    return {
       p({ node: _node, children, ...props }) {
         return <p {...props}>{renderSkillInlineMarkdownChildren(children, skills)}</p>;
       },
@@ -1416,7 +1452,7 @@ function ChatMarkdown({
         const normalizedHref = href ? normalizeMarkdownLinkHrefKey(href) : "";
         const fileLinkMeta = normalizedHref ? markdownFileLinkMetaByHref.get(normalizedHref) : null;
         if (!fileLinkMeta) {
-          const faviconHost = resolveExternalLinkHost(href);
+          const faviconHost = resolveExternalWebLinkHost(href);
           const isSameDocumentLink = href?.startsWith("#") ?? false;
           const onClick = props.onClick;
           const canOpenInPreview = Boolean(threadRef) && isPreviewSupportedInRuntime();
@@ -1433,37 +1469,30 @@ function ChatMarkdown({
                 }
               }}
               onContextMenu={(event) => {
-                if (!canOpenInPreview || !href) return;
+                if (!canOpenInPreview || !href || !faviconHost) return;
                 event.preventDefault();
                 event.stopPropagation();
                 const api = readLocalApi();
                 if (!api) return;
-                void (async () => {
-                  let operation = "show-link-context-menu";
-                  try {
-                    const clicked = await api.contextMenu.show(
-                      [
-                        { id: "open-in-browser", label: "Open in integrated browser" },
-                        { id: "open-external", label: "Open in system browser" },
-                      ] as const,
-                      { x: event.clientX, y: event.clientY },
-                    );
-                    if (clicked === "open-in-browser") {
-                      operation = "open-link-in-preview";
-                      const result = await openExternalLinkInPreview(href);
-                      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-                        reportMarkdownActionFailure({ operation, target: href }, result.cause);
-                      }
-                      return;
+                void showExternalLinkContextMenu({
+                  href,
+                  position: { x: event.clientX, y: event.clientY },
+                  showContextMenu: (items, position) => api.contextMenu.show(items, position),
+                  openInPreview: async (target) => {
+                    const result = await openExternalLinkInPreview(target);
+                    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+                      reportMarkdownActionFailure(
+                        { operation: "open-link-in-preview", target },
+                        result.cause,
+                      );
                     }
-                    if (clicked === "open-external") {
-                      operation = "open-link-external";
-                      await api.shell.openExternal(href);
-                    }
-                  } catch (cause) {
+                  },
+                  openExternal: (target) => api.shell.openExternal(target),
+                  copyLink: (target) => writeTextToClipboard(target, "link"),
+                  reportFailure: (operation, cause) => {
                     reportMarkdownActionFailure({ operation, target: href }, cause);
-                  }
-                })();
+                  },
+                });
               }}
             >
               {faviconHost ? (
@@ -1491,39 +1520,26 @@ function ChatMarkdown({
           );
         }
 
-        const parentSuffix = fileLinkParentSuffixByPath.get(fileLinkMeta.filePath);
-        const labelParts = [fileLinkMeta.basename];
-        if (typeof parentSuffix === "string" && parentSuffix.length > 0) {
-          labelParts.push(parentSuffix);
+        return fileLinkChip(
+          fileLinkMeta,
+          `[${fileLinkMeta.basename}](${normalizedHref})`,
+          props.className,
+        );
+      },
+      code({ node, children, className, ...props }) {
+        if (node?.properties?.dataInlineCode != null) {
+          const codeText = nodeToPlainText(children);
+          const fileLinkMeta =
+            inlineCodeFileLinkMetaByText.get(codeText.trim()) ??
+            resolveInlineCodeFileLinkMeta(codeText, cwd);
+          if (fileLinkMeta) {
+            return fileLinkChip(fileLinkMeta, `\`${codeText}\``);
+          }
         }
-        if (fileLinkMeta.line) {
-          labelParts.push(
-            `L${fileLinkMeta.line}${fileLinkMeta.column ? `:C${fileLinkMeta.column}` : ""}`,
-          );
-        }
-
         return (
-          <MarkdownFileLink
-            href={fileLinkMeta.targetPath}
-            targetPath={fileLinkMeta.targetPath}
-            iconPath={fileLinkMeta.filePath}
-            displayPath={fileLinkMeta.displayPath}
-            workspaceRelativePath={fileLinkMeta.workspaceRelativePath}
-            line={fileLinkMeta.line}
-            label={labelParts.join(" · ")}
-            copyMarkdown={`[${fileLinkMeta.basename}](${normalizedHref})`}
-            theme={resolvedTheme}
-            threadRef={threadRef}
-            onOpen={openInPreferredEditor}
-            onOpenInBrowser={
-              threadRef &&
-              isPreviewSupportedInRuntime() &&
-              isBrowserPreviewFile(fileLinkMeta.filePath)
-                ? () => openMarkdownFileInPreview(fileLinkMeta.filePath)
-                : undefined
-            }
-            className={props.className}
-          />
+          <code {...props} className={className}>
+            {children}
+          </code>
         );
       },
       table({ node: _node, ...props }) {
@@ -1546,9 +1562,8 @@ function ChatMarkdown({
             language={language}
             fenceTitle={fenceTitle}
             theme={resolvedTheme}
-            editorDiffTheme={editorDiffTheme}
           >
-            <CodeHighlightErrorBoundary fallback={<pre {...props}>{children}</pre>}>
+            <RenderErrorBoundary fallback={<pre {...props}>{children}</pre>}>
               <Suspense fallback={<pre {...props}>{children}</pre>}>
                 <SuspenseShikiCodeBlock
                   className={codeBlock.className}
@@ -1557,27 +1572,27 @@ function ChatMarkdown({
                   isStreaming={isStreaming}
                 />
               </Suspense>
-            </CodeHighlightErrorBoundary>
+            </RenderErrorBoundary>
           </MarkdownCodeBlock>
         );
       },
-    }),
-    [
-      diffThemeName,
-      editorDiffTheme,
-      fileLinkParentSuffixByPath,
-      isStreaming,
-      markdownFileLinkMetaByHref,
-      onTaskListChange,
-      openInPreferredEditor,
-      openExternalLinkInPreview,
-      openMarkdownFileInPreview,
-      resolvedTheme,
-      skills,
-      text,
-      threadRef,
-    ],
-  );
+    };
+  }, [
+    cwd,
+    diffThemeName,
+    fileLinkParentSuffixByPath,
+    inlineCodeFileLinkMetaByText,
+    isStreaming,
+    markdownFileLinkMetaByHref,
+    onTaskListChange,
+    openInPreferredEditor,
+    openExternalLinkInPreview,
+    openMarkdownFileInPreview,
+    resolvedTheme,
+    skills,
+    text,
+    threadRef,
+  ]);
 
   return (
     <div

@@ -1,21 +1,27 @@
 import {
+  type DirItem,
+  type DirSearchResult,
+  type FileItem,
   FileFinder,
   type GrepMatch,
+  type GrepCursor,
   type MixedItem,
   type MixedSearchResult,
+  type Result,
+  type SearchResult,
 } from "@ff-labs/fff-node";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as LayerMap from "effect/LayerMap";
-import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 
 import type {
   ProjectEntry,
-  ProjectCodeSearchMatch,
-  ProjectCodeSymbolKind,
+  ProjectEntryKind,
   ProjectListEntriesResult,
+  ProjectSearchContentsInput,
+  ProjectSearchContentsResult,
   ProjectSearchCodeInput,
   ProjectSearchCodeResult,
   ProjectSearchEntriesResult,
@@ -24,8 +30,10 @@ import type {
 const WORKSPACE_INDEX_MAX_ENTRIES = 25_000;
 const WORKSPACE_INDEX_PAGE_SIZE = WORKSPACE_INDEX_MAX_ENTRIES + 2;
 const WORKSPACE_INDEX_SCAN_TIMEOUT = "15 seconds";
+const WORKSPACE_INDEX_SCAN_TIMEOUT_MS = 15_000;
 const WORKSPACE_INDEX_IDLE_TTL = "15 minutes";
-const WORKSPACE_INDEX_SCAN_POLL_INTERVAL = "50 millis";
+const CONTENT_SEARCH_TIME_BUDGET_MS = 250;
+const CONTENT_SEARCH_MAX_MATCHES_PER_FILE = 100;
 
 export class WorkspaceSearchIndexCreateFailed extends Schema.TaggedErrorClass<WorkspaceSearchIndexCreateFailed>()(
   "WorkspaceSearchIndexCreateFailed",
@@ -105,7 +113,11 @@ export class WorkspaceSearchIndex extends Context.Service<
     readonly search: (
       query: string,
       limit: number,
+      kind?: ProjectEntryKind,
     ) => Effect.Effect<ProjectSearchEntriesResult, WorkspaceSearchIndexSearchFailed>;
+    readonly searchContents: (
+      input: Omit<ProjectSearchContentsInput, "cwd">,
+    ) => Effect.Effect<ProjectSearchContentsResult, WorkspaceSearchIndexSearchFailed>;
     readonly searchCode: (
       input: Omit<ProjectSearchCodeInput, "cwd">,
     ) => Effect.Effect<ProjectSearchCodeResult, WorkspaceSearchIndexSearchFailed>;
@@ -141,6 +153,43 @@ function toProjectEntry(item: MixedItem): ProjectEntry | null {
   };
 }
 
+function toFileEntry(item: FileItem): ProjectEntry | null {
+  const normalizedPath = trimDirectorySeparator(toPosixPath(item.relativePath));
+  return normalizedPath ? { path: normalizedPath, kind: "file" } : null;
+}
+
+function toDirectoryEntry(item: DirItem): ProjectEntry | null {
+  const normalizedPath = trimDirectorySeparator(toPosixPath(item.relativePath));
+  return normalizedPath ? { path: normalizedPath, kind: "directory" } : null;
+}
+
+function mapFileSearchResult(result: SearchResult, limit: number): ProjectSearchEntriesResult {
+  return {
+    entries: result.items
+      .flatMap((item) => {
+        const entry = toFileEntry(item);
+        return entry ? [entry] : [];
+      })
+      .slice(0, limit),
+    truncated: result.totalMatched > limit,
+  };
+}
+
+function mapDirectorySearchResult(
+  result: DirSearchResult,
+  limit: number,
+): ProjectSearchEntriesResult {
+  const entries = result.items.flatMap((item) => {
+    const entry = toDirectoryEntry(item);
+    return entry ? [entry] : [];
+  });
+  const rootDirectoryCount = result.items.some((item) => item.relativePath.length === 0) ? 1 : 0;
+  return {
+    entries: entries.slice(0, limit),
+    truncated: result.totalMatched - rootDirectoryCount > limit,
+  };
+}
+
 function mapMixedSearchResult(
   result: MixedSearchResult,
   limit: number,
@@ -167,6 +216,74 @@ function mapMixedSearchResult(
   };
 }
 
+const WORD_CHARACTER = /[\p{Letter}\p{Mark}\p{Number}_]/u;
+
+function codePointAt(line: string, index: number): string | undefined {
+  const codePoint = line.codePointAt(index);
+  return codePoint === undefined ? undefined : String.fromCodePoint(codePoint);
+}
+
+function codePointBefore(line: string, index: number): string | undefined {
+  if (index <= 0) return undefined;
+  const previousCodeUnit = line.charCodeAt(index - 1);
+  const previousIndex =
+    previousCodeUnit >= 0xdc00 && previousCodeUnit <= 0xdfff ? index - 2 : index - 1;
+  return codePointAt(line, previousIndex);
+}
+
+function buildContentSearchQuery(input: Omit<ProjectSearchContentsInput, "cwd">): {
+  readonly searchQuery: string;
+  readonly regexMode: boolean;
+} {
+  if (input.caseSensitive) {
+    return { searchQuery: input.query, regexMode: input.useRegex };
+  }
+  // Plain mode relies on smart case: an all-lowercase needle matches
+  // case-insensitively. Regex mode needs an explicit inline flag instead.
+  return input.useRegex
+    ? { searchQuery: `(?i)${input.query}`, regexMode: true }
+    : { searchQuery: input.query.toLowerCase(), regexMode: false };
+}
+
+function mapContentMatchRanges(
+  line: string,
+  byteRanges: ReadonlyArray<readonly [number, number]>,
+): Array<{ readonly start: number; readonly end: number }> {
+  const lineBytes = Buffer.from(line);
+  const toStringIndex = (byteOffset: number) => lineBytes.subarray(0, byteOffset).toString().length;
+  return byteRanges.map(([startByte, endByte]) => ({
+    start: toStringIndex(startByte),
+    end: toStringIndex(endByte),
+  }));
+}
+
+/**
+ * Whole-word filtering happens after the grep rather than by wrapping the
+ * pattern in boundary regex: consuming boundaries such as `(?:^|\W)` swallow
+ * the separator between adjacent matches and widen the reported ranges, and
+ * `\b` cannot match punctuation-edged queries at all. Matching VS Code, a
+ * match edge is a word boundary when it touches the line edge, the
+ * neighbouring character is not a word character, or the match's own edge
+ * character is not a word character.
+ */
+function isWholeWordRange(
+  line: string,
+  range: { readonly start: number; readonly end: number },
+): boolean {
+  if (range.end <= range.start) return false;
+  const isWord = (character: string | undefined) =>
+    character !== undefined && WORD_CHARACTER.test(character);
+  const leftIsBoundary =
+    range.start === 0 ||
+    !isWord(codePointBefore(line, range.start)) ||
+    !isWord(codePointAt(line, range.start));
+  const rightIsBoundary =
+    range.end >= line.length ||
+    !isWord(codePointAt(line, range.end)) ||
+    !isWord(codePointBefore(line, range.end));
+  return leftIsBoundary && rightIsBoundary;
+}
+
 function withDirectoryAncestors(entries: ReadonlyArray<ProjectEntry>): ProjectEntry[] {
   const entryByPath = new Map(entries.map((entry) => [entry.path, entry]));
   for (const entry of entries) {
@@ -181,136 +298,19 @@ function withDirectoryAncestors(entries: ReadonlyArray<ProjectEntry>): ProjectEn
   return [...entryByPath.values()];
 }
 
-function isLikelyParameterDeclaration(line: string, query: string): boolean {
-  const openParenIndex = line.indexOf("(");
-  const closeParenIndex = line.lastIndexOf(")");
-  if (openParenIndex < 0 || closeParenIndex <= openParenIndex) return false;
-  const prefix = line.slice(0, openParenIndex);
-  if (/\b(?:if|for|while|switch|catch|with)\s*$/u.test(prefix)) return false;
-  const suffix = line.slice(closeParenIndex + 1).trimStart();
-  const isDeclaration =
-    /\b(?:function|func|fn|def)\s+[A-Za-z_$][\w$]*\s*$/u.test(prefix) ||
-    (/\b[A-Za-z_$][\w$]*\s*$/u.test(prefix) && /^(?:\{|=>|:)/u.test(suffix));
-  if (!isDeclaration) return false;
-
-  return line
-    .slice(openParenIndex + 1, closeParenIndex)
-    .split(",")
-    .some((parameter) => {
-      const identifiers = [...parameter.matchAll(/[A-Za-z_$][\w$]*/gu)].map((match) => match[0]);
-      if (identifiers.length === 0) return false;
-      const candidate =
-        /^[\s*]*(?:\.\.\.)?([A-Za-z_$][\w$]*)\s*[?:=]/u.exec(parameter)?.[1] ?? identifiers.at(-1)!;
-      return fuzzyIdentifierMatches(candidate, query);
-    });
-}
-
-function fuzzyIdentifierMatches(identifier: string, query: string): boolean {
-  const normalizedIdentifier = identifier.toLowerCase();
-  const normalizedQuery = query.toLowerCase();
-  let queryIndex = 0;
-  for (const character of normalizedIdentifier) {
-    if (character === normalizedQuery[queryIndex]) queryIndex += 1;
-    if (queryIndex === normalizedQuery.length) return true;
-  }
-  return normalizedQuery.length === 0;
-}
-
-function declaredIdentifierMatches(line: string, pattern: RegExp, query: string): boolean {
-  const identifier = line.match(pattern)?.[1];
-  return identifier ? fuzzyIdentifierMatches(identifier, query) : false;
-}
-
-function classifyCodeSymbol(match: GrepMatch, query: string): ProjectCodeSymbolKind {
-  const line = match.lineContent;
-  if (declaredIdentifierMatches(line, /\binterface\s+([A-Za-z_$][\w$]*)/u, query)) {
-    return "interface";
-  }
-  if (declaredIdentifierMatches(line, /\benum\s+([A-Za-z_$][\w$]*)/u, query)) return "enum";
-  if (declaredIdentifierMatches(line, /\bstruct\s+([A-Za-z_$][\w$]*)/u, query)) {
-    return "struct";
-  }
-  if (declaredIdentifierMatches(line, /\btrait\s+([A-Za-z_$][\w$]*)/u, query)) return "trait";
-  if (declaredIdentifierMatches(line, /\b(?:class|record|protocol)\s+([A-Za-z_$][\w$]*)/u, query)) {
-    return "class";
-  }
-  if (declaredIdentifierMatches(line, /\btype\s+([A-Za-z_$][\w$]*)\s*(?:=|\{|$)/u, query)) {
-    return "type";
-  }
-  if (declaredIdentifierMatches(line, /^\s+(?:async\s+)?def\s+([A-Za-z_$][\w$]*)\s*\(/u, query)) {
-    return "method";
-  }
-  if (isLikelyParameterDeclaration(line, query)) return "parameter";
-  if (
-    declaredIdentifierMatches(line, /\b(?:function|func|fn|def)\s+([A-Za-z_$][\w$]*)\s*\(/u, query)
-  ) {
-    return "function";
-  }
-  if (
-    declaredIdentifierMatches(
-      line,
-      /^\s*(?:(?:public|private|protected|static|async|final|override|virtual|abstract|export|unsafe|mut)\s+)*([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*(?:\{|=>|:)/u,
-      query,
-    )
-  ) {
-    return "method";
-  }
-  if (declaredIdentifierMatches(line, /\b(?:const|let|var|val)\s+([A-Za-z_$][\w$]*)/u, query)) {
-    return "variable";
-  }
-  return "text";
-}
-
-function isCodeDefinition(match: GrepMatch, query: string): boolean {
-  const kind = classifyCodeSymbol(match, query);
-  return kind !== "text";
-}
-
-function isClassLikeSymbol(kind: ProjectCodeSymbolKind): boolean {
-  return (
-    kind === "class" ||
-    kind === "interface" ||
-    kind === "enum" ||
-    kind === "struct" ||
-    kind === "trait" ||
-    kind === "type"
-  );
-}
-
-function containsIdentifier(line: string, query: string): boolean {
-  let fromIndex = 0;
-  while (fromIndex <= line.length - query.length) {
-    const index = line.indexOf(query, fromIndex);
-    if (index < 0) return false;
-    const before = index === 0 ? "" : line[index - 1]!;
-    const afterIndex = index + query.length;
-    const after = afterIndex >= line.length ? "" : line[afterIndex]!;
-    if (!/[\p{L}\p{N}_$]/u.test(before) && !/[\p{L}\p{N}_$]/u.test(after)) {
-      return true;
-    }
-    fromIndex = index + 1;
-  }
-  return false;
-}
-
-function toCodeSearchMatch(match: GrepMatch, query: string): ProjectCodeSearchMatch {
-  return {
-    path: toPosixPath(match.relativePath),
-    lineNumber: Math.max(1, match.lineNumber),
-    column: Math.max(0, match.col),
-    snippet: match.lineContent.trimEnd().slice(0, 1_000),
-    isDefinition: isCodeDefinition(match, query),
-    kind: classifyCodeSymbol(match, query),
-  };
-}
-
-const createFinder = Effect.fn("WorkspaceSearchIndex.createFinder")(function* (cwd: string) {
+const createFinder = Effect.fn("WorkspaceSearchIndex.createFinder")(function* (
+  cwd: string,
+  variant: WorkspaceSearchIndexVariant,
+) {
   const result = yield* Effect.try({
     try: () =>
       FileFinder.create({
         basePath: cwd,
         disableMmapCache: true,
-        disableContentIndexing: true,
+        // Content indexing costs scan CPU and memory, so only the on-demand
+        // content-search index pays for it; path-only consumers (file tree,
+        // composer path search, file picker) keep the lightweight index.
+        disableContentIndexing: variant !== "content",
         aiMode: false,
         enableFsRootScanning: true,
         enableHomeDirScanning: true,
@@ -329,53 +329,65 @@ const createFinder = Effect.fn("WorkspaceSearchIndex.createFinder")(function* (c
   });
 });
 
-const waitForScan = <E>(cwd: string, finder: FileFinder, onFailure: (cause: unknown) => E) =>
-  Effect.try({
-    try: () => finder.isScanning(),
-    catch: onFailure,
-  }).pipe(
-    Effect.repeat({
-      while: (scanning) => scanning,
-      schedule: Schedule.spaced(WORKSPACE_INDEX_SCAN_POLL_INTERVAL),
-    }),
-    Effect.timeoutOrElse({
-      duration: WORKSPACE_INDEX_SCAN_TIMEOUT,
-      orElse: () =>
-        new WorkspaceSearchIndexScanTimedOut({ cwd, timeout: WORKSPACE_INDEX_SCAN_TIMEOUT }),
-    }),
-    Effect.withSpan("WorkspaceSearchIndex.waitForScan"),
-  );
+const waitForIndexReady = Effect.fn("WorkspaceSearchIndex.waitForIndexReady")(function* <E>(
+  cwd: string,
+  finder: FileFinder,
+  onFailure: (input: { readonly reason: string; readonly cause?: unknown }) => E,
+): Effect.fn.Return<void, E | WorkspaceSearchIndexScanTimedOut> {
+  const result = yield* Effect.tryPromise({
+    try: () => finder.waitForIndexReady(WORKSPACE_INDEX_SCAN_TIMEOUT_MS),
+    catch: (cause) =>
+      onFailure({
+        reason: "FileFinder.waitForIndexReady rejected unexpectedly.",
+        cause,
+      }),
+  });
+  if (!result.ok) {
+    return yield* Effect.fail(onFailure({ reason: result.error }));
+  }
+  if (!result.value) {
+    return yield* new WorkspaceSearchIndexScanTimedOut({
+      cwd,
+      timeout: WORKSPACE_INDEX_SCAN_TIMEOUT,
+    });
+  }
+});
 
-export const make = Effect.fn("WorkspaceSearchIndex.make")(function* (cwd: string) {
-  const finder = yield* Effect.acquireRelease(createFinder(cwd), (finder) =>
+export const make = Effect.fn("WorkspaceSearchIndex.make")(function* (
+  cwd: string,
+  variant: WorkspaceSearchIndexVariant = "paths",
+) {
+  const finder = yield* Effect.acquireRelease(createFinder(cwd, variant), (finder) =>
     Effect.try({
       try: () => finder.destroy(),
       catch: (cause) => new WorkspaceSearchIndexDestroyFailed({ cwd, cause }),
     }).pipe(Effect.orDie),
   );
-  yield* waitForScan(
+  yield* waitForIndexReady(
     cwd,
     finder,
-    (cause) =>
+    ({ reason, cause }) =>
       new WorkspaceSearchIndexCreateFailed({
         cwd,
-        reason: "FileFinder.isScanning threw while creating the index.",
+        reason,
         cause,
       }),
   );
 
-  const runMixedSearch = Effect.fn("WorkspaceSearchIndex.runMixedSearch")(function* (
+  const runSearch = Effect.fn("WorkspaceSearchIndex.runSearch")(function* <A>(
     query: string,
     pageSize: number,
-  ) {
+    operation: "directorySearch" | "fileSearch" | "grep" | "mixedSearch",
+    execute: () => Result<A>,
+  ): Effect.fn.Return<A, WorkspaceSearchIndexSearchFailed> {
     const result = yield* Effect.try({
-      try: () => finder.mixedSearch(query, { pageSize }),
+      try: execute,
       catch: (cause) =>
         new WorkspaceSearchIndexSearchFailed({
           cwd,
           queryLength: query.length,
           pageSize,
-          reason: "FileFinder.mixedSearch threw unexpectedly.",
+          reason: `FileFinder.${operation} threw unexpectedly.`,
           cause,
         }),
     });
@@ -408,13 +420,13 @@ export const make = Effect.fn("WorkspaceSearchIndex.make")(function* (cwd: strin
         reason: result.error,
       });
     }
-    yield* waitForScan(
+    yield* waitForIndexReady(
       cwd,
       finder,
-      (cause) =>
+      ({ reason, cause }) =>
         new WorkspaceSearchIndexRefreshFailed({
           cwd,
-          reason: "FileFinder.isScanning threw while refreshing the index.",
+          reason,
           cause,
         }),
     );
@@ -422,7 +434,9 @@ export const make = Effect.fn("WorkspaceSearchIndex.make")(function* (cwd: strin
 
   const list: WorkspaceSearchIndex["Service"]["list"] = Effect.fn("WorkspaceSearchIndex.list")(
     function* () {
-      const result = yield* runMixedSearch("", WORKSPACE_INDEX_PAGE_SIZE);
+      const result = yield* runSearch("", WORKSPACE_INDEX_PAGE_SIZE, "mixedSearch", () =>
+        finder.mixedSearch("", { pageSize: WORKSPACE_INDEX_PAGE_SIZE }),
+      );
       const mapped = mapMixedSearchResult(result, WORKSPACE_INDEX_MAX_ENTRIES);
       const sortedEntries = withDirectoryAncestors(mapped.entries).toSorted((left, right) =>
         left.path.localeCompare(right.path),
@@ -437,70 +451,137 @@ export const make = Effect.fn("WorkspaceSearchIndex.make")(function* (cwd: strin
 
   const search: WorkspaceSearchIndex["Service"]["search"] = Effect.fn(
     "WorkspaceSearchIndex.search",
-  )(function* (query, limit) {
-    const result = yield* runMixedSearch(query, Math.max(1, limit + 1));
+  )(function* (query, limit, kind) {
+    const pageSize = Math.max(1, limit + 1);
+    if (kind === "file") {
+      const result = yield* runSearch(query, pageSize, "fileSearch", () =>
+        finder.fileSearch(query, { pageSize }),
+      );
+      return mapFileSearchResult(result, limit);
+    }
+    if (kind === "directory") {
+      const result = yield* runSearch(query, pageSize, "directorySearch", () =>
+        finder.directorySearch(query, { pageSize }),
+      );
+      return mapDirectorySearchResult(result, limit);
+    }
+    const result = yield* runSearch(query, pageSize, "mixedSearch", () =>
+      finder.mixedSearch(query, { pageSize }),
+    );
     return mapMixedSearchResult(result, limit);
+  });
+
+  const searchContents: WorkspaceSearchIndex["Service"]["searchContents"] = Effect.fn(
+    "WorkspaceSearchIndex.searchContents",
+  )(function* (input) {
+    const { searchQuery, regexMode } = buildContentSearchQuery(input);
+    const deadline = performance.now() + CONTENT_SEARCH_TIME_BUDGET_MS;
+    // Grep cursors advance by file, so whole-word post-filtering needs enough
+    // raw candidates from the current file before moving to the next one.
+    const rawPageSize = input.wholeWord
+      ? Math.max(input.limit, CONTENT_SEARCH_MAX_MATCHES_PER_FILE)
+      : input.limit;
+    const matches: Array<ProjectSearchContentsResult["matches"][number]> = [];
+    let nextCursor: GrepCursor | null = null;
+    let regexFallbackError: string | undefined;
+
+    do {
+      const remainingTimeBudgetMs = Math.max(1, Math.ceil(deadline - performance.now()));
+      const result = yield* runSearch(input.query, input.limit, "grep", () =>
+        finder.grep(searchQuery, {
+          mode: regexMode ? "regex" : "plain",
+          smartCase: !input.caseSensitive && !regexMode,
+          // A single dense file must not consume the whole result page.
+          maxMatchesPerFile: Math.min(CONTENT_SEARCH_MAX_MATCHES_PER_FILE, rawPageSize),
+          pageSize: rawPageSize,
+          cursor: nextCursor,
+          timeBudgetMs: remainingTimeBudgetMs,
+        }),
+      );
+
+      for (const match of result.items) {
+        const matchRanges = mapContentMatchRanges(match.lineContent, match.matchRanges).filter(
+          (range) => !input.wholeWord || isWholeWordRange(match.lineContent, range),
+        );
+        if (matchRanges.length === 0) continue;
+        matches.push({
+          path: toPosixPath(match.relativePath),
+          lineNumber: match.lineNumber,
+          lineContent: match.lineContent,
+          matchRanges,
+        });
+      }
+      nextCursor = result.nextCursor;
+      regexFallbackError ??= result.regexFallbackError;
+    } while (matches.length < input.limit && nextCursor !== null && performance.now() < deadline);
+
+    return {
+      matches: matches.slice(0, input.limit),
+      truncated: matches.length > input.limit || nextCursor !== null,
+      ...(regexFallbackError !== undefined ? { regexFallbackError } : {}),
+    };
   });
 
   const searchCode: WorkspaceSearchIndex["Service"]["searchCode"] = Effect.fn(
     "WorkspaceSearchIndex.searchCode",
   )(function* (input) {
-    const requestedResultCount = Math.min(1_000, Math.max(100, input.limit * 12));
-    const result = yield* Effect.try({
-      try: () =>
-        finder.grep(input.query, {
-          mode: input.scope === "navigation" ? "plain" : "fuzzy",
-          pageSize: requestedResultCount,
-          maxMatchesPerFile: 40,
-          timeBudgetMs: 1_500,
-        }),
-      catch: (cause) =>
-        new WorkspaceSearchIndexSearchFailed({
-          cwd,
-          queryLength: input.query.length,
-          pageSize: requestedResultCount,
-          reason: "FileFinder.grep threw unexpectedly.",
-          cause,
-        }),
-    });
-    if (!result.ok) {
-      return yield* new WorkspaceSearchIndexSearchFailed({
-        cwd,
-        queryLength: input.query.length,
-        pageSize: requestedResultCount,
-        reason: result.error,
-      });
-    }
-
-    const matches = result.value.items
-      .filter((match) => {
-        if (input.scope === "navigation") {
-          return containsIdentifier(match.lineContent, input.query);
-        }
-        const kind = classifyCodeSymbol(match, input.query);
-        if (input.scope === "classes") {
-          return isCodeDefinition(match, input.query) && isClassLikeSymbol(kind);
-        }
-        if (input.scope === "symbols") return isCodeDefinition(match, input.query);
-        return true;
-      })
-      .map((match) => toCodeSearchMatch(match, input.query));
-
+    const result = yield* runSearch(input.query, Math.max(input.limit + 1, 100), "grep", () =>
+      finder.grep(input.query, {
+        mode: "plain",
+        pageSize: Math.max(input.limit + 1, 100),
+        maxMatchesPerFile: 40,
+        timeBudgetMs: 1_500,
+      }),
+    );
+    const matches = result.items.map((match: GrepMatch) => ({
+      path: toPosixPath(match.relativePath),
+      lineNumber: match.lineNumber,
+      column: Math.max(0, match.col),
+      snippet: match.lineContent.trimEnd().slice(0, 1_000),
+      isDefinition: false,
+      kind: "text" as const,
+    }));
     return {
       matches: matches.slice(0, input.limit),
-      truncated: result.value.nextCursor !== null || matches.length > input.limit,
+      truncated: result.nextCursor !== null || matches.length > input.limit,
     };
   });
 
-  return WorkspaceSearchIndex.of({ list, refresh, search, searchCode });
+  return WorkspaceSearchIndex.of({ list, refresh, search, searchContents, searchCode });
 });
+
+export const WORKSPACE_SEARCH_INDEX_VARIANTS = ["paths", "content"] as const;
+export type WorkspaceSearchIndexVariant = (typeof WORKSPACE_SEARCH_INDEX_VARIANTS)[number];
+
+/**
+ * Composite LayerMap key so the lightweight path index and the on-demand
+ * content-search index of the same workspace are separate resources with
+ * independent lifecycles. "\n" cannot appear in a filesystem path.
+ */
+export const workspaceSearchIndexKey = (cwd: string, variant: WorkspaceSearchIndexVariant) =>
+  `${variant}\n${cwd}`;
+
+function parseWorkspaceSearchIndexKey(key: string): {
+  readonly cwd: string;
+  readonly variant: WorkspaceSearchIndexVariant;
+} {
+  const separatorIndex = key.indexOf("\n");
+  return {
+    variant: key.slice(0, separatorIndex) as WorkspaceSearchIndexVariant,
+    cwd: key.slice(separatorIndex + 1),
+  };
+}
 
 /**
  * A layer factory is required because every index is scoped to a concrete
- * workspace root. WorkspaceSearchIndexMap owns memoization and idle cleanup;
- * using a default cwd here would mix resources from different workspaces.
+ * workspace root and variant. WorkspaceSearchIndexMap owns memoization and
+ * idle cleanup; using a default cwd here would mix resources from different
+ * workspaces.
  */
-export const layer = (cwd: string) => Layer.effect(WorkspaceSearchIndex, make(cwd));
+export const layer = (key: string) => {
+  const { cwd, variant } = parseWorkspaceSearchIndexKey(key);
+  return Layer.effect(WorkspaceSearchIndex, make(cwd, variant));
+};
 
 export class WorkspaceSearchIndexMap extends LayerMap.Service<WorkspaceSearchIndexMap>()(
   "t3/workspace/WorkspaceSearchIndexMap",

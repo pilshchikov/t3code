@@ -50,20 +50,6 @@ import type {
   ProjectWriteFileInput,
   ProjectWriteFileResult,
 } from "./project.ts";
-import type { ProviderInstanceId } from "./providerInstance.ts";
-import type {
-  ServerConfig,
-  ServerProcessDiagnosticsResult,
-  ServerProcessResourceHistoryInput,
-  ServerProcessResourceHistoryResult,
-  ServerProviderUpdateInput,
-  ServerProviderUpdatedPayload,
-  ServerRemoveKeybindingResult,
-  ServerSignalProcessInput,
-  ServerSignalProcessResult,
-  ServerTraceDiagnosticsResult,
-  ServerUpsertKeybindingResult,
-} from "./server.ts";
 import type {
   TerminalAttachInput,
   TerminalAttachStreamEvent,
@@ -76,7 +62,6 @@ import type {
   TerminalSessionSnapshot,
   TerminalWriteInput,
 } from "./terminal.ts";
-import type { ServerRemoveKeybindingInput, ServerUpsertKeybindingInput } from "./server.ts";
 import * as Schema from "effect/Schema";
 import type {
   DiscoveredLocalServerList,
@@ -120,13 +105,11 @@ import { EnvironmentId } from "./baseSchemas.ts";
 import { ListResumableSessionsInput, ListResumableSessionsResult } from "./resumableSessions.ts";
 import { AuthAccessTokenResult, AuthSessionState, AuthWebSocketTicketResult } from "./auth.ts";
 import { AdvertisedEndpoint } from "./remoteAccess.ts";
-import { EditorId } from "./editor.ts";
 import { ExecutionEnvironmentDescriptor } from "./environment.ts";
-import type { ClientSettings, ServerSettings, ServerSettingsPatch } from "./settings.ts";
+import type { ClientSettings } from "./settings.ts";
 import type {
   SourceControlCloneRepositoryInput,
   SourceControlCloneRepositoryResult,
-  SourceControlDiscoveryResult,
   SourceControlPublishRepositoryInput,
   SourceControlPublishRepositoryResult,
   SourceControlRepositoryInfo,
@@ -530,6 +513,15 @@ export type DesktopPreviewNavStatus =
       description: string;
     };
 
+/**
+ * Emulated `prefers-color-scheme` for the guest page. "system" clears the
+ * override so the page follows the OS appearance.
+ */
+export type DesktopPreviewColorScheme = "system" | "light" | "dark";
+
+export const DesktopPreviewColorSchemeSchema: Schema.Codec<DesktopPreviewColorScheme> =
+  Schema.Literals(["system", "light", "dark"]);
+
 export interface DesktopPreviewTabState {
   tabId: string;
   webContentsId: number | null;
@@ -538,6 +530,9 @@ export interface DesktopPreviewTabState {
   canGoForward: boolean;
   /** Current zoom factor (1.0 = 100%). */
   zoomFactor: number;
+  /** Whether this tab is currently mirrored into a desktop picture-in-picture window. */
+  pictureInPicture: boolean;
+  colorScheme: DesktopPreviewColorScheme;
   controller: "human" | "agent" | "none";
   updatedAt: string;
 }
@@ -574,6 +569,8 @@ export const DesktopPreviewTabStateSchema: Schema.Codec<DesktopPreviewTabState> 
   canGoBack: Schema.Boolean,
   canGoForward: Schema.Boolean,
   zoomFactor: Schema.Number,
+  pictureInPicture: Schema.Boolean,
+  colorScheme: DesktopPreviewColorSchemeSchema,
   controller: Schema.Literals(["human", "agent", "none"]),
   updatedAt: Schema.String,
 });
@@ -932,6 +929,11 @@ export const DesktopPreviewConfigInputSchema = Schema.Struct({
   environmentId: EnvironmentId,
 });
 
+export const DesktopPreviewSetColorSchemeInputSchema = Schema.Struct({
+  tabId: DesktopPreviewTabIdSchema,
+  colorScheme: DesktopPreviewColorSchemeSchema,
+});
+
 export const DesktopPreviewAnnotationThemeInputSchema = Schema.Struct({
   theme: DesktopPreviewAnnotationThemeSchema,
 });
@@ -1054,6 +1056,11 @@ export interface DesktopPreviewBridge {
   resetZoom: (tabId: string) => Promise<void>;
   /** Reload bypassing the HTTP cache. */
   hardReload: (tabId: string) => Promise<void>;
+  /**
+   * Emulate `prefers-color-scheme` on the guest page ("system" clears the
+   * override). Persists per tab and is re-applied across webview swaps.
+   */
+  setColorScheme: (tabId: string, colorScheme: DesktopPreviewColorScheme) => Promise<void>;
   /** Open the guest webview's DevTools (detached). */
   openDevTools: (tabId: string) => Promise<void>;
   /** Drop cookies + storage data for the preview partition (all tabs). */
@@ -1079,6 +1086,10 @@ export interface DesktopPreviewBridge {
   captureScreenshot: (tabId: string) => Promise<DesktopPreviewScreenshotArtifact>;
   revealArtifact: (path: string) => Promise<void>;
   copyArtifactToClipboard: (path: string) => Promise<void>;
+  pictureInPicture: {
+    open: (tabId: string) => Promise<void>;
+    close: (tabId: string) => Promise<void>;
+  };
   recording: {
     startScreencast: (tabId: string) => Promise<void>;
     stopScreencast: (tabId: string) => Promise<void>;
@@ -1107,7 +1118,7 @@ export interface DesktopPreviewBridge {
  * APIs bound to the local app shell, not to any particular backend environment.
  *
  * These capabilities describe the desktop/browser host that the user is
- * currently running: dialogs, editor/external-link opening, context menus, and
+ * currently running: dialogs, external-link opening, context menus, and
  * app-level settings/config access. They must not be used as a proxy for
  * "whatever environment the user is targeting", because in a multi-environment
  * world the local shell and a selected backend environment are distinct
@@ -1119,7 +1130,6 @@ export interface LocalApi {
     confirm: (message: string) => Promise<boolean>;
   };
   shell: {
-    openInEditor: (cwd: string, editor: EditorId) => Promise<void>;
     openExternal: (url: string) => Promise<void>;
   };
   contextMenu: {
@@ -1131,29 +1141,6 @@ export interface LocalApi {
   persistence: {
     getClientSettings: () => Promise<ClientSettings | null>;
     setClientSettings: (settings: ClientSettings) => Promise<void>;
-  };
-  server: {
-    getConfig: () => Promise<ServerConfig>;
-    /**
-     * Refresh provider snapshots. When `input.instanceId` is supplied only that
-     * configured instance is probed; otherwise every configured instance is
-     * refreshed (legacy untargeted refresh).
-     */
-    refreshProviders: (input?: {
-      readonly instanceId?: ProviderInstanceId;
-    }) => Promise<ServerProviderUpdatedPayload>;
-    updateProvider: (input: ServerProviderUpdateInput) => Promise<ServerProviderUpdatedPayload>;
-    upsertKeybinding: (input: ServerUpsertKeybindingInput) => Promise<ServerUpsertKeybindingResult>;
-    removeKeybinding: (input: ServerRemoveKeybindingInput) => Promise<ServerRemoveKeybindingResult>;
-    getSettings: () => Promise<ServerSettings>;
-    updateSettings: (patch: ServerSettingsPatch) => Promise<ServerSettings>;
-    discoverSourceControl: () => Promise<SourceControlDiscoveryResult>;
-    getTraceDiagnostics: () => Promise<ServerTraceDiagnosticsResult>;
-    getProcessDiagnostics: () => Promise<ServerProcessDiagnosticsResult>;
-    getProcessResourceHistory: (
-      input: ServerProcessResourceHistoryInput,
-    ) => Promise<ServerProcessResourceHistoryResult>;
-    signalProcess: (input: ServerSignalProcessInput) => Promise<ServerSignalProcessResult>;
   };
 }
 
