@@ -13,7 +13,6 @@ import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopClientSettings from "./DesktopClientSettings.ts";
 
 const clientSettings: ClientSettings = {
-  autoOpenPlanSidebar: false,
   confirmThreadArchive: true,
   confirmThreadDelete: false,
   dismissedProviderUpdateNotificationKeys: [],
@@ -21,7 +20,17 @@ const clientSettings: ClientSettings = {
   editorSyntaxTheme: "app",
   environmentIdentificationMode: "artwork",
   favorites: [],
+  fontFamilyCode: "",
+  fontFamilyComposer: "",
+  fontFamilySans: "",
+  fontFamilyTerminal: "",
+  fontSizeCode: 13,
+  fontSizeInterface: 16,
+  fontSizePrompt: 14,
+  fontSizeTerminal: 12,
+  fontSmoothing: true,
   glassOpacity: 80,
+  planModeEnabled: false,
   providerModelPreferences: {},
   sidebarAutoSettleAfterDays: 3,
   sidebarProjectGroupingMode: "repository_path",
@@ -31,9 +40,7 @@ const clientSettings: ClientSettings = {
   sidebarProjectSortOrder: "manual",
   sidebarThreadSortOrder: "created_at",
   sidebarThreadPreviewCount: 6,
-  sidebarV2Enabled: false,
-  sidebarV2ConfiguredByUser: false,
-  showEditorTabs: true,
+  legacySidebarEnabled: false,
   timestampFormat: "24-hour",
   wordWrap: true,
 };

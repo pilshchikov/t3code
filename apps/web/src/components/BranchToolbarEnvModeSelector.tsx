@@ -51,7 +51,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
 
   if (envLocked) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 border border-transparent px-[calc(--spacing(3)-1px)] text-sm font-medium text-muted-foreground/70 sm:text-xs">
+      <span className="inline-flex h-7 shrink-0 items-center gap-1 border border-transparent px-[calc(--spacing(3)-1px)] text-sm font-medium text-muted-foreground/70 sm:h-6 sm:text-xs">
         {activeWorktreePath ? (
           <>
             <FolderGitIcon className="size-3" />
@@ -80,17 +80,25 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
       }}
       items={envModeItems}
     >
-      <SelectTrigger variant="ghost" size="xs" className="shrink-0 font-medium" aria-label="Workspace">
-        {effectiveEnvMode === "multiwork" ? (
-          <FoldersIcon className="size-3" />
-        ) : effectiveEnvMode === "worktree" ? (
+      <SelectTrigger
+        variant="ghost"
+        size="xs"
+        className="min-w-0 shrink font-medium"
+        aria-label="Workspace"
+      >
+        {effectiveEnvMode === "worktree" ? (
           <FolderGit2Icon className="size-3" />
         ) : activeWorktreePath ? (
           <FolderGitIcon className="size-3" />
         ) : (
           <FolderIcon className="size-3" />
         )}
-        <SelectValue />
+        <span
+          data-composer-label
+          className="min-w-0 max-w-[240px] truncate transition-[max-width,opacity] duration-300 ease-out group-data-[compact]/composer-context:max-w-0 group-data-[compact]/composer-context:opacity-0"
+        >
+          <SelectValue />
+        </span>
       </SelectTrigger>
       <SelectPopup>
         <SelectGroup>

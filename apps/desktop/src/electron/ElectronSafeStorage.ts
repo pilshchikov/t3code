@@ -1,9 +1,11 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import * as Electron from "electron";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 
 const electronSafeStorageErrorFields = {
   cause: Schema.Defect(),
@@ -60,34 +62,39 @@ export class ElectronSafeStorage extends Context.Service<
     readonly decryptString: (
       value: Uint8Array,
     ) => Effect.Effect<string, ElectronSafeStorageDecryptError>;
+    readonly selectedStorageBackend: Effect.Effect<Option.Option<string>>;
   }
 >()("@t3tools/desktop/electron/ElectronSafeStorage") {}
 
-// This fork's desktop build is ad-hoc signed (no Apple Developer ID), so macOS re-prompts for the
-// Keychain "Safe Storage" key on every launch/reinstall because the app's signature keeps changing.
-// To avoid that prompt, OS-keychain secret storage is disabled by default: `isEncryptionAvailable`
-// reports false without touching Electron, and every consumer already degrades gracefully (secrets
-// for saved remote environments just aren't persisted). Re-enable real Keychain encryption with
-// `T3CODE_ENABLE_SAFE_STORAGE_KEYCHAIN=true`.
-const keychainSecretStorageEnabled = process.env.T3CODE_ENABLE_SAFE_STORAGE_KEYCHAIN === "true";
+export const make = Effect.gen(function* () {
+  const platform = yield* HostProcessPlatform;
 
-export const make = ElectronSafeStorage.of({
-  isEncryptionAvailable: keychainSecretStorageEnabled
-    ? Effect.try({
-        try: () => Electron.safeStorage.isEncryptionAvailable(),
-        catch: (cause) => new ElectronSafeStorageAvailabilityError({ cause }),
-      })
-    : Effect.succeed(false),
-  encryptString: (value) =>
-    Effect.try({
-      try: () => Electron.safeStorage.encryptString(value),
-      catch: (cause) => new ElectronSafeStorageEncryptError({ cause }),
+  return ElectronSafeStorage.of({
+    isEncryptionAvailable: Effect.try({
+      try: () => Electron.safeStorage.isEncryptionAvailable(),
+      catch: (cause) => new ElectronSafeStorageAvailabilityError({ cause }),
     }),
-  decryptString: (value) =>
-    Effect.try({
-      try: () => Electron.safeStorage.decryptString(Buffer.from(value)),
-      catch: (cause) => new ElectronSafeStorageDecryptError({ cause }),
+    encryptString: (value) =>
+      Effect.try({
+        try: () => Electron.safeStorage.encryptString(value),
+        catch: (cause) => new ElectronSafeStorageEncryptError({ cause }),
+      }),
+    decryptString: (value) =>
+      Effect.try({
+        try: () => Electron.safeStorage.decryptString(Buffer.from(value)),
+        catch: (cause) => new ElectronSafeStorageDecryptError({ cause }),
+      }),
+    selectedStorageBackend: Effect.sync(() => {
+      if (platform !== "linux") {
+        return Option.none();
+      }
+      try {
+        return Option.fromNullishOr(Electron.safeStorage.getSelectedStorageBackend());
+      } catch {
+        return Option.none();
+      }
     }),
+  });
 });
 
-export const layer = Layer.succeed(ElectronSafeStorage, make);
+export const layer = Layer.effect(ElectronSafeStorage, make);
