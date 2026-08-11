@@ -115,6 +115,11 @@ import type {
   SourceControlRepositoryInfo,
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
+import type {
+  MultiworkCreateInput,
+  MultiworkCreateResult,
+  MultiworkListResult,
+} from "./multiwork.ts";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;

@@ -17,7 +17,6 @@ const clientSettings: ClientSettings = {
   confirmThreadDelete: false,
   dismissedProviderUpdateNotificationKeys: [],
   diffIgnoreWhitespace: true,
-  editorSyntaxTheme: "app",
   environmentIdentificationMode: "artwork",
   favorites: [],
   fontFamilyCode: "",

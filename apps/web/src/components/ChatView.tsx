@@ -130,8 +130,6 @@ import {
   type RightPanelSurface,
   useRightPanelStore,
 } from "../rightPanelStore";
-import { useResumeSeedStore } from "../resumeSeedStore";
-import { useExplorerViewStore } from "../explorerViewStore";
 import {
   isPreviewSupportedInRuntime,
   setActivePreviewTab,
@@ -4696,25 +4694,6 @@ function ChatViewContent(props: ChatViewProps) {
         return;
       }
 
-      if (command === "editor.toggle") {
-        event.preventDefault();
-        event.stopPropagation();
-        if (activeThreadRef) {
-          useRightPanelStore.getState().toggle(activeThreadRef, "files");
-        }
-        return;
-      }
-
-      if (command === "structure.open") {
-        event.preventDefault();
-        event.stopPropagation();
-        if (activeThreadRef) {
-          useRightPanelStore.getState().open(activeThreadRef, "files");
-          useExplorerViewStore.getState().showView("structure");
-        }
-        return;
-      }
-
       if (command === "terminal.split") {
         event.preventDefault();
         event.stopPropagation();
@@ -4795,7 +4774,6 @@ function ChatViewContent(props: ChatViewProps) {
     return () => window.removeEventListener("keydown", handler, true);
   }, [
     activeProject,
-    activeThreadRef,
     activeRightPanelSurface,
     addTerminalSurface,
     terminalUiState.terminalOpen,
@@ -5033,17 +5011,16 @@ function ChatViewContent(props: ChatViewProps) {
     }
     const threadIdForSend = activeThread.id;
     const isFirstMessage = !isServerThread || activeThread.messages.length === 0;
-    // Both "worktree" and "multiwork" provision a dedicated isolated workspace on the first message.
+    const baseBranchForWorktree =
+      isFirstMessage && sendEnvMode === "worktree" && !activeThread.worktreePath
+        ? activeThreadBranch
+        : null;
+
+    // In worktree mode, require an explicit base branch so we don't silently
+    // fall back to local execution when branch selection is missing.
     const shouldCreateWorktree =
-      isFirstMessage &&
-      (sendEnvMode === "worktree" || sendEnvMode === "multiwork") &&
-      !activeThread.worktreePath;
-    // Worktree mode needs an explicit base branch; multiwork always clones a fresh copy from origin
-    // (default branch), so it falls back to "master" purely to satisfy the bootstrap contract.
-    const baseBranchForWorktree = shouldCreateWorktree
-      ? (activeThreadBranch ?? (sendEnvMode === "multiwork" ? "master" : null))
-      : null;
-    if (shouldCreateWorktree && sendEnvMode === "worktree" && !activeThreadBranch) {
+      isFirstMessage && sendEnvMode === "worktree" && !activeThread.worktreePath;
+    if (shouldCreateWorktree && !activeThreadBranch) {
       setThreadError(threadIdForSend, "Select a base branch before sending in New worktree mode.");
       return;
     }
@@ -5243,7 +5220,6 @@ function ChatViewContent(props: ChatViewProps) {
                       baseBranch: baseBranchForWorktree,
                       branch: buildTemporaryWorktreeBranchName(randomHex),
                       ...(startFromOrigin ? { startFromOrigin: true } : {}),
-                      ...(sendEnvMode === "multiwork" ? { mode: "multiwork" as const } : {}),
                     },
                     runSetupScript: true,
                   }
@@ -5251,10 +5227,6 @@ function ChatViewContent(props: ChatViewProps) {
             }
           : undefined;
       beginLocalDispatch({ preparingWorktree: false });
-      // Continue an existing on-disk CLI session if this draft was created from the sidebar's
-      // "Resume from CLI" list. Only the thread's first turn carries it; the model picker was already
-      // preset to the session's provider instance so routing matches the cursor.
-      const resumeSeed = useResumeSeedStore.getState().peekSeed(threadIdForSend);
       const startResult = await startThreadTurn({
         environmentId,
         input: {
@@ -5270,7 +5242,6 @@ function ChatViewContent(props: ChatViewProps) {
           runtimeMode,
           interactionMode,
           ...(bootstrap ? { bootstrap } : {}),
-          ...(resumeSeed ? { resumeSession: { resumeCursor: resumeSeed.resumeCursor } } : {}),
           createdAt: messageCreatedAt,
         },
       });
@@ -6541,7 +6512,6 @@ function ChatViewContent(props: ChatViewProps) {
       {!shouldUseRightPanelSheet && rightPanelOpen && activeThreadRef ? (
         <RightPanelTabs
           mode="inline"
-          showTabs={settings.showEditorTabs}
           maximized={rightPanelMaximized}
           surfaces={rightPanelState.surfaces}
           activeSurfaceId={activeRightPanelSurface?.id ?? null}
@@ -6576,7 +6546,6 @@ function ChatViewContent(props: ChatViewProps) {
         <RightPanelSheet open onClose={closePreviewPanel}>
           <RightPanelTabs
             mode="sheet"
-            showTabs={settings.showEditorTabs}
             layoutControls={panelToggleControls}
             surfaces={rightPanelState.surfaces}
             activeSurfaceId={activeRightPanelSurface?.id ?? null}

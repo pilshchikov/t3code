@@ -41,11 +41,9 @@ import {
 import { type TurnDiffSummary } from "../../types";
 import {
   getRenderablePatch,
-  resolveEditorDiffTheme,
-  type ResolvedEditorDiffTheme,
+  resolveDiffThemeName,
   resolveFileDiffPath,
 } from "../../lib/diffRendering";
-import { useClientSettings } from "../../hooks/useSettings";
 import ChatMarkdown from "../ChatMarkdown";
 import {
   BotIcon,
@@ -136,7 +134,6 @@ interface TimelineRowSharedState {
   threadRef: ScopedThreadRef | null;
   markdownCwd: string | undefined;
   resolvedTheme: "light" | "dark";
-  editorDiffTheme: ResolvedEditorDiffTheme;
   workspaceRoot: string | undefined;
   skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
   activeThreadEnvironmentId: EnvironmentId;
@@ -284,11 +281,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   topFadeEnabled = false,
   loadEarlier = null,
 }: MessagesTimelineProps) {
-  const editorSyntaxTheme = useClientSettings((settings) => settings.editorSyntaxTheme);
-  const editorDiffTheme = useMemo(
-    () => resolveEditorDiffTheme(editorSyntaxTheme, resolvedTheme),
-    [editorSyntaxTheme, resolvedTheme],
-  );
   const [expandedTurnIds, setExpandedTurnIds] = useState<ReadonlySet<TurnId>>(new Set());
   const [expandedWorkGroupIds, setExpandedWorkGroupIds] = useState<ReadonlySet<string>>(new Set());
   const [disclosureToggleSettling, setDisclosureToggleSettling] = useState(false);
@@ -515,7 +507,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       threadRef: parseScopedThreadKey(routeThreadKey),
       markdownCwd,
       resolvedTheme,
-      editorDiffTheme,
       workspaceRoot,
       skills,
       activeThreadEnvironmentId,
@@ -532,7 +523,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       routeThreadKey,
       markdownCwd,
       resolvedTheme,
-      editorDiffTheme,
       workspaceRoot,
       skills,
       activeThreadEnvironmentId,
@@ -1885,8 +1875,7 @@ function UserMessageReviewCommentCard({ comment }: { comment: ReviewCommentConte
             options={{
               collapsed: false,
               diffStyle: "unified",
-              theme: ctx.editorDiffTheme.themeName,
-              themeType: ctx.editorDiffTheme.themeType,
+              theme: resolveDiffThemeName(ctx.resolvedTheme),
             }}
           />
         ))}

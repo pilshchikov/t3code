@@ -42,7 +42,6 @@ interface RightPanelTabsProps {
   /** Forwarded to PreviewPanelShell as the initial width before a user resize. */
   defaultWidth?: number;
   layoutControls?: ReactNode;
-  showTabs: boolean;
   surfaces: readonly RightPanelSurface[];
   activeSurfaceId: string | null;
   pendingSurfaceIds: ReadonlySet<string>;
@@ -358,60 +357,6 @@ function SurfaceIcon({
   }
 }
 
-function AddSurfaceMenu(
-  props: Pick<
-    RightPanelTabsProps,
-    | "browserAvailable"
-    | "diffAvailable"
-    | "filesAvailable"
-    | "onAddBrowser"
-    | "onAddDiff"
-    | "onAddFiles"
-    | "onAddTerminal"
-  >,
-) {
-  return (
-    <Menu>
-      <MenuTrigger
-        className="relative inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-        aria-label="Add panel surface"
-      >
-        <Plus className="size-4" />
-      </MenuTrigger>
-      <MenuPopup align="start" side="bottom" sideOffset={6} className="min-w-44">
-        <SurfaceMenuItem
-          available={props.browserAvailable}
-          disabledReason={SURFACE_DISABLED_REASONS.browser}
-          onClick={props.onAddBrowser}
-        >
-          <Globe2 />
-          Browser
-        </SurfaceMenuItem>
-        <SurfaceMenuItem available onClick={props.onAddTerminal}>
-          <TerminalSquare />
-          Terminal
-        </SurfaceMenuItem>
-        <SurfaceMenuItem
-          available={props.filesAvailable}
-          disabledReason={SURFACE_DISABLED_REASONS.files}
-          onClick={props.onAddFiles}
-        >
-          <Files />
-          Files
-        </SurfaceMenuItem>
-        <SurfaceMenuItem
-          available={props.diffAvailable}
-          disabledReason={SURFACE_DISABLED_REASONS.diff}
-          onClick={props.onAddDiff}
-        >
-          <FileDiff />
-          Diff
-        </SurfaceMenuItem>
-      </MenuPopup>
-    </Menu>
-  );
-}
-
 export function RightPanelTabs(props: RightPanelTabsProps) {
   const ownsDesktopTitleBar = isElectron && props.mode === "inline";
   const { resolvedTheme } = useTheme();
@@ -471,6 +416,19 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
         case null:
           break;
       }
+    },
+    [props],
+  );
+  const handleTabMouseDown = useCallback((event: ReactMouseEvent) => {
+    if (event.button !== 1) return;
+    event.preventDefault();
+  }, []);
+  const handleTabAuxClick = useCallback(
+    (event: ReactMouseEvent, surface: RightPanelSurface) => {
+      if (event.button !== 1) return;
+      event.preventDefault();
+      event.stopPropagation();
+      props.onCloseSurface(surface);
     },
     [props],
   );
@@ -622,9 +580,8 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                 </MenuPopup>
               </Menu>
             ) : null}
-            {props.surfaces.length > 0 ? <AddSurfaceMenu {...props} /> : null}
           </div>
-        )}
+        </ScrollArea>
         {props.layoutControls}
       </div>
       <div className="flex min-h-0 flex-1 flex-col" data-right-panel-surface-content>

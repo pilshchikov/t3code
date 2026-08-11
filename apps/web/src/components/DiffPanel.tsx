@@ -34,7 +34,7 @@ import {
   getDiffCollapseIconClassName,
   getDiffLineStat,
   getRenderablePatch,
-  resolveEditorDiffTheme,
+  resolveDiffThemeName,
   resolveFileDiffPath,
 } from "../lib/diffRendering";
 import { areAllDiffFilesCollapsed, toggleAllDiffFiles } from "../lib/diffCollapse";
@@ -101,7 +101,6 @@ export default function DiffPanel({
 }: DiffPanelProps) {
   const { resolvedTheme } = useTheme();
   const settings = useClientSettings();
-  const editorDiffTheme = resolveEditorDiffTheme(settings.editorSyntaxTheme, resolvedTheme);
   const [initialGitScope] = useState(initialGitScopeProp);
   const diffRenderMode = useDiffPanelStore((state) => state.diffRenderMode);
   const setDiffRenderMode = useDiffPanelStore((state) => state.setDiffRenderMode);
@@ -938,8 +937,6 @@ export default function DiffPanel({
                   options={{
                     diffStyle: diffRenderMode === "split" ? "split" : "unified",
                     lineDiffType: "none",
-                    theme: editorDiffTheme.themeName,
-                    themeType: editorDiffTheme.themeType as DiffThemeType,
                     overflow: wordWrap ? "wrap" : "scroll",
                     theme: resolveDiffThemeName(resolvedTheme),
                     themeType: resolvedTheme as DiffThemeType,
