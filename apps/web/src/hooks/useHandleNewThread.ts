@@ -420,6 +420,7 @@ export function useNewThreadHandler() {
           // whatever sticky state just wrote".
           setModelSelection(draftId, carryModelSelection, { replaceOptions: true });
         }
+        carryComposerContentTo(draftId);
         options?.onDraftCreated?.({ draftId, threadId });
 
         await router.navigate({

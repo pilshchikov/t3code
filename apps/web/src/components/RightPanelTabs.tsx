@@ -218,6 +218,7 @@ function RightPanelEmptyState(props: {
       label: "Git History",
       description: "Browse commits and changed files.",
       icon: GitGraph,
+      shortcut: "G",
       available: props.gitHistoryAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.gitHistory,
       onClick: props.onAddGitHistory,

@@ -443,6 +443,27 @@ fork-specific behavior so future upstream syncs are easier to review.
     `apps/desktop/src/app/DesktopEnvironment.test.ts`,
     `apps/desktop/src/app/DesktopAppIdentity.test.ts`.
 
+## Upstream Sync 2026-08-13
+
+- Merged `upstream/main` (27 commits, merge base `f0b57ca23`) with `-X ours`, so fork-local code
+  wins any conflicting hunk. Backup of the pre-merge tip: branch `backup/pre-upstream-sync-20260813`.
+- Only two files conflicted: `apps/web/src/components/BranchToolbar.tsx` and
+  `apps/web/src/hooks/useHandleNewThread.ts`. Every upstream-added line was checked against the
+  merged tree afterwards; two upstream hunks were deliberately not carried over:
+  - `apps/web/src/components/chat/ChatComposer.tsx` — upstream's model-picker alignment tweak
+    (`-ms-3.5`/`ps-3.5` on the footer scroller, `triggerClassName="-ms-2.5"`, #6252) has no landing
+    site because the fork rewrote that footer for stacked multi-root rows.
+  - Nothing else. `BranchToolbar`'s conflict resolved to identical content, so upstream's composer
+    resize motion (#6209) is intact.
+- Upstream's new right-panel launcher (#6258) reads `action.shortcut` on every surface entry, which
+  broke the fork-only Git History entry. It now carries `shortcut: "G"`
+  (`apps/web/src/components/RightPanelTabs.tsx`); the letter was free alongside B/T/F/D/P/A.
+- One upstream line was grafted back by hand after the conflict resolution dropped it:
+  `carryComposerContentTo(draftId)` in `useHandleNewThread`, where the fork's
+  `options?.onDraftCreated?.(…)` occupies the same hunk. Without it the upstream "keep the typed
+  prompt when a draft changes repo" feature (#6393) was half-landed — `DraftHeroHeadline` passes
+  `carryComposerContent: true` and hits exactly that path.
+
 ## Validation Notes
 
 The fork-local changes above were validated with focused server tests, the full web unit suite,
