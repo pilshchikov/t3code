@@ -38,6 +38,8 @@ function summary(
     provider: UsageProviderKind;
     hostId: string;
     homePath: string;
+    sourceId?: string;
+    sourceLabel?: string;
     volumeId?: string;
     distinctSessions?: number;
   }[],
@@ -51,6 +53,8 @@ function summary(
     untilDay: "2026-08-31" as UsageDay,
     buckets,
     sources: sources.map((source) => ({
+      ...(source.sourceId === undefined ? {} : { sourceId: source.sourceId }),
+      ...(source.sourceLabel === undefined ? {} : { sourceLabel: source.sourceLabel }),
       fingerprint: {
         hostId: source.hostId,
         provider: source.provider,
@@ -92,6 +96,47 @@ describe("mergeUsage", () => {
     expect(merged.costUsd).toBe(20);
     expect(merged.records).toBe(10);
     expect(merged.duplicateSources).toHaveLength(0);
+  });
+
+  it("keeps two Claude accounts separate without double-counting them", () => {
+    const personalPath = "/Users/me/.claude/projects";
+    const workPath = "/Users/me/.claude-work/projects";
+    const merged = mergeUsage(
+      [
+        environment(
+          "env-a",
+          summary(
+            [
+              bucket({ sourceId: personalPath, costUsd: 10 }),
+              bucket({ sourceId: workPath, costUsd: 20 }),
+            ],
+            [
+              {
+                provider: "claude",
+                hostId: "mac",
+                homePath: personalPath,
+                sourceId: personalPath,
+                sourceLabel: "Claude Personal",
+              },
+              {
+                provider: "claude",
+                hostId: "mac",
+                homePath: workPath,
+                sourceId: workPath,
+                sourceLabel: "Claude Work",
+              },
+            ],
+          ),
+        ),
+      ],
+      USAGE_CONTRACT_VERSION,
+    );
+
+    expect(merged.costUsd).toBe(30);
+    expect(merged.sources.map((source) => [source.label, source.costUsd])).toEqual([
+      ["Claude Work", 20],
+      ["Claude Personal", 10],
+    ]);
   });
 
   it("counts a shared transcript directory once", () => {

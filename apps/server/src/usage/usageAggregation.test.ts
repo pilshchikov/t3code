@@ -94,6 +94,23 @@ describe("UsageAggregator", () => {
     expect(result.buckets[0]?.totals.outputTokens).toBe(100);
   });
 
+  it("keeps identical Claude models separated by transcript source", () => {
+    const aggregator = new UsageAggregator({
+      timeZone: "UTC",
+      sinceDay: "2026-08-01",
+      untilDay: "2026-08-31",
+      rates,
+    });
+    aggregator.add(record(), "/Users/me/.claude/projects");
+    aggregator.add(record({ sessionId: "session-work" }), "/Users/me/.claude-work/projects");
+
+    const result = aggregator.finish();
+    expect(result.buckets).toHaveLength(2);
+    expect(result.buckets.map((bucket) => bucket.sourceId)).toEqual(
+      expect.arrayContaining(["/Users/me/.claude/projects", "/Users/me/.claude-work/projects"]),
+    );
+  });
+
   it("buckets by the day in the requested time zone", () => {
     const utc = aggregate([record()], "UTC");
     const losAngeles = aggregate([record()], "America/Los_Angeles");

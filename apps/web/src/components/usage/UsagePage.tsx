@@ -233,6 +233,38 @@ export function UsagePage() {
                         </div>
                       );
                     })}
+                    {merged.sources.filter((source) => source.provider === "claude").length > 1 ? (
+                      <div className="flex flex-col gap-2 border-t border-border pt-3">
+                        <span className="text-xs tracking-wide text-muted-foreground uppercase">
+                          Claude accounts
+                        </span>
+                        {merged.sources
+                          .filter((source) => source.provider === "claude")
+                          .map((source) => (
+                            <div
+                              key={`${source.label}:${source.sourceId}`}
+                              className="flex flex-col gap-1"
+                            >
+                              <div className="flex items-baseline justify-between gap-2">
+                                <span className="flex min-w-0 items-center gap-2 text-sm text-foreground">
+                                  <ProviderMark provider="claude" className="size-3.5" />
+                                  <span className="truncate">{source.label}</span>
+                                </span>
+                                <span className="text-sm text-foreground tabular-nums">
+                                  {metric === "cost"
+                                    ? formatUsd(source.costUsd)
+                                    : formatTokens(source.totalTokens)}
+                                </span>
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {metric === "cost"
+                                  ? `${formatPercent(source.costShare)} of total · ${formatTokens(source.totalTokens)} tokens`
+                                  : `${formatPercent(source.totalTokens / Math.max(merged.totalTokens, 1))} of tokens · ${formatUsd(source.costUsd)}`}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="flex flex-col gap-3">

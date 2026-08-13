@@ -158,6 +158,29 @@ it.effect("decodes project.create with createWorkspaceRootIfMissing enabled", ()
   }),
 );
 
+it.effect("preserves private per-directory agent guidance", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeProjectCreateCommand({
+      type: "project.create",
+      commandId: "cmd-1",
+      projectId: "project-1",
+      title: "Project Title",
+      workspaceRoot: "/tmp/workspace",
+      workspaceRoots: [
+        {
+          path: "/tmp/workspace",
+          agentGuidance: " Commit directly to main after each completed change. ",
+        },
+      ],
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.strictEqual(
+      parsed.workspaceRoots?.[0]?.agentGuidance,
+      "Commit directly to main after each completed change.",
+    );
+  }),
+);
+
 it.effect("decodes historical project.created payloads with a default provider", () =>
   Effect.gen(function* () {
     const parsed = yield* decodeProjectCreatedPayload({

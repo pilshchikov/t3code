@@ -619,6 +619,29 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     padding-inline-end: calc(env(safe-area-inset-right) + 0.75rem);
   }
 
+  /* Keep the expanded prompt mounted while it collapses so scrolling away from the live edge
+     visibly shrinks the input instead of replacing it in one frame. */
+  .chat-composer-scroll-collapse {
+    min-height: 0;
+    max-height: 70vh;
+    overflow: hidden;
+    opacity: 1;
+    transition:
+      max-height 220ms cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 160ms ease-out;
+  }
+
+  .chat-composer-scroll-collapse > * {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .chat-composer-scroll-collapse-collapsed {
+    max-height: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
   .chat-composer-glass {
     background: color-mix(in srgb, var(--background) var(--glass-opacity), transparent);
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
@@ -1807,6 +1830,27 @@ label:has(> select#reasoning-effort) select {
   min-width: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* Timeline status, timestamps, plans, and work logs should grow with chat
+ * reading text, but remain visually secondary to the message itself. */
+.chat-system-text,
+.chat-system-text .text-xs,
+.chat-system-text .text-\[11px\],
+.chat-system-text .text-\[12px\] {
+  font-size: calc(var(--font-size-chat-message, 0.875rem) * 0.86) !important;
+}
+
+/* The rest of the chat timeline's compact UI—changed-file cards, tool rows,
+ * plan/status controls, timestamps, and chips—follows the same reading size.
+ * Markdown content is excluded: prose has its full chat size and code keeps
+ * the independently configurable code size. */
+.chat-timeline-system-scale
+  :is(.text-xs, .text-\[10px\], .text-\[11px\], .text-\[12px\]):not(
+    .chat-markdown *,
+    .chat-markdown
+  ) {
+  font-size: calc(var(--font-size-chat-message, 0.875rem) * 0.86) !important;
 }
 
 .chat-markdown > :first-child {

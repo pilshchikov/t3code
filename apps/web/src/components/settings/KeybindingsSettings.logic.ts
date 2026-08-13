@@ -321,6 +321,7 @@ export function keybindingFromKeyboardEvent(
 ): string | null {
   const keyToken = normalizeShortcutKeyToken(event.key);
   if (!keyToken) return null;
+  if (keyToken === "§") return keyToken;
 
   const parts: string[] = [];
   if (isMacPlatform(platform)) {

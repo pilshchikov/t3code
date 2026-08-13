@@ -12,6 +12,7 @@ import {
   OrchestrationThread,
   OrchestrationThreadDetailSnapshot,
   ProjectScript,
+  ProjectWorkspace,
   TurnId,
   type OrchestrationCheckpointSummary,
   type OrchestrationLatestTurn,
@@ -72,6 +73,7 @@ const decodeThread = Schema.decodeUnknownEffect(OrchestrationThread);
 const ProjectionProjectDbRowSchema = ProjectionProject.mapFields(
   Struct.assign({
     defaultModelSelection: Schema.NullOr(Schema.fromJsonString(ModelSelection)),
+    workspaceRoots: Schema.optional(Schema.fromJsonString(Schema.Array(ProjectWorkspace))),
     scripts: Schema.fromJsonString(Schema.Array(ProjectScript)),
   }),
 );
@@ -314,6 +316,7 @@ function mapProjectShellRow(
     id: row.projectId,
     title: row.title,
     workspaceRoot: row.workspaceRoot,
+    workspaceRoots: row.workspaceRoots?.length ? row.workspaceRoots : [{ path: row.workspaceRoot }],
     repositoryIdentity,
     defaultModelSelection: row.defaultModelSelection,
     defaultThreadEnvMode: row.defaultThreadEnvMode,
@@ -392,6 +395,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           project_id AS "projectId",
           title,
           workspace_root AS "workspaceRoot",
+          workspace_roots_json AS "workspaceRoots",
           default_model_selection_json AS "defaultModelSelection",
           default_thread_env_mode AS "defaultThreadEnvMode",
           favicon_path AS "faviconPath",
@@ -847,6 +851,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           project_id AS "projectId",
           title,
           workspace_root AS "workspaceRoot",
+          workspace_roots_json AS "workspaceRoots",
           default_model_selection_json AS "defaultModelSelection",
           default_thread_env_mode AS "defaultThreadEnvMode",
           favicon_path AS "faviconPath",
@@ -871,6 +876,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           project_id AS "projectId",
           title,
           workspace_root AS "workspaceRoot",
+          workspace_roots_json AS "workspaceRoots",
           default_model_selection_json AS "defaultModelSelection",
           default_thread_env_mode AS "defaultThreadEnvMode",
           favicon_path AS "faviconPath",
@@ -1548,6 +1554,9 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 id: row.projectId,
                 title: row.title,
                 workspaceRoot: row.workspaceRoot,
+                workspaceRoots: row.workspaceRoots?.length
+                  ? row.workspaceRoots
+                  : [{ path: row.workspaceRoot }],
                 repositoryIdentity: repositoryIdentities.get(row.projectId) ?? null,
                 defaultModelSelection: row.defaultModelSelection,
                 defaultThreadEnvMode: row.defaultThreadEnvMode,

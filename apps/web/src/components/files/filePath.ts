@@ -25,6 +25,13 @@ export function parentDirectoryPath(relativePath: string): string {
   return parts.slice(0, -1).join("/");
 }
 
+export function workspaceDocumentDirectory(workspaceRoot: string, relativePath: string): string {
+  const parent = parentDirectoryPath(relativePath);
+  if (!parent) return workspaceRoot.replace(/[\\/]+$/, "") || workspaceRoot;
+  const separator = workspaceRoot.includes("\\") && !workspaceRoot.includes("/") ? "\\" : "/";
+  return `${workspaceRoot.replace(/[\\/]+$/, "")}${separator}${parent.replaceAll("/", separator)}`;
+}
+
 export function directChildProjectEntries(
   entries: ReadonlyArray<ProjectEntry>,
   directoryPath: string,

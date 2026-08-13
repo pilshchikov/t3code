@@ -29,6 +29,61 @@ fork-specific behavior so future upstream syncs are easier to review.
 - Validation performed on the installed macOS build showed a clean startup using only loopback
   sockets between Electron and the local backend after these gates were added.
 
+## Multi-directory Projects
+
+- A project can retain several filesystem roots, including a root that is also used by another
+  project. The lightweight shell snapshot preserves the complete root list so live chat surfaces do
+  not fall back to the primary directory after an update.
+- Composer workspace and branch controls render one aligned stacked row per root. Root badges use a
+  stable project palette; clicking a badge opens the predefined color picker and persists the
+  selection in project metadata.
+- Files renders every root across the full available height, titles sections with their directory
+  names, and supports collapsing roots and dragging the horizontal dividers to rebalance their
+  heights. Each tree toolbar also has a one-click collapse-all-directories control beside Refresh.
+  Ignored entries remain visible with muted styling, and open file tabs are keyed by both root and
+  relative path.
+- Diffs exposes a directory selector for working-tree and branch comparisons and a collapsible
+  directory-tree navigator for changed files instead of relying on a flat sequence of file headers.
+  The tree/detail divider is draggable and persisted; selecting a tree file renders that file alone
+  in the adjacent diff viewer.
+- Each directory's branch row has an Agent guidance button. Its note is persisted with that
+  directory, appears only in the configuration dialog, and is injected as private context on every
+  agent turn. This supports different branch policies across directories (for example, commit
+  directly to `main` in a private repo versus creating a task branch for larger work).
+- Source: `packages/contracts/src/orchestration.ts`,
+  `apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts`,
+  `apps/web/src/components/BranchToolbar.tsx`, `apps/web/src/components/DiffPanel.tsx`,
+  `apps/web/src/components/files/FileBrowserPanel.tsx`,
+  `apps/web/src/components/files/FilePreviewPanel.tsx`, `apps/web/src/rightPanelStore.ts`.
+- Validation: focused projection snapshot, right-panel, diff-file action, and file-preview tests;
+  web typecheck.
+
+## Git History Surface
+
+- The thread right panel includes a Git History surface alongside Files, Diff, Terminal, and the
+  other workspace tools.
+  - Multi-directory projects can switch repositories from the surface header.
+  - The current branch's latest 100 commits render as a dense graph-style timeline with merge
+    markers, refs/tags, author, relative date, and short SHA.
+  - Selecting a commit shows its complete message, author/date/SHA, changed files, per-file line
+    statistics, aggregate additions/deletions, and binary-file indicators.
+  - Commit-list/details and changed-files/diff columns are independently resizable and persisted.
+    Changed files use the same hierarchical navigator and split/unified diff renderer as the Diff
+    surface, with one selected file displayed at a time.
+  - History and commit details use bounded, read-only Git RPCs and cached client query atoms; Git
+    commands never run in the renderer.
+- Source: `packages/contracts/src/git.ts`, `packages/contracts/src/rpc.ts`,
+  `apps/server/src/git/GitHistory.ts`, `apps/server/src/git/GitWorkflowService.ts`,
+  `packages/client-runtime/src/state/git.ts`, `apps/web/src/components/GitHistoryPanel.tsx`,
+  `apps/web/src/components/RightPanelTabs.tsx`, `apps/web/src/rightPanelStore.ts`.
+
+## Focused File Editing
+
+- Undo/redo is routed directly to the editable file surface while its code editor has focus, so
+  Cmd/Ctrl+Z cannot mutate the unfocused chat composer. Shift+Cmd/Ctrl+Z routes to editor redo.
+- Source: `apps/web/src/components/files/FilePreviewPanel.tsx`,
+  `apps/web/src/components/files/fileEditorUndo.ts`.
+
 ## File Preview UX
 
 - Editor surface tabs can be hidden from Settings > General.

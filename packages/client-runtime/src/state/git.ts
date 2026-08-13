@@ -57,6 +57,24 @@ export function createGitEnvironmentAtoms<R, E>(
       staleTimeMs: 5_000,
       idleTtlMs: 5 * 60_000,
     }),
+    history: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:git:history",
+      tag: WS_METHODS.gitHistory,
+      staleTimeMs: 15_000,
+      idleTtlMs: 5 * 60_000,
+    }),
+    commitDetails: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:git:commit-details",
+      tag: WS_METHODS.gitCommitDetails,
+      staleTimeMs: 60_000,
+      idleTtlMs: 5 * 60_000,
+    }),
+    commitDiff: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:git:commit-diff",
+      tag: WS_METHODS.gitCommitDiff,
+      staleTimeMs: 60_000,
+      idleTtlMs: 5 * 60_000,
+    }),
     pullRequestResolution: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:git:resolve-pull-request",
       tag: WS_METHODS.gitResolvePullRequest,

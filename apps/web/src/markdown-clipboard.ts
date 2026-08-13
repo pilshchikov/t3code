@@ -257,20 +257,52 @@ export function serializeTableElementToMarkdown(table: Element): string {
   return serializeTable(table).trim();
 }
 
+function tableRows(table: Element): string[][] {
+  return [...table.querySelectorAll(":scope > thead > tr, :scope > tbody > tr, :scope > tr")]
+    .map((row) =>
+      [...row.children]
+        .filter((cell) => cell.tagName === "TH" || cell.tagName === "TD")
+        .map((cell) => (cell.textContent ?? "").replace(/\s+/g, " ").trim()),
+    )
+    .filter((cells) => cells.length > 0);
+}
+
+/**
+ * Slack has no native Markdown table syntax. A box-drawn table inside a code
+ * block is both legible and retained as a table when it is pasted and sent.
+ */
+export function serializeTableElementToSlack(table: Element): string {
+  const rows = tableRows(table);
+  if (rows.length === 0) return "";
+  const columnCount = Math.max(...rows.map((row) => row.length));
+  const widths = Array.from({ length: columnCount }, (_, columnIndex) =>
+    Math.max(...rows.map((row) => [...(row[columnIndex] ?? "")].length)),
+  );
+  const horizontal = (left: string, middle: string, right: string) =>
+    `${left}${widths.map((width) => "─".repeat(width + 2)).join(middle)}${right}`;
+  const renderRow = (row: string[]) =>
+    `│${widths
+      .map((width, columnIndex) => ` ${(row[columnIndex] ?? "").padEnd(width)} `)
+      .join("│")}│`;
+  const [header, ...body] = rows;
+  if (!header) return "";
+  const lines = [horizontal("┌", "┬", "┐"), renderRow(header)];
+  if (rows.length > 1) {
+    lines.push(horizontal("├", "┼", "┤"), ...body.map(renderRow));
+  }
+  lines.push(horizontal("└", "┴", "┘"));
+  return `\`\`\`\n${lines.join("\n")}\n\`\`\``;
+}
+
 function csvCell(value: string): string {
   const normalized = value.replace(/\s+/g, " ").trim();
   return /[",\n]/.test(normalized) ? `"${normalized.replaceAll('"', '""')}"` : normalized;
 }
 
 export function serializeTableElementToCsv(table: Element): string {
-  const rows = [...table.querySelectorAll(":scope > thead > tr, :scope > tbody > tr, :scope > tr")];
   const lines: string[] = [];
-  for (const row of rows) {
-    const cells = [...row.children].filter(
-      (cell) => cell.tagName === "TH" || cell.tagName === "TD",
-    );
-    if (cells.length === 0) continue;
-    lines.push(cells.map((cell) => csvCell(cell.textContent ?? "")).join(","));
+  for (const cells of tableRows(table)) {
+    lines.push(cells.map(csvCell).join(","));
   }
   return lines.join("\n");
 }
@@ -301,6 +333,12 @@ export function chatMarkdownClipboardPayload(
     if (range.collapsed) continue;
     const container = document.createElement("div");
     container.appendChild(range.cloneContents());
+    // Slack ignores Markdown tables. Replace each selected rendered table with
+    // a code-block table before the normal rich-copy serializer runs, so a
+    // regular Cmd/Ctrl+C produces the same usable format as “Copy for Slack”.
+    for (const table of container.querySelectorAll("table")) {
+      table.replaceWith(document.createTextNode(`\n\n${serializeTableElementToSlack(table)}\n\n`));
+    }
     const text = serializeRenderedMarkdownFragment(container);
     if (!text) continue;
     texts.push(text);

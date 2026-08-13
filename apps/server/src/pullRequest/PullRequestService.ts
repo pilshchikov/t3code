@@ -467,9 +467,16 @@ export const make = Effect.gen(function* () {
           // Recorded before the de-duplication below, so the viewer lookup keeps the alternates
           // the listing is about to drop.
           if (api !== null) {
+            const projectRoots = project.workspaceRoots?.length
+              ? project.workspaceRoots.map((root) => root.path)
+              : [project.workspaceRoot];
             const roots = viewerRoots.get(host);
-            if (roots === undefined) viewerRoots.set(host, [project.workspaceRoot]);
-            else if (!roots.includes(project.workspaceRoot)) roots.push(project.workspaceRoot);
+            if (roots === undefined) viewerRoots.set(host, [...projectRoots]);
+            else {
+              for (const root of projectRoots) {
+                if (!roots.includes(root)) roots.push(root);
+              }
+            }
           }
           const key = listCursorKey(host, repository);
           if (seen.has(key)) continue;

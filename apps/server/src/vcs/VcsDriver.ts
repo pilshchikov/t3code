@@ -38,6 +38,11 @@ export interface VcsDeleteCheckpointRefsInput {
   readonly checkpointRefs: ReadonlyArray<CheckpointRef>;
 }
 
+export interface VcsIgnoredWorkspaceEntry {
+  readonly path: string;
+  readonly kind: "file" | "directory";
+}
+
 export interface VcsCheckpointOps {
   readonly captureCheckpoint: (input: VcsCaptureCheckpointInput) => Effect.Effect<void, VcsError>;
   readonly hasCheckpointRef: (
@@ -67,6 +72,9 @@ export class VcsDriver extends Context.Service<
     readonly listWorkspaceFiles: (
       cwd: string,
     ) => Effect.Effect<VcsListWorkspaceFilesResult, VcsError>;
+    readonly listIgnoredWorkspaceEntries?: (
+      cwd: string,
+    ) => Effect.Effect<ReadonlyArray<VcsIgnoredWorkspaceEntry>, VcsError>;
     readonly listRemotes: (cwd: string) => Effect.Effect<VcsListRemotesResult, VcsError>;
     readonly filterIgnoredPaths: (
       cwd: string,

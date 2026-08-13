@@ -70,6 +70,7 @@ interface BranchToolbarBranchSelectorProps {
   threadId: ThreadId;
   draftId?: DraftId;
   envLocked: boolean;
+  allowWorkspaceModeChange?: boolean;
   effectiveEnvModeOverride?: "local" | "multiwork" | "worktree";
   activeThreadBranchOverride?: string | null;
   onActiveThreadBranchOverrideChange?: (refName: string | null) => void;
@@ -77,6 +78,8 @@ interface BranchToolbarBranchSelectorProps {
   onStartFromOriginChange: (startFromOrigin: boolean) => void;
   onCheckoutPullRequestRequest?: (reference: string) => void;
   onComposerFocusRequest?: () => void;
+  /** When set, inspect and switch this project directory independently of the thread checkout. */
+  workspaceRootOverride?: string;
 }
 
 function toBranchActionErrorMessage(error: unknown): string {
@@ -89,6 +92,7 @@ export function BranchToolbarBranchSelector({
   threadId,
   draftId,
   envLocked,
+  allowWorkspaceModeChange = false,
   effectiveEnvModeOverride,
   activeThreadBranchOverride,
   onActiveThreadBranchOverrideChange,
@@ -96,6 +100,7 @@ export function BranchToolbarBranchSelector({
   onStartFromOriginChange,
   onCheckoutPullRequestRequest,
   onComposerFocusRequest,
+  workspaceRootOverride,
 }: BranchToolbarBranchSelectorProps) {
   const startFromOriginSwitchId = useId();
   const stopThreadSession = useAtomCommand(threadEnvironment.stopSession, "thread session stop");
@@ -131,12 +136,16 @@ export function BranchToolbarBranchSelector({
   const activeProject = useProject(activeProjectRef);
 
   const activeThreadId = serverThread?.id ?? (draftThread ? threadId : undefined);
-  const activeThreadBranch =
-    activeThreadBranchOverride !== undefined
+  const isIndependentWorkspace = workspaceRootOverride !== undefined;
+  const activeThreadBranch = isIndependentWorkspace
+    ? null
+    : activeThreadBranchOverride !== undefined
       ? activeThreadBranchOverride
       : (serverThread?.branch ?? draftThread?.branch ?? null);
-  const activeWorktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
-  const activeProjectCwd = activeProject?.workspaceRoot ?? null;
+  const activeWorktreePath = isIndependentWorkspace
+    ? null
+    : (serverThread?.worktreePath ?? draftThread?.worktreePath ?? null);
+  const activeProjectCwd = workspaceRootOverride ?? activeProject?.workspaceRoot ?? null;
   const branchCwd = activeWorktreePath ?? activeProjectCwd;
   const hasServerThread = serverThread !== null;
   const effectiveEnvMode =
@@ -153,6 +162,7 @@ export function BranchToolbarBranchSelector({
   const setThreadBranch = useCallback(
     (branch: string | null, worktreePath: string | null) => {
       if (!activeThreadId || !activeProject) return;
+      if (isIndependentWorkspace) return;
       if (serverSession && worktreePath !== activeWorktreePath) {
         void stopThreadSession({
           environmentId,
@@ -199,6 +209,7 @@ export function BranchToolbarBranchSelector({
       effectiveEnvMode,
       stopThreadSession,
       updateThreadMetadata,
+      isIndependentWorkspace,
     ],
   );
 
@@ -254,7 +265,10 @@ export function BranchToolbarBranchSelector({
   const normalizedDeferredBranchQuery = deferredTrimmedBranchQuery.toLowerCase();
   const prReference = parsePullRequestReference(trimmedBranchQuery);
   const isSelectingWorktreeBase =
-    effectiveEnvMode === "worktree" && !envLocked && !activeWorktreePath;
+    !isIndependentWorkspace &&
+    effectiveEnvMode === "worktree" &&
+    !activeWorktreePath &&
+    (!envLocked || allowWorkspaceModeChange);
   const checkoutPullRequestItemValue =
     prReference && onCheckoutPullRequestRequest ? `__checkout_pull_request__:${prReference}` : null;
   const canCreateBranch = !isSelectingWorktreeBase && trimmedBranchQuery.length > 0;

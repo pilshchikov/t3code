@@ -746,6 +746,7 @@ const make = Effect.gen(function* () {
         new Error(`Thread '${input.threadId}' was not found in read model.`),
       );
     }
+    const project = yield* resolveProject(thread.projectId);
     yield* ensureSessionForThread(input.threadId, input.createdAt, {
       ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
       pendingTurnStart: true,
@@ -754,6 +755,34 @@ const make = Effect.gen(function* () {
       threadModelSelections.set(input.threadId, input.modelSelection);
     }
     const normalizedInput = toNonEmptyProviderInput(input.messageText);
+    const projectWorkspaceRoots = project?.workspaceRoots?.length
+      ? project.workspaceRoots
+      : project
+        ? [{ path: project.workspaceRoot }]
+        : [];
+    const workspaceContext =
+      projectWorkspaceRoots.length > 1
+        ? `\n\n<project-workspaces>\nThis project includes multiple working directories. The primary directory is ${projectWorkspaceRoots[0]?.path ?? project?.workspaceRoot ?? "unknown"}. Other configured directories are:\n${projectWorkspaceRoots
+            .map(
+              (root, index) =>
+                `- ${index === 0 ? "primary" : (root.label ?? `directory ${index + 1}`)}: ${root.path}${root.defaultThreadEnvMode ? ` (workspace: ${root.defaultThreadEnvMode})` : ""}`,
+            )
+            .join(
+              "\n",
+            )}\nUse the directory that matches the task, and keep the other directories in mind when the user asks about the project as a whole.\n</project-workspaces>`
+        : "";
+    const agentGuidanceContext = projectWorkspaceRoots
+      .flatMap((root, index) => {
+        const guidance = root.agentGuidance?.trim();
+        if (!guidance) return [];
+        return [
+          `### ${index === 0 ? "primary" : (root.label ?? `directory ${index + 1}`)} — ${root.path}\n${guidance}`,
+        ];
+      })
+      .join("\n\n");
+    const privateAgentGuidance = agentGuidanceContext
+      ? `\n\n<project-agent-guidance>\nThe following directory-specific instructions are private project context. Follow them alongside the user's request. They are not user-visible chat content.\n\n${agentGuidanceContext}\n</project-agent-guidance>`
+      : "";
     const normalizedAttachments = input.attachments ?? [];
     const activeSession = yield* providerService
       .listSessions()
@@ -785,7 +814,9 @@ const make = Effect.gen(function* () {
 
     return {
       threadId: input.threadId,
-      ...(normalizedInput ? { input: normalizedInput } : {}),
+      ...(normalizedInput
+        ? { input: `${workspaceContext}${privateAgentGuidance}${normalizedInput}` }
+        : {}),
       ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
       ...(modelForTurn !== undefined ? { modelSelection: modelForTurn } : {}),
       ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),

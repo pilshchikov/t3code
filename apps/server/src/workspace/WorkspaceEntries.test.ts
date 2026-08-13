@@ -13,6 +13,7 @@ import { vi } from "vite-plus/test";
 import * as ServerConfig from "../config.ts";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
+import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 import * as WorkspaceEntries from "./WorkspaceEntries.ts";
 import * as WorkspacePaths from "./WorkspacePaths.ts";
 
@@ -25,6 +26,7 @@ const TestLayer = Layer.empty.pipe(
   Layer.provideMerge(WorkspaceEntries.layer.pipe(Layer.provide(WorkspacePaths.layer))),
   Layer.provideMerge(WorkspacePaths.layer),
   Layer.provideMerge(VcsProcess.layer),
+  Layer.provideMerge(VcsDriverRegistry.layer.pipe(Layer.provide(VcsProcess.layer))),
   Layer.provide(
     ServerConfig.ServerConfig.layerTest(process.cwd(), {
       prefix: "t3-workspace-entries-test-",
@@ -119,6 +121,41 @@ it.layer(TestLayer, { excludeTestServices: true })("WorkspaceEntries", (it) => {
         );
         expect(result.entries.some((entry) => entry.path.startsWith("node_modules"))).toBe(false);
         expect(result.truncated).toBe(false);
+      }),
+    );
+
+    it.effect("includes git-ignored entries with ignored metadata", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTempDir({ git: true });
+        yield* writeTextFile(cwd, ".git/info/exclude", "local-notes/\n");
+        yield* writeTextFile(cwd, "local-notes/notes.md");
+        yield* writeTextFile(cwd, "src/index.ts");
+
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        const result = yield* workspaceEntries.list({ cwd });
+
+        expect(result.entries).toEqual(
+          expect.arrayContaining([
+            { path: "local-notes", kind: "directory", ignored: true },
+            { path: "local-notes/notes.md", kind: "file", ignored: true },
+            { path: "src/index.ts", kind: "file" },
+          ]),
+        );
+      }),
+    );
+
+    it.effect("normalizes ignored directory separators before adding ancestors", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTempDir({ git: true });
+        yield* writeTextFile(cwd, ".git/info/exclude", "oracle/\n");
+        yield* writeTextFile(cwd, "oracle/tracked.ts");
+        yield* writeTextFile(cwd, "oracle/ignored.ts");
+        yield* git(cwd, ["add", "-f", "oracle/tracked.ts"]);
+
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        const result = yield* workspaceEntries.list({ cwd });
+
+        expect(result.entries.filter((entry) => entry.path === "oracle")).toHaveLength(1);
       }),
     );
   });

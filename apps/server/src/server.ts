@@ -334,7 +334,10 @@ const PreviewLayerLive = Layer.empty.pipe(
   Layer.provideMerge(PortScannerLayerLive),
 );
 
-const WorkspaceEntriesLayerLive = WorkspaceEntries.layer.pipe(Layer.provide(WorkspacePaths.layer));
+const WorkspaceEntriesLayerLive = WorkspaceEntries.layer.pipe(
+  Layer.provide(WorkspacePaths.layer),
+  Layer.provideMerge(VcsDriverRegistryLayerLive),
+);
 
 const ServerSettingsAndSessionsLayerLive = ResumableSessionDiscovery.layer.pipe(
   Layer.provideMerge(ServerSettings.layer.pipe(Layer.provide(ServerSecretStore.layer))),

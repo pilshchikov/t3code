@@ -1,6 +1,7 @@
 import type {
   EditorId,
   EnvironmentId,
+  ProjectWorkspace,
   ResolvedKeybindingsConfig,
   ScopedThreadRef,
 } from "@t3tools/contracts";
@@ -12,7 +13,15 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { ChevronRight, Code2, Eye, FolderTree, Globe2, LoaderCircle } from "lucide-react";
+import {
+  ChevronRight,
+  Code2,
+  Eye,
+  FolderTree,
+  Globe2,
+  GripHorizontal,
+  LoaderCircle,
+} from "lucide-react";
 import * as Schema from "effect/Schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -25,12 +34,18 @@ import { useTheme } from "~/hooks/useTheme";
 import { getLocalStorageItem, setLocalStorageItem, useLocalStorage } from "~/hooks/useLocalStorage";
 import { DIFF_SURFACE_THEME_UNSAFE_CSS, resolveDiffThemeName } from "~/lib/diffRendering";
 import { cn } from "~/lib/utils";
+import {
+  resolveWorkspaceColor,
+  workspaceColorOption,
+  workspaceDirectoryName,
+} from "~/lib/projectWorkspacePresentation";
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
 import { resolvePathLinkTarget } from "~/terminal-links";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Toggle } from "~/components/ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
+import { ResizableColumns } from "~/components/ui/resizable-columns";
 import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { buildFileReviewComment } from "~/reviewCommentContext";
 import { assetEnvironment } from "~/state/assets";
@@ -51,10 +66,11 @@ import {
   remapFileCommentAnnotations,
 } from "./fileCommentAnnotations";
 import { installFileEditorDismissal } from "./fileEditorDismissal";
+import { resolveFileEditorHistoryAction } from "./fileEditorUndo";
 import { resolveCenteredFileLineScrollTop } from "./fileLineReveal";
 import { DiffCommentAnnotation } from "../diffs/DiffCommentAnnotation";
 import { projectFileCacheKey, projectFileEditorCacheKey } from "./fileContentRevision";
-import { fileBreadcrumbs } from "./filePath";
+import { fileBreadcrumbs, workspaceDocumentDirectory } from "./filePath";
 import { isMarkdownPreviewFile, setMarkdownTaskChecked } from "./filePreviewMode";
 import { FileSaveCoordinator } from "./fileSaveCoordinator";
 import {
@@ -75,8 +91,9 @@ interface FilePreviewPanelProps {
   availableEditors: ReadonlyArray<EditorId>;
   revealLine: number | null;
   revealRequestId: number;
-  onOpenFile: (relativePath: string) => void;
+  onOpenFile: (relativePath: string, workspaceRoot?: string) => void;
   onPendingChange: (relativePath: string, pending: boolean) => void;
+  workspaceRoots?: ReadonlyArray<ProjectWorkspace> | undefined;
 }
 
 const FILE_EXPLORER_STORAGE_KEY = "t3code.fileExplorerOpen";
@@ -455,6 +472,7 @@ function EditableFileSurface({
     [revealRequestId],
   );
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const editorFocusedRef = useRef(false);
   const selectionFrameRef = useRef<number | null>(null);
   const saveCoordinator = useFileSaveCoordinator({
     environmentId,
@@ -467,6 +485,12 @@ function EditableFileSurface({
       new Editor<FileCommentAnnotationGroup>({
         persistState: true,
         persistStateStorage: "inMemory",
+        onFocus: () => {
+          editorFocusedRef.current = true;
+        },
+        onBlur: () => {
+          editorFocusedRef.current = false;
+        },
         onChange: (file, nextLineAnnotations) => {
           setProjectFileQueryData(environmentId, cwd, relativePath, file.contents);
           saveCoordinator.change(file.contents);
@@ -503,6 +527,20 @@ function EditableFileSurface({
     },
     [editor],
   );
+
+  useEffect(() => {
+    const handleHistoryShortcut = (event: KeyboardEvent) => {
+      if (!editorFocusedRef.current) return;
+      const action = resolveFileEditorHistoryAction(event);
+      if (!action) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (action === "redo") editor.redo();
+      else editor.undo();
+    };
+    window.addEventListener("keydown", handleHistoryShortcut, true);
+    return () => window.removeEventListener("keydown", handleHistoryShortcut, true);
+  }, [editor]);
 
   const removeAnnotationEntry = useCallback(
     (entryId: string) => {
@@ -640,9 +678,9 @@ function EditableFileSurface({
 
   return (
     <EditProvider editor={editor}>
-      <div ref={surfaceRef} className="flex min-h-0 flex-1">
+      <div ref={surfaceRef} className="flex h-full min-h-0 flex-1 overflow-hidden">
         <Virtualizer
-          className="file-preview-virtualizer min-h-0 flex-1 overflow-auto"
+          className="file-preview-virtualizer h-full min-h-0 flex-1 overflow-auto overscroll-contain"
           config={{
             overscrollSize: 600,
             intersectionObserverMargin: 1200,
@@ -728,7 +766,8 @@ function RenderedMarkdownSurface({
     <ScrollArea className="min-h-0 flex-1">
       <ChatMarkdown
         text={contents}
-        cwd={cwd}
+        cwd={workspaceDocumentDirectory(cwd, relativePath)}
+        workspaceRoot={cwd}
         threadRef={threadRef}
         className="mx-auto max-w-4xl px-6 py-5"
         onTaskListChange={({ markerOffset, checked }) => {
@@ -754,6 +793,160 @@ function initialExplorerOpen(): boolean {
   }
 }
 
+const MIN_WORKSPACE_TREE_HEIGHT_PX = 96;
+
+function MultiRootFileBrowser(props: {
+  environmentId: EnvironmentId;
+  roots: ReadonlyArray<ProjectWorkspace>;
+  projectName: string;
+  revealRequestId: number;
+  onOpenFile: (path: string, workspaceRoot: string) => void;
+}) {
+  const [collapsedRoots, setCollapsedRoots] = useState<ReadonlySet<string>>(() => new Set());
+  const [rootWeights, setRootWeights] = useState<Record<string, number>>({});
+  const sectionElements = useRef(new Map<string, HTMLElement>());
+  const resizeState = useRef<{
+    pointerId: number;
+    upperPath: string;
+    lowerPath: string;
+    upperHeight: number;
+    lowerHeight: number;
+    startY: number;
+    weights: Record<string, number>;
+  } | null>(null);
+
+  const toggleRoot = useCallback((path: string) => {
+    setCollapsedRoots((current) => {
+      const next = new Set(current);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
+
+  const startResize = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>, upperPath: string, lowerPath: string) => {
+      const upper = sectionElements.current.get(upperPath);
+      const lower = sectionElements.current.get(lowerPath);
+      if (!upper || !lower) return;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      const weights = Object.fromEntries(
+        props.roots
+          .filter((root) => !collapsedRoots.has(root.path))
+          .map((root) => [root.path, sectionElements.current.get(root.path)?.offsetHeight ?? 1]),
+      );
+      resizeState.current = {
+        pointerId: event.pointerId,
+        upperPath,
+        lowerPath,
+        upperHeight: upper.offsetHeight,
+        lowerHeight: lower.offsetHeight,
+        startY: event.clientY,
+        weights,
+      };
+    },
+    [collapsedRoots, props.roots],
+  );
+
+  const resize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const state = resizeState.current;
+    if (!state || state.pointerId !== event.pointerId) return;
+    const pairHeight = state.upperHeight + state.lowerHeight;
+    const minimumHeight = Math.min(MIN_WORKSPACE_TREE_HEIGHT_PX, pairHeight / 2);
+    const upperHeight = Math.min(
+      pairHeight - minimumHeight,
+      Math.max(minimumHeight, state.upperHeight + event.clientY - state.startY),
+    );
+    setRootWeights({
+      ...state.weights,
+      [state.upperPath]: upperHeight,
+      [state.lowerPath]: pairHeight - upperHeight,
+    });
+  }, []);
+
+  const stopResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (resizeState.current?.pointerId !== event.pointerId) return;
+    resizeState.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  }, []);
+
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1 overflow-hidden p-2">
+      {props.roots.map((root, index) => {
+        const collapsed = collapsedRoots.has(root.path);
+        const nextRoot = props.roots[index + 1];
+        const color = resolveWorkspaceColor(root, index);
+        const colorOption = workspaceColorOption(color);
+        return (
+          <div key={root.path} className="contents">
+            <section
+              ref={(element) => {
+                if (element) sectionElements.current.set(root.path, element);
+                else sectionElements.current.delete(root.path);
+              }}
+              className={cn(
+                "flex min-h-0 flex-col overflow-hidden rounded-lg border border-border/60 bg-background",
+                collapsed ? "shrink-0" : "basis-0",
+              )}
+              style={collapsed ? undefined : { flexGrow: rootWeights[root.path] ?? 1 }}
+            >
+              <button
+                type="button"
+                className="flex shrink-0 items-center gap-2 bg-muted/20 px-3 py-2 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                aria-expanded={!collapsed}
+                onClick={() => toggleRoot(root.path)}
+              >
+                <ChevronRight
+                  className={cn(
+                    "size-3.5 shrink-0 text-muted-foreground transition-transform",
+                    !collapsed && "rotate-90",
+                  )}
+                />
+                <span className={cn("size-2 shrink-0 rounded-full", colorOption.dotClassName)} />
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-medium">
+                    {workspaceDirectoryName(root.path)}
+                  </div>
+                  <code className="block truncate text-[10px] text-muted-foreground">
+                    {root.path}
+                  </code>
+                </div>
+              </button>
+              {!collapsed ? (
+                <div className="min-h-0 flex-1 border-t border-border/60">
+                  <FileBrowserPanel
+                    key={`${props.environmentId}:${root.path}`}
+                    environmentId={props.environmentId}
+                    cwd={root.path}
+                    projectName={workspaceDirectoryName(root.path) || props.projectName}
+                    selectedPath={null}
+                    selectedPathRevealId={props.revealRequestId}
+                    onOpenFile={(path) => props.onOpenFile(path, root.path)}
+                  />
+                </div>
+              ) : null}
+            </section>
+            {!collapsed && nextRoot && !collapsedRoots.has(nextRoot.path) ? (
+              <div
+                role="separator"
+                aria-orientation="horizontal"
+                aria-label={`Resize ${workspaceDirectoryName(root.path)} and ${workspaceDirectoryName(nextRoot.path)}`}
+                className="group -my-1 flex h-3 shrink-0 touch-none cursor-row-resize items-center justify-center"
+                onPointerDown={(event) => startResize(event, root.path, nextRoot.path)}
+                onPointerMove={resize}
+                onPointerUp={stopResize}
+                onPointerCancel={stopResize}
+              >
+                <GripHorizontal className="size-3.5 text-muted-foreground/35 transition-colors group-hover:text-muted-foreground" />
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function FilePreviewPanel({
   environmentId,
   cwd,
@@ -767,10 +960,23 @@ export default function FilePreviewPanel({
   revealRequestId,
   onOpenFile,
   onPendingChange,
+  workspaceRoots,
 }: FilePreviewPanelProps) {
   const { resolvedTheme } = useTheme();
   const wordWrap = useClientSettings((settings) => settings.wordWrap);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const [selectedRootCwd, setSelectedRootCwd] = useState(cwd);
+  useEffect(() => {
+    setSelectedRootCwd(cwd);
+  }, [cwd]);
+  const activeCwd = selectedRootCwd;
+  const roots = useMemo(
+    () =>
+      workspaceRoots?.length
+        ? workspaceRoots
+        : [{ path: cwd, label: "Primary directory" } satisfies ProjectWorkspace],
+    [cwd, workspaceRoots],
+  );
   const environmentHttpBaseUrl = useEnvironmentHttpBaseUrl(environmentId);
   const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
     reportFailure: false,
@@ -779,7 +985,7 @@ export default function FilePreviewPanel({
     reportFailure: false,
   });
   const isImage = relativePath !== null && isWorkspaceImagePreviewPath(relativePath);
-  const file = useProjectFileQuery(environmentId, cwd, relativePath, !isImage);
+  const file = useProjectFileQuery(environmentId, activeCwd, relativePath, !isImage);
   const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
   // Reading markdown rendered is a preference, not a property of one file. Keeping
   // it on the panel meant a thread switch dropped it and forced source back.
@@ -804,7 +1010,7 @@ export default function FilePreviewPanel({
       (handledReveal?.path === relativePath && handledReveal.requestId === revealRequestId));
   const canOpenInBrowser =
     relativePath !== null && isPreviewSupportedInRuntime() && isBrowserPreviewFile(relativePath);
-  const absolutePath = relativePath ? resolvePathLinkTarget(relativePath, cwd) : null;
+  const absolutePath = relativePath ? resolvePathLinkTarget(relativePath, activeCwd) : null;
   const breadcrumbs = useMemo(
     () => (relativePath ? fileBreadcrumbs(projectName, relativePath) : []),
     [projectName, relativePath],
@@ -853,6 +1059,79 @@ export default function FilePreviewPanel({
       );
     })();
   }, [absolutePath, createAssetUrl, environmentHttpBaseUrl, openPreview, threadRef]);
+
+  const previewSurface = (
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      {relativePath && isImage && absolutePath ? (
+        <WorkspaceImagePreview
+          key={absolutePath}
+          environmentId={environmentId}
+          threadRef={threadRef}
+          absolutePath={absolutePath}
+          alt={relativePath}
+        />
+      ) : relativePath && file.error && file.data === null ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-xs leading-relaxed text-destructive">
+          {file.error}
+        </div>
+      ) : relativePath && file.data === null ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground">
+          <LoaderCircle className="size-5 animate-spin" />
+        </div>
+      ) : relativePath && file.data ? (
+        isMarkdown && renderMarkdown ? (
+          <RenderedMarkdownSurface
+            environmentId={environmentId}
+            cwd={activeCwd}
+            relativePath={relativePath}
+            threadRef={threadRef}
+            contents={file.data.contents}
+            onPendingChange={onPendingChange}
+          />
+        ) : file.data.truncated ? (
+          <Virtualizer
+            key={`${relativePath}:${resolvedTheme}:${file.data.byteLength}`}
+            className="file-preview-virtualizer h-full min-h-0 flex-1 overflow-auto overscroll-contain"
+            config={{
+              overscrollSize: 600,
+              intersectionObserverMargin: 1200,
+            }}
+          >
+            <File
+              file={{
+                name: relativePath,
+                contents: file.data.contents,
+                cacheKey: projectFileCacheKey(activeCwd, relativePath, file.data.contents),
+              }}
+              options={{
+                disableFileHeader: true,
+                overflow: wordWrap ? "wrap" : "scroll",
+                theme: resolveDiffThemeName(resolvedTheme),
+                themeType: resolvedTheme,
+                unsafeCSS: FILE_LINK_REVEAL_UNSAFE_CSS,
+                onPostRender: onFilePostRender,
+              }}
+              className="min-h-full"
+            />
+          </Virtualizer>
+        ) : (
+          <EditableFileSurface
+            key={`${relativePath}:${resolvedTheme}`}
+            environmentId={environmentId}
+            cwd={activeCwd}
+            relativePath={relativePath}
+            composerDraftTarget={composerDraftTarget}
+            contents={file.data.contents}
+            resolvedTheme={resolvedTheme}
+            revealRequestId={revealRequestId}
+            wordWrap={wordWrap}
+            onPostRender={onFilePostRender}
+            onPendingChange={onPendingChange}
+          />
+        )
+      ) : null}
+    </div>
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
@@ -974,101 +1253,45 @@ export default function FilePreviewPanel({
         </div>
       ) : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div
-          className={cn(
-            "min-w-0 flex-1 flex-col overflow-hidden",
-            relativePath ? "flex" : "hidden",
-          )}
-        >
-          {relativePath && isImage && absolutePath ? (
-            <WorkspaceImagePreview
-              key={absolutePath}
-              environmentId={environmentId}
-              threadRef={threadRef}
-              absolutePath={absolutePath}
-              alt={relativePath}
-            />
-          ) : relativePath && file.error && file.data === null ? (
-            <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-xs leading-relaxed text-destructive">
-              {file.error}
-            </div>
-          ) : relativePath && file.data === null ? (
-            <div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground">
-              <LoaderCircle className="size-5 animate-spin" />
-            </div>
-          ) : relativePath && file.data ? (
-            isMarkdown && renderMarkdown ? (
-              <RenderedMarkdownSurface
-                environmentId={environmentId}
-                cwd={cwd}
-                relativePath={relativePath}
-                threadRef={threadRef}
-                contents={file.data.contents}
-                onPendingChange={onPendingChange}
-              />
-            ) : file.data.truncated ? (
-              <Virtualizer
-                key={`${relativePath}:${resolvedTheme}:${file.data.byteLength}`}
-                className="file-preview-virtualizer min-h-0 flex-1 overflow-auto"
-                config={{
-                  overscrollSize: 600,
-                  intersectionObserverMargin: 1200,
-                }}
-              >
-                <File
-                  file={{
-                    name: relativePath,
-                    contents: file.data.contents,
-                    cacheKey: projectFileCacheKey(cwd, relativePath, file.data.contents),
-                  }}
-                  options={{
-                    disableFileHeader: true,
-                    overflow: wordWrap ? "wrap" : "scroll",
-                    theme: resolveDiffThemeName(resolvedTheme),
-                    themeType: resolvedTheme,
-                    unsafeCSS: FILE_LINK_REVEAL_UNSAFE_CSS,
-                    onPostRender: onFilePostRender,
-                  }}
-                  className="min-h-full"
+        {relativePath && explorerOpen ? (
+          <ResizableColumns
+            className="h-full flex-1"
+            storageKey="t3code.fileExplorerTreeRatio"
+            defaultRatio={0.72}
+            firstMinPx={280}
+            secondMinPx={192}
+            separatorLabel="Resize files tree"
+            first={previewSurface}
+            second={
+              <aside className="flex h-full min-h-0 min-w-0 flex-1 bg-background">
+                <FileBrowserPanel
+                  key={`${environmentId}:${activeCwd}`}
+                  environmentId={environmentId}
+                  cwd={activeCwd}
+                  projectName={projectName}
+                  selectedPath={relativePath}
+                  selectedPathRevealId={revealRequestId}
+                  onOpenFile={(path) => onOpenFile(path, activeCwd)}
                 />
-              </Virtualizer>
-            ) : (
-              <EditableFileSurface
-                key={`${relativePath}:${resolvedTheme}`}
-                environmentId={environmentId}
-                cwd={cwd}
-                relativePath={relativePath}
-                composerDraftTarget={composerDraftTarget}
-                contents={file.data.contents}
-                resolvedTheme={resolvedTheme}
-                revealRequestId={revealRequestId}
-                wordWrap={wordWrap}
-                onPostRender={onFilePostRender}
-                onPendingChange={onPendingChange}
-              />
-            )
-          ) : null}
-        </div>
-        {explorerOpen || relativePath === null ? (
-          <aside
-            className={cn(
-              "flex min-h-0 shrink-0 bg-background",
-              relativePath
-                ? "w-[min(22rem,46%)] min-w-64 border-l border-border/60"
-                : "min-w-0 flex-1",
-            )}
-          >
-            <FileBrowserPanel
-              key={`${environmentId}:${cwd}`}
+              </aside>
+            }
+          />
+        ) : relativePath ? (
+          previewSurface
+        ) : (
+          <aside className="flex min-h-0 min-w-0 flex-1 bg-background">
+            <MultiRootFileBrowser
               environmentId={environmentId}
-              cwd={cwd}
+              roots={roots}
               projectName={projectName}
-              selectedPath={relativePath}
-              selectedPathRevealId={revealRequestId}
-              onOpenFile={onOpenFile}
+              revealRequestId={revealRequestId}
+              onOpenFile={(path, rootPath) => {
+                setSelectedRootCwd(rootPath);
+                onOpenFile(path, rootPath);
+              }}
             />
           </aside>
-        ) : null}
+        )}
       </div>
     </div>
   );

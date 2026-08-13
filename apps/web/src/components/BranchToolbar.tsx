@@ -1,19 +1,40 @@
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import type {
+  EnvironmentId,
+  ProjectWorkspace,
+  ProjectWorkspaceColor,
+  ThreadId,
+} from "@t3tools/contracts";
+import {
+  CheckIcon,
   ChevronDownIcon,
   CloudIcon,
   FolderGit2Icon,
   FolderGitIcon,
   FolderIcon,
   HistoryIcon,
+  NotebookPenIcon,
   MonitorIcon,
+  PlusIcon,
 } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
+import { useOpenDirectoryCommandPalette } from "../commandPaletteContext";
 import { useProject, useThread, useThreadShellsForProjectRefs } from "../state/entities";
 import { useIsMobile } from "../hooks/useMediaQuery";
+import { projectEnvironment } from "../state/projects";
+import { useAtomCommand } from "../state/use-atom-command";
+import {
+  PROJECT_WORKSPACE_COLORS,
+  resolveWorkspaceColor,
+  workspaceBadgeClassName,
+  workspaceDisplayName,
+} from "../lib/projectWorkspacePresentation";
 import {
   type EnvMode,
   type EnvironmentOption,
@@ -33,6 +54,7 @@ import {
   Menu,
   MenuGroup,
   MenuGroupLabel,
+  MenuItem,
   MenuPopup,
   MenuRadioGroup,
   MenuRadioItem,
@@ -40,6 +62,18 @@ import {
   MenuTrigger,
 } from "./ui/menu";
 import { Separator } from "./ui/separator";
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "./ui/dialog";
+import { Textarea } from "./ui/textarea";
+import { stackedThreadToast, toastManager } from "./ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 interface BranchToolbarProps {
   environmentId: EnvironmentId;
@@ -53,10 +87,70 @@ interface BranchToolbarProps {
   startFromOrigin: boolean;
   onStartFromOriginChange: (startFromOrigin: boolean) => void;
   envLocked: boolean;
+  /** Allow changing the workspace mode after a server thread has started. */
+  allowWorkspaceModeChange?: boolean;
   onCheckoutPullRequestRequest?: (reference: string) => void;
   onComposerFocusRequest?: () => void;
   availableEnvironments?: readonly EnvironmentOption[];
   onEnvironmentChange?: (environmentId: EnvironmentId) => void;
+}
+
+function WorkspaceBadge(props: {
+  workspace: ProjectWorkspace;
+  index: number;
+  onColorChange: (color: ProjectWorkspaceColor) => void;
+}) {
+  const color = resolveWorkspaceColor(props.workspace, props.index);
+  return (
+    <Menu>
+      <MenuTrigger
+        className={workspaceBadgeClassName(
+          color,
+          "max-w-32 truncate rounded px-1.5 py-0.5 text-[10px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        )}
+        title={`${props.workspace.path} · Change directory color`}
+      >
+        {workspaceDisplayName(props.workspace, props.index)}
+      </MenuTrigger>
+      <MenuPopup align="start" side="top" className="w-36">
+        <MenuGroup>
+          <MenuGroupLabel>Directory color</MenuGroupLabel>
+          {PROJECT_WORKSPACE_COLORS.map((option) => (
+            <MenuItem key={option.color} onClick={() => props.onColorChange(option.color)}>
+              <span className={`size-2.5 rounded-full ${option.dotClassName}`} />
+              <span>{option.label}</span>
+              {option.color === color ? <CheckIcon className="ms-auto size-3.5" /> : null}
+            </MenuItem>
+          ))}
+        </MenuGroup>
+      </MenuPopup>
+    </Menu>
+  );
+}
+
+function AgentGuidanceButton(props: { workspace: ProjectWorkspace; onClick: () => void }) {
+  const hasGuidance = Boolean(props.workspace.agentGuidance?.trim());
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className={hasGuidance ? "text-primary" : "text-muted-foreground"}
+            aria-label={`Edit agent guidance for ${props.workspace.label ?? props.workspace.path}`}
+            onClick={props.onClick}
+          />
+        }
+      >
+        <NotebookPenIcon className="size-3.5" />
+      </TooltipTrigger>
+      <TooltipPopup side="top">
+        {hasGuidance ? "Edit agent guidance" : "Add agent guidance"}
+      </TooltipPopup>
+    </Tooltip>
+  );
 }
 
 interface MobileRunContextSelectorProps {
@@ -103,7 +197,7 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
     : effectiveEnvMode === "worktree"
       ? resolveEnvModeLabel("worktree")
       : resolveCurrentWorkspaceLabel(activeWorktreePath);
-  const isLocked = envLocked || envModeLocked;
+  const isLocked = envModeLocked;
   const EnvironmentIcon = activeEnvironment?.isPrimary ? MonitorIcon : CloudIcon;
   const icon = showEnvironmentIndicator ? (
     // Button's base styles apply `-mx-0.5` to descendant SVGs, which eats 4px
@@ -319,6 +413,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   startFromOrigin,
   onStartFromOriginChange,
   envLocked,
+  allowWorkspaceModeChange = false,
   onCheckoutPullRequestRequest,
   onComposerFocusRequest,
   availableEnvironments,
@@ -339,6 +434,7 @@ export const BranchToolbar = memo(function BranchToolbar({
       ? scopeProjectRef(draftThread.environmentId, draftThread.projectId)
       : null;
   const activeProject = useProject(activeProjectRef);
+  const updateProject = useAtomCommand(projectEnvironment.update, { reportFailure: false });
   const hasActiveThread = serverThread !== null || draftThread !== null;
   const activeWorktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
   const effectiveEnvMode =
@@ -348,7 +444,9 @@ export const BranchToolbar = memo(function BranchToolbar({
       hasServerThread: serverThread !== null,
       draftThreadEnvMode: draftThread?.envMode,
     });
-  const envModeLocked = envLocked || (serverThread !== null && activeWorktreePath !== null);
+  const envModeLocked =
+    !allowWorkspaceModeChange &&
+    (envLocked || (serverThread !== null && activeWorktreePath !== null));
 
   // "Previous worktree" hops a draft into the most recently active worktree
   // of this project — the "keep going where I just was" follow-up flow. Only
@@ -396,6 +494,116 @@ export const BranchToolbar = memo(function BranchToolbar({
   const isMobile = useIsMobile();
   const [stripElement, setStripElement] = useState<HTMLDivElement | null>(null);
   const labelsOverflow = useLabelsOverflow(stripElement);
+  const workspaceRoots = useMemo(
+    () =>
+      activeProject?.workspaceRoots?.length
+        ? activeProject.workspaceRoots
+        : activeProject
+          ? [{ path: activeProject.workspaceRoot, label: "Primary directory" }]
+          : [],
+    [activeProject?.workspaceRoot, activeProject?.workspaceRoots],
+  );
+  const openDirectoryPicker = useOpenDirectoryCommandPalette();
+  const reportWorkspaceRootFailure = useCallback(
+    (result: Awaited<ReturnType<typeof updateProject>>) => {
+      if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return;
+      const error = squashAtomCommandFailure(result);
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Failed to update project directories",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        }),
+      );
+    },
+    [],
+  );
+  const persistWorkspaceRoots = useCallback(
+    async (nextRoots: typeof workspaceRoots) => {
+      if (!activeProject) return;
+      const result = await updateProject({
+        environmentId: activeProject.environmentId,
+        input: { projectId: activeProject.id, workspaceRoots: nextRoots },
+      });
+      reportWorkspaceRootFailure(result);
+    },
+    [activeProject, reportWorkspaceRootFailure, updateProject],
+  );
+  const addWorkspaceRoot = useCallback(() => {
+    if (!activeProject) return;
+    openDirectoryPicker({
+      environmentId: activeProject.environmentId,
+      initialPath: activeProject.workspaceRoot,
+      onSelect: async (selectedPath) => {
+        const normalizedPath = selectedPath.replace(/[\\/]+$/, "") || selectedPath;
+        if (workspaceRoots.some((root) => root.path === normalizedPath)) {
+          toastManager.add({ type: "warning", title: "Directory is already in this project" });
+          return;
+        }
+        await persistWorkspaceRoots([...workspaceRoots, { path: normalizedPath }]);
+      },
+    });
+  }, [activeProject, openDirectoryPicker, persistWorkspaceRoots, workspaceRoots]);
+  const setWorkspaceRootMode = useCallback(
+    (path: string, mode: EnvMode) => {
+      void persistWorkspaceRoots(
+        workspaceRoots.map((root) =>
+          root.path === path ? { ...root, defaultThreadEnvMode: mode } : root,
+        ),
+      );
+    },
+    [persistWorkspaceRoots, workspaceRoots],
+  );
+  const setWorkspaceRootColor = useCallback(
+    (path: string, color: ProjectWorkspaceColor) => {
+      void persistWorkspaceRoots(
+        workspaceRoots.map((root) => (root.path === path ? { ...root, color } : root)),
+      );
+    },
+    [persistWorkspaceRoots, workspaceRoots],
+  );
+  const [guidanceWorkspacePath, setGuidanceWorkspacePath] = useState<string | null>(null);
+  const guidanceWorkspace =
+    workspaceRoots.find((root) => root.path === guidanceWorkspacePath) ?? null;
+  const [guidanceDraft, setGuidanceDraft] = useState("");
+  const openAgentGuidance = useCallback((workspace: ProjectWorkspace) => {
+    setGuidanceWorkspacePath(workspace.path);
+    setGuidanceDraft(workspace.agentGuidance ?? "");
+  }, []);
+  const saveAgentGuidance = useCallback(async () => {
+    if (!guidanceWorkspace) return;
+    const guidance = guidanceDraft.trim();
+    await persistWorkspaceRoots(
+      workspaceRoots.map((root) =>
+        root.path === guidanceWorkspace.path
+          ? {
+              ...root,
+              ...(guidance ? { agentGuidance: guidance } : { agentGuidance: undefined }),
+            }
+          : root,
+      ),
+    );
+    setGuidanceWorkspacePath(null);
+  }, [guidanceDraft, guidanceWorkspace, persistWorkspaceRoots, workspaceRoots]);
+
+  const addWorkspaceRootButton = (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Add directory to project"
+            onClick={addWorkspaceRoot}
+          />
+        }
+      >
+        <PlusIcon className="size-3" />
+      </TooltipTrigger>
+      <TooltipPopup side="top">Add directory to project</TooltipPopup>
+    </Tooltip>
+  );
 
   if (!hasActiveThread || !activeProject) return null;
 
@@ -406,64 +614,181 @@ export const BranchToolbar = memo(function BranchToolbar({
       className="chat-composer-context-strip group/composer-context -mt-4 mx-auto flex w-[calc(100%-2.75rem)] max-w-[calc(48rem-2.75rem)] items-center gap-2 ps-1 pe-2 pt-5 pb-1"
     >
       {isMobile && showGitControls ? (
-        <MobileRunContextSelector
-          envLocked={envLocked}
-          envModeLocked={envModeLocked}
-          environmentId={environmentId}
-          availableEnvironments={availableEnvironments}
-          showEnvironmentPicker={showEnvironmentPicker}
-          showEnvironmentIndicator={showEnvironmentIndicator}
-          onEnvironmentChange={onEnvironmentChange}
-          effectiveEnvMode={effectiveEnvMode}
-          activeWorktreePath={activeWorktreePath}
-          onEnvModeChange={onEnvModeChange}
-          previousWorktreeLabel={previousWorktreeLabel}
-          onUsePreviousWorktree={onUsePreviousWorktree}
-        />
-      ) : (
         <div className="flex min-w-0 flex-1 items-center gap-1">
-          {showEnvironmentIndicator && availableEnvironments && (
-            <>
-              <BranchToolbarEnvironmentSelector
-                envLocked={envLocked}
-                environmentId={environmentId}
-                availableEnvironments={availableEnvironments}
-                {...(showEnvironmentPicker && onEnvironmentChange ? { onEnvironmentChange } : {})}
+          {addWorkspaceRootButton}
+          <MobileRunContextSelector
+            envLocked={envLocked}
+            envModeLocked={envModeLocked}
+            environmentId={environmentId}
+            availableEnvironments={availableEnvironments}
+            showEnvironmentPicker={showEnvironmentPicker}
+            showEnvironmentIndicator={showEnvironmentIndicator}
+            onEnvironmentChange={onEnvironmentChange}
+            effectiveEnvMode={effectiveEnvMode}
+            activeWorktreePath={activeWorktreePath}
+            onEnvModeChange={onEnvModeChange}
+            previousWorktreeLabel={previousWorktreeLabel}
+            onUsePreviousWorktree={onUsePreviousWorktree}
+          />
+        </div>
+      ) : (
+        <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+          <div className="flex min-w-0 max-w-full items-center gap-1">
+            {showGitControls ? addWorkspaceRootButton : null}
+            {showGitControls && workspaceRoots.length > 1 ? (
+              workspaceRoots[0] ? (
+                <WorkspaceBadge
+                  workspace={workspaceRoots[0]}
+                  index={0}
+                  onColorChange={(color) => setWorkspaceRootColor(workspaceRoots[0]!.path, color)}
+                />
+              ) : null
+            ) : null}
+            {showEnvironmentIndicator && availableEnvironments && (
+              <>
+                <BranchToolbarEnvironmentSelector
+                  envLocked={envLocked}
+                  environmentId={environmentId}
+                  availableEnvironments={availableEnvironments}
+                  {...(showEnvironmentPicker && onEnvironmentChange ? { onEnvironmentChange } : {})}
+                />
+                {showGitControls ? (
+                  <Separator orientation="vertical" className="mx-0.5 h-3.5!" />
+                ) : null}
+              </>
+            )}
+            {showGitControls ? (
+              <BranchToolbarEnvModeSelector
+                envLocked={envModeLocked}
+                effectiveEnvMode={effectiveEnvMode}
+                activeWorktreePath={activeWorktreePath}
+                onEnvModeChange={onEnvModeChange}
+                previousWorktreeLabel={previousWorktreeLabel}
+                onUsePreviousWorktree={onUsePreviousWorktree}
               />
-              {showGitControls ? (
-                <Separator orientation="vertical" className="mx-0.5 h-3.5!" />
-              ) : null}
-            </>
-          )}
-          {showGitControls ? (
-            <BranchToolbarEnvModeSelector
-              envLocked={envModeLocked}
-              effectiveEnvMode={effectiveEnvMode}
-              activeWorktreePath={activeWorktreePath}
-              onEnvModeChange={onEnvModeChange}
-              previousWorktreeLabel={previousWorktreeLabel}
-              onUsePreviousWorktree={onUsePreviousWorktree}
-            />
-          ) : null}
+            ) : null}
+          </div>
+          {showGitControls
+            ? workspaceRoots.slice(1).map((root, rootIndex) => (
+                <div key={root.path} className="flex min-w-0 max-w-full items-center gap-1">
+                  <span aria-hidden="true" className="size-6 shrink-0" />
+                  <WorkspaceBadge
+                    workspace={root}
+                    index={rootIndex + 1}
+                    onColorChange={(color) => setWorkspaceRootColor(root.path, color)}
+                  />
+                  <BranchToolbarEnvModeSelector
+                    envLocked={false}
+                    effectiveEnvMode={root.defaultThreadEnvMode ?? "local"}
+                    activeWorktreePath={null}
+                    onEnvModeChange={(mode) => setWorkspaceRootMode(root.path, mode)}
+                  />
+                </div>
+              ))
+            : null}
         </div>
       )}
 
       {showGitControls ? (
-        <BranchToolbarBranchSelector
-          className="min-w-0 flex-1 justify-end md:ml-auto md:flex-none"
-          environmentId={environmentId}
-          threadId={threadId}
-          {...(draftId ? { draftId } : {})}
-          envLocked={envLocked}
-          {...(effectiveEnvModeOverride ? { effectiveEnvModeOverride } : {})}
-          {...(activeThreadBranchOverride !== undefined ? { activeThreadBranchOverride } : {})}
-          {...(onActiveThreadBranchOverrideChange ? { onActiveThreadBranchOverrideChange } : {})}
-          startFromOrigin={startFromOrigin}
-          onStartFromOriginChange={onStartFromOriginChange}
-          {...(onCheckoutPullRequestRequest ? { onCheckoutPullRequestRequest } : {})}
-          {...(onComposerFocusRequest ? { onComposerFocusRequest } : {})}
-        />
+        <div className="flex min-w-0 flex-1 flex-col items-end gap-0.5 md:ml-auto md:flex-none">
+          <div className="flex min-w-0 max-w-full items-center gap-1">
+            {workspaceRoots[0] ? (
+              <AgentGuidanceButton
+                workspace={workspaceRoots[0]}
+                onClick={() => openAgentGuidance(workspaceRoots[0]!)}
+              />
+            ) : null}
+            <BranchToolbarBranchSelector
+              className="min-w-0 flex-1 justify-end"
+              environmentId={environmentId}
+              threadId={threadId}
+              {...(draftId ? { draftId } : {})}
+              envLocked={envLocked}
+              allowWorkspaceModeChange={allowWorkspaceModeChange}
+              {...(effectiveEnvModeOverride ? { effectiveEnvModeOverride } : {})}
+              {...(activeThreadBranchOverride !== undefined ? { activeThreadBranchOverride } : {})}
+              {...(onActiveThreadBranchOverrideChange
+                ? { onActiveThreadBranchOverrideChange }
+                : {})}
+              startFromOrigin={startFromOrigin}
+              onStartFromOriginChange={onStartFromOriginChange}
+              {...(onCheckoutPullRequestRequest ? { onCheckoutPullRequestRequest } : {})}
+              {...(onComposerFocusRequest ? { onComposerFocusRequest } : {})}
+            />
+          </div>
+          {workspaceRoots.slice(1).map((root, rootIndex) => (
+            <div key={root.path} className="flex min-w-0 max-w-full items-center gap-1">
+              {isMobile ? (
+                <span
+                  className="max-w-24 truncate text-[10px] text-muted-foreground/60"
+                  title={root.path}
+                >
+                  {workspaceDisplayName(root, rootIndex + 1)}
+                </span>
+              ) : null}
+              <AgentGuidanceButton workspace={root} onClick={() => openAgentGuidance(root)} />
+              <BranchToolbarBranchSelector
+                className="min-w-0 flex-1 justify-end"
+                environmentId={environmentId}
+                threadId={threadId}
+                {...(draftId ? { draftId } : {})}
+                envLocked={false}
+                allowWorkspaceModeChange={false}
+                {...(root.defaultThreadEnvMode
+                  ? { effectiveEnvModeOverride: root.defaultThreadEnvMode }
+                  : {})}
+                workspaceRootOverride={root.path}
+                startFromOrigin={startFromOrigin}
+                onStartFromOriginChange={onStartFromOriginChange}
+                {...(onComposerFocusRequest ? { onComposerFocusRequest } : {})}
+              />
+            </div>
+          ))}
+        </div>
       ) : null}
+      <Dialog
+        open={guidanceWorkspace !== null}
+        onOpenChange={(open) => {
+          if (!open) setGuidanceWorkspacePath(null);
+        }}
+      >
+        <DialogPopup className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Agent guidance</DialogTitle>
+            <DialogDescription>
+              Private instructions sent with every agent turn for this directory. They are not shown
+              in the chat transcript.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogPanel>
+            <div className="space-y-2">
+              <p
+                className="truncate font-mono text-[11px] text-muted-foreground"
+                title={guidanceWorkspace?.path}
+              >
+                {guidanceWorkspace?.path}
+              </p>
+              <Textarea
+                value={guidanceDraft}
+                maxLength={8000}
+                placeholder="Example: Commit directly to main after each completed change. Do not create a branch."
+                onChange={(event) => setGuidanceDraft(event.target.value)}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                {guidanceDraft.length.toLocaleString()} / 8,000 characters
+              </p>
+            </div>
+          </DialogPanel>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setGuidanceWorkspacePath(null)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void saveAgentGuidance()}>
+              Save guidance
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
     </div>
   );
 });

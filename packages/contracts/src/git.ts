@@ -427,6 +427,69 @@ export const GitFileDiffResult = Schema.Struct({
 });
 export type GitFileDiffResult = typeof GitFileDiffResult.Type;
 
+export const GitHistoryInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  limit: PositiveInt.check(Schema.isLessThanOrEqualTo(200)),
+});
+export type GitHistoryInput = typeof GitHistoryInput.Type;
+
+export const GitHistoryCommit = Schema.Struct({
+  sha: TrimmedNonEmptyStringSchema,
+  parentShas: Schema.Array(TrimmedNonEmptyStringSchema),
+  authorName: TrimmedNonEmptyStringSchema,
+  authorEmail: Schema.String,
+  authoredAt: TrimmedNonEmptyStringSchema,
+  subject: TrimmedNonEmptyStringSchema,
+  body: Schema.String,
+  decorations: Schema.Array(TrimmedNonEmptyStringSchema),
+});
+export type GitHistoryCommit = typeof GitHistoryCommit.Type;
+
+export const GitHistoryResult = Schema.Struct({
+  isRepo: Schema.Boolean,
+  branch: Schema.NullOr(TrimmedNonEmptyStringSchema),
+  commits: Schema.Array(GitHistoryCommit),
+  truncated: Schema.Boolean,
+});
+export type GitHistoryResult = typeof GitHistoryResult.Type;
+
+export const GitCommitDetailsInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  sha: TrimmedNonEmptyStringSchema.check(
+    Schema.isMaxLength(64),
+    Schema.isPattern(/^[0-9a-f]{7,64}$/i),
+  ),
+});
+export type GitCommitDetailsInput = typeof GitCommitDetailsInput.Type;
+
+export const GitCommitFile = Schema.Struct({
+  path: TrimmedNonEmptyStringSchema,
+  additions: Schema.NullOr(NonNegativeInt),
+  deletions: Schema.NullOr(NonNegativeInt),
+});
+export type GitCommitFile = typeof GitCommitFile.Type;
+
+export const GitCommitDetailsResult = Schema.Struct({
+  commit: GitHistoryCommit,
+  files: Schema.Array(GitCommitFile),
+});
+export type GitCommitDetailsResult = typeof GitCommitDetailsResult.Type;
+
+export const GitCommitDiffInput = Schema.Struct({
+  ...GitCommitDetailsInput.fields,
+  /** Limit the patch to one repository-relative path. Omitted for the full commit patch. */
+  path: Schema.optional(TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(4096))),
+});
+export type GitCommitDiffInput = typeof GitCommitDiffInput.Type;
+
+/** Unified patch for exactly one commit against its first parent (or the empty tree). */
+export const GitCommitDiffResult = Schema.Struct({
+  sha: TrimmedNonEmptyStringSchema,
+  diff: Schema.String,
+  truncated: Schema.Boolean,
+});
+export type GitCommitDiffResult = typeof GitCommitDiffResult.Type;
+
 // RPC / domain errors
 export class GitCommandError extends Schema.TaggedErrorClass<GitCommandError>()("GitCommandError", {
   operation: Schema.String,

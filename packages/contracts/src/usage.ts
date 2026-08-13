@@ -83,6 +83,8 @@ export const UsageBucket = Schema.Struct({
   day: UsageDay,
   hourStart: Schema.optional(TrimmedNonEmptyString),
   provider: UsageProviderKind,
+  /** Physical transcript source that produced this bucket. */
+  sourceId: Schema.optionalKey(TrimmedNonEmptyString),
   model: TrimmedNonEmptyString,
   totals: UsageTokenTotals,
   costUsd: Schema.Number,
@@ -129,6 +131,10 @@ export const UsageSourceStatus = Schema.Literals(["ok", "missing", "partial", "f
 export type UsageSourceStatus = typeof UsageSourceStatus.Type;
 
 export const UsageSource = Schema.Struct({
+  /** Stable source identity, normally the resolved transcript directory. */
+  sourceId: Schema.optionalKey(TrimmedNonEmptyString),
+  /** Human-readable account/instance name, when configured. */
+  sourceLabel: Schema.optionalKey(TrimmedNonEmptyString),
   fingerprint: UsageSourceFingerprint,
   status: UsageSourceStatus,
   scannedFiles: NonNegativeInt,

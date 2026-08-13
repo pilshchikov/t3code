@@ -149,6 +149,33 @@ function hasExternalScheme(path: string): boolean {
   return !POSITION_ONLY_PATTERN.test(rest);
 }
 
+function normalizeResolvedFileTarget(targetPath: string): string {
+  const { path, line, column } = splitPathAndPosition(targetPath);
+  const usesBackslashes = path.includes("\\") && !path.includes("/");
+  const normalizedSlashes = path.replaceAll("\\", "/");
+  const drive = normalizedSlashes.match(/^[A-Za-z]:/)?.[0] ?? "";
+  const isUnc = normalizedSlashes.startsWith("//");
+  const isAbsolute = normalizedSlashes.startsWith("/") || drive.length > 0;
+  const body = drive ? normalizedSlashes.slice(drive.length) : normalizedSlashes;
+  const segments: string[] = [];
+  for (const segment of body.split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") {
+      if (segments.length > 0 && segments.at(-1) !== "..") {
+        segments.pop();
+      } else if (!isAbsolute) {
+        segments.push(segment);
+      }
+      continue;
+    }
+    segments.push(segment);
+  }
+  const prefix = drive ? `${drive}/` : isUnc ? "//" : isAbsolute ? "/" : "";
+  const normalizedPath = `${prefix}${segments.join("/")}`;
+  const restoredPath = usesBackslashes ? normalizedPath.replaceAll("/", "\\") : normalizedPath;
+  return line ? `${restoredPath}:${line}${column ? `:${column}` : ""}` : restoredPath;
+}
+
 export function resolveMarkdownFileLinkTarget(
   href: string | undefined,
   cwd?: string,
@@ -179,11 +206,11 @@ export function resolveMarkdownFileLinkTarget(
 
   const pathWithPosition = appendLineColumnFromHash(decodedPath, decodedHash);
   if (!isRelativePath(pathWithPosition)) {
-    return pathWithPosition;
+    return normalizeResolvedFileTarget(pathWithPosition);
   }
 
   if (!cwd) return null;
-  return resolvePathLinkTarget(pathWithPosition, cwd);
+  return normalizeResolvedFileTarget(resolvePathLinkTarget(pathWithPosition, cwd));
 }
 
 const INLINE_CODE_DISQUALIFIER_PATTERN = /[\s`]/;
@@ -313,6 +340,7 @@ function looksLikeHostname(segment: string, hasPosition: boolean): boolean {
 export function resolveInlineCodeFileLinkMeta(
   codeText: string,
   cwd?: string,
+  workspaceRoot: string | undefined = cwd,
 ): MarkdownFileLinkMeta | null {
   const trimmed = codeText.trim();
   if (trimmed.length === 0 || INLINE_CODE_DISQUALIFIER_PATTERN.test(trimmed)) return null;
@@ -342,7 +370,7 @@ export function resolveInlineCodeFileLinkMeta(
     }
   }
 
-  const resolved = resolveMarkdownFileLinkMeta(candidate, cwd);
+  const resolved = resolveMarkdownFileLinkMeta(candidate, cwd, workspaceRoot);
   if (resolved) return resolved;
 
   // `Makefile:12` — conventional extensionless names fail the generic
@@ -353,7 +381,7 @@ export function resolveInlineCodeFileLinkMeta(
     BARE_EXTENSIONLESS_POSITION_PATTERN.test(candidate) &&
     EXTENSIONLESS_FILE_NAMES.has(candidate.replace(POSITION_SUFFIX_PATTERN, ""))
   ) {
-    return buildFileLinkMetaFromTarget(resolvePathLinkTarget(candidate, cwd), cwd);
+    return buildFileLinkMetaFromTarget(resolvePathLinkTarget(candidate, cwd), workspaceRoot);
   }
   return null;
 }
@@ -379,13 +407,17 @@ function workspaceRelativePath(path: string, workspaceRoot: string | undefined):
 export function resolveMarkdownFileLinkMeta(
   href: string | undefined,
   cwd?: string,
+  workspaceRoot: string | undefined = cwd,
 ): MarkdownFileLinkMeta | null {
   const targetPath = resolveMarkdownFileLinkTarget(href, cwd);
   if (!targetPath) return null;
-  return buildFileLinkMetaFromTarget(targetPath, cwd);
+  return buildFileLinkMetaFromTarget(targetPath, workspaceRoot);
 }
 
-function buildFileLinkMetaFromTarget(targetPath: string, cwd?: string): MarkdownFileLinkMeta {
+function buildFileLinkMetaFromTarget(
+  targetPath: string,
+  workspaceRoot?: string,
+): MarkdownFileLinkMeta {
   const { path, line, column } = splitPathAndPosition(targetPath);
   const parsedLine = line ? Number.parseInt(line, 10) : Number.NaN;
   const parsedColumn = column ? Number.parseInt(column, 10) : Number.NaN;
@@ -395,8 +427,8 @@ function buildFileLinkMetaFromTarget(targetPath: string, cwd?: string): Markdown
   return {
     filePath: path,
     targetPath,
-    displayPath: formatWorkspaceRelativePath(targetPath, cwd),
-    workspaceRelativePath: workspaceRelativePath(path, cwd),
+    displayPath: formatWorkspaceRelativePath(targetPath, workspaceRoot),
+    workspaceRelativePath: workspaceRelativePath(path, workspaceRoot),
     basename: basenameOfPath(path),
     ...(lineNumber !== undefined ? { line: lineNumber } : {}),
     ...(columnNumber !== undefined ? { column: columnNumber } : {}),

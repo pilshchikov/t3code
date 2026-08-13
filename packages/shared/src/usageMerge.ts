@@ -38,6 +38,16 @@ export interface ModelTotals {
   readonly costShare: number;
 }
 
+export interface UsageSourceTotals {
+  readonly sourceId: string;
+  readonly label: string;
+  readonly provider: UsageProviderKind;
+  readonly costUsd: number;
+  readonly totalTokens: number;
+  readonly records: number;
+  readonly costShare: number;
+}
+
 export interface DailyTotals {
   readonly day: string;
   readonly costUsd: number;
@@ -71,6 +81,7 @@ export interface MergedUsage {
   readonly records: number;
   readonly sessions: number;
   readonly providers: readonly ProviderTotals[];
+  readonly sources: readonly UsageSourceTotals[];
   readonly models: readonly ModelTotals[];
   readonly daily: readonly DailyTotals[];
   readonly hourly: readonly HourlyTotals[];
@@ -137,19 +148,25 @@ function ownedContribution(
   ownerByFingerprint: ReadonlyMap<string, EnvironmentId>,
 ): { readonly buckets: readonly UsageBucket[]; readonly sessions: number } {
   const ownedProviders = new Set<UsageProviderKind>();
+  const ownedSourceIds = new Set<string>();
   let sessions = 0;
   for (const source of environment.summary.sources) {
     if (source.status === "missing") continue;
     const key = fingerprintKey(source.fingerprint);
     if (ownerByFingerprint.get(key) === environment.environmentId) {
       ownedProviders.add(source.fingerprint.provider);
+      ownedSourceIds.add(source.sourceId ?? source.fingerprint.resolvedHomePath);
       // Distinct within a directory. Summing per-bucket session counts instead
       // would count a session once per day and model it spans.
       sessions += source.distinctSessions;
     }
   }
   return {
-    buckets: environment.summary.buckets.filter((bucket) => ownedProviders.has(bucket.provider)),
+    buckets: environment.summary.buckets.filter((bucket) =>
+      bucket.sourceId === undefined
+        ? ownedProviders.has(bucket.provider)
+        : ownedSourceIds.has(bucket.sourceId),
+    ),
     sessions,
   };
 }
@@ -175,6 +192,7 @@ const EMPTY_MERGED: MergedUsage = {
   records: 0,
   sessions: 0,
   providers: [],
+  sources: [],
   models: [],
   daily: [],
   hourly: [],
@@ -187,6 +205,11 @@ const EMPTY_MERGED: MergedUsage = {
   duplicateSources: [],
   contributingEnvironments: [],
   staleEnvironments: [],
+};
+
+const PROVIDER_FALLBACK_LABEL: Record<UsageProviderKind, string> = {
+  claude: "Claude Code",
+  codex: "Codex",
 };
 
 /**
@@ -233,6 +256,17 @@ export function mergeUsage(
   const modelAccumulator = new Map<
     string,
     { provider: UsageProviderKind; costUsd: number; totalTokens: number; records: number }
+  >();
+  const sourceAccumulator = new Map<
+    string,
+    {
+      sourceId: string;
+      label: string;
+      provider: UsageProviderKind;
+      costUsd: number;
+      totalTokens: number;
+      records: number;
+    }
   >();
   const dailyAccumulator = new Map<
     string,
@@ -285,6 +319,35 @@ export function mergeUsage(
       provider.totalTokens += tokens;
       provider.records += bucket.records;
       providerAccumulator.set(bucket.provider, provider);
+
+      const matchingSource = environment.summary.sources.find(
+        (source) =>
+          (bucket.sourceId !== undefined &&
+            (source.sourceId === bucket.sourceId ||
+              source.fingerprint.resolvedHomePath === bucket.sourceId)) ||
+          (bucket.sourceId === undefined && source.fingerprint.provider === bucket.provider),
+      );
+      const sourceId =
+        bucket.sourceId ??
+        matchingSource?.sourceId ??
+        matchingSource?.fingerprint.resolvedHomePath ??
+        bucket.provider;
+      const sourceKey = `${environment.environmentId}\u0000${sourceId}`;
+      const source = sourceAccumulator.get(sourceKey) ?? {
+        sourceId,
+        label:
+          matchingSource?.sourceLabel ??
+          matchingSource?.fingerprint.resolvedHomePath ??
+          PROVIDER_FALLBACK_LABEL[bucket.provider],
+        provider: bucket.provider,
+        costUsd: 0,
+        totalTokens: 0,
+        records: 0,
+      };
+      source.costUsd += bucket.costUsd;
+      source.totalTokens += tokens;
+      source.records += bucket.records;
+      sourceAccumulator.set(sourceKey, source);
 
       const modelKey = `${bucket.provider} ${bucket.model}`;
       const model = modelAccumulator.get(modelKey) ?? {
@@ -346,6 +409,13 @@ export function mergeUsage(
     }))
     .sort((a, b) => b.costUsd - a.costUsd);
 
+  const sources: UsageSourceTotals[] = [...sourceAccumulator.values()]
+    .map((source) => ({
+      ...source,
+      costShare: costUsd === 0 ? 0 : source.costUsd / costUsd,
+    }))
+    .sort((a, b) => b.costUsd - a.costUsd || a.label.localeCompare(b.label));
+
   const models: ModelTotals[] = [...modelAccumulator.entries()]
     .map(([key, totals]) => ({
       model: key.slice(key.indexOf(" ") + 1),
@@ -381,6 +451,7 @@ export function mergeUsage(
     records,
     sessions,
     providers,
+    sources,
     models,
     daily,
     hourly,

@@ -43,11 +43,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     readonly publishSnapshot: (snapshot: ServerProvider) => Effect.Effect<void>;
   }) => Effect.Effect<void>;
   readonly refreshInterval?: Duration.Input;
-}): Effect.fn.Return<
-  ServerProviderShape,
-  ServerSettingsError,
-  Scope.Scope
-> {
+}): Effect.fn.Return<ServerProviderShape, ServerSettingsError, Scope.Scope> {
   const backgroundPolicy = yield* Effect.serviceOption(BackgroundPolicy.BackgroundPolicy);
   const serverSettings = yield* Effect.serviceOption(ServerSettingsService);
   const enableBackgroundRefresh =
@@ -202,29 +198,29 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
   if (enableBackgroundRefresh) {
     yield* Effect.forever(
       getRefreshInterval.pipe(
-      Effect.flatMap((refreshInterval) =>
-        Effect.raceFirst(
-          Effect.sleep(
-            Duration.toMillis(Duration.fromInputUnsafe(refreshInterval)) <= 0
-              ? "60 seconds"
-              : refreshInterval,
-          ).pipe(Effect.as(true)),
-          Queue.take(refreshIntervalChanges).pipe(Effect.as(false)),
-        ).pipe(
-          Effect.flatMap((intervalElapsed) =>
-            intervalElapsed && Duration.toMillis(Duration.fromInputUnsafe(refreshInterval)) > 0
-              ? hasProviderStatusDemand.pipe(
-                  Effect.flatMap((shouldRefresh) =>
-                    shouldRefresh ? refreshSnapshot().pipe(Effect.asVoid) : Effect.void,
-                  ),
-                )
-              : Effect.void,
+        Effect.flatMap((refreshInterval) =>
+          Effect.raceFirst(
+            Effect.sleep(
+              Duration.toMillis(Duration.fromInputUnsafe(refreshInterval)) <= 0
+                ? "60 seconds"
+                : refreshInterval,
+            ).pipe(Effect.as(true)),
+            Queue.take(refreshIntervalChanges).pipe(Effect.as(false)),
+          ).pipe(
+            Effect.flatMap((intervalElapsed) =>
+              intervalElapsed && Duration.toMillis(Duration.fromInputUnsafe(refreshInterval)) > 0
+                ? hasProviderStatusDemand.pipe(
+                    Effect.flatMap((shouldRefresh) =>
+                      shouldRefresh ? refreshSnapshot().pipe(Effect.asVoid) : Effect.void,
+                    ),
+                  )
+                : Effect.void,
+            ),
           ),
         ),
+        Effect.ignoreCause({ log: true }),
       ),
-      Effect.ignoreCause({ log: true }),
-    ),
-      ).pipe(Effect.forkScoped);
+    ).pipe(Effect.forkScoped);
 
     yield* applySnapshot(initialSettings, { forceRefresh: true }).pipe(
       Effect.ignoreCause({ log: true }),

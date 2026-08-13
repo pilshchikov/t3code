@@ -29,7 +29,8 @@ describe("openDiffFilePrimaryAction", () => {
       selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, THREAD_REF),
     ).toMatchObject({
       isOpen: true,
-      activeSurfaceId: "file:apps/web/src/components/DiffPanel.tsx",
+      activeSurfaceId: "file:%2Frepo%2Fproject:apps/web/src/components/DiffPanel.tsx",
+      surfaces: [{ workspaceRoot: "/repo/project" }],
     });
     expect(openInEditor).not.toHaveBeenCalled();
   });

@@ -1970,7 +1970,9 @@ const makeWsRpcLayer = (
         [WS_METHODS.vcsFetch]: (input) =>
           observeRpcEffect(
             WS_METHODS.vcsFetch,
-            gitWorkflow.fetchCurrentBranch(input.cwd).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            gitWorkflow
+              .fetchCurrentBranch(input.cwd)
+              .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
             { "rpc.aggregate": "git" },
           ),
         [WS_METHODS.gitRunStackedAction]: (input) =>
@@ -2054,6 +2056,18 @@ const makeWsRpcLayer = (
           ),
         [WS_METHODS.gitFileDiff]: (input) =>
           observeRpcEffect(WS_METHODS.gitFileDiff, gitWorkflow.fileDiff(input), {
+            "rpc.aggregate": "git",
+          }),
+        [WS_METHODS.gitHistory]: (input) =>
+          observeRpcEffect(WS_METHODS.gitHistory, gitWorkflow.history(input), {
+            "rpc.aggregate": "git",
+          }),
+        [WS_METHODS.gitCommitDetails]: (input) =>
+          observeRpcEffect(WS_METHODS.gitCommitDetails, gitWorkflow.commitDetails(input), {
+            "rpc.aggregate": "git",
+          }),
+        [WS_METHODS.gitCommitDiff]: (input) =>
+          observeRpcEffect(WS_METHODS.gitCommitDiff, gitWorkflow.commitDiff(input), {
             "rpc.aggregate": "git",
           }),
         [WS_METHODS.vcsListRefs]: (input) =>

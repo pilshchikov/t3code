@@ -17,7 +17,7 @@ export function openDiffFilePrimaryAction({
   openInEditor,
 }: OpenDiffFilePrimaryActionInput): void {
   if (threadRef) {
-    useRightPanelStore.getState().openFile(threadRef, filePath);
+    useRightPanelStore.getState().openFile(threadRef, filePath, undefined, activeCwd);
     return;
   }
 

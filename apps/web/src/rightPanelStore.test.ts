@@ -251,6 +251,16 @@ describe("rightPanelStore", () => {
     });
   });
 
+  it("keeps Git history as a singleton surface", () => {
+    useRightPanelStore.getState().open(refA, "git-history");
+    useRightPanelStore.getState().open(refA, "git-history");
+    expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
+      isOpen: true,
+      activeSurfaceId: "git-history",
+      surfaces: [{ id: "git-history", kind: "git-history" }],
+    });
+  });
+
   it("replaces the standalone explorer with peer file surfaces", () => {
     useRightPanelStore.getState().open(refA, "files");
     useRightPanelStore.getState().openFile(refA, "src/index.ts");
@@ -277,6 +287,18 @@ describe("rightPanelStore", () => {
         },
       ],
     });
+  });
+
+  it("keeps the same relative file from different project directories as separate surfaces", () => {
+    useRightPanelStore.getState().openFile(refA, "README.md", undefined, "/repo/frontend");
+    useRightPanelStore.getState().openFile(refA, "README.md", undefined, "/repo/backend");
+
+    const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+    expect(state.surfaces).toEqual([
+      expect.objectContaining({ relativePath: "README.md", workspaceRoot: "/repo/frontend" }),
+      expect.objectContaining({ relativePath: "README.md", workspaceRoot: "/repo/backend" }),
+    ]);
+    expect(state.activeSurfaceId).toBe("file:%2Frepo%2Fbackend:README.md");
   });
 
   it("updates line reveal requests when reopening a file surface", () => {

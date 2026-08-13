@@ -15,6 +15,7 @@ import {
 import type {
   ContextMenuItem,
   ModelSelection,
+  ProjectWorkspace,
   ProviderDriverKind,
   SidebarProjectGroupingMode,
   T3ProjectFileScript,
@@ -25,7 +26,14 @@ import { createModelSelection } from "@t3tools/shared/model";
 import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
 import { useCanGoBack, useNavigate } from "@tanstack/react-router";
 import * as Cause from "effect/Cause";
-import { ChevronDownIcon, CopyIcon, PlusIcon, SettingsIcon, Trash2Icon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  CopyIcon,
+  FolderPlusIcon,
+  PlusIcon,
+  SettingsIcon,
+  Trash2Icon,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -36,6 +44,7 @@ import {
 } from "react";
 
 import { useComposerDraftStore } from "../../composerDraftStore";
+import { useOpenDirectoryCommandPalette } from "../../commandPaletteContext";
 import { isElectron } from "../../env";
 import {
   useClientSettings,
@@ -97,6 +106,10 @@ import {
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SidebarInset } from "../ui/sidebar";
 import { stackedThreadToast, toastManager } from "../ui/toast";
+
+function pathIsPrimary(path: string, primaryPath: string): boolean {
+  return path === primaryPath;
+}
 import {
   WorkspaceBreadcrumb,
   WorkspaceBreadcrumbItem,
@@ -366,6 +379,7 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
         defaultModelSelection: ModelSelection | null;
         defaultThreadEnvMode: ThreadEnvMode | null;
         faviconPath: string | null;
+        workspaceRoots: ReadonlyArray<ProjectWorkspace>;
       }>,
       failureTitle: string,
     ): Promise<AtomCommandResult<void, unknown>> => {
@@ -459,6 +473,68 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
       }
     },
     [updateAllMembers],
+  );
+
+  const workspaceRoots = useMemo<ReadonlyArray<ProjectWorkspace>>(
+    () =>
+      representative.workspaceRoots?.length
+        ? representative.workspaceRoots
+        : [{ path: representative.workspaceRoot }],
+    [representative.workspaceRoot, representative.workspaceRoots],
+  );
+  const [isAddingWorkspaceRoot, setIsAddingWorkspaceRoot] = useState(false);
+  const openDirectoryPicker = useOpenDirectoryCommandPalette();
+  const addWorkspaceRoot = useCallback(() => {
+    if (isAddingWorkspaceRoot) return;
+    openDirectoryPicker({
+      environmentId: representative.environmentId,
+      initialPath: representative.workspaceRoot,
+      onSelect: async (path) => {
+        setIsAddingWorkspaceRoot(true);
+        try {
+          const normalizedPath = path.replace(/[\\/]+$/, "") || path;
+          if (workspaceRoots.some((root) => root.path === normalizedPath)) {
+            toastManager.add({ type: "warning", title: "Directory is already in this project" });
+            return;
+          }
+          await updateAllMembers(
+            { workspaceRoots: [...workspaceRoots, { path: normalizedPath }] },
+            "Failed to add project directory",
+          );
+        } finally {
+          setIsAddingWorkspaceRoot(false);
+        }
+      },
+    });
+  }, [
+    isAddingWorkspaceRoot,
+    openDirectoryPicker,
+    representative,
+    updateAllMembers,
+    workspaceRoots,
+  ]);
+  const removeWorkspaceRoot = useCallback(
+    (path: string) => {
+      if (workspaceRoots.length <= 1 || path === representative.workspaceRoot) return;
+      void updateAllMembers(
+        { workspaceRoots: workspaceRoots.filter((root) => root.path !== path) },
+        "Failed to remove project directory",
+      );
+    },
+    [representative.workspaceRoot, updateAllMembers, workspaceRoots],
+  );
+  const setWorkspaceRootMode = useCallback(
+    (path: string, mode: NonNullable<ProjectWorkspace["defaultThreadEnvMode"]> | null) => {
+      void updateAllMembers(
+        {
+          workspaceRoots: workspaceRoots.map((root) =>
+            root.path === path ? { ...root, defaultThreadEnvMode: mode } : root,
+          ),
+        },
+        "Failed to update directory workspace",
+      );
+    },
+    [updateAllMembers, workspaceRoots],
   );
 
   // ----- checkout selection and scripts -----
@@ -811,6 +887,85 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
               </div>
             }
           />
+        </SettingsSection>
+
+        <SettingsSection
+          title="Directories"
+          headerAction={
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              disabled={isAddingWorkspaceRoot}
+              onClick={addWorkspaceRoot}
+            >
+              <FolderPlusIcon />
+              Add directory
+            </Button>
+          }
+        >
+          <div className="space-y-1 px-3 py-2 sm:px-4">
+            <p className="text-xs text-muted-foreground">
+              Directories share this project context. The primary directory remains the default
+              checkout for existing threads.
+            </p>
+            {workspaceRoots.map((root, index) => (
+              <div
+                key={root.path}
+                className="flex min-w-0 items-center gap-2 rounded-lg bg-muted/30 px-2 py-1.5"
+              >
+                <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/60" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-medium">
+                    {root.label ?? (index === 0 ? "Primary directory" : `Directory ${index + 1}`)}
+                  </div>
+                  <code className="block truncate text-[11px] text-muted-foreground">
+                    {root.path}
+                  </code>
+                </div>
+                <Select
+                  value={root.defaultThreadEnvMode ?? "inherit"}
+                  onValueChange={(value) => {
+                    if (value === "local" || value === "worktree" || value === "multiwork") {
+                      setWorkspaceRootMode(root.path, value);
+                    } else if (value === "inherit") {
+                      setWorkspaceRootMode(root.path, null);
+                    }
+                  }}
+                >
+                  <SelectTrigger
+                    className="h-7 w-28 text-[11px]"
+                    aria-label={`Workspace for ${root.path}`}
+                  >
+                    <SelectValue>
+                      {root.defaultThreadEnvMode
+                        ? resolveEnvModeLabel(root.defaultThreadEnvMode)
+                        : "Default"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectPopup align="end" alignItemWithTrigger={false}>
+                    <SelectItem value="inherit">Default</SelectItem>
+                    <SelectItem value="local">Current checkout</SelectItem>
+                    <SelectItem value="worktree">Worktree</SelectItem>
+                    <SelectItem value="multiwork">Multiwork</SelectItem>
+                  </SelectPopup>
+                </Select>
+                {pathIsPrimary(root.path, representative.workspaceRoot) ? (
+                  <span className="shrink-0 text-[10px] text-muted-foreground">Primary</span>
+                ) : (
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    aria-label={`Remove ${root.path}`}
+                    onClick={() => removeWorkspaceRoot(root.path)}
+                  >
+                    <Trash2Icon />
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
         </SettingsSection>
 
         <SettingsSection title="New threads">

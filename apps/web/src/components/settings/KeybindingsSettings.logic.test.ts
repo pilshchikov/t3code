@@ -64,6 +64,15 @@ describe("KeybindingsSettings.logic", () => {
     ).toBe("mod+shift+k");
   });
 
+  it("captures the section sign as the supported plain-key shortcut", () => {
+    expect(
+      keybindingFromKeyboardEvent(
+        { key: "§", metaKey: false, ctrlKey: false, altKey: true, shiftKey: false },
+        "MacIntel",
+      ),
+    ).toBe("§");
+  });
+
   it("serializes shortcuts and when expressions for upserts", () => {
     expect(
       shortcutToKeybindingInput({

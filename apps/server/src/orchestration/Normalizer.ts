@@ -6,6 +6,7 @@ import {
   type ClientOrchestrationCommand,
   type IsoDateTime,
   type OrchestrationCommand,
+  type ProjectWorkspace,
   OrchestrationDispatchCommandError,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
 } from "@t3tools/contracts";
@@ -79,6 +80,18 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
           ),
         );
 
+    const normalizeProjectWorkspaceRoots = (
+      roots: ReadonlyArray<ProjectWorkspace> | undefined,
+      createFirstRoot: boolean,
+    ) =>
+      roots === undefined
+        ? Effect.succeed(roots)
+        : Effect.forEach(roots, (root) =>
+            normalizeProjectWorkspaceRootForCreate(root.path, createFirstRoot).pipe(
+              Effect.map((path) => ({ ...root, path })),
+            ),
+          );
+
     if (canonicalCommand.type === "project.create") {
       return {
         ...canonicalCommand,
@@ -86,6 +99,14 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
           canonicalCommand.workspaceRoot,
           canonicalCommand.createWorkspaceRootIfMissing,
         ),
+        ...(canonicalCommand.workspaceRoots !== undefined
+          ? {
+              workspaceRoots: yield* normalizeProjectWorkspaceRoots(
+                canonicalCommand.workspaceRoots,
+                false,
+              ),
+            }
+          : {}),
         createWorkspaceRootIfMissing: canonicalCommand.createWorkspaceRootIfMissing === true,
       } satisfies OrchestrationCommand;
     }
@@ -97,6 +118,27 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
       return {
         ...canonicalCommand,
         workspaceRoot: yield* normalizeProjectWorkspaceRoot(canonicalCommand.workspaceRoot),
+        ...(canonicalCommand.workspaceRoots !== undefined
+          ? {
+              workspaceRoots: yield* normalizeProjectWorkspaceRoots(
+                canonicalCommand.workspaceRoots,
+                false,
+              ),
+            }
+          : {}),
+      } satisfies OrchestrationCommand;
+    }
+
+    if (
+      canonicalCommand.type === "project.meta.update" &&
+      canonicalCommand.workspaceRoots !== undefined
+    ) {
+      return {
+        ...canonicalCommand,
+        workspaceRoots: yield* normalizeProjectWorkspaceRoots(
+          canonicalCommand.workspaceRoots,
+          false,
+        ),
       } satisfies OrchestrationCommand;
     }
 

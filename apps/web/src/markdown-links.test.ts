@@ -48,6 +48,19 @@ describe("resolveMarkdownFileLinkTarget", () => {
     );
   });
 
+  it("resolves links from a document directory while keeping workspace-relative preview paths", () => {
+    expect(
+      resolveMarkdownFileLinkMeta(
+        "./report.md",
+        "/Users/example/project/docs",
+        "/Users/example/project",
+      ),
+    ).toMatchObject({
+      targetPath: "/Users/example/project/docs/report.md",
+      workspaceRelativePath: "docs/report.md",
+    });
+  });
+
   it("does not treat filename line references as external schemes", () => {
     expect(resolveMarkdownFileLinkTarget("script.ts:10", "/Users/julius/project")).toBe(
       "/Users/julius/project/script.ts:10",

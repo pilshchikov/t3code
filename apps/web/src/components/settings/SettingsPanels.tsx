@@ -21,12 +21,14 @@ import {
   DEFAULT_UNIFIED_SETTINGS,
   type EnvironmentIdentificationMode,
   MAX_CODE_FONT_SIZE,
+  MAX_CHAT_MESSAGE_FONT_SIZE,
   MAX_GLASS_OPACITY,
   MAX_INTERFACE_FONT_SIZE,
   MAX_PROMPT_FONT_SIZE,
   MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
   MAX_TERMINAL_FONT_SIZE,
   MIN_CODE_FONT_SIZE,
+  MIN_CHAT_MESSAGE_FONT_SIZE,
   MIN_GLASS_OPACITY,
   MIN_INTERFACE_FONT_SIZE,
   MIN_PROMPT_FONT_SIZE,
@@ -540,6 +542,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.fontFamilySans,
       settings.fontFamilyTerminal,
       settings.fontSizeCode,
+      settings.fontSizeChatMessage,
       settings.fontSizeInterface,
       settings.fontSizePrompt,
       settings.fontSizeTerminal,
@@ -646,6 +649,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       fontFamilyTerminal: DEFAULT_UNIFIED_SETTINGS.fontFamilyTerminal,
       fontSizeInterface: DEFAULT_UNIFIED_SETTINGS.fontSizeInterface,
       fontSizePrompt: DEFAULT_UNIFIED_SETTINGS.fontSizePrompt,
+      fontSizeChatMessage: DEFAULT_UNIFIED_SETTINGS.fontSizeChatMessage,
       fontSizeCode: DEFAULT_UNIFIED_SETTINGS.fontSizeCode,
       fontSizeTerminal: DEFAULT_UNIFIED_SETTINGS.fontSizeTerminal,
     });
@@ -1154,6 +1158,59 @@ function PromptFontRow() {
   );
 }
 
+function ChatMessageSizeRow() {
+  const settings = usePrimarySettings();
+  const updateSettings = useUpdatePrimarySettings();
+  return (
+    <SettingsRow
+      {...searchableSetting("chat-message-size")}
+      title="Chat & system text size"
+      description="Messages, agent responses, and chat-side system UI such as changes, work output, plans, and timestamps. Code blocks keep their separate code size."
+      resetAction={
+        settings.fontSizeChatMessage !== DEFAULT_UNIFIED_SETTINGS.fontSizeChatMessage ? (
+          <SettingResetButton
+            label="chat and system text size"
+            onClick={() =>
+              updateSettings({
+                fontSizeChatMessage: DEFAULT_UNIFIED_SETTINGS.fontSizeChatMessage,
+              })
+            }
+          />
+        ) : null
+      }
+      control={
+        <Select
+          value={String(settings.fontSizeChatMessage)}
+          onValueChange={(value) => {
+            const fontSizeChatMessage = Number(value);
+            if (
+              Number.isInteger(fontSizeChatMessage) &&
+              fontSizeChatMessage >= MIN_CHAT_MESSAGE_FONT_SIZE &&
+              fontSizeChatMessage <= MAX_CHAT_MESSAGE_FONT_SIZE
+            ) {
+              updateSettings({ fontSizeChatMessage });
+            }
+          }}
+        >
+          <SelectTrigger className="w-22" aria-label="Chat and system text size">
+            <SelectValue>{settings.fontSizeChatMessage} px</SelectValue>
+          </SelectTrigger>
+          <SelectPopup align="end" alignItemWithTrigger={false}>
+            {Array.from(
+              { length: MAX_CHAT_MESSAGE_FONT_SIZE - MIN_CHAT_MESSAGE_FONT_SIZE + 1 },
+              (_, index) => MIN_CHAT_MESSAGE_FONT_SIZE + index,
+            ).map((px) => (
+              <SelectItem hideIndicator key={px} value={String(px)}>
+                {px} px
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      }
+    />
+  );
+}
+
 function CodeFontRow({
   title,
   description = "Code blocks, diffs, and file previews.",
@@ -1296,6 +1353,7 @@ function FontSettingsGroup() {
     <>
       <InterfaceFontRow />
       <PromptFontRow />
+      <ChatMessageSizeRow />
       <CodeFontRow />
       <TerminalFontRow />
       <FontSmoothingRow />
@@ -1313,6 +1371,7 @@ function SimpleFontRows() {
   return (
     <>
       <InterfaceFontRow preview={<PromptFontPreview />} />
+      <ChatMessageSizeRow />
       <CodeFontRow
         title="Monospace font"
         description="Code blocks, diffs, file previews, and the terminal."

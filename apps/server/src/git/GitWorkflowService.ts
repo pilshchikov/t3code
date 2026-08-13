@@ -11,6 +11,12 @@ import {
   type GitDiscardChangesInput,
   type GitFileDiffInput,
   type GitFileDiffResult,
+  type GitHistoryInput,
+  type GitHistoryResult,
+  type GitCommitDetailsInput,
+  type GitCommitDetailsResult,
+  type GitCommitDiffInput,
+  type GitCommitDiffResult,
   type GitGenerateCommitMessageResult,
   type GitResolveConflictInput,
   type GitStageFilesInput,
@@ -42,6 +48,12 @@ import {
 import * as GitManager from "./GitManager.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
+import {
+  GIT_HISTORY_FORMAT,
+  parseGitCommitFiles,
+  parseGitHistory,
+  parseGitHistoryCommit,
+} from "./GitHistory.ts";
 
 export class GitWorkflowService extends Context.Service<
   GitWorkflowService,
@@ -131,6 +143,13 @@ export class GitWorkflowService extends Context.Service<
     readonly fileDiff: (
       input: GitFileDiffInput,
     ) => Effect.Effect<GitFileDiffResult, GitCommandError>;
+    readonly history: (input: GitHistoryInput) => Effect.Effect<GitHistoryResult, GitCommandError>;
+    readonly commitDetails: (
+      input: GitCommitDetailsInput,
+    ) => Effect.Effect<GitCommitDetailsResult, GitCommandError>;
+    readonly commitDiff: (
+      input: GitCommitDiffInput,
+    ) => Effect.Effect<GitCommitDiffResult, GitCommandError>;
   }
 >()("t3/git/GitWorkflowService") {}
 
@@ -422,6 +441,108 @@ export const make = Effect.gen(function* () {
                 .pipe(Effect.map((diff) => ({ path: input.path, diff })))
             : Effect.succeed<GitFileDiffResult>({ path: input.path, diff: "" }),
         ),
+      ),
+    history: (input) =>
+      detectGitRepositoryForCommand("GitWorkflowService.history", input.cwd).pipe(
+        Effect.flatMap((isGitRepository) => {
+          if (!isGitRepository) {
+            return Effect.succeed<GitHistoryResult>({
+              isRepo: false,
+              branch: null,
+              commits: [],
+              truncated: false,
+            });
+          }
+          return Effect.all({
+            branch: git.execute({
+              operation: "history branch",
+              cwd: input.cwd,
+              args: ["branch", "--show-current"],
+            }),
+            log: git.execute({
+              operation: "history log",
+              cwd: input.cwd,
+              args: [
+                "log",
+                `--max-count=${input.limit + 1}`,
+                `--format=%x1e${GIT_HISTORY_FORMAT}`,
+                "HEAD",
+              ],
+              maxOutputBytes: 4 * 1024 * 1024,
+            }),
+          }).pipe(
+            Effect.map(({ branch, log }) =>
+              parseGitHistory(log.stdout, branch.stdout.trim() || null, input.limit),
+            ),
+          );
+        }),
+      ),
+    commitDetails: (input) =>
+      ensureGitCommand("GitWorkflowService.commitDetails", input.cwd).pipe(
+        Effect.andThen(
+          Effect.all({
+            metadata: git.execute({
+              operation: "commit details metadata",
+              cwd: input.cwd,
+              args: ["show", "-s", `--format=%x1e${GIT_HISTORY_FORMAT}`, input.sha],
+              maxOutputBytes: 1024 * 1024,
+            }),
+            files: git.execute({
+              operation: "commit details files",
+              cwd: input.cwd,
+              args: ["show", "--format=", "--numstat", "--no-renames", input.sha],
+              maxOutputBytes: 4 * 1024 * 1024,
+            }),
+          }),
+        ),
+        Effect.flatMap(({ metadata, files }) => {
+          const metadataRecord = metadata.stdout.startsWith("\u001e")
+            ? metadata.stdout.slice(1)
+            : metadata.stdout;
+          const commit = parseGitHistoryCommit(metadataRecord);
+          return commit
+            ? Effect.succeed<GitCommitDetailsResult>({
+                commit,
+                files: parseGitCommitFiles(files.stdout),
+              })
+            : Effect.fail(
+                new GitCommandError({
+                  operation: "commit details parse",
+                  command: "git show",
+                  cwd: input.cwd,
+                  detail: `Unable to parse commit '${input.sha}'.`,
+                }),
+              );
+        }),
+      ),
+    commitDiff: (input) =>
+      ensureGitCommand("GitWorkflowService.commitDiff", input.cwd).pipe(
+        Effect.andThen(
+          git.execute({
+            operation: "commit diff",
+            cwd: input.cwd,
+            args: [
+              "show",
+              "--format=",
+              "--patch",
+              "--no-color",
+              "--no-ext-diff",
+              "--no-textconv",
+              "--minimal",
+              "--first-parent",
+              input.sha,
+              "--",
+              ...(input.path ? [input.path] : []),
+            ],
+            maxOutputBytes: 8 * 1024 * 1024,
+            appendTruncationMarker: true,
+          }),
+        ),
+        Effect.map((result) => ({
+          sha: input.sha,
+          diff: result.stdout,
+          truncated: result.stdoutTruncated,
+        })),
       ),
   });
 });

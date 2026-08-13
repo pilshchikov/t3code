@@ -217,10 +217,40 @@ export const ProjectFaviconPath = TrimmedNonEmptyString.check(
 );
 export type ProjectFaviconPath = typeof ProjectFaviconPath.Type;
 
+export const ProjectWorkspaceColor = Schema.Literals([
+  "red",
+  "orange",
+  "amber",
+  "green",
+  "cyan",
+  "blue",
+  "violet",
+  "pink",
+]);
+export type ProjectWorkspaceColor = typeof ProjectWorkspaceColor.Type;
+
+/**
+ * A directory participating in a project. `workspaceRoot` remains the
+ * primary directory for backwards compatibility with existing threads and
+ * integrations; this list describes the complete project workspace.
+ */
+export const ProjectWorkspace = Schema.Struct({
+  path: TrimmedNonEmptyString,
+  label: Schema.optional(TrimmedNonEmptyString),
+  color: Schema.optional(ProjectWorkspaceColor),
+  /** Private, persistent operating guidance injected into agent turns for this directory. */
+  agentGuidance: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(8_000))),
+  defaultThreadEnvMode: Schema.optional(
+    Schema.NullOr(Schema.Literals(["local", "worktree", "multiwork"])),
+  ),
+});
+export type ProjectWorkspace = typeof ProjectWorkspace.Type;
+
 export const OrchestrationProject = Schema.Struct({
   id: ProjectId,
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
+  workspaceRoots: Schema.optional(Schema.Array(ProjectWorkspace)),
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   // Per-project override for where new threads start. Null/absent means
@@ -420,6 +450,7 @@ export const OrchestrationProjectShell = Schema.Struct({
   id: ProjectId,
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
+  workspaceRoots: Schema.optional(Schema.Array(ProjectWorkspace)),
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   defaultThreadEnvMode: Schema.optional(Schema.NullOr(ThreadEnvMode)),
@@ -625,6 +656,7 @@ export const ProjectCreateCommand = Schema.Struct({
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
+  workspaceRoots: Schema.optional(Schema.Array(ProjectWorkspace)),
   createWorkspaceRootIfMissing: Schema.optional(Schema.Boolean),
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
   createdAt: IsoDateTime,
@@ -636,6 +668,7 @@ const ProjectMetaUpdateCommand = Schema.Struct({
   projectId: ProjectId,
   title: Schema.optional(TrimmedNonEmptyString),
   workspaceRoot: Schema.optional(TrimmedNonEmptyString),
+  workspaceRoots: Schema.optional(Schema.Array(ProjectWorkspace)),
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
   // Absent = leave unchanged; null = clear the override.
   defaultThreadEnvMode: Schema.optional(Schema.NullOr(ThreadEnvMode)),
@@ -1098,6 +1131,7 @@ export const ProjectCreatedPayload = Schema.Struct({
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
+  workspaceRoots: Schema.optional(Schema.Array(ProjectWorkspace)),
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   // Optional so persisted events from older servers still decode.
@@ -1111,6 +1145,7 @@ export const ProjectMetaUpdatedPayload = Schema.Struct({
   projectId: ProjectId,
   title: Schema.optional(TrimmedNonEmptyString),
   workspaceRoot: Schema.optional(TrimmedNonEmptyString),
+  workspaceRoots: Schema.optional(Schema.Array(ProjectWorkspace)),
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
   defaultThreadEnvMode: Schema.optional(Schema.NullOr(ThreadEnvMode)),

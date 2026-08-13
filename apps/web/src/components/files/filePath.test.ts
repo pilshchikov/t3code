@@ -5,6 +5,7 @@ import {
   fileBreadcrumbs,
   firstFileInDirectory,
   parentDirectoryPath,
+  workspaceDocumentDirectory,
 } from "./filePath";
 
 describe("fileBreadcrumbs", () => {
@@ -45,6 +46,18 @@ describe("project file navigation helpers", () => {
   it("resolves the parent directory path for a file", () => {
     expect(parentDirectoryPath("apps/web/src/main.tsx")).toBe("apps/web/src");
     expect(parentDirectoryPath("README.md")).toBe("");
+  });
+
+  it("resolves the directory containing a workspace document", () => {
+    expect(workspaceDocumentDirectory("/Users/example/project", "docs/index.md")).toBe(
+      "/Users/example/project/docs",
+    );
+    expect(workspaceDocumentDirectory("/Users/example/project/", "README.md")).toBe(
+      "/Users/example/project",
+    );
+    expect(workspaceDocumentDirectory("C:\\work\\project", "docs/index.md")).toBe(
+      "C:\\work\\project\\docs",
+    );
   });
 
   it("returns only direct children of a directory, with directories first", () => {

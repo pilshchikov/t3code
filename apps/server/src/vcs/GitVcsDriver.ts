@@ -589,6 +589,62 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
       ),
     );
 
+  const listIgnoredWorkspaceEntries: VcsDriver.VcsDriver["Service"]["listIgnoredWorkspaceEntries"] =
+    Effect.fn("GitVcsDriver.listIgnoredWorkspaceEntries")(function* (cwd) {
+      const listIgnoredPaths = (includeDirectories: boolean) =>
+        gitCommand(
+          vcsProcess,
+          "GitVcsDriver.listIgnoredWorkspaceEntries",
+          cwd,
+          [
+            ...WORKSPACE_GIT_HARDENED_CONFIG_ARGS,
+            "ls-files",
+            "--cached",
+            "--others",
+            "--ignored",
+            "--exclude-standard",
+            ...(includeDirectories ? ["--directory"] : []),
+            "-z",
+          ],
+          {
+            allowNonZeroExit: true,
+            timeoutMs: 20_000,
+            maxOutputBytes: WORKSPACE_FILES_MAX_OUTPUT_BYTES,
+            appendTruncationMarker: true,
+          },
+        ).pipe(
+          Effect.flatMap((result) =>
+            result.exitCode === 0
+              ? Effect.succeed(splitNullSeparatedPaths(result.stdout, result.stdoutTruncated))
+              : Effect.fail(
+                  new VcsProcessExitError({
+                    operation: "GitVcsDriver.listIgnoredWorkspaceEntries",
+                    command: "git ls-files",
+                    cwd,
+                    exitCode: result.exitCode,
+                    detail: result.stderr.trim() || "git ls-files failed",
+                  }),
+                ),
+          ),
+        );
+
+      const [filePaths, directoryPaths] = yield* Effect.all([
+        listIgnoredPaths(false),
+        listIgnoredPaths(true),
+      ]);
+      const directories = directoryPaths
+        .filter((entryPath) => entryPath.endsWith("/"))
+        .map((entryPath) => ({
+          path: entryPath.slice(0, -1),
+          kind: "directory" as const,
+        }));
+      const files = filePaths.map((entryPath) => ({
+        path: entryPath,
+        kind: "file" as const,
+      }));
+      return [...directories, ...files];
+    });
+
   const listRemotes: VcsDriver.VcsDriver["Service"]["listRemotes"] = Effect.fn("listRemotes")(
     function* (cwd) {
       const result = yield* gitCommand(
@@ -949,6 +1005,7 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
     detectRepository,
     isInsideWorkTree,
     listWorkspaceFiles,
+    listIgnoredWorkspaceEntries,
     listRemotes,
     filterIgnoredPaths,
     initRepository,

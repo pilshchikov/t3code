@@ -1,12 +1,7 @@
-import type {
-  ContextMenuItem as TreeContextMenuItem,
-  ContextMenuOpenContext as TreeContextMenuOpenContext,
-} from "@pierre/trees";
 import type { EnvironmentId, ProjectEntry } from "@t3tools/contracts";
-import { FileTree, useFileTree, useFileTreeSearch } from "@pierre/trees/react";
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
-import { RotateCw } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { ChevronsDownUpIcon, RotateCw, Trash2Icon, XIcon } from "lucide-react";
+import { useCallback, useDeferredValue, useMemo, useState } from "react";
 
 import { Button } from "~/components/ui/button";
 import { InputGroup, InputGroupInput } from "~/components/ui/input-group";
@@ -17,36 +12,20 @@ import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
 import { useTheme } from "~/hooks/useTheme";
 import { cn } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
-import { T3_PIERRE_ICONS } from "~/pierre-icons";
+import { projectEnvironment } from "~/state/projects";
+import { useAtomCommand } from "~/state/use-atom-command";
+import { resolvePathLinkTarget } from "~/terminal-links";
 
-import { createFileTreeDragMentionController } from "./fileTreeDragMention";
+import { NativeProjectFileTree } from "./NativeProjectFileTree";
 import { useProjectEntriesQuery } from "./projectFilesQueryState";
 
 interface FileBrowserPanelProps {
   environmentId: EnvironmentId;
   cwd: string;
   projectName: string;
-  /** File currently open in the preview pane; revealed and selected in the tree. */
   selectedPath: string | null;
-  /** Bumped when the same path should be revealed again (e.g. re-opened from search). */
   selectedPathRevealId: number;
   onOpenFile: (relativePath: string) => void;
-}
-
-const TREE_UNSAFE_CSS = `
-  :host {
-    --trees-bg-override: transparent;
-    --trees-selected-bg-override: color-mix(in srgb, currentColor 12%, transparent);
-    --trees-hover-bg-override: color-mix(in srgb, currentColor 7%, transparent);
-    --trees-border-color-override: color-mix(in srgb, currentColor 14%, transparent);
-    --trees-font-family-override: var(--font-sans);
-    --trees-font-size-override: 12px;
-  }
-  button[data-type='item'] { border-radius: 5px; }
-`;
-
-function treePath(entry: ProjectEntry): string {
-  return entry.kind === "directory" ? `${entry.path}/` : entry.path;
 }
 
 function RefreshFilesButton(props: { isPending: boolean; onRefresh: () => void }) {
@@ -70,10 +49,30 @@ function RefreshFilesButton(props: { isPending: boolean; onRefresh: () => void }
   );
 }
 
+function CollapseDirectoriesButton(props: { onCollapse: () => void }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Collapse all directories"
+            onClick={props.onCollapse}
+          />
+        }
+      >
+        <ChevronsDownUpIcon />
+      </TooltipTrigger>
+      <TooltipPopup>Collapse all directories</TooltipPopup>
+    </Tooltip>
+  );
+}
+
 function FileSearchField(props: {
   ariaLabel: string;
   name: string;
-  onClose: () => void;
   onValueChange: (value: string) => void;
   value: string;
 }) {
@@ -90,11 +89,19 @@ function FileSearchField(props: {
         onChange={(event) => props.onValueChange(event.target.value)}
         onKeyDown={(event) => {
           if (event.key !== "Escape") return;
-          props.onClose();
+          props.onValueChange("");
           event.currentTarget.blur();
         }}
       />
     </InputGroup>
+  );
+}
+
+function uniqueProjectEntries(entries: ReadonlyArray<ProjectEntry>): ProjectEntry[] {
+  return Array.from(
+    new Map(
+      entries.map((entry) => [`${entry.kind}:${entry.path.replace(/\/+$/, "")}`, entry]),
+    ).values(),
   );
 }
 
@@ -109,51 +116,36 @@ export default function FileBrowserPanel({
   const { resolvedTheme } = useTheme();
   const composerRef = useComposerHandleContext();
   const entriesQuery = useProjectEntriesQuery(environmentId, cwd);
-  const entries = entriesQuery.data?.entries ?? [];
-  const entryKinds = useMemo(
-    () => new Map(entries.map((entry) => [entry.path, entry.kind] as const)),
+  const deleteEntry = useAtomCommand(projectEnvironment.deleteEntry, { reportFailure: false });
+  const entries = useMemo(
+    () => uniqueProjectEntries(entriesQuery.data?.entries ?? []),
+    [entriesQuery.data?.entries],
+  );
+  const filePaths = useMemo(
+    () => new Set(entries.filter((entry) => entry.kind === "file").map((entry) => entry.path)),
     [entries],
   );
-  const entryKindsRef = useRef<ReadonlyMap<string, ProjectEntry["kind"]>>(entryKinds);
-  const treePaths = useMemo(() => entries.map(treePath), [entries]);
-  const previousTreePathsRef = useRef<readonly string[]>([]);
-  const syncingSelectionRef = useRef(false);
-  const treeSelectionPathRef = useRef<string | null>(null);
-  const handledRevealRef = useRef<{ path: string; revealId: number } | null>(null);
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const [selectedPaths, setSelectedPaths] = useState<ReadonlyArray<string>>([]);
+  const [collapseRequestId, setCollapseRequestId] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const selectedFiles = useMemo(
+    () => selectedPaths.filter((path) => filePaths.has(path)),
+    [filePaths, selectedPaths],
+  );
 
-  // The tree renders rows in shadow DOM and its anchor rect is unreliable, so
-  // capture the right-click position ourselves; contextmenu is a composed
-  // event, so a capture-phase listener sees it with viewport coordinates.
-  const contextMenuPointerRef = useRef<{ x: number; y: number; at: number } | null>(null);
-  useEffect(() => {
-    const capturePointer = (event: MouseEvent) => {
-      contextMenuPointerRef.current = { x: event.clientX, y: event.clientY, at: event.timeStamp };
-    };
-    document.addEventListener("contextmenu", capturePointer, true);
-    return () => document.removeEventListener("contextmenu", capturePointer, true);
-  }, []);
-
-  const showEntryContextMenu = async (
-    item: TreeContextMenuItem,
-    context: TreeContextMenuOpenContext,
-  ) => {
-    const api = readLocalApi();
-    if (!api) {
-      context.close();
-      return;
-    }
-    const relativePath = item.path.replace(/\/$/, "");
-    const mention = serializeComposerFileLink(relativePath);
-    const pointer = contextMenuPointerRef.current;
-    const pointerIsFresh = pointer !== null && performance.now() - pointer.at < 1000;
-    const anchorRect = context.anchorElement.getBoundingClientRect();
-    const position = pointerIsFresh
-      ? { x: pointer.x, y: pointer.y }
-      : { x: anchorRect.left, y: anchorRect.bottom };
-    try {
+  const clearSelection = useCallback(() => setSelectedPaths([]), []);
+  const showEntryContextMenu = useCallback(
+    async (relativePath: string, position: { x: number; y: number }) => {
+      const api = readLocalApi();
+      if (!api) return;
+      const mention = serializeComposerFileLink(relativePath);
+      const absolutePath = resolvePathLinkTarget(relativePath, cwd);
       const clicked = await api.contextMenu.show(
         [
           { id: "copy-mention", label: "Copy mention" },
+          { id: "copy-absolute-path", label: "Copy absolute path" },
           { id: "add-to-chat", label: "Add to chat" },
         ],
         position,
@@ -171,206 +163,155 @@ export default function FileBrowserPanel({
         }
         return;
       }
-      if (clicked === "add-to-chat") {
-        const composer = composerRef?.current;
-        if (!composer) {
+      if (clicked === "copy-absolute-path") {
+        try {
+          await writeTextToClipboard(absolutePath);
+          toastManager.add({
+            type: "success",
+            title: "Absolute path copied",
+            description: absolutePath,
+          });
+        } catch (error) {
           toastManager.add({
             type: "error",
-            title: "Unable to add to chat",
-            description: "Open a chat for this project and try again.",
-          });
-          return;
-        }
-        const inserted = composer.insertTextAtEnd(`${mention} `, { ensureLeadingBoundary: true });
-        if (!inserted) {
-          toastManager.add({
-            type: "error",
-            title: "Unable to add to chat",
-            description: "The chat isn't ready to accept input right now.",
+            title: "Failed to copy absolute path",
+            description: error instanceof Error ? error.message : "An error occurred.",
           });
         }
-      }
-    } finally {
-      context.close();
-    }
-  };
-  const showEntryContextMenuRef = useRef(showEntryContextMenu);
-  useEffect(() => {
-    showEntryContextMenuRef.current = showEntryContextMenu;
-  });
-
-  const treeModelRef = useRef<ReturnType<typeof useFileTree>["model"] | null>(null);
-  const dragMention = useMemo(
-    () =>
-      createFileTreeDragMentionController({
-        deselect: (path) => treeModelRef.current?.getItem(path)?.deselect(),
-      }),
-    [],
-  );
-  const { model } = useFileTree({
-    composition: {
-      contextMenu: {
-        triggerMode: "right-click",
-        onOpen: (item, context) => {
-          void showEntryContextMenuRef.current(item, context);
-        },
-      },
-    },
-    // Rows only need to be draggable so entries can be dropped into the chat
-    // composer; rearranging files inside the tree stays off.
-    dragAndDrop: { canDrop: () => false },
-    density: "compact",
-    fileTreeSearchMode: "hide-non-matches",
-    flattenEmptyDirectories: true,
-    initialExpansion: 1,
-    icons: T3_PIERRE_ICONS,
-    onSelectionChange: (selectedPaths) => {
-      // The drag controller's selection cache must track every change,
-      // including reveal-driven ones, or drags act on a stale selection.
-      dragMention.handleSelectionChange(selectedPaths);
-      // Selection changes driven by the reveal sync below are echoes of an
-      // already-open file, not a request to open it again.
-      if (syncingSelectionRef.current) return;
-      // Starting a drag selects the dragged row; that selection is a side
-      // effect of the gesture, not a request to open the file.
-      if (dragMention.isDragInProgress()) {
         return;
       }
-      const selectedPath = selectedPaths.at(-1)?.replace(/\/$/, "");
-      if (selectedPath && entryKindsRef.current.get(selectedPath) === "file") {
-        treeSelectionPathRef.current = selectedPath;
-        onOpenFile(selectedPath);
+      if (clicked !== "add-to-chat") return;
+      const inserted = composerRef?.current?.insertTextAtEnd(`${mention} `, {
+        ensureLeadingBoundary: true,
+      });
+      if (!inserted) {
+        toastManager.add({
+          type: "error",
+          title: "Unable to add to chat",
+          description: "The chat isn't ready to accept input right now.",
+        });
       }
     },
-    paths: [],
-    search: false,
-    unsafeCSS: TREE_UNSAFE_CSS,
-  });
-  const search = useFileTreeSearch(model);
-  const handleSearchValueChange = (value: string) => {
-    if (value.trim().length === 0) {
-      search.close();
+    [composerRef, cwd],
+  );
+
+  const deleteSelectedFiles = useCallback(async () => {
+    if (isDeleting || selectedFiles.length === 0) return;
+    const api = readLocalApi();
+    if (!api) return;
+    const listedPaths = selectedFiles.slice(0, 6).map((path) => `• ${path}`);
+    const remainingCount = selectedFiles.length - listedPaths.length;
+    const confirmed = await api.dialogs.confirm(
+      [
+        `Delete ${selectedFiles.length} selected file${selectedFiles.length === 1 ? "" : "s"}?`,
+        ...listedPaths,
+        ...(remainingCount > 0 ? [`• and ${remainingCount} more`] : []),
+        "This permanently removes the selected files from disk.",
+      ].join("\n"),
+      { variant: "destructive" },
+    );
+    if (!confirmed) return;
+    setIsDeleting(true);
+    const results = await Promise.all(
+      selectedFiles.map((relativePath) =>
+        deleteEntry({ environmentId, input: { cwd, relativePath } }),
+      ),
+    );
+    const failed = results.filter((result) => result._tag === "Failure");
+    setIsDeleting(false);
+    setSelectedPaths([]);
+    entriesQuery.refresh();
+    if (failed.length > 0) {
+      toastManager.add({
+        type: "error",
+        title: `Could not delete ${failed.length} file${failed.length === 1 ? "" : "s"}`,
+        description: "Refresh the file list and try again.",
+      });
       return;
     }
-    search.setValue(value);
-  };
-
-  useEffect(() => {
-    if (previousTreePathsRef.current === treePaths) return;
-    entryKindsRef.current = entryKinds;
-    previousTreePathsRef.current = treePaths;
-    model.resetPaths(treePaths);
-  }, [entryKinds, model, treePaths]);
-
-  useEffect(() => {
-    if (!selectedPath) {
-      handledRevealRef.current = null;
-      return;
-    }
-    const revealRequest = { path: selectedPath, revealId: selectedPathRevealId };
-    const handledReveal = handledRevealRef.current;
-    // Entry refreshes rebuild treePaths while the same preview stays open.
-    // Replaying a handled reveal would close an active tree search and steal focus.
-    if (
-      handledReveal?.path === revealRequest.path &&
-      handledReveal.revealId === revealRequest.revealId
-    ) {
-      return;
-    }
-    if (entryKinds.get(selectedPath) !== "file") return;
-    const selectedItem = model.getItem(selectedPath);
-    if (!selectedItem) return;
-
-    // A selection that originated inside the tree (clicking a row, possibly
-    // in an active tree search) is already visible; re-revealing it would
-    // close the search and clobber the user's context. Only sync external
-    // opens (file picker, content search, chat links).
-    const selectedInTree = model
-      .getSelectedPaths()
-      .some((path) => path.replace(/\/$/, "") === selectedPath);
-    if (selectedInTree && treeSelectionPathRef.current === selectedPath) {
-      treeSelectionPathRef.current = null;
-      handledRevealRef.current = revealRequest;
-      return;
-    }
-    treeSelectionPathRef.current = null;
-    handledRevealRef.current = revealRequest;
-
-    syncingSelectionRef.current = true;
-    model.closeSearch();
-    for (const path of model.getSelectedPaths()) {
-      model.getItem(path)?.deselect();
-    }
-
-    // Directory rows are registered with a trailing slash (see treePath), so
-    // ancestor lookups must use the same form to expand them.
-    const segments = selectedPath.split("/");
-    let ancestorPath = "";
-    for (const segment of segments.slice(0, -1)) {
-      ancestorPath = ancestorPath ? `${ancestorPath}/${segment}` : segment;
-      const item = model.getItem(`${ancestorPath}/`) ?? model.getItem(ancestorPath);
-      if (item && "expand" in item) item.expand();
-    }
-
-    selectedItem.select();
-    model.scrollToPath(selectedPath, { focus: true, offset: "center" });
-    queueMicrotask(() => {
-      syncingSelectionRef.current = false;
+    toastManager.add({
+      type: "success",
+      title: `Deleted ${selectedFiles.length} file${selectedFiles.length === 1 ? "" : "s"}`,
     });
-  }, [entryKinds, model, selectedPath, selectedPathRevealId, treePaths]);
-
-  // Tag tree drags with the composer mention payload. The row is read from
-  // the composed event path (the tree's shadow root is open), so this does
-  // not depend on running after the tree's own dragstart handler; the drag
-  // data store is writable for every dragstart listener in the dispatch.
-  // The capture phase runs before the tree's own dragstart handler selects
-  // the dragged row, so the drag flag is up before that selection emits.
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    treeModelRef.current = model;
-  }, [model]);
-  useEffect(() => {
-    const panel = panelRef.current;
-    if (panel === null) {
-      return;
-    }
-    const handleDragStart = (event: DragEvent) => dragMention.handleDragStart(event);
-    const handleDragEnd = () => dragMention.handleDragEnd();
-    panel.addEventListener("dragstart", handleDragStart, true);
-    panel.addEventListener("dragend", handleDragEnd);
-    return () => {
-      panel.removeEventListener("dragstart", handleDragStart, true);
-      panel.removeEventListener("dragend", handleDragEnd);
-    };
-  }, [dragMention]);
+  }, [cwd, deleteEntry, entriesQuery, environmentId, isDeleting, selectedFiles]);
 
   return (
     <div
-      ref={panelRef}
-      className="flex min-h-0 flex-1 flex-col bg-background"
+      className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
       data-file-browser-panel={`${environmentId}:${cwd}`}
     >
-      <div className="surface-subheader gap-1 px-2" data-surface-subheader>
+      <div className="surface-subheader shrink-0 gap-1 px-2" data-surface-subheader>
         <RefreshFilesButton isPending={entriesQuery.isPending} onRefresh={entriesQuery.refresh} />
+        <CollapseDirectoriesButton onCollapse={() => setCollapseRequestId((value) => value + 1)} />
         <FileSearchField
           name="project-files-search"
           ariaLabel={`Search ${projectName} files`}
-          value={search.value}
-          onValueChange={handleSearchValueChange}
-          onClose={search.close}
+          value={query}
+          onValueChange={setQuery}
         />
+        {selectedFiles.length > 0 ? (
+          <>
+            <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+              {selectedFiles.length} selected
+            </span>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label="Clear file selection"
+                    onClick={clearSelection}
+                  />
+                }
+              >
+                <XIcon />
+              </TooltipTrigger>
+              <TooltipPopup>Clear selection</TooltipPopup>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    className="text-destructive hover:text-destructive"
+                    aria-label={`Delete ${selectedFiles.length} selected files`}
+                    disabled={isDeleting}
+                    onClick={() => void deleteSelectedFiles()}
+                  />
+                }
+              >
+                <Trash2Icon className={cn(isDeleting && "animate-pulse")} />
+              </TooltipTrigger>
+              <TooltipPopup>
+                Delete {selectedFiles.length} selected file{selectedFiles.length === 1 ? "" : "s"}
+              </TooltipPopup>
+            </Tooltip>
+          </>
+        ) : null}
       </div>
       {entriesQuery.error && entriesQuery.data === null ? (
         <div className="p-4 text-xs leading-relaxed text-destructive">{entriesQuery.error}</div>
+      ) : entriesQuery.data === null ? (
+        <div className="p-4 text-xs text-muted-foreground">Loading files…</div>
+      ) : entries.length === 0 ? (
+        <div className="p-4 text-xs text-muted-foreground">No files found in this directory.</div>
       ) : (
-        <FileTree
-          model={model}
-          aria-label={`${projectName} files`}
-          className="min-h-0 flex-1 overflow-hidden"
-          style={{
-            colorScheme: resolvedTheme,
-            ["--trees-fg-override" as string]: "var(--foreground)",
-          }}
+        <NativeProjectFileTree
+          entries={entries}
+          query={deferredQuery}
+          selectedPath={selectedPath}
+          selectedPathRevealId={selectedPathRevealId}
+          selectedPaths={selectedPaths}
+          resolvedTheme={resolvedTheme}
+          onOpenFile={onOpenFile}
+          onSelectionChange={setSelectedPaths}
+          onDeleteSelected={deleteSelectedFiles}
+          onContextMenu={(path, position) => void showEntryContextMenu(path, position)}
+          collapseRequestId={collapseRequestId}
         />
       )}
     </div>

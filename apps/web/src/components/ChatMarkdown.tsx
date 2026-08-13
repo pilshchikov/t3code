@@ -71,6 +71,7 @@ import {
   chatMarkdownClipboardPayload,
   serializeTableElementToCsv,
   serializeTableElementToMarkdown,
+  serializeTableElementToSlack,
 } from "../markdown-clipboard";
 import { remarkNormalizeListItemIndentation } from "../markdown-list-indentation";
 import {
@@ -103,6 +104,8 @@ import {
 interface ChatMarkdownProps {
   text: string;
   cwd: string | undefined;
+  /** Project root used for internal file-preview paths when cwd is a document subdirectory. */
+  workspaceRoot?: string | undefined;
   threadRef?: ScopedThreadRef | undefined;
   onTaskListChange?: ((input: { markerOffset: number; checked: boolean }) => void) | undefined;
   isStreaming?: boolean;
@@ -121,7 +124,7 @@ const MAX_HIGHLIGHT_CACHE_MEMORY_BYTES = 50 * 1024 * 1024;
 interface MarkdownActionFailureContext {
   readonly operation: string;
   readonly target?: string;
-  readonly format?: "markdown" | "csv";
+  readonly format?: "markdown" | "csv" | "slack";
   readonly language?: string;
   readonly fenceTitle?: string;
   readonly copyTarget?: string;
@@ -397,7 +400,7 @@ function MarkdownTable({ children, ...props }: React.ComponentProps<"table">) {
     setExpanded((value) => !value);
   }
 
-  const handleCopy = useCallback((format: "markdown" | "csv") => {
+  const handleCopy = useCallback((format: "markdown" | "csv" | "slack") => {
     const table = containerRef.current?.querySelector("table");
     if (!table || typeof navigator === "undefined" || navigator.clipboard == null) {
       return;
@@ -405,7 +408,9 @@ function MarkdownTable({ children, ...props }: React.ComponentProps<"table">) {
     const text =
       format === "markdown"
         ? serializeTableElementToMarkdown(table)
-        : serializeTableElementToCsv(table);
+        : format === "csv"
+          ? serializeTableElementToCsv(table)
+          : serializeTableElementToSlack(table);
     void navigator.clipboard
       .writeText(text)
       .then(() => {
@@ -490,6 +495,7 @@ function MarkdownTable({ children, ...props }: React.ComponentProps<"table">) {
             <TooltipPopup side="top">{copyLabel}</TooltipPopup>
           </Tooltip>
           <MenuPopup align="end">
+            <MenuItem onClick={() => handleCopy("slack")}>Copy for Slack</MenuItem>
             <MenuItem onClick={() => handleCopy("markdown")}>Copy as Markdown</MenuItem>
             <MenuItem onClick={() => handleCopy("csv")}>Copy as CSV</MenuItem>
           </MenuPopup>
@@ -1321,6 +1327,7 @@ function areMarkdownFileLinkPropsEqual(
 function ChatMarkdown({
   text,
   cwd,
+  workspaceRoot = cwd,
   threadRef,
   onTaskListChange,
   isStreaming = false,
@@ -1351,24 +1358,24 @@ function ChatMarkdown({
     for (const href of extractMarkdownLinkHrefs(text)) {
       const normalizedHref = normalizeMarkdownLinkHrefKey(href);
       if (metaByHref.has(normalizedHref)) continue;
-      const meta = resolveMarkdownFileLinkMeta(normalizedHref, cwd);
+      const meta = resolveMarkdownFileLinkMeta(normalizedHref, cwd, workspaceRoot);
       if (meta) {
         metaByHref.set(normalizedHref, meta);
       }
     }
     return metaByHref;
-  }, [cwd, text]);
+  }, [cwd, text, workspaceRoot]);
   const inlineCodeFileLinkMetaByText = useMemo(() => {
     const metaByText = new Map<string, MarkdownFileLinkMeta>();
     for (const span of extractInlineCodeSpans(text)) {
       if (metaByText.has(span)) continue;
-      const meta = resolveInlineCodeFileLinkMeta(span, cwd);
+      const meta = resolveInlineCodeFileLinkMeta(span, cwd, workspaceRoot);
       if (meta) {
         metaByText.set(span, meta);
       }
     }
     return metaByText;
-  }, [cwd, text]);
+  }, [cwd, text, workspaceRoot]);
   const fileLinkParentSuffixByPath = useMemo(() => {
     const filePaths = [
       ...[...markdownFileLinkMetaByHref.values()].map((meta) => meta.filePath),
@@ -1631,7 +1638,7 @@ function ChatMarkdown({
           const codeText = nodeToPlainText(children);
           const fileLinkMeta =
             inlineCodeFileLinkMetaByText.get(codeText.trim()) ??
-            resolveInlineCodeFileLinkMeta(codeText, cwd);
+            resolveInlineCodeFileLinkMeta(codeText, cwd, workspaceRoot);
           if (fileLinkMeta) {
             return fileLinkChip(fileLinkMeta, `\`${codeText}\``);
           }
@@ -1698,7 +1705,7 @@ function ChatMarkdown({
   return (
     <div
       className={cn(
-        "chat-markdown w-full min-w-0 text-sm leading-relaxed text-foreground/80",
+        "chat-markdown w-full min-w-0 text-[length:var(--font-size-chat-message,0.875rem)] leading-relaxed text-foreground/80",
         className,
       )}
       onCopy={handleCopy}

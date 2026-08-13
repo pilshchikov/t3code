@@ -58,6 +58,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
 } from "react";
 import { flushSync } from "react-dom";
 import { useNavigate } from "@tanstack/react-router";
@@ -427,6 +428,7 @@ const PreviewPanel = lazy(() =>
 );
 const DiffPanel = lazy(() => import("./DiffPanel"));
 const FilePreviewPanel = lazy(() => import("./files/FilePreviewPanel"));
+const GitHistoryPanel = lazy(() => import("./GitHistoryPanel"));
 const EMPTY_PENDING_FILE_SURFACE_IDS: ReadonlySet<string> = new Set();
 const TYPE_TO_FOCUS_EDITABLE_SELECTOR = [
   "input",
@@ -1204,6 +1206,9 @@ function ChatViewContent(props: ChatViewProps) {
   const createThread = useAtomCommand(threadEnvironment.create, { reportFailure: false });
   const deleteThread = useAtomCommand(threadEnvironment.delete, { reportFailure: false });
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
+    reportFailure: false,
+  });
+  const stopThreadSession = useAtomCommand(threadEnvironment.stopSession, {
     reportFailure: false,
   });
   const switchGitRef = useAtomCommand(vcsEnvironment.switchRef, { reportFailure: false });
@@ -2646,6 +2651,7 @@ function ChatViewContent(props: ChatViewProps) {
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
+  const activeFileWorkspaceRoot = activeFileSurface?.workspaceRoot ?? activeWorkspaceRoot;
   const activeTerminalLaunchContext =
     terminalUiLaunchContext?.threadId === activeThreadId ? terminalUiLaunchContext : null;
   // Default true while loading to avoid toolbar flicker.
@@ -2655,6 +2661,13 @@ function ChatViewContent(props: ChatViewProps) {
     isGitRepo,
     showEnvironmentIndicator: showComposerEnvironmentIndicator,
   });
+  const composerWorkspaceRootCount = Math.max(1, activeProject?.workspaceRoots?.length ?? 1);
+  const composerContextShellStyle =
+    showComposerContextStrip && composerWorkspaceRootCount > 1
+      ? ({
+          "--chat-composer-context-extension": `${2 + (composerWorkspaceRootCount - 1) * 1.75}rem`,
+        } as CSSProperties & { "--chat-composer-context-extension": string })
+      : undefined;
   const initialDiffPanelGitScope =
     gitStatusQuery.data?.hasWorkingTreeChanges === true ? "unstaged" : "branch";
   const diffPanelGitStatusResolutionKey = gitStatusQuery.data ? "resolved" : "pending";
@@ -3256,14 +3269,20 @@ function ChatViewContent(props: ChatViewProps) {
     if (!activeThreadRef || !activeProject) return;
     useRightPanelStore.getState().open(activeThreadRef, "files");
   }, [activeProject, activeThreadRef]);
+  const addGitHistorySurface = useCallback(() => {
+    if (!activeThreadRef || !activeProject || !isGitRepo) return;
+    useRightPanelStore.getState().open(activeThreadRef, "git-history");
+  }, [activeProject, activeThreadRef, isGitRepo]);
   const addAgentsSurface = useCallback(() => {
     if (!activeThreadRef) return;
     useRightPanelStore.getState().open(activeThreadRef, "agents");
   }, [activeThreadRef]);
   const openFileSurface = useCallback(
-    (relativePath: string) => {
+    (relativePath: string, workspaceRoot?: string) => {
       if (!activeThreadRef || !activeProject) return;
-      useRightPanelStore.getState().openFile(activeThreadRef, relativePath);
+      useRightPanelStore
+        .getState()
+        .openFile(activeThreadRef, relativePath, undefined, workspaceRoot);
     },
     [activeProject, activeThreadRef],
   );
@@ -3648,6 +3667,13 @@ function ChatViewContent(props: ChatViewProps) {
   // re-pins on its own (independent of the refs), so the timeline needs a
   // render-visible flag to switch it off once the user scrolls away.
   const [timelineLiveFollowEnabled, setTimelineLiveFollowEnabled] = useState(true);
+  const [timelineScrolledThreadKey, setTimelineScrolledThreadKey] = useState<string | null>(null);
+  const markTimelineScrolled = useCallback(() => {
+    setTimelineScrolledThreadKey(routeThreadKey);
+  }, [routeThreadKey]);
+  const clearTimelineScrollCollapse = useCallback(() => {
+    setTimelineScrolledThreadKey(null);
+  }, []);
   const pendingTimelineAnchorRef = useRef<MessageId | null>(null);
   const positionedTimelineAnchorRef = useRef<MessageId | null>(null);
   const settledTimelineAnchorRef = useRef<MessageId | null>(null);
@@ -3819,6 +3845,19 @@ function ChatViewContent(props: ChatViewProps) {
               break;
           }
         };
+        // LegendList's state is useful for anchoring, but its scroll callback
+        // can be coalesced while a trackpad gesture is in flight. Read the
+        // actual scroll container as well so the composer collapses on the
+        // first real upward movement.
+        let previousScrollTop: number | null = null;
+        const handleScroll = () => {
+          const scrollTop = scrollNode.scrollTop;
+          if (previousScrollTop !== null && scrollTop < previousScrollTop - 1) {
+            markTimelineScrolled();
+            handleManualNavigation();
+          }
+          previousScrollTop = scrollTop;
+        };
         scrollNode.addEventListener("wheel", handleWheel, {
           passive: true,
         });
@@ -3829,11 +3868,15 @@ function ChatViewContent(props: ChatViewProps) {
           passive: true,
         });
         scrollNode.addEventListener("keydown", handleKeyDown);
+        scrollNode.addEventListener("scroll", handleScroll, {
+          passive: true,
+        });
         removeListeners = () => {
           scrollNode.removeEventListener("wheel", handleWheel);
           scrollNode.removeEventListener("touchmove", handleTouchMove);
           scrollNode.removeEventListener("pointerdown", handlePointerDown);
           scrollNode.removeEventListener("keydown", handleKeyDown);
+          scrollNode.removeEventListener("scroll", handleScroll);
         };
       });
     };
@@ -3845,7 +3888,12 @@ function ChatViewContent(props: ChatViewProps) {
       }
       removeListeners?.();
     };
-  }, [activeThread?.id, composerOverlayHeight, timelineRealContentOverflowsViewport]);
+  }, [
+    activeThread?.id,
+    composerOverlayHeight,
+    markTimelineScrolled,
+    timelineRealContentOverflowsViewport,
+  ]);
 
   const onTimelineAnchorReady = useCallback((messageId: MessageId, anchorIndex: number) => {
     // Anchored-end space can be remeasured when the turn completes. Once the
@@ -3979,10 +4027,11 @@ function ChatViewContent(props: ChatViewProps) {
     positionedTimelineAnchorRef.current = null;
     settledTimelineAnchorRef.current = null;
     activeTimelineAnchorIndexRef.current = null;
+    setTimelineScrolledThreadKey(null);
     showScrollDebouncer.current.cancel();
     setShowScrollToBottom(false);
     // activeThreadRef resets transitively with the active thread.
-  }, [activeThread?.id]);
+  }, [routeThreadKey]);
 
   useEffect(() => {
     setIsRevertingCheckpoint(false);
@@ -4054,16 +4103,19 @@ function ChatViewContent(props: ChatViewProps) {
     activeThread.worktreePath === null &&
     !envLocked,
   );
-  const envMode: DraftThreadEnvMode = canOverrideServerThreadEnvMode
-    ? (pendingServerThreadEnvMode ?? draftThread?.envMode ?? derivedEnvMode)
-    : derivedEnvMode;
+  const canChangeServerThreadWorkspace = Boolean(isServerThread && activeThread);
+  const envMode: DraftThreadEnvMode = canChangeServerThreadWorkspace
+    ? (pendingServerThreadEnvMode ?? derivedEnvMode)
+    : canOverrideServerThreadEnvMode
+      ? (pendingServerThreadEnvMode ?? draftThread?.envMode ?? derivedEnvMode)
+      : derivedEnvMode;
   const activeThreadBranch =
     canOverrideServerThreadEnvMode && pendingServerThreadBranch !== undefined
       ? pendingServerThreadBranch
       : (activeThread?.branch ?? null);
   const startFromOrigin = isLocalDraftThread
     ? (draftThread?.startFromOrigin ?? false)
-    : canOverrideServerThreadEnvMode
+    : canChangeServerThreadWorkspace
       ? (pendingServerThreadStartFromOriginByThreadId[activeThread?.id ?? ""] ??
         primaryServerSettings.newWorktreesStartFromOrigin)
       : false;
@@ -4572,12 +4624,12 @@ function ChatViewContent(props: ChatViewProps) {
   }, [activeThread?.id]);
 
   useEffect(() => {
-    if (canOverrideServerThreadEnvMode) {
+    if (canChangeServerThreadWorkspace) {
       return;
     }
     setPendingServerThreadEnvMode(null);
     setPendingServerThreadBranch(undefined);
-  }, [canOverrideServerThreadEnvMode]);
+  }, [canChangeServerThreadWorkspace]);
 
   useEffect(() => {
     if (!activeThreadId) {
@@ -5011,15 +5063,12 @@ function ChatViewContent(props: ChatViewProps) {
     }
     const threadIdForSend = activeThread.id;
     const isFirstMessage = !isServerThread || activeThread.messages.length === 0;
-    const baseBranchForWorktree =
-      isFirstMessage && sendEnvMode === "worktree" && !activeThread.worktreePath
-        ? activeThreadBranch
-        : null;
+    const needsNewWorktree = sendEnvMode === "worktree" && !activeThread.worktreePath;
+    const baseBranchForWorktree = needsNewWorktree ? activeThreadBranch : null;
 
     // In worktree mode, require an explicit base branch so we don't silently
     // fall back to local execution when branch selection is missing.
-    const shouldCreateWorktree =
-      isFirstMessage && sendEnvMode === "worktree" && !activeThread.worktreePath;
+    const shouldCreateWorktree = needsNewWorktree;
     if (shouldCreateWorktree && !activeThreadBranch) {
       setThreadError(threadIdForSend, "Select a base branch before sending in New worktree mode.");
       return;
@@ -5900,6 +5949,52 @@ function ChatViewContent(props: ChatViewProps) {
   );
   const onEnvModeChange = useCallback(
     (mode: DraftThreadEnvMode) => {
+      if (canChangeServerThreadWorkspace && activeThread) {
+        setPendingServerThreadEnvMode(mode);
+        if (mode === "local" && activeThread.worktreePath) {
+          void (async () => {
+            if (activeThread.session && activeThread.session.status !== "stopped") {
+              const stopResult = await stopThreadSession({
+                environmentId,
+                input: { threadId: activeThread.id },
+              });
+              if (stopResult._tag === "Failure") {
+                setPendingServerThreadEnvMode(null);
+                if (!isAtomCommandInterrupted(stopResult)) {
+                  toastManager.add(
+                    stackedThreadToast({
+                      type: "error",
+                      title: "Could not switch to the current checkout",
+                      description: chatActionErrorMessage(squashAtomCommandFailure(stopResult)),
+                    }),
+                  );
+                }
+                return;
+              }
+            }
+            const updateResult = await updateThreadMetadata({
+              environmentId,
+              input: { threadId: activeThread.id, worktreePath: null },
+            });
+            if (updateResult._tag === "Failure") {
+              setPendingServerThreadEnvMode(null);
+              if (!isAtomCommandInterrupted(updateResult)) {
+                toastManager.add(
+                  stackedThreadToast({
+                    type: "error",
+                    title: "Could not switch to the current checkout",
+                    description: chatActionErrorMessage(squashAtomCommandFailure(updateResult)),
+                  }),
+                );
+              }
+              return;
+            }
+            setPendingServerThreadEnvMode(null);
+          })();
+        }
+        scheduleComposerFocus();
+        return;
+      }
       if (canOverrideServerThreadEnvMode) {
         setPendingServerThreadEnvMode(mode);
         scheduleComposerFocus();
@@ -5918,19 +6013,24 @@ function ChatViewContent(props: ChatViewProps) {
       scheduleComposerFocus();
     },
     [
+      activeThread,
       canOverrideServerThreadEnvMode,
+      canChangeServerThreadWorkspace,
       composerDraftTarget,
       draftThread?.worktreePath,
+      environmentId,
       isLocalDraftThread,
       primaryServerSettings.newWorktreesStartFromOrigin,
       setPendingServerThreadEnvMode,
       scheduleComposerFocus,
       setDraftThreadContext,
+      stopThreadSession,
+      updateThreadMetadata,
     ],
   );
 
   const onStartFromOriginChange = (nextStartFromOrigin: boolean) => {
-    if (canOverrideServerThreadEnvMode && activeThread) {
+    if (canChangeServerThreadWorkspace && activeThread) {
       setPendingServerThreadStartFromOriginByThreadId((current) =>
         current[activeThread.id] === nextStartFromOrigin
           ? current
@@ -6052,6 +6152,16 @@ function ChatViewContent(props: ChatViewProps) {
           initialGitScope={initialDiffPanelGitScope}
         />
       </Suspense>
+    ) : activeRightPanelSurface?.kind === "git-history" && activeProject ? (
+      <Suspense fallback={null}>
+        <GitHistoryPanel
+          environmentId={activeProject.environmentId}
+          primaryCwd={gitCwd ?? activeProject.workspaceRoot}
+          {...(activeProject.workspaceRoots
+            ? { workspaceRoots: activeProject.workspaceRoots }
+            : {})}
+        />
+      </Suspense>
     ) : activeRightPanelSurface?.kind === "pull-request" && !pullRequestsCapabilityKnown ? (
       <PullRequestDetailGhost />
     ) : activeRightPanelSurface?.kind === "pull-request" && !supportsPullRequests ? (
@@ -6089,13 +6199,14 @@ function ChatViewContent(props: ChatViewProps) {
       />
     ) : (activeRightPanelSurface?.kind === "files" || activeRightPanelSurface?.kind === "file") &&
       activeProject &&
-      activeWorkspaceRoot ? (
+      activeFileWorkspaceRoot ? (
       <Suspense fallback={null}>
         <FilePreviewPanel
-          key={`${activeProject.environmentId}:${activeWorkspaceRoot}`}
+          key={`${activeProject.environmentId}:${activeFileWorkspaceRoot}`}
           environmentId={activeProject.environmentId}
-          cwd={activeWorkspaceRoot}
+          cwd={activeFileWorkspaceRoot}
           projectName={activeProject.title}
+          workspaceRoots={activeProject.workspaceRoots}
           threadRef={activeThreadRef}
           composerDraftTarget={composerDraftTarget}
           keybindings={keybindings}
@@ -6226,6 +6337,7 @@ function ChatViewContent(props: ChatViewProps) {
                 liveFollowEnabled={timelineLiveFollowEnabled}
                 onIsAtEndChange={onIsAtEndChange}
                 onManualNavigation={cancelTimelineLiveFollowForUserNavigation}
+                onTimelineScroll={markTimelineScrolled}
                 hideEmptyPlaceholder={isDraftHeroState || threadDetailLoading}
                 topFadeEnabled={!hasTimelineTopBanner}
                 loadEarlier={loadEarlierTurns}
@@ -6304,6 +6416,7 @@ function ChatViewContent(props: ChatViewProps) {
                         "chat-composer-glass-shell relative mx-auto w-full max-w-3xl",
                         showComposerContextStrip && "chat-composer-glass-shell-with-context",
                       )}
+                      style={composerContextShellStyle}
                     >
                       <div className="chat-composer-glass-host relative z-10 w-full rounded-[22px]">
                         <div ref={attachDraftHeroComposerAnchorRef} className="relative z-10">
@@ -6320,6 +6433,12 @@ function ChatViewContent(props: ChatViewProps) {
                             isServerThread={isServerThread}
                             isLocalDraftThread={isLocalDraftThread}
                             forceExpandedOnMobile={forceExpandedMobileComposer && isDraftHeroState}
+                            compactWhenTimelineScrolled={
+                              !isDraftHeroState &&
+                              !timelineLiveFollowEnabled &&
+                              timelineScrolledThreadKey === routeThreadKey
+                            }
+                            onExpandComposer={clearTimelineScrollCollapse}
                             projectSelectionRequired={isLocalDraftThread && activeProject === null}
                             phase={phase}
                             isConnecting={isConnecting}
@@ -6395,9 +6514,10 @@ function ChatViewContent(props: ChatViewProps) {
                                 showGitControls={isGitRepo}
                                 {...(routeKind === "draft" && draftId ? { draftId } : {})}
                                 onEnvModeChange={onEnvModeChange}
+                                allowWorkspaceModeChange={canChangeServerThreadWorkspace}
                                 startFromOrigin={startFromOrigin}
                                 onStartFromOriginChange={onStartFromOriginChange}
-                                {...(canOverrideServerThreadEnvMode
+                                {...(canChangeServerThreadWorkspace
                                   ? { effectiveEnvModeOverride: envMode }
                                   : {})}
                                 {...(canOverrideServerThreadEnvMode
@@ -6528,12 +6648,14 @@ function ChatViewContent(props: ChatViewProps) {
           onAddTerminal={addTerminalSurface}
           onAddDiff={addDiffSurface}
           onAddFiles={addFilesSurface}
+          onAddGitHistory={addGitHistorySurface}
           onAddPullRequest={addPullRequestSurface}
           onAddAgents={addAgentsSurface}
           browserAvailable={isPreviewSupportedInRuntime()}
           terminalAvailable={activeProject !== null}
           diffAvailable={isServerThread && isGitRepo}
           filesAvailable={activeProject !== null}
+          gitHistoryAvailable={activeProject !== null && isGitRepo}
           pullRequestAvailable={pullRequestSurfaceAvailable}
           agentsAvailable
           pullRequestStatuses={pullRequestTabStatuses}
@@ -6562,12 +6684,14 @@ function ChatViewContent(props: ChatViewProps) {
             onAddTerminal={addTerminalSurface}
             onAddDiff={addDiffSurface}
             onAddFiles={addFilesSurface}
+            onAddGitHistory={addGitHistorySurface}
             onAddPullRequest={addPullRequestSurface}
             onAddAgents={addAgentsSurface}
             browserAvailable={isPreviewSupportedInRuntime()}
             terminalAvailable={activeProject !== null}
             diffAvailable={isServerThread && isGitRepo}
             filesAvailable={activeProject !== null}
+            gitHistoryAvailable={activeProject !== null && isGitRepo}
             pullRequestAvailable={pullRequestSurfaceAvailable}
             agentsAvailable
             pullRequestStatuses={pullRequestTabStatuses}

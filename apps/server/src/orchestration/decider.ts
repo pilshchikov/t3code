@@ -12,7 +12,6 @@ import type * as PlatformError from "effect/PlatformError";
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import {
   listThreadsByProjectId,
-  requireActiveProjectWorkspaceRootAbsent,
   requireProject,
   requireProjectAbsent,
   requireThread,
@@ -230,12 +229,6 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         projectId: command.projectId,
       });
-      yield* requireActiveProjectWorkspaceRootAbsent({
-        readModel,
-        command,
-        workspaceRoot: command.workspaceRoot,
-        exceptProjectId: command.projectId,
-      });
 
       return {
         ...(yield* withEventBase({
@@ -249,6 +242,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           projectId: command.projectId,
           title: command.title,
           workspaceRoot: command.workspaceRoot,
+          workspaceRoots: command.workspaceRoots ?? [{ path: command.workspaceRoot }],
           defaultModelSelection: command.defaultModelSelection ?? null,
           faviconPath: null,
           scripts: [],
@@ -264,14 +258,6 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         projectId: command.projectId,
       });
-      if (command.workspaceRoot !== undefined) {
-        yield* requireActiveProjectWorkspaceRootAbsent({
-          readModel,
-          command,
-          workspaceRoot: command.workspaceRoot,
-          exceptProjectId: command.projectId,
-        });
-      }
       const occurredAt = yield* nowIso;
       return {
         ...(yield* withEventBase({
@@ -285,6 +271,9 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           projectId: command.projectId,
           ...(command.title !== undefined ? { title: command.title } : {}),
           ...(command.workspaceRoot !== undefined ? { workspaceRoot: command.workspaceRoot } : {}),
+          ...(command.workspaceRoots !== undefined
+            ? { workspaceRoots: command.workspaceRoots }
+            : {}),
           ...(command.defaultModelSelection !== undefined
             ? { defaultModelSelection: command.defaultModelSelection }
             : {}),

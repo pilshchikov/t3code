@@ -5,6 +5,7 @@ import * as NodeOS from "node:os";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as RcMap from "effect/RcMap";
 import * as Schema from "effect/Schema";
@@ -12,6 +13,7 @@ import * as Schema from "effect/Schema";
 import type {
   FilesystemBrowseInput,
   FilesystemBrowseResult,
+  ProjectEntry,
   ProjectListEntriesInput,
   ProjectListEntriesResult,
   ProjectSearchContentsInput,
@@ -27,6 +29,45 @@ import { normalizeSearchQuery } from "@t3tools/shared/searchRanking";
 
 import * as WorkspacePaths from "./WorkspacePaths.ts";
 import * as WorkspaceSearchIndex from "./WorkspaceSearchIndex.ts";
+import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
+
+const MAX_IGNORED_WORKSPACE_ENTRIES = 10_000;
+const MAX_WORKSPACE_ENTRIES = 25_000;
+
+function parentPathOf(input: string): string | undefined {
+  const separatorIndex = input.lastIndexOf("/");
+  return separatorIndex === -1 ? undefined : input.slice(0, separatorIndex);
+}
+
+function pathDepth(input: string): number {
+  let depth = 1;
+  for (const character of input) {
+    if (character === "/") depth += 1;
+  }
+  return depth;
+}
+
+function normalizeEntryPath(input: string): string {
+  return input.replace(/\/+$/, "");
+}
+
+function withDirectoryAncestors(entries: ReadonlyArray<ProjectEntry>): ProjectEntry[] {
+  const normalizedEntries = entries.map((entry) => ({
+    ...entry,
+    path: normalizeEntryPath(entry.path),
+  }));
+  const entriesByPath = new Map(normalizedEntries.map((entry) => [entry.path, entry] as const));
+  for (const entry of normalizedEntries) {
+    let parentPath = parentPathOf(entry.path);
+    while (parentPath) {
+      if (!entriesByPath.has(parentPath)) {
+        entriesByPath.set(parentPath, { path: parentPath, kind: "directory" });
+      }
+      parentPath = parentPathOf(parentPath);
+    }
+  }
+  return [...entriesByPath.values()];
+}
 
 export class WorkspaceEntriesWindowsPathUnsupportedError extends Schema.TaggedErrorClass<WorkspaceEntriesWindowsPathUnsupportedError>()(
   "WorkspaceEntriesWindowsPathUnsupportedError",
@@ -147,6 +188,7 @@ export const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const workspacePaths = yield* WorkspacePaths.WorkspacePaths;
   const workspaceSearchIndexes = yield* WorkspaceSearchIndex.WorkspaceSearchIndexMap;
+  const vcsDriverRegistry = yield* Effect.serviceOption(VcsDriverRegistry.VcsDriverRegistry);
 
   const normalizeWorkspaceRoot = Effect.fn("WorkspaceEntries.normalizeWorkspaceRoot")(function* (
     cwd: string,
@@ -300,6 +342,54 @@ export const make = Effect.gen(function* () {
   const list: WorkspaceEntries["Service"]["list"] = Effect.fn("WorkspaceEntries.list")(
     function* (input) {
       const normalizedCwd = yield* normalizeWorkspaceRoot(input.cwd);
+      const detected = yield* Option.match(vcsDriverRegistry, {
+        onNone: () => Effect.succeed(null),
+        onSome: (registry) =>
+          registry
+            .detect({ cwd: normalizedCwd, requestedKind: "auto" })
+            .pipe(Effect.orElseSucceed(() => null)),
+      });
+
+      if (detected) {
+        const [workspaceFiles, ignoredEntries] = yield* Effect.all([
+          detected.driver.listWorkspaceFiles(normalizedCwd).pipe(Effect.option),
+          detected.driver.listIgnoredWorkspaceEntries
+            ? detected.driver
+                .listIgnoredWorkspaceEntries(normalizedCwd)
+                .pipe(Effect.orElseSucceed(() => []))
+            : Effect.succeed([]),
+        ]);
+        if (Option.isSome(workspaceFiles)) {
+          // Prefer shallow ignored paths so useful project-local folders (for
+          // example `local-notes/`) are not crowded out by thousands of deep cache,
+          // virtualenv, or node_modules entries.
+          const ignoredSlice = ignoredEntries
+            .toSorted(
+              (left, right) =>
+                pathDepth(left.path) - pathDepth(right.path) || left.path.localeCompare(right.path),
+            )
+            .slice(0, MAX_IGNORED_WORKSPACE_ENTRIES);
+          const allEntries = withDirectoryAncestors([
+            ...workspaceFiles.value.paths.map((filePath) => ({
+              path: normalizeEntryPath(filePath),
+              kind: "file" as const,
+            })),
+            ...ignoredSlice.map((entry) => ({
+              ...entry,
+              path: normalizeEntryPath(entry.path),
+              ignored: true as const,
+            })),
+          ]).sort((left, right) => left.path.localeCompare(right.path));
+          return {
+            entries: allEntries.slice(0, MAX_WORKSPACE_ENTRIES),
+            truncated:
+              workspaceFiles.value.truncated ||
+              ignoredEntries.length > MAX_IGNORED_WORKSPACE_ENTRIES ||
+              allEntries.length > MAX_WORKSPACE_ENTRIES,
+          };
+        }
+      }
+
       return yield* Effect.gen(function* () {
         const searchIndex = yield* WorkspaceSearchIndex.WorkspaceSearchIndex;
         return yield* searchIndex.list();

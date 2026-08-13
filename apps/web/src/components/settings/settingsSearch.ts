@@ -74,6 +74,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/appearance",
   },
   {
+    id: "chat-message-size",
+    title: "Chat & system text size",
+    to: "/settings/appearance",
+  },
+  {
     id: "code-font",
     title: "Code font",
     to: "/settings/appearance",

@@ -142,6 +142,10 @@ import {
   buildSidebarProjectSnapshots,
 } from "../sidebarProjectGrouping";
 import type { Project } from "../types";
+import {
+  OpenAddProjectCommandPaletteProvider,
+  type OpenDirectoryCommandPaletteOptions,
+} from "../commandPaletteContext";
 
 const EMPTY_BROWSE_ENTRIES: FilesystemBrowseResult["entries"] = [];
 
@@ -392,6 +396,15 @@ export function CommandPalette({ children }: { children: ReactNode }) {
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const { theme, themeHalves, resolvedTheme } = useTheme();
   const composerHandleRef = useRef<ChatComposerHandle | null>(null);
+  const directoryRequestIdRef = useRef(0);
+  const [directorySelectionRequest, setDirectorySelectionRequest] = useState<
+    (OpenDirectoryCommandPaletteOptions & { readonly requestId: number }) | null
+  >(null);
+  const openDirectoryPicker = useCallback((options: OpenDirectoryCommandPaletteOptions) => {
+    directoryRequestIdRef.current += 1;
+    setDirectorySelectionRequest({ ...options, requestId: directoryRequestIdRef.current });
+    dispatch({ _tag: "SetOpen", open: true });
+  }, []);
   const routeTarget = useParams({
     strict: false,
     select: (params) => resolveThreadRouteTarget(params),
@@ -469,30 +482,42 @@ export function CommandPalette({ children }: { children: ReactNode }) {
     [openAddProject, openNewThreadIn, setOpen],
   );
 
+  useEffect(() => {
+    if (!state.open) setDirectorySelectionRequest(null);
+  }, [state.open]);
+
   return (
-    <ComposerHandleContext value={composerHandleRef}>
-      <CommandDialog
-        open={state.open}
-        onOpenChange={(open, eventDetails) => {
-          if (!open && eventDetails.reason === "escape-key" && state.mode !== "command") {
-            eventDetails.cancel();
-            toggleMode("command");
-            return;
-          }
-          setOpen(open);
-        }}
-      >
-        {children}
-        <CommandPaletteDialog
+    <OpenAddProjectCommandPaletteProvider
+      openAddProject={openAddProject}
+      openCommandPalette={() => setOpen(true)}
+      openDirectoryPicker={openDirectoryPicker}
+    >
+      <ComposerHandleContext value={composerHandleRef}>
+        <CommandDialog
           open={state.open}
-          mode={state.mode}
-          openIntent={state.openIntent}
-          setOpen={setOpen}
-          openOverlayMode={toggleMode}
-          clearOpenIntent={clearOpenIntent}
-        />
-      </CommandDialog>
-    </ComposerHandleContext>
+          onOpenChange={(open, eventDetails) => {
+            if (!open && eventDetails.reason === "escape-key" && state.mode !== "command") {
+              eventDetails.cancel();
+              toggleMode("command");
+              return;
+            }
+            setOpen(open);
+          }}
+        >
+          {children}
+          <CommandPaletteDialog
+            open={state.open}
+            mode={state.mode}
+            openIntent={state.openIntent}
+            setOpen={setOpen}
+            openOverlayMode={toggleMode}
+            clearOpenIntent={clearOpenIntent}
+            directorySelectionRequest={directorySelectionRequest}
+            clearDirectorySelectionRequest={() => setDirectorySelectionRequest(null)}
+          />
+        </CommandDialog>
+      </ComposerHandleContext>
+    </OpenAddProjectCommandPaletteProvider>
   );
 }
 
@@ -503,6 +528,10 @@ function CommandPaletteDialog(props: {
   readonly setOpen: (open: boolean) => void;
   readonly openOverlayMode: (mode: SearchOverlayMode) => void;
   readonly clearOpenIntent: () => void;
+  readonly directorySelectionRequest:
+    | (OpenDirectoryCommandPaletteOptions & { readonly requestId: number })
+    | null;
+  readonly clearDirectorySelectionRequest: () => void;
 }) {
   const composerHandleRef = useComposerHandleContext();
 
@@ -541,6 +570,8 @@ function CommandPaletteDialog(props: {
           setOpen={props.setOpen}
           openOverlayMode={props.openOverlayMode}
           clearOpenIntent={props.clearOpenIntent}
+          directorySelectionRequest={props.directorySelectionRequest}
+          clearDirectorySelectionRequest={props.clearDirectorySelectionRequest}
         />
       )}
     </CommandDialogPopup>
@@ -552,9 +583,20 @@ function OpenCommandPaletteDialog(props: {
   readonly setOpen: (open: boolean) => void;
   readonly openOverlayMode: (mode: SearchOverlayMode) => void;
   readonly clearOpenIntent: () => void;
+  readonly directorySelectionRequest:
+    | (OpenDirectoryCommandPaletteOptions & { readonly requestId: number })
+    | null;
+  readonly clearDirectorySelectionRequest: () => void;
 }) {
   const navigate = useNavigate();
-  const { clearOpenIntent, openIntent, openOverlayMode, setOpen } = props;
+  const {
+    clearDirectorySelectionRequest,
+    clearOpenIntent,
+    directorySelectionRequest,
+    openIntent,
+    openOverlayMode,
+    setOpen,
+  } = props;
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const isActionsOnly = deferredQuery.startsWith(">");
@@ -614,6 +656,7 @@ function OpenCommandPaletteDialog(props: {
     browseNavigationRef.current = createBrowseNavigationCoordinator();
   }
   const browseNavigation = browseNavigationRef.current;
+  const processedDirectoryRequestRef = useRef<number | null>(null);
   const [addProjectEnvironmentId, setAddProjectEnvironmentId] = useState<EnvironmentId | null>(
     null,
   );
@@ -1110,6 +1153,36 @@ function OpenCommandPaletteDialog(props: {
       pushPaletteView,
     ],
   );
+
+  useLayoutEffect(() => {
+    if (
+      !directorySelectionRequest ||
+      processedDirectoryRequestRef.current === directorySelectionRequest.requestId
+    ) {
+      return;
+    }
+    processedDirectoryRequestRef.current = directorySelectionRequest.requestId;
+    const initialQuery = ensureBrowseDirectoryPath(directorySelectionRequest.initialPath ?? "~/");
+    const initialBrowsePath = getBrowseDirectoryPath(initialQuery);
+    browseNavigation.invalidate();
+    setAddProjectCloneFlow(null);
+    setViewStack([]);
+    setHighlightedItemValue(null);
+    void browseNavigation.run(
+      () =>
+        initialBrowsePath.length > 0
+          ? prefetchBrowsePath(initialBrowsePath, directorySelectionRequest.environmentId, null)
+          : Promise.resolve(),
+      () => {
+        setAddProjectEnvironmentId(directorySelectionRequest.environmentId);
+        pushPaletteView({
+          addonIcon: <FolderPlusIcon className={ADDON_ICON_CLASS} />,
+          groups: [],
+          initialQuery,
+        });
+      },
+    );
+  }, [browseNavigation, directorySelectionRequest, prefetchBrowsePath, pushPaletteView]);
 
   const startAddProjectClone = useCallback(
     (environmentId: EnvironmentId, source: AddProjectRemoteSource): void => {
@@ -1703,6 +1776,14 @@ function OpenCommandPaletteDialog(props: {
   const handleAddProject = useCallback(
     async (rawCwd: string) => {
       if (!browseEnvironmentId) return;
+      if (directorySelectionRequest) {
+        const selectedPath = resolveProjectPathForDispatch(rawCwd, currentProjectCwdForBrowse);
+        if (selectedPath.length === 0) return;
+        await directorySelectionRequest.onSelect(selectedPath);
+        clearDirectorySelectionRequest();
+        setOpen(false);
+        return;
+      }
       await handleAddProjectForEnvironment({
         environmentId: browseEnvironmentId,
         rawCwd,
@@ -1713,8 +1794,11 @@ function OpenCommandPaletteDialog(props: {
     [
       browseEnvironmentId,
       browseEnvironmentPlatform,
+      clearDirectorySelectionRequest,
       currentProjectCwdForBrowse,
+      directorySelectionRequest,
       handleAddProjectForEnvironment,
+      setOpen,
     ],
   );
 

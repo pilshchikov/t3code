@@ -1,4 +1,9 @@
-import type { TurnDiffFileChange } from "../types";
+export interface DiffTreeFile {
+  readonly path: string;
+  readonly kind?: string;
+  readonly additions?: number;
+  readonly deletions?: number;
+}
 
 export interface TurnDiffStat {
   additions: number;
@@ -43,7 +48,7 @@ function compareByName(a: { name: string }, b: { name: string }): number {
   return a.name.localeCompare(b.name, undefined, SORT_LOCALE_OPTIONS);
 }
 
-function readStat(file: TurnDiffFileChange): TurnDiffStat | null {
+function readStat(file: DiffTreeFile): TurnDiffStat | null {
   if (typeof file.additions !== "number" || typeof file.deletions !== "number") {
     return null;
   }
@@ -96,7 +101,7 @@ function toTreeNodes(directory: MutableDirectoryNode): TurnDiffTreeNode[] {
   return [...subdirectories, ...files];
 }
 
-export function summarizeTurnDiffStats(files: ReadonlyArray<TurnDiffFileChange>): TurnDiffStat {
+export function summarizeTurnDiffStats(files: ReadonlyArray<DiffTreeFile>): TurnDiffStat {
   return files.reduce(
     (acc, file) => {
       const stat = readStat(file);
@@ -110,7 +115,7 @@ export function summarizeTurnDiffStats(files: ReadonlyArray<TurnDiffFileChange>)
   );
 }
 
-export function buildTurnDiffTree(files: ReadonlyArray<TurnDiffFileChange>): TurnDiffTreeNode[] {
+export function buildTurnDiffTree(files: ReadonlyArray<DiffTreeFile>): TurnDiffTreeNode[] {
   const root: MutableDirectoryNode = {
     name: "",
     path: "",

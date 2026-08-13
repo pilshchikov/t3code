@@ -27,6 +27,12 @@ import {
   GitDiscardChangesInput,
   GitFileDiffInput,
   GitFileDiffResult,
+  GitHistoryInput,
+  GitHistoryResult,
+  GitCommitDetailsInput,
+  GitCommitDetailsResult,
+  GitCommitDiffInput,
+  GitCommitDiffResult,
   GitGenerateCommitMessageResult,
   GitResolveConflictInput,
   GitStageFilesInput,
@@ -260,6 +266,9 @@ export const WS_METHODS = {
   gitCommitStaged: "git.commitStaged",
   gitGenerateCommitMessage: "git.generateCommitMessage",
   gitFileDiff: "git.fileDiff",
+  gitHistory: "git.history",
+  gitCommitDetails: "git.commitDetails",
+  gitCommitDiff: "git.commitDiff",
 
   // Multiwork methods
   multiworkCreate: "multiwork.create",
@@ -786,6 +795,24 @@ export const WsGitFileDiffRpc = Rpc.make(WS_METHODS.gitFileDiff, {
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
+export const WsGitHistoryRpc = Rpc.make(WS_METHODS.gitHistory, {
+  payload: GitHistoryInput,
+  success: GitHistoryResult,
+  error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
+});
+
+export const WsGitCommitDetailsRpc = Rpc.make(WS_METHODS.gitCommitDetails, {
+  payload: GitCommitDetailsInput,
+  success: GitCommitDetailsResult,
+  error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
+});
+
+export const WsGitCommitDiffRpc = Rpc.make(WS_METHODS.gitCommitDiff, {
+  payload: GitCommitDiffInput,
+  success: GitCommitDiffResult,
+  error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
+});
+
 export const WsVcsListRefsRpc = Rpc.make(WS_METHODS.vcsListRefs, {
   payload: VcsListRefsInput,
   success: VcsListRefsResult,
@@ -1141,6 +1168,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitCommitStagedRpc,
   WsGitGenerateCommitMessageRpc,
   WsGitFileDiffRpc,
+  WsGitHistoryRpc,
+  WsGitCommitDetailsRpc,
+  WsGitCommitDiffRpc,
   WsVcsListRefsRpc,
   WsVcsCreateWorktreeRpc,
   WsVcsRemoveWorktreeRpc,

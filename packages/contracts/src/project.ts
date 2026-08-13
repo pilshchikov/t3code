@@ -30,6 +30,8 @@ export type ProjectSearchEntriesInput = typeof ProjectSearchEntriesInput.Type;
 export const ProjectEntry = Schema.Struct({
   path: TrimmedNonEmptyString,
   kind: ProjectEntryKind,
+  // Git-ignored entries are included in the file browser but remain visually muted.
+  ignored: Schema.optionalKey(Schema.Boolean),
 });
 export type ProjectEntry = typeof ProjectEntry.Type;
 

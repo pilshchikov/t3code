@@ -14,6 +14,7 @@
 import * as NodeOS from "node:os";
 
 import {
+  ClaudeSettings,
   USAGE_CONTRACT_VERSION,
   type UsageProviderKind,
   type UsageSource,
@@ -35,7 +36,7 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 
 import { ServerConfig } from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
-import { resolveClaudeHomePath } from "../provider/Drivers/ClaudeHome.ts";
+import { resolveClaudeConfigDir, resolveClaudeHomePath } from "../provider/Drivers/ClaudeHome.ts";
 import { resolveCodexHomeLayout } from "../provider/Drivers/CodexHomeLayout.ts";
 import { UsageAggregator } from "./usageAggregation.ts";
 import { parseRateTable, type RateTable } from "./usagePricing.ts";
@@ -188,8 +189,9 @@ export const make = Effect.gen(function* () {
    * Claude's config dir is the home itself when overridden, but a default
    * install nests transcripts under `~/.claude/projects`. Probe both.
    */
-  const resolveClaudeTranscriptDir = (homePath: string) =>
+  const resolveClaudeTranscriptDir = (homePath: string, configDir?: string) =>
     Effect.gen(function* () {
+      if (configDir !== undefined) return path.join(configDir, "projects");
       const nested = path.join(homePath, ".claude", "projects");
       const nestedExists = yield* fileSystem
         .exists(nested)
@@ -215,13 +217,45 @@ export const make = Effect.gen(function* () {
       ),
     );
 
-    const claudeHome = yield* resolveClaudeHomePath(settings.providers.claudeAgent);
-    const claudeDir = yield* resolveClaudeTranscriptDir(claudeHome);
+    const configuredClaudeSources = Object.entries(settings.providerInstances).flatMap(
+      ([instanceId, instance]) => {
+        if (instance.driver !== "claudeAgent" || instance.config === undefined) return [];
+        const config = Option.getOrUndefined(
+          Schema.decodeUnknownOption(ClaudeSettings)(instance.config),
+        );
+        if (config === undefined) return [];
+        const hint = `${instanceId} ${config.configDir} ${config.homePath}`.toLowerCase();
+        const label =
+          instance.displayName ??
+          (hint.includes("work")
+            ? "Claude Work"
+            : hint.includes("personal")
+              ? "Claude Personal"
+              : `Claude ${instanceId}`);
+        return [{ config, label }];
+      },
+    );
+    const claudeSources = [
+      { config: settings.providers.claudeAgent, label: "Claude Personal" },
+      ...configuredClaudeSources,
+    ];
+    const claudeDirs = yield* Effect.forEach(claudeSources, (source) =>
+      Effect.gen(function* () {
+        const claudeHome = yield* resolveClaudeHomePath(source.config);
+        const configDir = yield* resolveClaudeConfigDir(source.config);
+        const claudeDir = yield* resolveClaudeTranscriptDir(claudeHome, configDir);
+        return { provider: "claude" as const, dir: claudeDir, label: source.label };
+      }),
+    );
     const codexLayout = yield* resolveCodexHomeLayout(settings.providers.codex);
 
     return [
-      { provider: "claude" as const, dir: claudeDir },
-      { provider: "codex" as const, dir: path.join(codexLayout.sharedHomePath, "sessions") },
+      ...new Map(claudeDirs.map((source) => [source.dir, source])).values(),
+      {
+        provider: "codex" as const,
+        dir: path.join(codexLayout.sharedHomePath, "sessions"),
+        label: "Codex",
+      },
     ];
   });
 
@@ -353,7 +387,7 @@ export const make = Effect.gen(function* () {
     const livePaths = new Set<string>();
     const walkedRoots: string[] = [];
 
-    for (const { provider, dir } of dirs) {
+    for (const { provider, dir, label } of dirs) {
       const volumeId = yield* Effect.promise(() => readDirectoryVolumeId(dir));
       const exists = yield* fileSystem
         .exists(dir)
@@ -361,6 +395,8 @@ export const make = Effect.gen(function* () {
 
       if (!exists) {
         sources.push({
+          sourceId: dir,
+          sourceLabel: label,
           fingerprint: { hostId, provider, resolvedHomePath: dir, volumeId },
           status: "missing",
           scannedFiles: 0,
@@ -391,13 +427,15 @@ export const make = Effect.gen(function* () {
         for (const record of records) {
           // Only sessions that contributed in-window count: the mtime slack
           // admits boundary files whose records fall outside the range.
-          if (aggregator.add(record) && record.sessionId.length > 0) {
+          if (aggregator.add(record, dir) && record.sessionId.length > 0) {
             sessionIds.add(record.sessionId);
           }
         }
       }
 
       sources.push({
+        sourceId: dir,
+        sourceLabel: label,
         fingerprint: { hostId, provider, resolvedHomePath: dir, volumeId },
         status: "ok",
         scannedFiles,

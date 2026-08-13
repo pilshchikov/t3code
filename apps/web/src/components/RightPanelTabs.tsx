@@ -5,6 +5,7 @@ import {
   FileDiff,
   Files,
   GitPullRequest,
+  GitGraph,
   Globe2,
   Plus,
   TerminalSquare,
@@ -57,12 +58,14 @@ interface RightPanelTabsProps {
   onAddTerminal: () => void;
   onAddDiff: () => void;
   onAddFiles: () => void;
+  onAddGitHistory: () => void;
   onAddPullRequest: () => void;
   onAddAgents: () => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
   filesAvailable: boolean;
+  gitHistoryAvailable: boolean;
   pullRequestAvailable: boolean;
   agentsAvailable: boolean;
   pullRequestStatuses?: Readonly<Record<string, PullRequestTabStatus>>;
@@ -83,6 +86,7 @@ const SURFACE_DISABLED_REASONS = {
   browser: "Browser previews are only available in the T3 Code desktop app.",
   terminal: "Terminal surfaces are only available from a project thread.",
   files: "Files are only available when a project is open.",
+  gitHistory: "Git history is only available for Git project threads.",
   diff: "Diff is only available for server threads in Git repositories.",
   pullRequest: "This thread's branch has no pull request yet.",
   agents: "Agents are only available from a thread.",
@@ -123,12 +127,14 @@ function RightPanelEmptyState(props: {
   onAddTerminal: () => void;
   onAddDiff: () => void;
   onAddFiles: () => void;
+  onAddGitHistory: () => void;
   onAddPullRequest: () => void;
   onAddAgents: () => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
   filesAvailable: boolean;
+  gitHistoryAvailable: boolean;
   pullRequestAvailable: boolean;
   agentsAvailable: boolean;
   liveAgentCount: number;
@@ -168,6 +174,15 @@ function RightPanelEmptyState(props: {
       available: props.diffAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.diff,
       onClick: props.onAddDiff,
+      badgeCount: 0,
+    },
+    {
+      label: "Git History",
+      description: "Browse commits and changed files.",
+      icon: GitGraph,
+      available: props.gitHistoryAvailable,
+      disabledReason: SURFACE_DISABLED_REASONS.gitHistory,
+      onClick: props.onAddGitHistory,
       badgeCount: 0,
     },
     {
@@ -277,6 +292,8 @@ function surfaceTitle(
       return `#${surface.number}`;
     case "agents":
       return "Agents";
+    case "git-history":
+      return "Git History";
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
@@ -354,6 +371,8 @@ function SurfaceIcon({
     }
     case "agents":
       return <Bot className="size-3 shrink-0" />;
+    case "git-history":
+      return <GitGraph className="size-3 shrink-0" />;
   }
 }
 
@@ -562,6 +581,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                     Diff
                   </SurfaceMenuItem>
                   <SurfaceMenuItem
+                    available={props.gitHistoryAvailable}
+                    disabledReason={SURFACE_DISABLED_REASONS.gitHistory}
+                    onClick={props.onAddGitHistory}
+                  >
+                    <GitGraph />
+                    Git History
+                  </SurfaceMenuItem>
+                  <SurfaceMenuItem
                     available={props.pullRequestAvailable}
                     disabledReason={SURFACE_DISABLED_REASONS.pullRequest}
                     onClick={props.onAddPullRequest}
@@ -591,12 +618,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddTerminal={props.onAddTerminal}
             onAddDiff={props.onAddDiff}
             onAddFiles={props.onAddFiles}
+            onAddGitHistory={props.onAddGitHistory}
             onAddPullRequest={props.onAddPullRequest}
             onAddAgents={props.onAddAgents}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
             diffAvailable={props.diffAvailable}
             filesAvailable={props.filesAvailable}
+            gitHistoryAvailable={props.gitHistoryAvailable}
             pullRequestAvailable={props.pullRequestAvailable}
             agentsAvailable={props.agentsAvailable}
             liveAgentCount={props.liveAgentCount}
