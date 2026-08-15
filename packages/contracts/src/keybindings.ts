@@ -57,6 +57,8 @@ const STATIC_KEYBINDING_COMMANDS = [
   "rightPanel.toggle",
   "rightPanel.maximize",
   "editor.toggle",
+  "editor.navigateBack",
+  "editor.navigateForward",
   "structure.open",
   "diff.toggle",
   "preview.toggle",

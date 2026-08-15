@@ -123,6 +123,7 @@ import { isCommandPaletteOpen } from "../commandPaletteBus";
 import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
+import { useEditorNavigationStore } from "../editorNavigationStore";
 import {
   selectActiveRightPanel,
   selectActiveRightPanelSurface,
@@ -2665,6 +2666,20 @@ function ChatViewContent(props: ChatViewProps) {
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
   const activeFileWorkspaceRoot = activeFileSurface?.workspaceRoot ?? activeWorkspaceRoot;
+  // Editor back/forward history. Recording the active file here, rather than at each call site
+  // that can open one, means the tree, markdown links, the file picker, and symbol jumps all feed
+  // one history. Replaying a back/forward step lands on the entry it just moved to, which
+  // recordActiveLocation treats as a no-op, so replays never append.
+  const activeFileRelativePath = activeFileSurface?.relativePath ?? null;
+  const activeFileEnvironmentId = activeProject?.environmentId ?? null;
+  useEffect(() => {
+    if (!activeFileEnvironmentId || !activeFileWorkspaceRoot || !activeFileRelativePath) return;
+    useEditorNavigationStore
+      .getState()
+      .recordActiveLocation(activeFileEnvironmentId, activeFileWorkspaceRoot, {
+        path: activeFileRelativePath,
+      });
+  }, [activeFileEnvironmentId, activeFileWorkspaceRoot, activeFileRelativePath]);
   const activeTerminalLaunchContext =
     terminalUiLaunchContext?.threadId === activeThreadId ? terminalUiLaunchContext : null;
   // Default true while loading to avoid toolbar flicker.
@@ -4759,6 +4774,25 @@ function ChatViewContent(props: ChatViewProps) {
         return;
       }
 
+      if (command === "editor.navigateBack" || command === "editor.navigateForward") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!activeFileEnvironmentId || !activeFileWorkspaceRoot) return;
+        const store = useEditorNavigationStore.getState();
+        const previousRequestId = store.navigationRequest?.requestId ?? 0;
+        if (command === "editor.navigateBack") {
+          store.goBack(activeFileEnvironmentId, activeFileWorkspaceRoot);
+        } else {
+          store.goForward(activeFileEnvironmentId, activeFileWorkspaceRoot);
+        }
+        // goBack/goForward no-op at either end of the history, leaving the request id untouched.
+        const request = useEditorNavigationStore.getState().navigationRequest;
+        if (request && request.requestId !== previousRequestId) {
+          openFileSurface(request.path, activeFileWorkspaceRoot);
+        }
+        return;
+      }
+
       if (command === "rightPanel.maximize") {
         event.preventDefault();
         event.stopPropagation();
@@ -4874,6 +4908,9 @@ function ChatViewContent(props: ChatViewProps) {
     rightPanelOpen,
     routeThreadKey,
     shouldUseRightPanelSheet,
+    activeFileEnvironmentId,
+    activeFileWorkspaceRoot,
+    openFileSurface,
     toggleTerminalVisibility,
     composerRef,
   ]);

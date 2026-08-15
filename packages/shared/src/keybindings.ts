@@ -45,6 +45,12 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+shift+n", command: "chat.newLocal", when: "!terminalFocus" },
   { key: "mod+shift+m", command: "modelPicker.toggle", when: "!terminalFocus" },
   { key: "mod+o", command: "editor.openFavorite" },
+  // Editor back/forward. `ctrl+left`/`ctrl+right` is the requested pair, but macOS binds those to
+  // Mission Control spaces by default, so `mod+[`/`mod+]` ships alongside as the reliable one.
+  { key: "ctrl+left", command: "editor.navigateBack", when: "!terminalFocus" },
+  { key: "ctrl+right", command: "editor.navigateForward", when: "!terminalFocus" },
+  { key: "mod+[", command: "editor.navigateBack", when: "!terminalFocus" },
+  { key: "mod+]", command: "editor.navigateForward", when: "!terminalFocus" },
   { key: "mod+shift+[", command: "thread.previous" },
   { key: "mod+shift+]", command: "thread.next" },
   ...THREAD_JUMP_KEYBINDING_COMMANDS.map((command, index) => ({

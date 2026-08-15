@@ -254,6 +254,20 @@ fork-specific behavior so future upstream syncs are easier to review.
     `apps/web/src/explorerViewStore.ts`, `apps/web/src/components/ChatView.tsx`,
     `apps/web/src/components/files/FilePreviewPanel.tsx`.
 
+- `editor.navigateBack` / `editor.navigateForward` walk the editor's back/forward history.
+  - Defaults are `ctrl+left` / `ctrl+right` plus `mod+[` / `mod+]`, both gated `!terminalFocus`.
+    The `ctrl` pair is the requested one; macOS binds `ctrl+left`/`ctrl+right` to Mission Control
+    spaces by default, so the `mod` pair ships alongside as the one that always reaches the app.
+  - **This re-wires an orphaned feature.** `apps/web/src/editorNavigationStore.ts` and its tests
+    survived, but every reference to the store was dropped in `57ce5ccc9` ("fix: reconcile upstream
+    merge integration"), leaving back/forward dead since 2026-08-11 while the store still shipped.
+  - History is recorded from one place, the active file surface in `ChatView`, so the file tree,
+    markdown links, the file picker, and symbol jumps all feed the same history rather than each
+    call site maintaining its own. Replaying a step lands on the entry just moved to, which
+    `recordActiveLocation` already treats as a no-op, so back/forward never appends to history.
+  - Source: `packages/contracts/src/keybindings.ts`, `packages/shared/src/keybindings.ts`,
+    `apps/web/src/components/ChatView.tsx`, `apps/web/src/editorNavigationStore.ts`.
+
 - `rightPanel.maximize` (default `mod+alt+m`) toggles the maximized right panel from the keyboard,
   matching the titlebar's existing `RightPanelMaximizeControl`.
   - Pressing it while the right panel is closed opens **and** maximizes in one go, so the shortcut

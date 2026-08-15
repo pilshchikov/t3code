@@ -203,6 +203,16 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
       assert.equal(defaultsByCommand.get("projectSearch.toggle"), "mod+shift+f");
       assert.equal(defaultsByCommand.get("sidebar.toggle"), "mod+b");
       assert.equal(defaultsByCommand.get("rightPanel.toggle"), "mod+alt+b");
+      assert.equal(defaultsByCommand.get("rightPanel.maximize"), "mod+alt+m");
+      // Both editor history commands ship two bindings; the map keeps the last one written.
+      assert.equal(defaultsByCommand.get("editor.navigateBack"), "mod+[");
+      assert.equal(defaultsByCommand.get("editor.navigateForward"), "mod+]");
+      assert.deepStrictEqual(
+        Keybindings.DEFAULT_KEYBINDINGS.filter(
+          (binding) => binding.command === "editor.navigateBack",
+        ).map((binding) => binding.key),
+        ["ctrl+left", "mod+["],
+      );
       assert.equal(defaultsByCommand.get("terminal.splitVertical"), "mod+shift+d");
       assert.equal(defaultsByCommand.get("modelPicker.jump.1"), "mod+1");
       assert.equal(defaultsByCommand.get("modelPicker.jump.9"), "mod+9");
