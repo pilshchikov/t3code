@@ -84,6 +84,28 @@ fork-specific behavior so future upstream syncs are easier to review.
 - Source: `apps/web/src/components/files/FilePreviewPanel.tsx`,
   `apps/web/src/components/files/fileEditorUndo.ts`.
 
+## Project File Tree Expansion
+
+- The workspace file tree starts fully collapsed and expansion is opt-in, instead of rendering every
+  directory open on mount. On a large workspace this is the difference between flattening tens of
+  thousands of rows into the virtualizer and flattening the top level.
+  - The tree's state is now a set of **expanded** directories rather than collapsed ones, so the
+    empty initial state is the closed tree. `allDirectoryPaths` (a full-tree walk run on every
+    rebuild purely to feed collapse-all) is gone, replaced by `ancestorDirectories`, which walks one
+    path.
+  - Opening a file expands exactly its ancestor directories and closes everything else, so the tree
+    always shows where the current file lives and nothing more.
+  - The collapse-all button now collapses everything **except** the path to the open file, rather
+    than shutting the tree completely. Its label reads "Collapse all, keeping the open file".
+  - Expansion no longer resets when the entries query refreshes. The reveal effect used to depend on
+    the rebuilt directory list, so any refresh re-collapsed the tree under the user.
+  - The diff file tree (`DiffFilesTreeNavigator`) deliberately keeps its expanded default: it lists
+    only changed files, so a collapsed default would just add clicks.
+  - Source: `apps/web/src/components/files/NativeProjectFileTree.tsx`,
+    `apps/web/src/components/files/FileBrowserPanel.tsx`.
+  - Validated with `nativeProjectFileTree.test.ts` (ancestor derivation, top-level entries, Windows
+    separators and empty segments).
+
 ## File Preview UX
 
 - Editor surface tabs can be hidden from Settings > General.
@@ -231,6 +253,13 @@ fork-specific behavior so future upstream syncs are easier to review.
   - Source: `packages/contracts/src/keybindings.ts`, `packages/shared/src/keybindings.ts`,
     `apps/web/src/explorerViewStore.ts`, `apps/web/src/components/ChatView.tsx`,
     `apps/web/src/components/files/FilePreviewPanel.tsx`.
+
+- `rightPanel.maximize` (default `mod+alt+m`) toggles the maximized right panel from the keyboard,
+  matching the titlebar's existing `RightPanelMaximizeControl`.
+  - Pressing it while the right panel is closed opens **and** maximizes in one go, so the shortcut
+    never reads as a dropped key. It is a no-op in the sheet layout, which has no maximized state.
+  - Source: `packages/contracts/src/keybindings.ts`, `packages/shared/src/keybindings.ts`,
+    `apps/web/src/components/ChatView.tsx`.
 
 ## Git Commit Panel
 

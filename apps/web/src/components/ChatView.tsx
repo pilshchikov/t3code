@@ -4759,6 +4759,22 @@ function ChatViewContent(props: ChatViewProps) {
         return;
       }
 
+      if (command === "rightPanel.maximize") {
+        event.preventDefault();
+        event.stopPropagation();
+        // The sheet layout has no maximized state to reach.
+        if (shouldUseRightPanelSheet) return;
+        // One press from closed goes straight to maximized, since waiting for the
+        // panel to open before the shortcut does anything reads as a dropped key.
+        if (!rightPanelOpen) {
+          toggleRightPanel();
+          setMaximizedRightPanelThreadKey(routeThreadKey);
+          return;
+        }
+        toggleRightPanelMaximized();
+        return;
+      }
+
       if (command === "terminal.split") {
         event.preventDefault();
         event.stopPropagation();
@@ -4854,6 +4870,10 @@ function ChatViewContent(props: ChatViewProps) {
     keybindings,
     onToggleDiff,
     toggleRightPanel,
+    toggleRightPanelMaximized,
+    rightPanelOpen,
+    routeThreadKey,
+    shouldUseRightPanelSheet,
     toggleTerminalVisibility,
     composerRef,
   ]);

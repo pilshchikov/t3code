@@ -122,10 +122,19 @@ function filterTree(nodes: ReadonlyArray<ProjectTreeNode>, query: string): Proje
   });
 }
 
-function allDirectoryPaths(nodes: ReadonlyArray<ProjectTreeNode>): string[] {
-  return nodes.flatMap((node) =>
-    node.kind === "directory" ? [node.path, ...allDirectoryPaths(node.children)] : [],
-  );
+/**
+ * Every directory between the workspace root and `path`, excluding the entry itself. Expanding
+ * exactly this set is what keeps one file reachable while the rest of the tree stays shut.
+ */
+export function ancestorDirectories(path: string): string[] {
+  const segments = pathSegments(path);
+  const ancestors: string[] = [];
+  let current = "";
+  for (const segment of segments.slice(0, -1)) {
+    current = current ? `${current}/${segment}` : segment;
+    ancestors.push(current);
+  }
+  return ancestors;
 }
 
 interface VisibleProjectTreeRow {
@@ -138,15 +147,15 @@ const TREE_OVERSCAN_ROWS = 12;
 
 function flattenVisibleNodes(
   nodes: ReadonlyArray<ProjectTreeNode>,
-  collapsed: ReadonlySet<string>,
+  expanded: ReadonlySet<string>,
   forceExpanded: boolean,
   depth = 0,
 ): VisibleProjectTreeRow[] {
   const rows: VisibleProjectTreeRow[] = [];
   for (const node of nodes) {
     rows.push({ node, depth });
-    if (node.kind === "directory" && (forceExpanded || !collapsed.has(node.path))) {
-      rows.push(...flattenVisibleNodes(node.children, collapsed, forceExpanded, depth + 1));
+    if (node.kind === "directory" && (forceExpanded || expanded.has(node.path))) {
+      rows.push(...flattenVisibleNodes(node.children, expanded, forceExpanded, depth + 1));
     }
   }
   return rows;
@@ -166,12 +175,13 @@ export function NativeProjectFileTree(props: {
   collapseRequestId: number;
 }) {
   const nodes = useMemo(() => buildProjectTree(props.entries), [props.entries]);
-  const directoryPaths = useMemo(() => allDirectoryPaths(nodes), [nodes]);
   const filteredNodes = useMemo(() => filterTree(nodes, props.query), [nodes, props.query]);
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  // Expansion is opt-in: a fresh tree shows only top-level entries, so opening a large
+  // workspace never flattens tens of thousands of rows into the virtualizer.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const visibleRows = useMemo(
-    () => flattenVisibleNodes(filteredNodes, collapsed, props.query.trim().length > 0),
-    [collapsed, filteredNodes, props.query],
+    () => flattenVisibleNodes(filteredNodes, expanded, props.query.trim().length > 0),
+    [expanded, filteredNodes, props.query],
   );
   const visibleFiles = useMemo(
     () => visibleRows.flatMap(({ node }) => (node.kind === "file" ? [node.path] : [])),
@@ -198,25 +208,21 @@ export function NativeProjectFileTree(props: {
     return () => observer.disconnect();
   }, []);
 
+  // Collapse keeps the open file reachable rather than shutting the tree down to nothing,
+  // which is the state you'd immediately have to click back out of.
+  const lastCollapseRequestRef = useRef(0);
   useEffect(() => {
     if (props.collapseRequestId === 0) return;
-    setCollapsed(new Set(directoryPaths));
-  }, [directoryPaths, props.collapseRequestId]);
+    if (lastCollapseRequestRef.current === props.collapseRequestId) return;
+    lastCollapseRequestRef.current = props.collapseRequestId;
+    setExpanded(new Set(props.selectedPath ? ancestorDirectories(props.selectedPath) : []));
+  }, [props.collapseRequestId, props.selectedPath]);
 
   useEffect(() => {
     if (!props.selectedPath) return;
-    const segments = pathSegments(props.selectedPath);
-    setCollapsed(() => {
-      const next = new Set(directoryPaths);
-      let ancestor = "";
-      for (const segment of segments.slice(0, -1)) {
-        ancestor = ancestor ? `${ancestor}/${segment}` : segment;
-        next.delete(ancestor);
-      }
-      return next;
-    });
+    setExpanded(new Set(ancestorDirectories(props.selectedPath)));
     props.onSelectionChange([props.selectedPath]);
-  }, [directoryPaths, props.selectedPath, props.selectedPathRevealId]);
+  }, [props.selectedPath, props.selectedPathRevealId]);
 
   useEffect(() => {
     if (!props.selectedPath) return;
@@ -271,7 +277,7 @@ export function NativeProjectFileTree(props: {
       top: index * TREE_ROW_HEIGHT,
     };
     if (node.kind === "directory") {
-      const expanded = props.query.trim().length > 0 || !collapsed.has(node.path);
+      const isExpanded = props.query.trim().length > 0 || expanded.has(node.path);
       return (
         <button
           key={`directory:${node.path}`}
@@ -282,7 +288,7 @@ export function NativeProjectFileTree(props: {
           )}
           style={rowStyle}
           onClick={() => {
-            setCollapsed((current) => {
+            setExpanded((current) => {
               const next = new Set(current);
               if (next.has(node.path)) next.delete(node.path);
               else next.add(node.path);
@@ -293,10 +299,10 @@ export function NativeProjectFileTree(props: {
           <ChevronRightIcon
             className={cn(
               "size-3 shrink-0 text-muted-foreground transition-transform",
-              expanded && "rotate-90",
+              isExpanded && "rotate-90",
             )}
           />
-          {expanded ? (
+          {isExpanded ? (
             <FolderOpenIcon className="size-3.5 shrink-0 text-muted-foreground" />
           ) : (
             <FolderClosedIcon className="size-3.5 shrink-0 text-muted-foreground" />

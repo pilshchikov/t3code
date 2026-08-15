@@ -58,14 +58,14 @@ function CollapseDirectoriesButton(props: { onCollapse: () => void }) {
             type="button"
             variant="ghost"
             size="icon-xs"
-            aria-label="Collapse all directories"
+            aria-label="Collapse all directories except the open file"
             onClick={props.onCollapse}
           />
         }
       >
         <ChevronsDownUpIcon />
       </TooltipTrigger>
-      <TooltipPopup>Collapse all directories</TooltipPopup>
+      <TooltipPopup>Collapse all, keeping the open file</TooltipPopup>
     </Tooltip>
   );
 }
