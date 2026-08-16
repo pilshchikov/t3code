@@ -268,10 +268,12 @@ fork-specific behavior so future upstream syncs are easier to review.
   - Source: `packages/contracts/src/keybindings.ts`, `packages/shared/src/keybindings.ts`,
     `apps/web/src/components/ChatView.tsx`, `apps/web/src/editorNavigationStore.ts`.
 
-- `rightPanel.maximize` (default `mod+alt+m`) toggles the maximized right panel from the keyboard,
-  matching the titlebar's existing `RightPanelMaximizeControl`.
+- `rightPanel.toggleMaximized` defaults to `mod+alt+m` here, where upstream ships the command with
+  no default, and the fork's handler does more than upstream's.
   - Pressing it while the right panel is closed opens **and** maximizes in one go, so the shortcut
     never reads as a dropped key. It is a no-op in the sheet layout, which has no maximized state.
+  - The fork originally shipped this as `rightPanel.maximize`; see the 2026-08-15 upstream sync
+    below for the rename and the config migration it required.
   - Source: `packages/contracts/src/keybindings.ts`, `packages/shared/src/keybindings.ts`,
     `apps/web/src/components/ChatView.tsx`.
 
