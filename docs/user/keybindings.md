@@ -43,9 +43,19 @@ Repeating either shortcut closes that search, and switching shortcuts replaces t
 `themeEditor.toggle` opens or closes the floating theme editor and defaults to
 `mod+alt+shift+t`. Select a color label to spotlight the elements that use it; select the label
 again to clear the spotlight. The swatch and hex field keep that color selected while you edit it.
+Advanced mode groups related app tokens into a smaller set of color families. Changing a family
+updates its paired text and interaction states while leaving every unrelated imported color intact.
 Use **Inspect** to pick an element in the app and reveal its color token. Inspect disarms after one
-successful pick; its hover glow and badge preview the element and token that click will select.
+successful pick; its hover glow and badge preview the element and color family that click will select.
 **Cancel** or `Escape` exits Inspect and clears its selection and spotlight.
+
+`rightPanel.toggleMaximized` maximizes or restores the open right panel, and defaults to
+`mod+alt+m`. Pressing it while the right panel is closed opens and maximizes it in one step.
+
+`editor.navigateBack` and `editor.navigateForward` step through the files you have opened in the
+editor, returning to the exact line you left. Each defaults to two shortcuts, `ctrl+left` and
+`mod+[` for back, `ctrl+right` and `mod+]` for forward, because macOS reserves the `ctrl` pair for
+switching desktops.
 
 The command palette searches active thread titles, projects, branches, user messages, and final
 agent responses across connected environments. Message matches show one labeled excerpt while

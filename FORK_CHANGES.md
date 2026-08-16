@@ -507,6 +507,42 @@ fork-specific behavior so future upstream syncs are easier to review.
   prompt when a draft changes repo" feature (#6393) was half-landed — `DraftHeroHeadline` passes
   `carryComposerContent: true` and hits exactly that path.
 
+## Upstream Sync 2026-08-15
+
+- Merged `upstream/main` (137 commits, merge base `6bc6cb6be`) with `-X ours`. Backup of the
+  pre-merge tip: branch `backup/pre-upstream-sync-20260815`.
+- **Right panel maximize converged on upstream's name.** Upstream shipped the same feature two days
+  after the fork did (#5091). The fork's `rightPanel.maximize` was renamed to upstream's
+  `rightPanel.toggleMaximized` so their tests and docs apply unchanged, while keeping the fork's
+  `mod+alt+m` default and its open-and-maximize-in-one-press behavior. Two upstream expectations are
+  therefore deliberately not carried:
+  - `apps/server/src/keybindings.test.ts`'s `assert.isFalse(defaultsByCommand.has(…))`, since the
+    fork does ship a default for it.
+  - `docs/user/keybindings.md`'s "It has no default shortcut" sentence, rewritten to document
+    `mod+alt+m` and the editor back/forward defaults.
+  - Migration: an existing `keybindings.json` naming the old command becomes an invalid entry, and
+    one invalid entry makes the server skip the **entire** startup default sync
+    (`apps/server/src/keybindings.ts`, `syncDefaultKeybindingsOnStartup`). The live config was
+    migrated in place with a `.bak-20260815` copy alongside it.
+- Half-landed upstream work that `-X ours` left broken, caught by typecheck and grafted back:
+  - `activeRepositoryRoot` in `DiffPanel.tsx` and `useRemoteOpenState` in `FilePreviewPanel.tsx`,
+    both used but with their definitions dropped.
+  - The `RemoteOpenTargets` mock layer in `apps/server/src/server.test.ts`.
+- Upstream fixes the fork's own code had silently missed:
+  - `diffFileActions.ts` computed `workspaceFilePath` and then opened the raw `filePath`, so a
+    nested project's diff opened the wrong path (#6174). It now opens the resolved path while
+    keeping the fork's workspace-root argument. Upstream's new test asserts the unkeyed surface id;
+    the fork keys file surfaces by root, so that expectation was adapted rather than the behavior.
+  - `markdown-clipboard.ts` gained upstream's copy-verbatim-inside-`<pre>` branch (#5069), placed
+    ahead of the fork's Slack table transform.
+- `apps/server/src/vcs/GitVcsDriverCore.ts`: upstream turned `runGit`'s fourth parameter from an
+  `allowNonZeroExit` boolean into an `ExecuteGitOptions` object. The fork's five git-index call
+  sites now pass `{ allowNonZeroExit: true }`.
+- `docs/user/providers-claude.md` was restored. It went missing in the 2026-08-13 sync while
+  `README.md`, `docs/README.md`, `docs/user/install.md`, and `docs/user/providers-codex.md` all kept
+  linking to it. The 08-13 audit only compared files present in the tree, so a wholly absent file
+  slipped through; this sync's audit checks for missing files too.
+
 ## Validation Notes
 
 The fork-local changes above were validated with focused server tests, the full web unit suite,
