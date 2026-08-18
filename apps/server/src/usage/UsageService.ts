@@ -232,11 +232,17 @@ export const make = Effect.gen(function* () {
             : hint.includes("personal")
               ? "Claude Personal"
               : `Claude ${instanceId}`);
-        return [{ config, label }];
+        return [{ config, label, instanceId }];
       },
     );
     const claudeSources = [
-      { config: settings.providers.claudeAgent, label: "Claude Personal" },
+      // The unconfigured default answers to the driver's own instance id, which is what an
+      // instance-keyed snapshot means when it carries no id of its own.
+      {
+        config: settings.providers.claudeAgent,
+        label: "Claude Personal",
+        instanceId: "claudeAgent",
+      },
       ...configuredClaudeSources,
     ];
     const claudeDirs = yield* Effect.forEach(claudeSources, (source) =>
@@ -244,7 +250,12 @@ export const make = Effect.gen(function* () {
         const claudeHome = yield* resolveClaudeHomePath(source.config);
         const configDir = yield* resolveClaudeConfigDir(source.config);
         const claudeDir = yield* resolveClaudeTranscriptDir(claudeHome, configDir);
-        return { provider: "claude" as const, dir: claudeDir, label: source.label };
+        return {
+          provider: "claude" as const,
+          dir: claudeDir,
+          label: source.label,
+          instanceId: source.instanceId,
+        };
       }),
     );
     const codexLayout = yield* resolveCodexHomeLayout(settings.providers.codex);
@@ -255,6 +266,7 @@ export const make = Effect.gen(function* () {
         provider: "codex" as const,
         dir: path.join(codexLayout.sharedHomePath, "sessions"),
         label: "Codex",
+        instanceId: "codex",
       },
     ];
   });
@@ -387,7 +399,7 @@ export const make = Effect.gen(function* () {
     const livePaths = new Set<string>();
     const walkedRoots: string[] = [];
 
-    for (const { provider, dir, label } of dirs) {
+    for (const { provider, dir, label, instanceId } of dirs) {
       const volumeId = yield* Effect.promise(() => readDirectoryVolumeId(dir));
       const exists = yield* fileSystem
         .exists(dir)
@@ -397,6 +409,7 @@ export const make = Effect.gen(function* () {
         sources.push({
           sourceId: dir,
           sourceLabel: label,
+          instanceId,
           fingerprint: { hostId, provider, resolvedHomePath: dir, volumeId },
           status: "missing",
           scannedFiles: 0,
@@ -436,6 +449,7 @@ export const make = Effect.gen(function* () {
       sources.push({
         sourceId: dir,
         sourceLabel: label,
+        instanceId,
         fingerprint: { hostId, provider, resolvedHomePath: dir, volumeId },
         status: "ok",
         scannedFiles,

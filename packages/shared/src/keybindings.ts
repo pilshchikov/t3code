@@ -5,9 +5,10 @@ import {
   MAX_KEYBINDINGS_COUNT,
   MAX_WHEN_EXPRESSION_DEPTH,
   MODEL_PICKER_JUMP_KEYBINDING_COMMANDS,
+  PROJECT_ASSIGN_KEYBINDING_COMMANDS,
+  PROJECT_JUMP_KEYBINDING_COMMANDS,
   type ResolvedKeybindingRule,
   type ResolvedKeybindingsConfig,
-  THREAD_JUMP_KEYBINDING_COMMANDS,
 } from "@t3tools/contracts";
 
 type WhenToken =
@@ -53,8 +54,16 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+]", command: "editor.navigateForward", when: "!terminalFocus" },
   { key: "mod+shift+[", command: "thread.previous" },
   { key: "mod+shift+]", command: "thread.next" },
-  ...THREAD_JUMP_KEYBINDING_COMMANDS.map((command, index) => ({
+  // Numbered slots recall a project into the sidebar's scope. Upstream spends mod+1..9 on jumping
+  // to the Nth thread in the list; this fork spends them on projects, which is the switch that is
+  // worth a chord. thread.jump.* stays a command, so anyone who wants it back can bind it.
+  ...PROJECT_JUMP_KEYBINDING_COMMANDS.map((command, index) => ({
     key: `mod+${index + 1}`,
+    command,
+  })),
+  // Control rather than mod, so filling a slot cannot be confused with using one.
+  ...PROJECT_ASSIGN_KEYBINDING_COMMANDS.map((command, index) => ({
+    key: `ctrl+${index + 1}`,
     command,
   })),
   ...MODEL_PICKER_JUMP_KEYBINDING_COMMANDS.map((command, index) => ({
@@ -62,13 +71,13 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
     command,
     when: "modelPickerOpen",
   })),
-  // Surface toggles. These come last so they win over the thread/model-picker jump bindings above
-  // for any overlapping key (the resolver is last-match-wins). `mod+1` therefore opens the file
-  // structure instead of jumping to thread 1, except while the model picker is open.
+  // Surface toggles. These come last so they win over the jump bindings above for any overlapping
+  // key (the resolver is last-match-wins). The file structure moved off mod+1 when the project
+  // slots took it, since a shadowed slot is worse than a longer chord.
   { key: "f1", command: "editor.toggle" },
   { key: "f2", command: "preview.toggle" },
   { key: "f3", command: "terminal.toggle" },
-  { key: "mod+1", command: "structure.open", when: "!modelPickerOpen" },
+  { key: "mod+shift+1", command: "structure.open" },
 ];
 
 function normalizeKeyToken(token: string): string {

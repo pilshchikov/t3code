@@ -100,6 +100,13 @@ function RowCaption({
 }) {
   return (
     <div className={cn("flex items-baseline gap-1.5", className)}>
+      {row.instanceColor === null ? null : (
+        <span
+          aria-hidden
+          className="size-2 shrink-0 self-center rounded-full"
+          style={{ backgroundColor: row.instanceColor }}
+        />
+      )}
       <span className="truncate">
         {row.instanceLabel}
         {/* The shared option-label contract: blank labels normalize, and
@@ -192,7 +199,7 @@ export function AccountLimitsHoverCard() {
                 <HoverWindowRow
                   key={window.id}
                   window={window}
-                  color={presentation.color}
+                  color={only.instanceColor ?? presentation.color}
                   nowMs={nowMs}
                 />
               ))
@@ -212,7 +219,7 @@ export function AccountLimitsHoverCard() {
                       <HoverWindowRow
                         key={window.id}
                         window={window}
-                        color={presentation.color}
+                        color={row.instanceColor ?? presentation.color}
                         nowMs={nowMs}
                       />
                     ))
@@ -300,7 +307,7 @@ export function AccountLimitsSection() {
                   <SectionWindowRow
                     key={window.id}
                     window={window}
-                    color={presentation.color}
+                    color={only.instanceColor ?? presentation.color}
                     nowMs={nowMs}
                   />
                 ))
@@ -320,7 +327,7 @@ export function AccountLimitsSection() {
                         <SectionWindowRow
                           key={window.id}
                           window={window}
-                          color={presentation.color}
+                          color={row.instanceColor ?? presentation.color}
                           nowMs={nowMs}
                         />
                       ))

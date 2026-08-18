@@ -705,6 +705,55 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
   `apps/web/src/hooks/useThreadActionMenu.ts`,
   `apps/web/src/components/settings/ProjectSettingsPanel.tsx`.
 
+## Open on the host as its own button
+
+- The pull-request panel puts "Open on GitHub" (or GitLab, Bitbucket, Azure DevOps) beside the merge
+  action rather than only inside the overflow menu. It is the action most reached for after the
+  merge, and a menu entry made it a two-step.
+- Source: `apps/web/src/components/pullRequest/PullRequestDetailPanel.tsx`,
+  `apps/web/src/components/pullRequest/pullRequestLinkContextMenu.ts`.
+
+## Numbered project slots on mod+1..9
+
+- `mod+1`..`mod+9` scope the sidebar to a project rather than jumping to the Nth thread. Hovering a
+  project in the scope menu and pressing `ctrl+1`..`ctrl+9` puts it in that slot; the slot is shown
+  on the row afterwards, and a project answers to one slot at a time. The file structure view moved
+  from `mod+1` to `mod+shift+1`, since a slot shadowed by another binding is worse than a longer
+  chord.
+- `thread.jump.*` remains a bindable command, just not a default. A config written against the old
+  bindings is migrated on startup: numbered thread jumps become the matching project slots and a
+  `mod+1` file-structure rule moves to `mod+shift+1`. Without the migration the backfill would
+  refuse to add the new defaults, because the rules being replaced already claim those shortcuts.
+- Which project a number recalls is stored per device: it is a habit built at one desk, not a
+  property of the project.
+- Source: `packages/contracts/src/keybindings.ts`, `packages/shared/src/keybindings.ts`,
+  `apps/server/src/keybindings.ts`, `apps/web/src/projectSlotStore.ts`,
+  `apps/web/src/components/Sidebar.tsx`.
+
+## Usage split and coloured by account
+
+- A usage source now carries the provider instance it was configured from, so the client can
+  attribute transcripts to the same account the provider settings and the limits view name.
+- The model breakdown is keyed by account as well as by model: two Claude subscriptions running the
+  same model are two lines of spend, and one merged row could not say which was doing the spending.
+  The account is only named on a row when its provider has more than one.
+- Limit meters and account captions take the accent colour set on the provider instance, in both the
+  sidebar hover card and the usage page, falling back to the provider's own colour when an instance
+  carries none.
+- Source: `packages/contracts/src/usage.ts`, `apps/server/src/usage/UsageService.ts`,
+  `packages/shared/src/usageMerge.ts`, `apps/web/src/state/accountLimits.ts`,
+  `apps/web/src/components/usage/AccountLimits.tsx`,
+  `apps/web/src/components/usage/UsagePage.tsx`.
+
+## Deleting from the file tree
+
+- Right-clicking a file or a folder in the Files tree offers to delete it, which previously needed a
+  multi-select and a toolbar button. Folders had no context menu at all before. A folder's menu drops
+  the two items that mean nothing for it (copy mention, add to chat), and the confirmation says when
+  a folder takes its contents with it.
+- Source: `apps/web/src/components/files/FileBrowserPanel.tsx`,
+  `apps/web/src/components/files/NativeProjectFileTree.tsx`.
+
 ## Validation Notes
 
 The fork-local changes above were validated with focused server tests, the full web unit suite,

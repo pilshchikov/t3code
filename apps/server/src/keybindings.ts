@@ -13,11 +13,13 @@ import {
   KeybindingShortcut,
   KeybindingWhenNode,
   MAX_KEYBINDINGS_COUNT,
+  PROJECT_JUMP_KEYBINDING_COMMANDS,
   ResolvedKeybindingRule,
   ResolvedKeybindingsConfig,
   type ServerRemoveKeybindingInput,
   type ServerUpsertKeybindingInput,
   type ServerConfigIssue,
+  THREAD_JUMP_KEYBINDING_COMMANDS,
 } from "@t3tools/contracts";
 import * as Array from "effect/Array";
 import * as Cache from "effect/Cache";
@@ -203,6 +205,42 @@ function invalidEntryIssue(index: number, detail: string): ServerConfigIssue {
     index,
     message: trimIssueMessage(detail),
   };
+}
+
+const THREAD_JUMP_TO_PROJECT_JUMP = new Map(
+  THREAD_JUMP_KEYBINDING_COMMANDS.map(
+    (command, index) => [command, PROJECT_JUMP_KEYBINDING_COMMANDS[index]!] as const,
+  ),
+);
+
+/**
+ * Carries a config written against the old numbered-thread bindings over to the numbered project
+ * slots this fork spends mod+1..9 on. Without it the startup backfill would refuse to add the new
+ * defaults: their shortcut context is already claimed by the rules being replaced, and the file
+ * would keep jumping to threads. The file structure moves off mod+1 for the same reason.
+ *
+ * Returns null when there is nothing to rewrite, so an already-migrated config is never rewritten.
+ */
+export function migrateKeybindingsToProjectSlots(
+  custom: ReadonlyArray<KeybindingRule>,
+): KeybindingRule[] | null {
+  let changed = false;
+  const migrated = custom.map((rule) => {
+    const projectJump = THREAD_JUMP_TO_PROJECT_JUMP.get(
+      rule.command as (typeof THREAD_JUMP_KEYBINDING_COMMANDS)[number],
+    );
+    if (projectJump !== undefined) {
+      changed = true;
+      return { ...rule, command: projectJump } satisfies KeybindingRule;
+    }
+    if (rule.command === "structure.open" && rule.key.toLowerCase() === "mod+1") {
+      changed = true;
+      const { when: _dropped, ...rest } = rule;
+      return { ...rest, key: "mod+shift+1" } satisfies KeybindingRule;
+    }
+    return rule;
+  });
+  return changed ? migrated : null;
 }
 
 function mergeWithDefaultKeybindings(custom: ResolvedKeybindingsConfig): ResolvedKeybindingsConfig {
@@ -492,7 +530,14 @@ const make = Effect.gen(function* () {
         yield* Cache.invalidate(resolvedConfigCache, resolvedConfigCacheKey);
         return;
       }
-      const customConfig = runtimeConfig.keybindings;
+      const migrated = migrateKeybindingsToProjectSlots(runtimeConfig.keybindings);
+      if (migrated !== null) {
+        yield* Effect.logInfo("migrated keybindings to numbered project slots", {
+          path: keybindingsConfigPath,
+        });
+        yield* writeConfigAtomically(migrated);
+      }
+      const customConfig = migrated ?? runtimeConfig.keybindings;
       const existingCommands = new Set(customConfig.map((entry) => entry.command));
       const missingDefaults: KeybindingRule[] = [];
       const shortcutConflictWarnings: Array<{

@@ -295,6 +295,10 @@ export function NativeProjectFileTree(props: {
               return next;
             });
           }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            props.onContextMenu(node.path, { x: event.clientX, y: event.clientY });
+          }}
         >
           <ChevronRightIcon
             className={cn(

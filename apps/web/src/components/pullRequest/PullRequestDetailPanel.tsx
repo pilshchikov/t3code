@@ -90,7 +90,11 @@ import { PullRequestActivityUnavailableState } from "./PullRequestActivityUnavai
 import { DiffPanelLoadingState } from "../DiffPanelShell";
 import { PullRequestsUnavailableState } from "./PullRequestsUnavailableState";
 import type { PullRequestAgentSelectionInput } from "./PullRequestCodeTab";
-import { openOnHostLabel, showPullRequestLinkContextMenu } from "./pullRequestLinkContextMenu";
+import {
+  hostDisplayName,
+  openOnHostLabel,
+  showPullRequestLinkContextMenu,
+} from "./pullRequestLinkContextMenu";
 import { PullRequestSummaryTab } from "./PullRequestSummaryTab";
 import { PullRequestTimelineTab } from "./PullRequestTimelineTab";
 import {
@@ -1157,6 +1161,19 @@ export function PullRequestDetailPanel({
         <div className="mr-4 flex h-11 min-w-0 flex-nowrap items-center justify-end gap-1">
           {detail ? (
             <>
+              {/* Its own control rather than a menu entry: opening the pull request where it lives
+                  is the most-reached-for action here after the merge. */}
+              <Button
+                size="xs"
+                variant="outline"
+                className="shrink-0 gap-1 px-1.5"
+                aria-label={openOnHostLabel(detail.provider)}
+                title={openOnHostLabel(detail.provider)}
+                onClick={() => void readLocalApi()?.shell.openExternal(detail.url)}
+              >
+                <ArrowUpRightIcon aria-hidden className="size-3.5" />
+                <span className="hidden sm:inline">{hostDisplayName(detail.provider)}</span>
+              </Button>
               <Menu>
                 <MenuTrigger
                   render={

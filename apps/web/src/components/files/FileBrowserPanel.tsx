@@ -136,17 +136,75 @@ export default function FileBrowserPanel({
   );
 
   const clearSelection = useCallback(() => setSelectedPaths([]), []);
+
+  /**
+   * Confirms and removes entries from disk. A directory goes with its contents, which is what the
+   * server's remove already does, so the confirmation has to say so.
+   */
+  const deletePaths = useCallback(
+    async (paths: readonly string[]) => {
+      if (isDeleting || paths.length === 0) return;
+      const api = readLocalApi();
+      if (!api) return;
+      const directories = paths.filter((path) => !filePaths.has(path));
+      const listedPaths = paths.slice(0, 6).map((path) => `• ${path}`);
+      const remainingCount = paths.length - listedPaths.length;
+      const confirmed = await api.dialogs.confirm(
+        [
+          paths.length === 1 ? `Delete ${paths[0]}?` : `Delete ${paths.length} selected entries?`,
+          ...(paths.length === 1 ? [] : listedPaths),
+          ...(remainingCount > 0 ? [`• and ${remainingCount} more`] : []),
+          directories.length > 0
+            ? "This permanently removes them from disk, folders with everything inside them."
+            : "This permanently removes them from disk.",
+        ].join("\n"),
+        { variant: "destructive" },
+      );
+      if (!confirmed) return;
+      setIsDeleting(true);
+      const results = await Promise.all(
+        paths.map((relativePath) => deleteEntry({ environmentId, input: { cwd, relativePath } })),
+      );
+      const failed = results.filter((result) => result._tag === "Failure");
+      setIsDeleting(false);
+      setSelectedPaths([]);
+      entriesQuery.refresh();
+      if (failed.length > 0) {
+        toastManager.add({
+          type: "error",
+          title: `Could not delete ${failed.length} of ${paths.length}`,
+          description: "Refresh the file list and try again.",
+        });
+        return;
+      }
+      toastManager.add({
+        type: "success",
+        title: paths.length === 1 ? `Deleted ${paths[0]}` : `Deleted ${paths.length} entries`,
+      });
+    },
+    [cwd, deleteEntry, entriesQuery, environmentId, filePaths, isDeleting],
+  );
+
   const showEntryContextMenu = useCallback(
     async (relativePath: string, position: { x: number; y: number }) => {
       const api = readLocalApi();
       if (!api) return;
       const mention = serializeComposerFileLink(relativePath);
       const absolutePath = resolvePathLinkTarget(relativePath, cwd);
+      // A folder has no mention to copy and nothing to hand the composer, so it gets the two
+      // items that do mean something for it.
+      const isFile = filePaths.has(relativePath);
       const clicked = await api.contextMenu.show(
         [
-          { id: "copy-mention", label: "Copy mention" },
+          ...(isFile ? [{ id: "copy-mention", label: "Copy mention" }] : []),
           { id: "copy-absolute-path", label: "Copy absolute path" },
-          { id: "add-to-chat", label: "Add to chat" },
+          ...(isFile ? [{ id: "add-to-chat", label: "Add to chat" }] : []),
+          {
+            id: "delete",
+            label: isFile ? "Delete file" : "Delete folder",
+            destructive: true,
+            icon: "trash",
+          },
         ],
         position,
       );
@@ -180,6 +238,10 @@ export default function FileBrowserPanel({
         }
         return;
       }
+      if (clicked === "delete") {
+        await deletePaths([relativePath]);
+        return;
+      }
       if (clicked !== "add-to-chat") return;
       const inserted = composerRef?.current?.insertTextAtEnd(`${mention} `, {
         ensureLeadingBoundary: true,
@@ -192,48 +254,13 @@ export default function FileBrowserPanel({
         });
       }
     },
-    [composerRef, cwd],
+    [composerRef, cwd, deletePaths, filePaths],
   );
 
-  const deleteSelectedFiles = useCallback(async () => {
-    if (isDeleting || selectedFiles.length === 0) return;
-    const api = readLocalApi();
-    if (!api) return;
-    const listedPaths = selectedFiles.slice(0, 6).map((path) => `• ${path}`);
-    const remainingCount = selectedFiles.length - listedPaths.length;
-    const confirmed = await api.dialogs.confirm(
-      [
-        `Delete ${selectedFiles.length} selected file${selectedFiles.length === 1 ? "" : "s"}?`,
-        ...listedPaths,
-        ...(remainingCount > 0 ? [`• and ${remainingCount} more`] : []),
-        "This permanently removes the selected files from disk.",
-      ].join("\n"),
-      { variant: "destructive" },
-    );
-    if (!confirmed) return;
-    setIsDeleting(true);
-    const results = await Promise.all(
-      selectedFiles.map((relativePath) =>
-        deleteEntry({ environmentId, input: { cwd, relativePath } }),
-      ),
-    );
-    const failed = results.filter((result) => result._tag === "Failure");
-    setIsDeleting(false);
-    setSelectedPaths([]);
-    entriesQuery.refresh();
-    if (failed.length > 0) {
-      toastManager.add({
-        type: "error",
-        title: `Could not delete ${failed.length} file${failed.length === 1 ? "" : "s"}`,
-        description: "Refresh the file list and try again.",
-      });
-      return;
-    }
-    toastManager.add({
-      type: "success",
-      title: `Deleted ${selectedFiles.length} file${selectedFiles.length === 1 ? "" : "s"}`,
-    });
-  }, [cwd, deleteEntry, entriesQuery, environmentId, isDeleting, selectedFiles]);
+  const deleteSelectedFiles = useCallback(
+    () => deletePaths(selectedFiles),
+    [deletePaths, selectedFiles],
+  );
 
   return (
     <div

@@ -18,6 +18,16 @@ export const OPEN_ON_HOST_LABELS: Partial<Record<string, string>> = {
 export const openOnHostLabel = (provider: string): string =>
   OPEN_ON_HOST_LABELS[provider] ?? "Open on host";
 
+const HOST_DISPLAY_NAMES: Partial<Record<string, string>> = {
+  github: "GitHub",
+  gitlab: "GitLab",
+  bitbucket: "Bitbucket",
+  "azure-devops": "Azure DevOps",
+};
+
+/** The host's own name, for a control that has room for a word but not a sentence. */
+export const hostDisplayName = (provider: string): string => HOST_DISPLAY_NAMES[provider] ?? "host";
+
 /** Copy first: it is the reason to right-click a number rather than click it. */
 export function pullRequestLinkContextMenuItems(
   openLabel: string,

@@ -135,6 +135,12 @@ export const UsageSource = Schema.Struct({
   sourceId: Schema.optionalKey(TrimmedNonEmptyString),
   /** Human-readable account/instance name, when configured. */
   sourceLabel: Schema.optionalKey(TrimmedNonEmptyString),
+  /**
+   * The provider instance whose configuration produced this directory. Lets a client attribute a
+   * source to the same account the provider settings and the limits view name, and reuse whatever
+   * that account is marked with.
+   */
+  instanceId: Schema.optionalKey(TrimmedNonEmptyString),
   fingerprint: UsageSourceFingerprint,
   status: UsageSourceStatus,
   scannedFiles: NonNegativeInt,

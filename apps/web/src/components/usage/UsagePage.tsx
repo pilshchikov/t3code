@@ -7,6 +7,9 @@ import type { DailyTotals, HourlyTotals } from "@t3tools/shared/usageMerge";
 import { isElectron } from "../../env";
 import { cn } from "../../lib/utils";
 import { useAccountLimits } from "../../state/accountLimits";
+import { useAtomValue } from "@effect/atom-react";
+import { primaryServerProvidersAtom } from "../../state/server";
+import { deriveProviderInstanceEntries } from "../../providerInstances";
 import { useUsage, type EnvironmentUsageStatus } from "../../state/usage";
 import {
   enumerateDays,
@@ -36,6 +39,14 @@ const WINDOW_OPTIONS = [
   { days: 90, label: "90 days" },
 ] as const;
 
+/** The account's own mark from provider settings; nothing at all when it carries none. */
+function AccountDot({ color }: { color: string | undefined }) {
+  if (!color) return null;
+  return (
+    <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+  );
+}
+
 export function UsagePage() {
   const [windowSelection, setWindowSelection] = useState(() => ({
     days: 30,
@@ -43,9 +54,32 @@ export function UsagePage() {
   }));
   const [metric, setMetric] = useState<UsageChartMetric>("cost");
   const [breakdown, setBreakdown] = useState<"model" | "time">("model");
+  // Accounts are marked in provider settings; usage reuses that mark rather than inventing a
+  // second colour scheme for the same two subscriptions.
+  const serverProviders = useAtomValue(primaryServerProvidersAtom);
+  const accentByInstanceId = useMemo(() => {
+    const colors = new Map<string, string>();
+    for (const entry of deriveProviderInstanceEntries(serverProviders ?? [])) {
+      if (entry.accentColor) colors.set(entry.instanceId, entry.accentColor);
+    }
+    return colors;
+  }, [serverProviders]);
   const { days: windowDays, window } = windowSelection;
   const isPast24Hours = windowDays === 1;
   const { merged, environments, isPending, isPartial, refresh: refreshUsage } = useUsage(window);
+  // Only worth naming the account on a model row when that provider has more than one.
+  const namedAccountProviders = useMemo(() => {
+    const counts = new Map<UsageProviderKind, Set<string>>();
+    for (const source of merged.sources) {
+      const ids = counts.get(source.provider) ?? new Set<string>();
+      ids.add(source.sourceId);
+      counts.set(source.provider, ids);
+    }
+    return new Set(
+      [...counts.entries()].filter(([, ids]) => ids.size > 1).map(([provider]) => provider),
+    );
+  }, [merged.sources]);
+
   const { refresh: refreshLimits } = useAccountLimits();
   // One refresh button, two caches: the transcript scan and the limits
   // snapshot both re-read, or the Limits strip lags the rest of the page.
@@ -260,6 +294,13 @@ export function UsagePage() {
                               <div className="flex items-baseline justify-between gap-2">
                                 <span className="flex min-w-0 items-center gap-2 text-sm text-foreground">
                                   <ProviderMark provider="claude" className="size-3.5" />
+                                  <AccountDot
+                                    color={
+                                      source.instanceId === null
+                                        ? undefined
+                                        : accentByInstanceId.get(source.instanceId)
+                                    }
+                                  />
                                   <span className="truncate">{source.label}</span>
                                 </span>
                                 <span className="text-sm text-foreground tabular-nums">
@@ -398,13 +439,25 @@ export function UsagePage() {
                         ) : (
                           merged.models.map((model) => (
                             <tr
-                              key={`${model.provider}:${model.model}`}
+                              key={`${model.provider}:${model.sourceId}:${model.model}`}
                               className="border-b border-border/50"
                             >
                               <td className="py-2 text-foreground">
                                 <span className="flex items-center gap-2">
                                   <ProviderMark provider={model.provider} className="size-3.5" />
                                   {model.model}
+                                  {namedAccountProviders.has(model.provider) ? (
+                                    <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                                      <AccountDot
+                                        color={
+                                          model.instanceId === null
+                                            ? undefined
+                                            : accentByInstanceId.get(model.instanceId)
+                                        }
+                                      />
+                                      <span className="truncate">{model.sourceLabel}</span>
+                                    </span>
+                                  ) : null}
                                 </span>
                               </td>
                               <td className="py-2 text-right text-foreground tabular-nums">

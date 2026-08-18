@@ -40,6 +40,7 @@ function summary(
     homePath: string;
     sourceId?: string;
     sourceLabel?: string;
+    instanceId?: string;
     volumeId?: string;
     distinctSessions?: number;
   }[],
@@ -55,6 +56,7 @@ function summary(
     sources: sources.map((source) => ({
       ...(source.sourceId === undefined ? {} : { sourceId: source.sourceId }),
       ...(source.sourceLabel === undefined ? {} : { sourceLabel: source.sourceLabel }),
+      ...(source.instanceId === undefined ? {} : { instanceId: source.instanceId }),
       fingerprint: {
         hostId: source.hostId,
         provider: source.provider,
@@ -325,5 +327,80 @@ describe("mergeUsage", () => {
     ]);
     expect(merged.daily).toHaveLength(1);
     expect(merged.daily[0]?.costUsd).toBe(10);
+  });
+});
+
+describe("mergeUsage model breakdown", () => {
+  it("keeps one row per model per account and carries the instance through", () => {
+    const merged = mergeUsage(
+      [
+        environment(
+          "env-1",
+          summary(
+            [
+              bucket({ sourceId: "/home/personal", costUsd: 3 }),
+              bucket({ sourceId: "/home/work", costUsd: 7 }),
+            ],
+            [
+              {
+                provider: "claude",
+                hostId: "host-1",
+                homePath: "/home/personal",
+                sourceId: "/home/personal",
+                sourceLabel: "personal",
+                instanceId: "claudeAgent",
+                volumeId: "1:1",
+              },
+              {
+                provider: "claude",
+                hostId: "host-1",
+                homePath: "/home/work",
+                sourceId: "/home/work",
+                sourceLabel: "work",
+                instanceId: "claude-work",
+                volumeId: "1:2",
+              },
+            ],
+          ),
+        ),
+      ],
+      USAGE_CONTRACT_VERSION,
+    );
+
+    expect(
+      merged.models.map((model) => [
+        model.model,
+        model.sourceLabel,
+        model.instanceId,
+        model.costUsd,
+      ]),
+    ).toEqual([
+      ["claude-fable-5", "work", "claude-work", 7],
+      ["claude-fable-5", "personal", "claudeAgent", 3],
+    ]);
+    expect(merged.models.map((model) => model.costShare)).toEqual([0.7, 0.3]);
+    expect(merged.sources.map((source) => [source.label, source.instanceId])).toEqual([
+      ["work", "claude-work"],
+      ["personal", "claudeAgent"],
+    ]);
+  });
+
+  it("still reports one row when a provider has a single account", () => {
+    const merged = mergeUsage(
+      [
+        environment(
+          "env-1",
+          summary(
+            [bucket({ costUsd: 4 }), bucket({ day: "2026-08-08" as UsageDay, costUsd: 6 })],
+            [{ provider: "claude", hostId: "host-1", homePath: "/home/only" }],
+          ),
+        ),
+      ],
+      USAGE_CONTRACT_VERSION,
+    );
+
+    expect(merged.models).toHaveLength(1);
+    expect(merged.models[0]?.costUsd).toBe(10);
+    expect(merged.models[0]?.instanceId).toBeNull();
   });
 });

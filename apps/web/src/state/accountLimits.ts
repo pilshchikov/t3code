@@ -82,6 +82,8 @@ export interface AccountLimitsRow {
    * showing.
    */
   readonly instanceLabel: string;
+  /** The accent this account is marked with in provider settings, when it carries one. */
+  readonly instanceColor: string | null;
   readonly snapshot: AccountLimitsSnapshot;
 }
 
@@ -145,6 +147,7 @@ export function mergeEnvironmentLimits(
         environmentLabel: status.environmentLabel,
         environmentIsPrimary: status.environmentIsPrimary,
         instanceLabel: entry?.displayName ?? instanceId,
+        instanceColor: entry?.accentColor ?? null,
         snapshot,
       });
       byProvider.set(snapshot.provider, rows);

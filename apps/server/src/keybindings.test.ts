@@ -195,8 +195,11 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
 
       assert.equal(defaultsByCommand.get("thread.previous"), "mod+shift+[");
       assert.equal(defaultsByCommand.get("thread.next"), "mod+shift+]");
-      assert.equal(defaultsByCommand.get("thread.jump.1"), "mod+1");
-      assert.equal(defaultsByCommand.get("thread.jump.9"), "mod+9");
+      // mod+1..9 recall project slots in this fork; thread.jump.* stays a bindable command.
+      assert.equal(defaultsByCommand.get("project.jump.1"), "mod+1");
+      assert.equal(defaultsByCommand.get("project.jump.9"), "mod+9");
+      assert.equal(defaultsByCommand.get("project.assign.1"), "ctrl+1");
+      assert.equal(defaultsByCommand.get("thread.jump.1"), undefined);
       assert.equal(defaultsByCommand.get("modelPicker.toggle"), "mod+shift+m");
       assert.equal(defaultsByCommand.get("themeEditor.toggle"), "mod+alt+shift+t");
       assert.equal(defaultsByCommand.get("filePicker.toggle"), "mod+p");
@@ -615,5 +618,46 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
         assert.isTrue(persistedCommands.has(command), `expected persisted command ${command}`);
       }
     }).pipe(Effect.provide(makeKeybindingsLayer())),
+  );
+});
+
+it("moves numbered thread jumps onto the project slots", () => {
+  const migrated = Keybindings.migrateKeybindingsToProjectSlots([
+    { key: "mod+1", command: "thread.jump.1" },
+    { key: "mod+9", command: "thread.jump.9" },
+    { key: "mod+b", command: "sidebar.toggle" },
+  ]);
+
+  assert.deepEqual(migrated, [
+    { key: "mod+1", command: "project.jump.1" },
+    { key: "mod+9", command: "project.jump.9" },
+    { key: "mod+b", command: "sidebar.toggle" },
+  ]);
+});
+
+it("moves the file structure off mod+1 and drops its when clause", () => {
+  const migrated = Keybindings.migrateKeybindingsToProjectSlots([
+    { key: "mod+1", command: "structure.open", when: "!modelPickerOpen" },
+  ]);
+
+  assert.deepEqual(migrated, [{ key: "mod+shift+1", command: "structure.open" }]);
+});
+
+it("leaves the file structure alone on any other key", () => {
+  assert.equal(
+    Keybindings.migrateKeybindingsToProjectSlots([
+      { key: "mod+shift+1", command: "structure.open" },
+    ]),
+    null,
+  );
+});
+
+it("returns null when there is nothing to migrate", () => {
+  assert.equal(
+    Keybindings.migrateKeybindingsToProjectSlots([
+      { key: "mod+1", command: "project.jump.1" },
+      { key: "ctrl+1", command: "project.assign.1" },
+    ]),
+    null,
   );
 });

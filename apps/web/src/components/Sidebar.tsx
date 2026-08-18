@@ -30,6 +30,7 @@ import {
   scopeThreadRef,
   scopedThreadKey,
 } from "@t3tools/client-runtime/environment";
+import { PROJECT_JUMP_KEYBINDING_COMMANDS } from "@t3tools/contracts";
 import type { ScopedThreadRef, ThreadId } from "@t3tools/contracts";
 import type { TimestampFormat } from "@t3tools/contracts/settings";
 import {
@@ -78,6 +79,8 @@ import {
   resolveShortcutCommand,
   shortcutLabelForCommand,
   shouldShowThreadJumpHintsForModifiers,
+  projectAssignIndexFromCommand,
+  projectJumpIndexFromCommand,
   threadJumpCommandForIndex,
   threadJumpIndexFromCommand,
   threadTraversalDirectionFromCommand,
@@ -186,6 +189,8 @@ import {
   type DraftSessionState,
 } from "../composerDraftStore";
 import { applySidebarThreadOrder, useSidebarThreadOrderStore } from "../sidebarThreadOrderStore";
+import { projectSlotNumber, useProjectSlotStore } from "../projectSlotStore";
+import { Kbd } from "./ui/kbd";
 import {
   readThreadAccentColor,
   setThreadAccentColor,
@@ -1922,6 +1927,25 @@ export default function Sidebar() {
   // making the header width depend on the number or length of project names.
   const [projectScopeKey, setProjectScopeKey] = useState<string | null>(null);
   const projectAccentColorByKey = useAccentColorStore((state) => state.projectColors);
+  const projectSlots = useProjectSlotStore((state) => state.slots);
+  const projectAssignHintLabel = useMemo(
+    () => shortcutLabelForCommand(keybindings, "project.assign.1"),
+    [keybindings],
+  );
+  const projectSlotLabels = useMemo(
+    () =>
+      PROJECT_JUMP_KEYBINDING_COMMANDS.map((command) =>
+        shortcutLabelForCommand(keybindings, command),
+      ),
+    [keybindings],
+  );
+  // The jump handler reads the current groups without re-registering its listener on every
+  // projection update.
+  const projectGroupsRef = useRef(projectGroups);
+  projectGroupsRef.current = projectGroups;
+  const assignProjectSlot = useProjectSlotStore((state) => state.assignSlot);
+  /** The scope-menu row the pointer is on, read by the assign shortcut at keypress time. */
+  const hoveredProjectScopeKeyRef = useRef<string | null>(null);
   const scopedProjectGroup = useMemo(
     () =>
       projectScopeKey === null
@@ -3329,6 +3353,32 @@ export default function Sidebar() {
         navigateToThread(scopeThreadRef(targetThread.environmentId, targetThread.id));
         return true;
       };
+      // Filling a slot needs a project under the pointer, so it only answers while the scope menu
+      // is open. Recalling one works from anywhere.
+      const assignIndex = projectAssignIndexFromCommand(command ?? "");
+      if (assignIndex !== null) {
+        const hovered = hoveredProjectScopeKeyRef.current;
+        if (hovered === null) return;
+        event.preventDefault();
+        event.stopPropagation();
+        assignProjectSlot(assignIndex, hovered);
+        return;
+      }
+      const projectIndex = projectJumpIndexFromCommand(command ?? "");
+      if (projectIndex !== null) {
+        const targetProjectKey = useProjectSlotStore.getState().slots[projectIndex] ?? null;
+        if (targetProjectKey === null) return;
+        event.preventDefault();
+        event.stopPropagation();
+        // A slot pointing at a project that has since gone is a no-op rather than a scope the user
+        // cannot get out of.
+        if (!projectGroupsRef.current.some((group) => group.projectKey === targetProjectKey)) {
+          return;
+        }
+        setProjectScopeKey(targetProjectKey);
+        setProjectScopeMenuOpen(false);
+        return;
+      }
       const traversalDirection = threadTraversalDirectionFromCommand(command);
       if (traversalDirection !== null) {
         navigateToThreadKey(
@@ -3347,6 +3397,7 @@ export default function Sidebar() {
     window.addEventListener("keydown", onWindowKeyDown);
     return () => window.removeEventListener("keydown", onWindowKeyDown);
   }, [
+    assignProjectSlot,
     keybindings,
     navigateToThread,
     orderedThreadKeys,
@@ -3512,7 +3563,15 @@ export default function Sidebar() {
             </div>
             {projectGroups.length > 0 ? (
               <div className="flex items-center gap-1">
-                <Menu open={projectScopeMenuOpen} onOpenChange={setProjectScopeMenuOpen}>
+                <Menu
+                  open={projectScopeMenuOpen}
+                  onOpenChange={(open) => {
+                    // The hovered row is only meaningful while the menu is up; a stale one would
+                    // let a later Ctrl+N fill a slot with whatever was last pointed at.
+                    if (!open) hoveredProjectScopeKeyRef.current = null;
+                    setProjectScopeMenuOpen(open);
+                  }}
+                >
                   <MenuTrigger
                     render={
                       <SidebarMenuButton
@@ -3560,6 +3619,7 @@ export default function Sidebar() {
                       </MenuRadioItem>
                       {projectGroups.map((project) => {
                         const scopeKey = project.projectKey;
+                        const slot = projectSlotNumber(projectSlots, scopeKey);
                         return (
                           <MenuRadioItem
                             key={scopeKey}
@@ -3569,6 +3629,14 @@ export default function Sidebar() {
                             style={projectAccentStyle(
                               projectAccentColorByKey[`${project.environmentId}:${project.id}`],
                             )}
+                            onMouseEnter={() => {
+                              hoveredProjectScopeKeyRef.current = scopeKey;
+                            }}
+                            onMouseLeave={() => {
+                              if (hoveredProjectScopeKeyRef.current === scopeKey) {
+                                hoveredProjectScopeKeyRef.current = null;
+                              }
+                            }}
                           >
                             <ProjectFavicon
                               environmentId={project.environmentId}
@@ -3577,6 +3645,18 @@ export default function Sidebar() {
                               className="size-4 shrink-0"
                             />
                             <span className="min-w-0 truncate text-sm">{project.displayName}</span>
+                            {slot === null ? null : (
+                              <Kbd
+                                className="ms-auto shrink-0"
+                                title={`Scopes the sidebar to this project${
+                                  projectSlotLabels[slot - 1]
+                                    ? ` (${projectSlotLabels[slot - 1]})`
+                                    : ""
+                                }`}
+                              >
+                                {projectSlotLabels[slot - 1] ?? slot}
+                              </Kbd>
+                            )}
                             <Button
                               size="icon-xs"
                               variant="ghost-muted"
@@ -3594,6 +3674,11 @@ export default function Sidebar() {
                         );
                       })}
                     </MenuRadioGroup>
+                    {projectAssignHintLabel === null ? null : (
+                      <p className="px-2 pt-1.5 pb-0.5 text-[10px] text-sidebar-muted-foreground">
+                        {projectAssignHintLabel} over a project assigns it a slot.
+                      </p>
+                    )}
                   </MenuPopup>
                 </Menu>
                 <Tooltip>

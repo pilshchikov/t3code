@@ -32,6 +32,10 @@ export interface ProviderTotals {
 export interface ModelTotals {
   readonly model: string;
   readonly provider: UsageProviderKind;
+  /** The account whose transcripts these tokens came from; one row per model per account. */
+  readonly sourceId: string;
+  readonly sourceLabel: string;
+  readonly instanceId: string | null;
   readonly costUsd: number;
   readonly totalTokens: number;
   readonly records: number;
@@ -42,6 +46,8 @@ export interface UsageSourceTotals {
   readonly sourceId: string;
   readonly label: string;
   readonly provider: UsageProviderKind;
+  /** The provider instance this source was configured from, when the server named one. */
+  readonly instanceId: string | null;
   readonly costUsd: number;
   readonly totalTokens: number;
   readonly records: number;
@@ -255,7 +261,16 @@ export function mergeUsage(
   >();
   const modelAccumulator = new Map<
     string,
-    { provider: UsageProviderKind; costUsd: number; totalTokens: number; records: number }
+    {
+      model: string;
+      provider: UsageProviderKind;
+      sourceId: string;
+      sourceLabel: string;
+      instanceId: string | null;
+      costUsd: number;
+      totalTokens: number;
+      records: number;
+    }
   >();
   const sourceAccumulator = new Map<
     string,
@@ -263,6 +278,7 @@ export function mergeUsage(
       sourceId: string;
       label: string;
       provider: UsageProviderKind;
+      instanceId: string | null;
       costUsd: number;
       totalTokens: number;
       records: number;
@@ -333,13 +349,16 @@ export function mergeUsage(
         matchingSource?.fingerprint.resolvedHomePath ??
         bucket.provider;
       const sourceKey = `${environment.environmentId}\u0000${sourceId}`;
+      const sourceLabel =
+        matchingSource?.sourceLabel ??
+        matchingSource?.fingerprint.resolvedHomePath ??
+        PROVIDER_FALLBACK_LABEL[bucket.provider];
+      const instanceId = matchingSource?.instanceId ?? null;
       const source = sourceAccumulator.get(sourceKey) ?? {
         sourceId,
-        label:
-          matchingSource?.sourceLabel ??
-          matchingSource?.fingerprint.resolvedHomePath ??
-          PROVIDER_FALLBACK_LABEL[bucket.provider],
+        label: sourceLabel,
         provider: bucket.provider,
+        instanceId,
         costUsd: 0,
         totalTokens: 0,
         records: 0,
@@ -349,9 +368,15 @@ export function mergeUsage(
       source.records += bucket.records;
       sourceAccumulator.set(sourceKey, source);
 
-      const modelKey = `${bucket.provider} ${bucket.model}`;
+      // Keyed by account as well as model: two Claude subscriptions running the same model are two
+      // separate lines of spend, and one merged row cannot say which account is doing the spending.
+      const modelKey = `${bucket.provider}\u0000${sourceKey}\u0000${bucket.model}`;
       const model = modelAccumulator.get(modelKey) ?? {
+        model: bucket.model,
         provider: bucket.provider,
+        sourceId,
+        sourceLabel,
+        instanceId,
         costUsd: 0,
         totalTokens: 0,
         records: 0,
@@ -412,14 +437,18 @@ export function mergeUsage(
   const sources: UsageSourceTotals[] = [...sourceAccumulator.values()]
     .map((source) => ({
       ...source,
+      instanceId: source.instanceId,
       costShare: costUsd === 0 ? 0 : source.costUsd / costUsd,
     }))
     .sort((a, b) => b.costUsd - a.costUsd || a.label.localeCompare(b.label));
 
-  const models: ModelTotals[] = [...modelAccumulator.entries()]
-    .map(([key, totals]) => ({
-      model: key.slice(key.indexOf(" ") + 1),
+  const models: ModelTotals[] = [...modelAccumulator.values()]
+    .map((totals) => ({
+      model: totals.model,
       provider: totals.provider,
+      sourceId: totals.sourceId,
+      sourceLabel: totals.sourceLabel,
+      instanceId: totals.instanceId,
       costUsd: totals.costUsd,
       totalTokens: totals.totalTokens,
       records: totals.records,
