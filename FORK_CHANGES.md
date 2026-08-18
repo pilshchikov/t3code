@@ -788,6 +788,20 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
 - Source: `packages/contracts/src/settings.ts`, `apps/web/src/themePalette.ts`,
   `apps/web/src/routes/__root.tsx`, `apps/web/src/components/settings/SettingsPanels.tsx`.
 
+## Dragging a thread plays once
+
+- Auto-animate sits on the thread list, so the drop's reorder was FLIPped through as a fresh
+  animation: the row travelled back to where it started and then replayed, by itself, the move the
+  pointer had just made. It is held off for the commit that lands the new order and switched back on
+  a frame after that has painted, so a drag now reads as one movement.
+- Sortable rows also opted out of dnd-kit's own layout animation. The drop commits the order itself,
+  so the row is already where it belongs by the time dnd-kit would animate it there.
+- The dragged card lifts instead of fading: a shadow and a faint accent ring on the card rather than
+  80% opacity on the row, since the card being moved is the one that most needs to stay readable.
+  Its `content-visibility` is pinned while it moves, which stops a long drag blanking the card as it
+  crosses out of view.
+- Source: `apps/web/src/components/Sidebar.tsx`.
+
 ## Validation Notes
 
 The fork-local changes above were validated with focused server tests, the full web unit suite,

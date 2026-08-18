@@ -460,6 +460,9 @@ function SortableThreadRow(props: {
 }) {
   const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: props.id,
+    // The drop commits the new order itself, so the row is already where it belongs by the time
+    // dnd-kit would animate it there. Leaving this on played the move a second time.
+    animateLayoutChanges: () => false,
   });
   return props.children({ listeners, setNodeRef, transform, transition, isDragging });
 }
@@ -1362,7 +1365,12 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
       {...(sortable?.listeners ?? {})}
       className={cn(
         "list-none py-0.5 [content-visibility:auto] [contain-intrinsic-size:auto_96px]",
-        sortable?.isDragging && "z-20 opacity-80",
+        // Lifted, not faded: the card being dragged is the one that most needs to stay readable,
+        // and content-visibility has to come off while it moves or it can blank mid-drag.
+        // The shadow and ring go on the card itself rather than on this row box, which is a little
+        // taller than the card it pads.
+        sortable?.isDragging &&
+          "relative z-20 [content-visibility:visible] [&_[data-testid=sidebar-row-card]]:cursor-grabbing [&_[data-testid=sidebar-row-card]]:shadow-lg [&_[data-testid=sidebar-row-card]]:ring-1 [&_[data-testid=sidebar-row-card]]:ring-primary/40",
       )}
     >
       <Tooltip>
@@ -1928,6 +1936,38 @@ export default function Sidebar() {
   const [projectScopeKey, setProjectScopeKey] = useState<string | null>(null);
   const projectAccentColorByKey = useAccentColorStore((state) => state.projectColors);
   const projectSlots = useProjectSlotStore((state) => state.slots);
+  /**
+   * The list's auto-animate controller. A drop reorders the DOM, which auto-animate would FLIP
+   * every row through — replaying by hand the move the pointer just made. It is held off for the
+   * commit that lands the new order and switched back on once that frame has painted.
+   */
+  const listAutoAnimateRef = useRef<ReturnType<typeof autoAnimate> | null>(null);
+  const listAutoAnimateFrameRef = useRef<number | null>(null);
+  const suspendListAutoAnimate = useCallback(() => {
+    if (listAutoAnimateFrameRef.current !== null) {
+      cancelAnimationFrame(listAutoAnimateFrameRef.current);
+      listAutoAnimateFrameRef.current = null;
+    }
+    listAutoAnimateRef.current?.disable();
+  }, []);
+  const resumeListAutoAnimate = useCallback(() => {
+    // Two frames: the first paints the reordered list, the second is the earliest point at which
+    // re-enabling cannot catch that reorder.
+    listAutoAnimateFrameRef.current = requestAnimationFrame(() => {
+      listAutoAnimateFrameRef.current = requestAnimationFrame(() => {
+        listAutoAnimateFrameRef.current = null;
+        listAutoAnimateRef.current?.enable();
+      });
+    });
+  }, []);
+  useEffect(
+    () => () => {
+      if (listAutoAnimateFrameRef.current !== null) {
+        cancelAnimationFrame(listAutoAnimateFrameRef.current);
+      }
+    },
+    [],
+  );
   const projectAssignHintLabel = useMemo(
     () => shortcutLabelForCommand(keybindings, "project.assign.1"),
     [keybindings],
@@ -2272,6 +2312,7 @@ export default function Sidebar() {
   );
   const handleActiveDragEnd = useCallback(
     (event: DragEndEvent) => {
+      resumeListAutoAnimate();
       const activeKey = String(event.active.id);
       const overKey = event.over === null ? null : String(event.over.id);
       if (overKey === null || activeKey === overKey) return;
@@ -2280,7 +2321,7 @@ export default function Sidebar() {
       if (fromIndex === -1 || toIndex === -1) return;
       setManualThreadOrder(arrayMove([...activeThreadDragKeys], fromIndex, toIndex));
     },
-    [activeThreadDragKeys, setManualThreadOrder],
+    [activeThreadDragKeys, resumeListAutoAnimate, setManualThreadOrder],
   );
 
   const orderedThreads = useMemo(
@@ -2722,6 +2763,7 @@ export default function Sidebar() {
 
   const handlePinnedDragEnd = useCallback(
     (event: DragEndEvent) => {
+      resumeListAutoAnimate();
       const activeKey = String(event.active.id);
       const overKey = event.over === null ? null : String(event.over.id);
       if (overKey === null || activeKey === overKey) return;
@@ -2784,7 +2826,7 @@ export default function Sidebar() {
         }
       })();
     },
-    [orderedPinnedThreads, reorderPinnedThread, reorderablePinnedKeys],
+    [orderedPinnedThreads, reorderPinnedThread, reorderablePinnedKeys, resumeListAutoAnimate],
   );
   // One snooze per thread at a time — same double-dispatch guard as settle.
   const snoozingThreadKeysRef = useRef(new Set<string>());
@@ -3420,8 +3462,11 @@ export default function Sidebar() {
   }, [shouldShowJumpHintsNow]);
 
   const attachListAutoAnimateRef = useCallback((node: HTMLUListElement | null) => {
-    if (!node) return;
-    autoAnimate(node, { duration: 150, easing: "ease-out" });
+    if (!node) {
+      listAutoAnimateRef.current = null;
+      return;
+    }
+    listAutoAnimateRef.current = autoAnimate(node, { duration: 150, easing: "ease-out" });
   }, []);
 
   // New thread defaults to the project you're in (active thread's project,
@@ -3897,6 +3942,8 @@ export default function Sidebar() {
                       sensors={pinnedDndSensors}
                       collisionDetection={closestCenter}
                       modifiers={[restrictToVerticalAxis, restrictToFirstScrollableAncestor]}
+                      onDragStart={suspendListAutoAnimate}
+                      onDragCancel={resumeListAutoAnimate}
                       onDragEnd={handlePinnedDragEnd}
                     >
                       <SortableContext
@@ -3940,6 +3987,8 @@ export default function Sidebar() {
                         sensors={pinnedDndSensors}
                         collisionDetection={closestCenter}
                         modifiers={[restrictToVerticalAxis, restrictToFirstScrollableAncestor]}
+                        onDragStart={suspendListAutoAnimate}
+                        onDragCancel={resumeListAutoAnimate}
                         onDragEnd={handleActiveDragEnd}
                       >
                         <SortableContext
