@@ -373,16 +373,29 @@ describe("rightPanelStore", () => {
     });
   });
 
-  it("toggles empty panel visibility without creating a surface", () => {
+  it("opens an empty panel on a surface rather than on nothing", () => {
     useRightPanelStore.getState().toggleVisibility(refA);
     expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
       isOpen: true,
-      activeSurfaceId: null,
-      surfaces: [],
+      activeSurfaceId: "files",
+      surfaces: [{ id: "files", kind: "files" }],
     });
 
     useRightPanelStore.getState().toggleVisibility(refA);
-    expect(useRightPanelStore.getState().byThreadKey).toEqual({});
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).isOpen,
+    ).toBe(false);
+  });
+
+  it("reopens on the surface that was selected before it was hidden", () => {
+    useRightPanelStore.getState().open(refA, "agents");
+    useRightPanelStore.getState().toggleVisibility(refA);
+    useRightPanelStore.getState().toggleVisibility(refA);
+    expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
+      isOpen: true,
+      activeSurfaceId: "agents",
+      surfaces: [{ id: "agents", kind: "agents" }],
+    });
   });
 
   it("toggle hides the panel without discarding the active surface", () => {

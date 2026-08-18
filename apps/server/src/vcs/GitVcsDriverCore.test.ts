@@ -818,6 +818,109 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
       }),
     );
 
+    it.effect("loads only the requested review source and file", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        yield* git(cwd, ["checkout", "-b", "feature/review-filter"]);
+        yield* writeTextFile(cwd, "README.md", "# branch change\n");
+        yield* git(cwd, ["add", "README.md"]);
+        yield* git(cwd, ["commit", "-m", "branch change"]);
+        yield* writeTextFile(cwd, "selected.txt", "selected\n");
+        yield* writeTextFile(cwd, "other.txt", "other\n");
+
+        const branch = yield* driver.getReviewDiffPreview({
+          cwd,
+          baseRef: initialBranch,
+          sourceKind: "branch-range",
+        });
+        const selected = yield* driver.getReviewDiffPreview({
+          cwd,
+          sourceKind: "working-tree",
+          path: "selected.txt",
+        });
+
+        assert.deepStrictEqual(
+          branch.sources.map((source) => source.kind),
+          ["branch-range"],
+        );
+        assert.include(branch.sources[0]?.diff ?? "", "README.md");
+        assert.deepStrictEqual(
+          selected.sources.map((source) => source.kind),
+          ["working-tree"],
+        );
+        assert.include(selected.sources[0]?.diff ?? "", "selected.txt");
+        assert.notInclude(selected.sources[0]?.diff ?? "", "other.txt");
+      }),
+    );
+
+    it.effect("lists every changed file without shipping the patch", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        yield* git(cwd, ["checkout", "-b", "feature/review-files"]);
+        yield* writeTextFile(cwd, "tracked.txt", "one\ntwo\n");
+        yield* git(cwd, ["add", "tracked.txt"]);
+        yield* git(cwd, ["commit", "-m", "tracked"]);
+        yield* writeTextFile(cwd, "tracked.txt", "one\ntwo\nthree\n");
+        yield* writeTextFile(cwd, "brand-new.txt", "new\n");
+
+        const workingTree = yield* driver.getReviewDiffPreview({
+          cwd,
+          sourceKind: "working-tree",
+          includePatch: false,
+        });
+        const branchRange = yield* driver.getReviewDiffPreview({
+          cwd,
+          baseRef: initialBranch,
+          sourceKind: "branch-range",
+          includePatch: false,
+        });
+
+        const workingTreeSource = workingTree.sources[0];
+        assert.strictEqual(workingTreeSource?.patchOmitted, true);
+        assert.strictEqual(workingTreeSource?.diff, "");
+        assert.deepStrictEqual(
+          [...(workingTreeSource?.files ?? [])].map((file) => file.path).toSorted(),
+          ["brand-new.txt", "tracked.txt"],
+        );
+        assert.strictEqual(
+          workingTreeSource?.files.find((file) => file.path === "tracked.txt")?.additions,
+          1,
+        );
+        // An untracked file's counts are deliberately unknown rather than guessed.
+        assert.strictEqual(
+          workingTreeSource?.files.find((file) => file.path === "brand-new.txt")?.additions,
+          null,
+        );
+        assert.deepStrictEqual(
+          [...(branchRange.sources[0]?.files ?? [])].map((file) => file.path),
+          ["tracked.txt"],
+        );
+      }),
+    );
+
+    it.effect("caps untracked files in the working-tree overview", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        yield* initRepoWithCommit(cwd);
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        for (let index = 0; index < 25; index += 1) {
+          yield* writeTextFile(cwd, `generated-${index}.txt`, `${index}\n`);
+        }
+
+        const preview = yield* driver.getReviewDiffPreview({
+          cwd,
+          sourceKind: "working-tree",
+        });
+
+        assert.strictEqual(preview.sources[0]?.kind, "working-tree");
+        assert.strictEqual(preview.sources[0]?.truncated, true);
+      }),
+    );
+
     it.effect("loads full file contents for working-tree diff expansion", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();
@@ -1561,6 +1664,45 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         assert.deepEqual(result, { refName: initialBranch, upstreamRef: null });
         assert.equal(yield* git(cwd, ["rev-parse", "HEAD"]), localHead);
         assert.equal(yield* git(cwd, ["rev-parse", `origin/${initialBranch}`]), remoteHead);
+      }),
+    );
+
+    it.effect("reports ahead and behind counts per branch and reconciles a diverged pull", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const remote = yield* makeTmpDir("git-remote-");
+        const peer = yield* makeTmpDir("git-peer-");
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        yield* git(remote, ["init", "--bare"]);
+        yield* git(cwd, ["remote", "add", "origin", remote]);
+        yield* git(cwd, ["push", "-u", "origin", initialBranch]);
+
+        yield* git(peer, ["clone", remote, "."]);
+        yield* git(peer, ["config", "user.email", "test@test.com"]);
+        yield* git(peer, ["config", "user.name", "Test"]);
+        yield* writeTextFile(peer, "remote-change.txt", "remote\n");
+        yield* git(peer, ["add", "remote-change.txt"]);
+        yield* git(peer, ["commit", "-m", "remote change"]);
+        yield* git(peer, ["push", "origin", initialBranch]);
+
+        yield* writeTextFile(cwd, "local-change.txt", "local\n");
+        yield* git(cwd, ["add", "local-change.txt"]);
+        yield* git(cwd, ["commit", "-m", "local change"]);
+
+        yield* driver.fetchCurrentBranch(cwd, { scope: "remote" });
+        const refs = yield* driver.listRefs({ cwd, refresh: true, limit: 100 });
+        const branchRef = refs.refs.find(
+          (ref) => ref.name === initialBranch && ref.isRemote !== true,
+        );
+        assert.equal(branchRef?.upstreamRef, `origin/${initialBranch}`);
+        assert.equal(branchRef?.aheadCount, 1);
+        assert.equal(branchRef?.behindCount, 1);
+
+        const pulled = yield* driver.pullCurrentBranch(cwd);
+        assert.equal(pulled.status, "diverged");
+        assert.equal(pulled.aheadCount, 1);
+        assert.equal(pulled.behindCount, 1);
       }),
     );
 

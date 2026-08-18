@@ -545,6 +545,129 @@ fork-specific behavior so future upstream syncs are easier to review.
   linking to it. The 08-13 audit only compared files present in the tree, so a wholly absent file
   slipped through; this sync's audit checks for missing files too.
 
+## Provider account limits
+
+- The Usage page now shows provider-reported subscription windows above the historical token/cost
+  charts, and the sidebar Usage hover card shows the same limits in compact form. Refreshing Usage
+  refreshes both the transcript analytics and the limits snapshot.
+- Limits are keyed by `(environment, provider instance)`, not only by provider kind. Separate Claude
+  instances (for example, personal and work profiles using different `CLAUDE_CONFIG_DIR` values)
+  retain separate 5-hour/weekly readings and are labeled with their configured display names.
+- Claude limits are collected from the live SDK usage response and streamed rate-limit events. Claude
+  has no trustworthy transcript fallback, so a newly configured instance remains empty until a
+  session reports its limits; snapshots are persisted locally across server restarts.
+- Codex limits use live app-server notifications and may be recovered from transcripts only when a
+  sessions directory has one unambiguous configured owner. Shared shadow-home transcripts are
+  skipped rather than attributed to the wrong account.
+- The account-limit contract is versioned and accepts legacy single-provider snapshots, migrating
+  them safely while evicting a stale migrated row when a live event identifies another instance.
+- Source: `packages/contracts/src/accountLimits.ts`,
+  `apps/server/src/usage/AccountLimitsService.ts`,
+  `apps/server/src/usage/accountLimitsNormalize.ts`,
+  `apps/server/src/usage/accountLimitsTranscripts.ts`,
+  `apps/web/src/state/accountLimits.ts`, `apps/web/src/components/usage/AccountLimits.tsx`.
+- Validation: focused account-limit normalization/service/client tests, package typechecks, lint,
+  and a successful desktop build/package/install.
+
+## Recent file and panel freshness fixes
+
+- An open text-file preview performs a fresh server read before displaying content and subscribes to
+  filesystem invalidations only while that file is visible. Closing the preview stops the watcher;
+  external edits then refresh the active file without polling every workspace file.
+- Diff previews fetch the selected file on demand and bound the initial untracked-file overview, so
+  large worktrees do not spawn one diff process per file before the user selects anything.
+- Right-panel tabs are selected with a left click and closed only with a right click; the close icon
+  and accidental middle-click closing path were removed. The composer collapse state is a transient
+  scroll gesture and resets when changing threads rather than collapsing on thread open.
+- Source: `apps/server/src/workspace/WorkspaceFileSystem.ts`,
+  `apps/web/src/components/files/projectFilesQueryState.ts`, `apps/web/src/components/DiffPanel.tsx`,
+  `apps/web/src/components/RightPanelTabs.tsx`, `apps/web/src/components/ChatView.tsx`.
+
+## Review panel driven by a file list rather than one large patch
+
+- The review diff overview now asks the server for the changed-file list alone (`includePatch:
+false`) and fetches a patch only for the file on screen. `git diff --numstat -z` produces that
+  list, so it is complete even when a patch would have hit the 120 KB preview cap. Untracked files
+  are listed from `ls-files --others`; their line counts are reported as unknown rather than guessed,
+  because counting them means reading every file.
+- The changed-files tree renders from that list instead of from the parsed patch, so an empty,
+  truncated, or failed patch empties only the code column. Previously a patch the parser could not
+  use hid the whole panel, which is what made Working tree and Branch changes look empty.
+- Selecting a file and rendering the "all files stacked" view (the tree hidden) each have their own
+  query, and the panel's +/- totals come from the file list rather than from whichever patch happens
+  to be loaded.
+- Source: `packages/contracts/src/review.ts`, `apps/server/src/vcs/GitVcsDriverCore.ts`,
+  `apps/web/src/components/DiffPanel.tsx`.
+
+## Branch remote state, fetch, and pull
+
+- Every local ref in the branch picker carries its upstream, ahead and behind counts, and whether
+  the upstream is gone. They come from `for-each-ref`'s `%(upstream:track)` in the existing snapshot
+  command, so listing refs costs no extra process. Rows show a blue down arrow for commits to pull
+  and a green up arrow for commits not yet pushed.
+- The picker has a fetch button that fetches and prunes the primary remote (`scope: "remote"`), which
+  is what refreshes the counts of branches other than the checked-out one. A fetch now invalidates
+  the cached ref list.
+- A branch that is behind gets a pull button. The checked-out branch pulls with `--ff-only`; any
+  other local branch fast-forwards through `git fetch <remote> <branch>:<branch>`, which git itself
+  refuses when the update is not a fast-forward.
+- A refused fast-forward is reported as `status: "diverged"` instead of as a command failure. The
+  toast offers to open a fresh thread whose prompt states the branch, the upstream, the two counts,
+  and git's own message, and asks the agent to choose between a rebase and a merge and to walk
+  through each conflict.
+- Source: `packages/contracts/src/git.ts`, `apps/server/src/vcs/GitVcsDriverCore.ts`,
+  `apps/server/src/git/GitWorkflowService.ts`, `apps/server/src/ws.ts`,
+  `packages/client-runtime/src/state/vcs.ts`, `apps/web/src/components/BranchToolbar.logic.ts`,
+  `apps/web/src/components/BranchToolbarBranchSelector.tsx`.
+
+## Branch drift follows a project checkout too
+
+- A thread working in the project checkout, not a dedicated worktree, now adopts the branch it
+  finished a turn on, the same way a worktree thread already did. A dedicated worktree still has to
+  belong to exactly one thread before its branch is adopted; a project checkout has no such
+  ambiguity. Without this a `git checkout` by the agent left the thread's recorded branch stale, and
+  the client only attributes pull-request state to a thread whose recorded branch matches the
+  checked-out one, so the thread silently lost its PR.
+- Source: `apps/server/src/orchestration/Layers/CheckpointReactor.ts`.
+
+## Sidebar thread arrangement
+
+- Inbox rows can be dragged into any order, reusing the drag machinery the pinned block already had.
+  The arrangement is client-local and persisted in `localStorage`; it never reaches the server,
+  because it is a view preference rather than thread state.
+- Threads the arrangement has never seen keep the slot the ordinary sort gave them, so a new thread
+  still arrives at the top instead of sinking below a stale arrangement.
+- Source: `apps/web/src/sidebarThreadOrderStore.ts`, `apps/web/src/components/Sidebar.tsx`.
+
+## Composer and right-panel shortcut fixes
+
+- The global shortcut listener registers once and dispatches through a ref. It used to re-register
+  on every dependency change, which moved it behind listeners mounted later (the right-panel surface
+  launcher, the composer), so a configured shortcut such as `§` reached the panel only sometimes.
+- A character bound to a command is never inserted as text, whether or not a thread is open, and the
+  `beforeinput` fallback covers any single character rather than only `§` inside the composer. macOS
+  delivers the section-sign key to an editable surface as text input without a matching keydown on
+  some layouts.
+- Toggling a right panel whose tabs were all closed opens it on the Files surface instead of showing
+  an empty shell, and reopening restores the surface that was selected before it was hidden. The
+  maximize flag is keyed by the same thread as the panel state; keying it by the route desynced the
+  two whenever a draft became a thread.
+- Source: `apps/web/src/components/ChatView.tsx`, `apps/web/src/rightPanelStore.ts`.
+
+## Composer density and the stash badge
+
+- The stash badge sits outside the collapsing prompt area. That container clips its overflow, so the
+  badge lost its top half as soon as the composer shrank; it now perches on the composer's shoulder
+  in both states, and its menu anchors to the whole composer.
+- Scrolling the timeline back down expands the composer wherever the viewport is, rather than only at
+  the live edge. `PageDown`, `End`, and `ArrowDown` do the same.
+- The empty prompt reserves 3rem instead of 4.375rem, the composer's inner padding is a step tighter,
+  and the timeline's trailing spacer is 4px instead of 12px, which closes the gap between the last
+  message and the controls.
+- Source: `apps/web/src/components/chat/ChatComposer.tsx`,
+  `apps/web/src/components/ComposerPromptEditor.tsx`,
+  `apps/web/src/components/chat/MessagesTimeline.tsx`, `apps/web/src/components/ChatView.tsx`.
+
 ## Validation Notes
 
 The fork-local changes above were validated with focused server tests, the full web unit suite,

@@ -94,6 +94,11 @@ function renderTabs(first: DesktopPreviewFavicon | null, second?: DesktopPreview
 }
 
 describe("RightPanelTabs preview favicon", () => {
+  it("does not render a left-click close control", () => {
+    const html = renderTabs(null);
+    expect(html).not.toContain('aria-label="Close ');
+  });
+
   it("prefers a live capture and never asks Google about a private hostname", () => {
     const captured = renderTabs(favicon("data:image/png;base64,AAAA", "http://24x.xf.local/"));
     expect(captured).toContain("data:image/png;base64,AAAA");

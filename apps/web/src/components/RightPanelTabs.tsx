@@ -1,4 +1,4 @@
-import type { ContextMenuItem, PreviewSessionSnapshot, PullRequestState } from "@t3tools/contracts";
+import type { PreviewSessionSnapshot, PullRequestState } from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import {
   Bot,
@@ -9,7 +9,6 @@ import {
   Globe2,
   Plus,
   TerminalSquare,
-  X,
 } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
@@ -26,7 +25,6 @@ import { isElectron } from "~/env";
 import type { DesktopPreviewOverlay } from "~/previewStateStore";
 import type { RightPanelSurface } from "~/rightPanelStore";
 import { cn } from "~/lib/utils";
-import { readLocalApi } from "~/localApi";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { Kbd } from "~/components/ui/kbd";
@@ -119,8 +117,6 @@ const SURFACE_UNAVAILABLE_HINTS = {
   pullRequest: "No pull request on this branch yet.",
   agents: "Available from a thread.",
 } as const;
-
-type TabContextMenuAction = "copy-path" | "close" | "close-others" | "close-to-right" | "close-all";
 
 function DisabledReasonTooltip(props: { reason: string; trigger: ReactElement }) {
   return (
@@ -540,69 +536,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
   const tabListRef = useRef<HTMLDivElement>(null);
 
   const handleTabContextMenu = useCallback(
-    async (event: ReactMouseEvent, surface: RightPanelSurface) => {
-      event.preventDefault();
-      event.stopPropagation();
-
-      const api = readLocalApi();
-      if (!api) return;
-
-      const surfaceIndex = props.surfaces.findIndex((entry) => entry.id === surface.id);
-      if (surfaceIndex < 0) return;
-
-      const items: ContextMenuItem<TabContextMenuAction>[] = [];
-      if (surface.kind === "file") {
-        items.push({ id: "copy-path", label: "Copy path" });
-      }
-      items.push(
-        { id: "close", label: "Close" },
-        {
-          id: "close-others",
-          label: "Close others",
-          disabled: props.surfaces.length <= 1,
-        },
-        {
-          id: "close-to-right",
-          label: "Close to the right",
-          disabled: surfaceIndex >= props.surfaces.length - 1,
-        },
-        {
-          id: "close-all",
-          label: "Close all",
-          disabled: props.surfaces.length === 0,
-        },
-      );
-
-      const action = await api.contextMenu.show(items, { x: event.clientX, y: event.clientY });
-      switch (action) {
-        case "copy-path":
-          if (surface.kind === "file") props.onCopyFilePath(surface.relativePath);
-          break;
-        case "close":
-          props.onCloseSurface(surface);
-          break;
-        case "close-others":
-          props.onCloseOtherSurfaces(surface);
-          break;
-        case "close-to-right":
-          props.onCloseSurfacesToRight(surface);
-          break;
-        case "close-all":
-          props.onCloseAllSurfaces();
-          break;
-        case null:
-          break;
-      }
-    },
-    [props],
-  );
-  const handleTabMouseDown = useCallback((event: ReactMouseEvent) => {
-    if (event.button !== 1) return;
-    event.preventDefault();
-  }, []);
-  const handleTabAuxClick = useCallback(
     (event: ReactMouseEvent, surface: RightPanelSurface) => {
-      if (event.button !== 1) return;
       event.preventDefault();
       event.stopPropagation();
       props.onCloseSurface(surface);
@@ -650,9 +584,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                 <div
                   key={surface.id}
                   data-active-tab={active}
-                  onMouseDown={handleTabMouseDown}
-                  onAuxClick={(event) => handleTabAuxClick(event, surface)}
-                  onContextMenu={(event) => void handleTabContextMenu(event, surface)}
+                  onContextMenu={(event) => handleTabContextMenu(event, surface)}
                   className={cn(
                     "cursor-pointer group/tab flex h-6 max-w-36 shrink-0 items-center gap-0.5 rounded-md pr-2 pl-1.5 text-xs",
                     active
@@ -660,37 +592,29 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                       : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
                   )}
                 >
-                  <button
-                    type="button"
-                    className="cursor-pointer group/close relative flex size-4 shrink-0 items-center justify-center rounded-sm hover:bg-muted"
-                    aria-label={`Close ${title}`}
-                    onClick={() => props.onCloseSurface(surface)}
-                  >
-                    <span className="relative flex size-3 items-center justify-center group-hover/tab:hidden group-focus-visible/close:hidden">
-                      <SurfaceIcon
-                        surface={surface}
-                        sessions={props.previewSessions}
-                        desktopByTabId={props.desktopByTabId}
-                        theme={resolvedTheme}
-                        pullRequestStatuses={props.pullRequestStatuses}
-                      />
-                      {pending ? (
-                        <span
-                          className="absolute -right-0.5 -bottom-0.5 size-1.5 rounded-full bg-current"
-                          aria-hidden
-                        />
-                      ) : null}
-                    </span>
-                    <X className="hidden size-3 group-hover/tab:block group-focus-visible/close:block" />
-                  </button>
                   <Tooltip>
                     <TooltipTrigger
                       render={
                         <button
                           type="button"
-                          className="cursor-pointer flex min-w-0 items-center"
+                          className="cursor-pointer flex min-w-0 items-center gap-0.5"
                           onClick={() => props.onActivate(surface)}
                         >
+                          <span className="relative flex size-4 shrink-0 items-center justify-center">
+                            <SurfaceIcon
+                              surface={surface}
+                              sessions={props.previewSessions}
+                              desktopByTabId={props.desktopByTabId}
+                              theme={resolvedTheme}
+                              pullRequestStatuses={props.pullRequestStatuses}
+                            />
+                            {pending ? (
+                              <span
+                                className="absolute right-0 bottom-0 size-1.5 rounded-full bg-current"
+                                aria-hidden
+                              />
+                            ) : null}
+                          </span>
                           <span className="truncate">{title}</span>
                         </button>
                       }

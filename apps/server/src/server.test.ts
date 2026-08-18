@@ -153,6 +153,7 @@ import * as NativeTelemetryClient from "./resourceTelemetry/NativeTelemetryClien
 import * as ResourceAttribution from "./resourceTelemetry/ResourceAttribution.ts";
 import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import * as UsageService from "./usage/UsageService.ts";
+import * as AccountLimitsService from "./usage/AccountLimitsService.ts";
 import * as Data from "effect/Data";
 
 import { makeOrchestrationIntegrationHarness } from "../integration/OrchestrationEngineHarness.integration.ts";
@@ -839,6 +840,7 @@ const buildAppUnderTest = (options?: {
     const appLayer = servedRoutesLayer.pipe(
       Layer.provide(resourceTelemetryLayer),
       Layer.provide(UsageService.layerTest),
+      Layer.provide(AccountLimitsService.layerTest),
       Layer.provide(
         Layer.mock(BrowserTraceCollector.BrowserTraceCollector)({
           record: () => Effect.void,
@@ -5343,6 +5345,8 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
                     diff: "dirty-diff",
                     diffHash: "hash-dirty",
                     truncated: false,
+                    files: [],
+                    patchOmitted: false,
                   },
                   {
                     id: "branch-range",
@@ -5353,6 +5357,8 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
                     diff: "base-diff",
                     diffHash: "hash-base",
                     truncated: false,
+                    files: [],
+                    patchOmitted: false,
                   },
                 ],
               }),

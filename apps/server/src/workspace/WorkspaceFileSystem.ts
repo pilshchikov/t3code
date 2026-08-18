@@ -12,17 +12,20 @@ import * as NodeFSP from "node:fs/promises";
 import type {
   ProjectDeleteEntryInput,
   ProjectDeleteEntryResult,
+  ProjectFileChangedEvent,
   ProjectReadFileInput,
   ProjectReadFileResult,
   ProjectWriteFileInput,
   ProjectWriteFileResult,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 
 import * as WorkspaceEntries from "./WorkspaceEntries.ts";
 import * as WorkspacePaths from "./WorkspacePaths.ts";
@@ -42,6 +45,7 @@ export class WorkspaceFileSystemOperationError extends Schema.TaggedErrorClass<W
       "open",
       "stat",
       "read",
+      "watch",
       "close",
       "make-directory",
       "write-file",
@@ -136,6 +140,13 @@ export class WorkspaceFileSystem extends Context.Service<
       input: ProjectReadFileInput,
     ) => Effect.Effect<
       ProjectReadFileResult,
+      WorkspaceFileSystemError | WorkspacePaths.WorkspacePathOutsideRootError
+    >;
+    /** Watch one workspace file and emit invalidations after external writes. */
+    readonly watchFile: (
+      input: ProjectReadFileInput,
+    ) => Stream.Stream<
+      ProjectFileChangedEvent,
       WorkspaceFileSystemError | WorkspacePaths.WorkspacePathOutsideRootError
     >;
     /**
@@ -293,6 +304,55 @@ export const make = Effect.gen(function* () {
     );
   });
 
+  const watchFile: WorkspaceFileSystem["Service"]["watchFile"] = (input) =>
+    Stream.unwrap(
+      Effect.gen(function* () {
+        const target = yield* workspacePaths.resolveRelativePathWithinRoot({
+          workspaceRoot: input.cwd,
+          relativePath: input.relativePath,
+        });
+
+        // Reuse the read path's canonical containment checks before opening a host watcher.
+        // The initial event is emitted only after the watcher exists, closing the read/watch race
+        // without polling or repeatedly transferring the whole file.
+        yield* readFile(input);
+        const watchedDirectory = path.dirname(target.absolutePath);
+        const watchedFile = path.basename(target.absolutePath);
+        const watchedPath = path.resolve(target.absolutePath);
+        const changes = fileSystem.watch(watchedDirectory).pipe(
+          Stream.filter(
+            (event) =>
+              event.path === watchedFile ||
+              event.path === target.absolutePath ||
+              path.resolve(watchedDirectory, event.path) === watchedPath,
+          ),
+          Stream.debounce(Duration.millis(50)),
+          Stream.mapAccum(
+            () => 1,
+            (revision): readonly [number, ReadonlyArray<ProjectFileChangedEvent>] => [
+              revision + 1,
+              [{ relativePath: target.relativePath, revision }],
+            ],
+          ),
+          Stream.mapError(
+            (cause) =>
+              new WorkspaceFileSystemOperationError({
+                workspaceRoot: input.cwd,
+                relativePath: input.relativePath,
+                resolvedPath: target.absolutePath,
+                operationPath: watchedDirectory,
+                operation: "watch",
+                cause,
+              }),
+          ),
+        );
+        return Stream.concat(
+          Stream.succeed({ relativePath: target.relativePath, revision: 0 }),
+          changes,
+        );
+      }),
+    );
+
   const writeFile: WorkspaceFileSystem["Service"]["writeFile"] = Effect.fn(
     "WorkspaceFileSystem.writeFile",
   )(function* (input) {
@@ -421,7 +481,7 @@ export const make = Effect.gen(function* () {
     return { relativePath: target.relativePath };
   });
 
-  return WorkspaceFileSystem.of({ readFile, writeFile, deleteEntry });
+  return WorkspaceFileSystem.of({ readFile, watchFile, writeFile, deleteEntry });
 });
 
 export const layer = Layer.effect(WorkspaceFileSystem, make);

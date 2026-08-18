@@ -80,6 +80,14 @@ export const VcsRef = Schema.Struct({
   current: Schema.Boolean,
   isDefault: Schema.Boolean,
   worktreePath: TrimmedNonEmptyStringSchema.pipe(Schema.NullOr),
+  /** The configured upstream, short form (`origin/main`). Null when the branch tracks nothing. */
+  upstreamRef: Schema.optional(TrimmedNonEmptyStringSchema.pipe(Schema.NullOr)),
+  /** Commits on this branch the upstream does not have. Null when there is no upstream. */
+  aheadCount: Schema.optional(NonNegativeInt.pipe(Schema.NullOr)),
+  /** Commits on the upstream this branch does not have. Null when there is no upstream. */
+  behindCount: Schema.optional(NonNegativeInt.pipe(Schema.NullOr)),
+  /** True when the branch tracks an upstream that no longer exists on the remote. */
+  upstreamGone: Schema.optional(Schema.Boolean),
 });
 export type VcsRef = typeof VcsRef.Type;
 
@@ -106,11 +114,18 @@ export type VcsStatusInput = typeof VcsStatusInput.Type;
 
 export const VcsPullInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
+  /** Fast-forward this local branch instead of the checked-out one. */
+  refName: Schema.optionalKey(TrimmedNonEmptyStringSchema),
 });
 export type VcsPullInput = typeof VcsPullInput.Type;
 
 export const VcsFetchInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
+  /**
+   * "current" fetches only what the checked-out branch tracks. "remote" fetches and prunes the
+   * whole primary remote, which is what refreshes the ahead/behind counts of every branch.
+   */
+  scope: Schema.optionalKey(Schema.Literals(["current", "remote"])),
 });
 export type VcsFetchInput = typeof VcsFetchInput.Type;
 
@@ -325,9 +340,17 @@ export const GitRunStackedActionResult = Schema.Struct({
 export type GitRunStackedActionResult = typeof GitRunStackedActionResult.Type;
 
 export const VcsPullResult = Schema.Struct({
-  status: Schema.Literals(["pulled", "skipped_up_to_date"]),
+  /**
+   * "diverged" is a refused fast-forward, not a failure: the branch and its upstream both moved,
+   * so reconciling them is a decision the user (or an agent) has to make.
+   */
+  status: Schema.Literals(["pulled", "skipped_up_to_date", "diverged"]),
   refName: TrimmedNonEmptyStringSchema,
   upstreamRef: TrimmedNonEmptyStringSchema.pipe(Schema.NullOr),
+  aheadCount: Schema.optionalKey(NonNegativeInt),
+  behindCount: Schema.optionalKey(NonNegativeInt),
+  /** Git's own message for a refused fast-forward, shown verbatim. */
+  detail: Schema.optionalKey(TrimmedNonEmptyStringSchema),
 });
 export type VcsPullResult = typeof VcsPullResult.Type;
 

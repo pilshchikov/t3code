@@ -260,6 +260,13 @@ export const ProjectReadFileResult = Schema.Struct({
 });
 export type ProjectReadFileResult = typeof ProjectReadFileResult.Type;
 
+/** Invalidation emitted while a client is actively watching one workspace file. */
+export const ProjectFileChangedEvent = Schema.Struct({
+  relativePath: TrimmedNonEmptyString,
+  revision: NonNegativeInt,
+});
+export type ProjectFileChangedEvent = typeof ProjectFileChangedEvent.Type;
+
 export const ProjectFileFailure = Schema.Literals([
   "workspace_path_outside_root",
   "resolved_path_outside_root",
@@ -277,6 +284,7 @@ export const ProjectFileOperation = Schema.Literals([
   "stat",
   "stat-target",
   "read",
+  "watch",
   "close",
   "make-directory",
   "remove-entry",

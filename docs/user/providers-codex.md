@@ -92,6 +92,11 @@ click the blurred email to reveal it.
 
 Use display names and accent colors to make accounts easy to tell apart in the model picker.
 
+The Usage page also keeps Codex account-limit snapshots separate by provider instance. Live
+app-server updates are preferred. If there is no live snapshot, T3 Code may recover one from a
+Codex transcript when the transcript directory belongs to exactly one configured instance; shared
+shadow-home transcripts are left unattributed rather than shown under the wrong account.
+
 ## I Need A Different API Key Or Endpoint
 
 Use the provider's Environment variables section in Settings.

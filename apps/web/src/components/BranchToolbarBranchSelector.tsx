@@ -5,7 +5,15 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import type { ContextMenuItem, EnvironmentId, VcsRef, ThreadId } from "@t3tools/contracts";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
-import { ChevronDownIcon, GitBranchIcon, RefreshCwIcon, SearchIcon } from "lucide-react";
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  ChevronDownIcon,
+  DownloadIcon,
+  GitBranchIcon,
+  RefreshCwIcon,
+  SearchIcon,
+} from "lucide-react";
 import {
   useCallback,
   useDeferredValue,
@@ -21,6 +29,8 @@ import {
 } from "react";
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
+import { useNewThreadHandler } from "../hooks/useHandleNewThread";
+import { buildBranchConflictPrompt } from "./BranchToolbar.logic";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
 import { readLocalApi } from "../localApi";
 import { useOpenPrLink } from "../lib/openPullRequestLink";
@@ -246,6 +256,117 @@ export function BranchToolbarBranchSelector({
     [branchCwd, branchRefQuery, environmentId],
   );
   const branchRefState = usePaginatedBranches(branchRefTarget);
+  // ---------------------------------------------------------------------------
+  // Remote sync: fetch the whole remote, fast-forward one branch, hand a refused
+  // fast-forward to a fresh thread.
+  // ---------------------------------------------------------------------------
+  const fetchRemoteRefs = useAtomCommand(vcsEnvironment.fetch, { reportFailure: false });
+  const pullRefMutation = useAtomCommand(vcsEnvironment.pull, { reportFailure: false });
+  const handleNewThread = useNewThreadHandler();
+  const setComposerPrompt = useComposerDraftStore((store) => store.setPrompt);
+  const [isFetchingRemote, setIsFetchingRemote] = useState(false);
+  const [pullingRefName, setPullingRefName] = useState<string | null>(null);
+  const refreshBranchRefs = branchRefState.refresh;
+
+  const runRemoteFetch = useCallback(() => {
+    if (branchCwd === null || isFetchingRemote) return;
+    setIsFetchingRemote(true);
+    void (async () => {
+      const result = await fetchRemoteRefs({
+        environmentId,
+        input: { cwd: branchCwd, scope: "remote" },
+      });
+      setIsFetchingRemote(false);
+      if (result._tag === "Failure") {
+        if (isAtomCommandInterrupted(result)) return;
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Failed to fetch",
+            description: toBranchActionErrorMessage(squashAtomCommandFailure(result)),
+          }),
+        );
+        return;
+      }
+      refreshBranchRefs();
+    })();
+  }, [branchCwd, environmentId, fetchRemoteRefs, isFetchingRemote, refreshBranchRefs]);
+
+  const openConflictThread = useCallback(
+    (input: {
+      refName: string;
+      upstreamRef: string | null;
+      aheadCount: number | null;
+      behindCount: number | null;
+      detail: string | null;
+    }) => {
+      if (!activeProjectRef) return;
+      void handleNewThread(activeProjectRef, {
+        forceNew: true,
+        branch: input.refName,
+        onDraftCreated: ({ draftId: createdDraftId }) => {
+          setComposerPrompt(createdDraftId as DraftId, buildBranchConflictPrompt(input));
+        },
+      });
+    },
+    [activeProjectRef, handleNewThread, setComposerPrompt],
+  );
+
+  const pullRef = useCallback(
+    (refName: string) => {
+      if (branchCwd === null || pullingRefName !== null) return;
+      setPullingRefName(refName);
+      void (async () => {
+        const result = await pullRefMutation({
+          environmentId,
+          input: { cwd: branchCwd, refName },
+        });
+        setPullingRefName(null);
+        if (result._tag === "Failure") {
+          if (isAtomCommandInterrupted(result)) return;
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: `Failed to pull ${refName}`,
+              description: toBranchActionErrorMessage(squashAtomCommandFailure(result)),
+            }),
+          );
+          return;
+        }
+        refreshBranchRefs();
+        if (result.value.status !== "diverged") {
+          return;
+        }
+        const conflict = {
+          refName,
+          upstreamRef: result.value.upstreamRef,
+          aheadCount: result.value.aheadCount ?? null,
+          behindCount: result.value.behindCount ?? null,
+          detail: result.value.detail ?? null,
+        };
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: `${refName} has diverged from its upstream`,
+            description: "Fast-forward refused. Open a thread to reconcile the two histories.",
+            timeout: 20_000,
+            actionProps: {
+              children: "Resolve in a new thread",
+              onClick: () => openConflictThread(conflict),
+            },
+          }),
+        );
+      })();
+    },
+    [
+      branchCwd,
+      environmentId,
+      openConflictThread,
+      pullRefMutation,
+      pullingRefName,
+      refreshBranchRefs,
+    ],
+  );
   const refs = branchRefState.refs;
   const hasNextPage =
     branchRefState.data?.nextCursor !== null && branchRefState.data?.nextCursor !== undefined;
@@ -702,6 +823,9 @@ export function BranchToolbarBranchSelector({
           : refName.isDefault
             ? "default"
             : null;
+    const aheadCount = refName.aheadCount ?? 0;
+    const behindCount = refName.behindCount ?? 0;
+    const canPull = !refName.isRemote && behindCount > 0 && branchCwd !== null;
     return (
       <ComboboxItem
         hideIndicator
@@ -714,6 +838,45 @@ export function BranchToolbarBranchSelector({
       >
         <div className="flex w-full min-w-0 items-center justify-between gap-2">
           <span className="min-w-0 flex-1 truncate">{itemValue}</span>
+          {behindCount > 0 ? (
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 text-[10px] font-medium tabular-nums text-blue-600 dark:text-blue-400"
+              title={`${behindCount} commit(s) to pull from ${refName.upstreamRef ?? "the upstream"}`}
+            >
+              <ArrowDownIcon aria-hidden="true" className="size-3" />
+              {behindCount}
+            </span>
+          ) : null}
+          {aheadCount > 0 ? (
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 text-[10px] font-medium tabular-nums text-green-600 dark:text-green-400"
+              title={`${aheadCount} commit(s) not pushed to ${refName.upstreamRef ?? "the upstream"}`}
+            >
+              <ArrowUpIcon aria-hidden="true" className="size-3" />
+              {aheadCount}
+            </span>
+          ) : null}
+          {refName.upstreamGone ? (
+            <span className="shrink-0 text-[10px] text-muted-foreground/45" title="Upstream gone">
+              gone
+            </span>
+          ) : null}
+          {canPull ? (
+            <button
+              type="button"
+              aria-label={`Pull ${itemValue}`}
+              title={`Pull ${behindCount} commit(s) into ${itemValue}`}
+              disabled={pullingRefName !== null}
+              className="inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-default disabled:text-muted-foreground/50"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                pullRef(itemValue);
+              }}
+            >
+              <DownloadIcon aria-hidden="true" className="size-3" />
+            </button>
+          ) : null}
           {badge && <span className="shrink-0 text-[10px] text-muted-foreground/45">{badge}</span>}
         </div>
       </ComboboxItem>
@@ -794,13 +957,13 @@ export function BranchToolbarBranchSelector({
       </div>
       <ComboboxPopup align="end" side="top" className="flex w-80 flex-col">
         <div className="shrink-0 px-3 pt-2.5">
-          <div className="relative -translate-y-px border-b border-border/70 pb-1.5 transition-colors focus-within:border-ring">
+          <div className="relative flex -translate-y-px items-center gap-1 border-b border-border/70 pb-1.5 transition-colors focus-within:border-ring">
             <SearchIcon
               aria-hidden="true"
               className="pointer-events-none absolute top-1.5 left-0 size-4 shrink-0 text-muted-foreground/55"
             />
             <ComboboxInput
-              className="[&_input]:h-6.5 [&_input]:ps-5 [&_input]:font-sans [&_input]:leading-6.5"
+              className="min-w-0 flex-1 [&_input]:h-6.5 [&_input]:ps-5 [&_input]:font-sans [&_input]:leading-6.5"
               inputClassName="rounded-none bg-transparent text-sm"
               placeholder="Search refs..."
               showTrigger={false}
@@ -809,6 +972,26 @@ export function BranchToolbarBranchSelector({
               value={branchQuery}
               onChange={(event) => setBranchQuery(event.target.value)}
             />
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Fetch from remote"
+                    disabled={branchCwd === null || isFetchingRemote}
+                    className="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-default disabled:text-muted-foreground/45"
+                    onClick={runRemoteFetch}
+                  />
+                }
+              >
+                <RefreshCwIcon aria-hidden="true" className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipPopup side="top" className="max-w-64 whitespace-normal leading-tight">
+                {isFetchingRemote
+                  ? "Fetching..."
+                  : "Fetch and prune the remote, then refresh every branch's ahead and behind counts."}
+              </TooltipPopup>
+            </Tooltip>
           </div>
         </div>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

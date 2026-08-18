@@ -1,6 +1,7 @@
 import { EnvironmentId, type VcsRef } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 import {
+  buildBranchConflictPrompt,
   dedupeRemoteBranchesWithLocalMatches,
   deriveLocalBranchNameFromRemoteRef,
   resolveEnvironmentOptionLabel,
@@ -818,5 +819,37 @@ describe("sanitizeNewRefName", () => {
   it("does not collapse dashes the user typed", () => {
     expect(sanitizeNewRefName("new - branch")).toBe("new---branch");
     expect(sanitizeNewRefName("foo--bar")).toBe("foo--bar");
+  });
+});
+
+describe("buildBranchConflictPrompt", () => {
+  it("states the divergence, the counts, and git's own message", () => {
+    const prompt = buildBranchConflictPrompt({
+      refName: "feature/x",
+      upstreamRef: "origin/feature/x",
+      aheadCount: 2,
+      behindCount: 3,
+      detail: "fatal: Not possible to fast-forward, aborting.",
+    });
+
+    expect(prompt).toContain("`feature/x` and `origin/feature/x` have diverged");
+    expect(prompt).toContain("2 local commit(s) not on origin/feature/x");
+    expect(prompt).toContain("3 commit(s) on origin/feature/x not local");
+    expect(prompt).toContain("fatal: Not possible to fast-forward, aborting.");
+    expect(prompt).toContain("Do not force-push anything.");
+  });
+
+  it("omits the counts and the git output when they are unknown", () => {
+    const prompt = buildBranchConflictPrompt({
+      refName: "main",
+      upstreamRef: null,
+      aheadCount: null,
+      behindCount: null,
+      detail: null,
+    });
+
+    expect(prompt).toContain("`main` and `its upstream` have diverged");
+    expect(prompt).not.toContain("There are");
+    expect(prompt).not.toContain("Git reported");
   });
 });

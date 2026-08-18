@@ -72,6 +72,8 @@ describe("buildReviewSectionItems", () => {
         diff: "diff --git a/a.ts b/a.ts",
         diffHash: "hash-dirty",
         truncated: false,
+        files: [],
+        patchOmitted: false,
       },
       {
         id: "branch-range",
@@ -82,6 +84,8 @@ describe("buildReviewSectionItems", () => {
         diff: "diff --git a/a.ts b/a.ts",
         diffHash: "hash-base",
         truncated: false,
+        files: [],
+        patchOmitted: false,
       },
     ];
 

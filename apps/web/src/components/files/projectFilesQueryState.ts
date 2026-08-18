@@ -1,13 +1,14 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import type {
   EnvironmentId,
+  ProjectFileChangedEvent,
   ProjectListEntriesResult,
   ProjectReadFileResult,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { projectEnvironment } from "~/state/projects";
@@ -18,6 +19,9 @@ const EMPTY_PROJECT_FILE_PATH = "";
 const EMPTY_PROJECT_FILE_QUERY_ATOM = Atom.make(
   AsyncResult.initial<ProjectReadFileResult, never>(false),
 ).pipe(Atom.withLabel("project-file-query:empty"));
+const EMPTY_PROJECT_FILE_WATCH_ATOM = Atom.make(
+  AsyncResult.initial<ProjectFileChangedEvent, never>(false),
+).pipe(Atom.withLabel("project-file-watch:empty"));
 function optimisticFileAtom(environmentId: EnvironmentId, cwd: string, relativePath: string) {
   return projectEnvironment.optimisticFile({ environmentId, cwd, relativePath });
 }
@@ -177,23 +181,63 @@ export function useProjectFileQuery(
   cwd: string,
   relativePath: string | null,
   enabled = true,
+  watch = false,
 ): ProjectQueryState<ProjectReadFileResult> {
   const atom = enabled
     ? getProjectFileQueryAtom(environmentId, cwd, relativePath)
     : EMPTY_PROJECT_FILE_QUERY_ATOM;
   const result = useAtomValue(atom);
   const refreshAtom = useAtomRefresh(atom);
+  const shouldWatch = enabled && watch && relativePath !== null;
+  const watchAtom = shouldWatch
+    ? projectEnvironment.watchFile({
+        environmentId,
+        input: { cwd, relativePath },
+      })
+    : EMPTY_PROJECT_FILE_WATCH_ATOM;
+  const watchResult = useAtomValue(watchAtom);
+  const watchRevision = AsyncResult.isSuccess(watchResult) ? watchResult.value.revision : null;
+  const targetKey = shouldWatch ? `${environmentId}\u0000${cwd}\u0000${relativePath}` : null;
+  const [freshTargetKey, setFreshTargetKey] = useState<string | null>(null);
+
+  // A file preview must never paint a cached snapshot on open. Force a real
+  // server read, keep the old value hidden until it settles, then let the
+  // scoped watcher refresh subsequent external edits while this preview is
+  // mounted. Closing or switching the visible surface unmounts/unsubscribes it.
+  useEffect(() => {
+    if (targetKey === null) {
+      setFreshTargetKey(null);
+      return;
+    }
+    let active = true;
+    refreshAtom();
+    void executeAtomQuery(appAtomRegistry, atom, {
+      reportDefect: false,
+      reportFailure: false,
+    }).then(() => {
+      if (active) setFreshTargetKey(targetKey);
+    });
+    return () => {
+      active = false;
+    };
+  }, [atom, refreshAtom, targetKey]);
+
+  useEffect(() => {
+    if (watchRevision === null) return;
+    refreshAtom();
+  }, [refreshAtom, watchRevision]);
   const refresh = useCallback(() => refreshAtom(), [refreshAtom]);
   const data = Option.getOrNull(AsyncResult.value(result));
   const optimisticResult = useAtomValue(
     optimisticFileAtom(environmentId, cwd, relativePath ?? EMPTY_PROJECT_FILE_PATH),
   );
   const optimisticFile = relativePath === null ? null : optimisticResult;
+  const awaitingFreshRead = targetKey !== null && freshTargetKey !== targetKey;
 
   return {
-    data: optimisticFile?.data ?? data,
-    error: errorMessage(result),
-    isPending: result.waiting,
+    data: awaitingFreshRead ? null : (optimisticFile?.data ?? data),
+    error: awaitingFreshRead ? null : errorMessage(result),
+    isPending: awaitingFreshRead || result.waiting,
     refresh,
   };
 }

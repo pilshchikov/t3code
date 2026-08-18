@@ -987,7 +987,7 @@ export default function FilePreviewPanel({
     reportFailure: false,
   });
   const isImage = relativePath !== null && isWorkspaceImagePreviewPath(relativePath);
-  const file = useProjectFileQuery(environmentId, activeCwd, relativePath, !isImage);
+  const file = useProjectFileQuery(environmentId, activeCwd, relativePath, !isImage, true);
   const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
   // Reading markdown rendered is a preference, not a property of one file. Keeping
   // it on the panel meant a thread switch dropped it and forced source back.

@@ -729,6 +729,29 @@ describe("resolveShortcutCommand", () => {
     );
   });
 
+  it("matches the macOS section-sign key as its configured plain shortcut", () => {
+    const keybindings = compile([
+      {
+        shortcut: {
+          key: "§",
+          metaKey: false,
+          ctrlKey: false,
+          shiftKey: false,
+          altKey: false,
+          modKey: false,
+        },
+        command: "rightPanel.toggle",
+      },
+    ]);
+
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "§", altKey: true }), keybindings, {
+        platform: "MacIntel",
+      }),
+      "rightPanel.toggle",
+    );
+  });
+
   it("matches non-Latin layout letters using the physical key code", () => {
     const keybindings = compile([{ shortcut: modShortcut("d"), command: "diff.toggle" }]);
 

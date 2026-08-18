@@ -7,6 +7,7 @@ import {
   createEnvironmentCommand,
   createEnvironmentRpcCommand,
   createEnvironmentRpcQueryAtomFamily,
+  createEnvironmentRpcSubscriptionAtomFamily,
 } from "./runtime.ts";
 import {
   type CreateProjectInput,
@@ -82,6 +83,12 @@ export function createProjectEnvironmentAtoms<R, E>(
       tag: WS_METHODS.projectsReadFile,
       staleTimeMs: 30_000,
       idleTtlMs: 5 * 60_000,
+    }),
+    watchFile: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:projects:watch-file",
+      tag: WS_METHODS.projectsWatchFile,
+      // Stop the host watcher as soon as the file surface unmounts.
+      idleTtlMs: 0,
     }),
     optimisticFile: (target: OptimisticProjectFileTarget) =>
       optimisticFileFamily(optimisticProjectFileKey(target)),

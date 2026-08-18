@@ -71,8 +71,14 @@ export class GitWorkflowService extends Context.Service<
     readonly invalidateLocalStatus: (cwd: string) => Effect.Effect<void, never>;
     readonly invalidateRemoteStatus: (cwd: string) => Effect.Effect<void, never>;
     readonly invalidateStatus: (cwd: string) => Effect.Effect<void, never>;
-    readonly pullCurrentBranch: (cwd: string) => Effect.Effect<VcsPullResult, GitCommandError>;
-    readonly fetchCurrentBranch: (cwd: string) => Effect.Effect<VcsFetchResult, GitCommandError>;
+    readonly pullCurrentBranch: (
+      cwd: string,
+      refName?: string,
+    ) => Effect.Effect<VcsPullResult, GitCommandError>;
+    readonly fetchCurrentBranch: (
+      cwd: string,
+      options?: { readonly scope?: "current" | "remote" },
+    ) => Effect.Effect<VcsFetchResult, GitCommandError>;
     readonly runStackedAction: (
       input: GitRunStackedActionInput,
       options?: GitManager.GitRunStackedActionOptions,
@@ -332,13 +338,13 @@ export const make = Effect.gen(function* () {
     invalidateLocalStatus: gitManager.invalidateLocalStatus,
     invalidateRemoteStatus: gitManager.invalidateRemoteStatus,
     invalidateStatus: gitManager.invalidateStatus,
-    pullCurrentBranch: (cwd) =>
+    pullCurrentBranch: (cwd, refName) =>
       ensureGitCommand("GitWorkflowService.pullCurrentBranch", cwd).pipe(
-        Effect.andThen(git.pullCurrentBranch(cwd)),
+        Effect.andThen(git.pullCurrentBranch(cwd, refName)),
       ),
-    fetchCurrentBranch: (cwd) =>
+    fetchCurrentBranch: (cwd, options) =>
       ensureGitCommand("GitWorkflowService.fetchCurrentBranch", cwd).pipe(
-        Effect.andThen(git.fetchCurrentBranch(cwd)),
+        Effect.andThen(git.fetchCurrentBranch(cwd, options)),
       ),
     runStackedAction: (input, options) =>
       ensureGit("GitWorkflowService.runStackedAction", input.cwd).pipe(

@@ -50,6 +50,7 @@ const RANGE_DIFF_PATCH_MAX_OUTPUT_BYTES = 59_000;
 const REVIEW_DIFF_PATCH_MAX_OUTPUT_BYTES = 120_000;
 const REVIEW_UNTRACKED_DIFF_MAX_OUTPUT_BYTES = 80_000;
 const REVIEW_DIFF_FILE_MAX_OUTPUT_BYTES = 1024 * 1024;
+const REVIEW_UNTRACKED_PREVIEW_FILE_LIMIT = 24;
 const WORKSPACE_FILES_MAX_OUTPUT_BYTES = 120_000;
 const STATUS_UPSTREAM_REFRESH_INTERVAL = Duration.seconds(15);
 const STATUS_UPSTREAM_REFRESH_TIMEOUT = Duration.seconds(5);
@@ -396,6 +397,89 @@ function splitNullSeparatedPaths(input: string, truncated: boolean): string[] {
   }
 
   return parts.filter((value) => value.length > 0);
+}
+
+export interface ReviewDiffNumstatEntry {
+  readonly path: string;
+  readonly origPath: string | null;
+  readonly additions: number | null;
+  readonly deletions: number | null;
+  readonly binary: boolean;
+}
+
+/**
+ * Parses `git diff --numstat -z`. Records are NUL-terminated; a rename leaves the path field of
+ * its record empty and follows it with the old and new paths as two further NUL-terminated fields.
+ * Binary files report "-" for both counts.
+ */
+export function parseGitNumstatZ(stdout: string): ReviewDiffNumstatEntry[] {
+  const fields = stdout.split("\0");
+  const entries: ReviewDiffNumstatEntry[] = [];
+  let index = 0;
+  while (index < fields.length) {
+    const record = fields[index];
+    index += 1;
+    if (record === undefined || record.length === 0) continue;
+    const separator = record.indexOf("\t");
+    if (separator === -1) continue;
+    const secondSeparator = record.indexOf("\t", separator + 1);
+    if (secondSeparator === -1) continue;
+    const additionsRaw = record.slice(0, separator);
+    const deletionsRaw = record.slice(separator + 1, secondSeparator);
+    const inlinePath = record.slice(secondSeparator + 1);
+    const binary = additionsRaw === "-" || deletionsRaw === "-";
+    const toCount = (value: string) => {
+      const parsed = Number.parseInt(value, 10);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    const additions = binary ? null : toCount(additionsRaw);
+    const deletions = binary ? null : toCount(deletionsRaw);
+    if (inlinePath.length > 0) {
+      entries.push({ path: inlinePath, origPath: null, additions, deletions, binary });
+      continue;
+    }
+    const origPath = fields[index];
+    const newPath = fields[index + 1];
+    index += 2;
+    if (origPath === undefined || newPath === undefined || newPath.length === 0) break;
+    entries.push({ path: newPath, origPath, additions, deletions, binary });
+  }
+  return entries;
+}
+
+/**
+ * Reads the `%(upstream:short)` and `%(upstream:track,nobracket)` fields of a `for-each-ref` line.
+ * The track field is empty when the branch is level with its upstream, "gone" when the upstream
+ * has been deleted, and otherwise some combination of "ahead N" and "behind N".
+ */
+export function parseUpstreamTracking(
+  upstreamRaw: string | undefined,
+  trackRaw: string | undefined,
+): {
+  readonly upstreamRef: string | null;
+  readonly aheadCount: number | null;
+  readonly behindCount: number | null;
+  readonly upstreamGone: boolean;
+} {
+  const upstreamRef = upstreamRaw?.trim() ?? "";
+  if (upstreamRef.length === 0) {
+    return { upstreamRef: null, aheadCount: null, behindCount: null, upstreamGone: false };
+  }
+  const track = trackRaw?.trim() ?? "";
+  if (track === "gone") {
+    return { upstreamRef, aheadCount: null, behindCount: null, upstreamGone: true };
+  }
+  const readCount = (label: string) => {
+    const match = track.match(new RegExp(`${label} (\\d+)`));
+    const parsed = match ? Number.parseInt(match[1] ?? "0", 10) : 0;
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  return {
+    upstreamRef,
+    aheadCount: readCount("ahead"),
+    behindCount: readCount("behind"),
+    upstreamGone: false,
+  };
 }
 
 export function splitNullSeparatedGitStdoutPaths(
@@ -2391,10 +2475,40 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       ["rev-parse", "HEAD"],
       true,
     ).pipe(Effect.map((stdout) => stdout.trim()));
-    yield* executeGit("GitVcsDriver.pullCurrentBranch.pull", cwd, ["pull", "--ff-only"], {
-      timeoutMs: 30_000,
-      fallbackErrorDetail: "git pull failed",
-    });
+    const pullResult = yield* executeGit(
+      "GitVcsDriver.pullCurrentBranch.pull",
+      cwd,
+      ["pull", "--ff-only"],
+      {
+        allowNonZeroExit: true,
+        timeoutMs: 30_000,
+        fallbackErrorDetail: "git pull failed",
+      },
+    );
+    if (pullResult.exitCode !== 0) {
+      // A refused fast-forward on a branch that moved on both sides is a decision, not a fault:
+      // report it so the caller can offer to reconcile instead of showing a raw git failure.
+      const afterFailure = yield* statusDetails(cwd);
+      if (afterFailure.aheadCount > 0 && afterFailure.behindCount > 0) {
+        const detail = pullResult.stderr.trim();
+        return {
+          status: "diverged" as const,
+          refName,
+          upstreamRef: afterFailure.upstreamRef,
+          aheadCount: afterFailure.aheadCount,
+          behindCount: afterFailure.behindCount,
+          ...(detail.length > 0 ? { detail } : {}),
+        };
+      }
+      return yield* new GitCommandError({
+        ...gitCommandContext({
+          operation: "GitVcsDriver.pullCurrentBranch",
+          cwd,
+          args: ["pull", "--ff-only"],
+        }),
+        detail: pullResult.stderr.trim().length > 0 ? pullResult.stderr.trim() : "git pull failed",
+      });
+    }
     const afterSha = yield* runGitStdout(
       "GitVcsDriver.pullCurrentBranch.afterSha",
       cwd,
@@ -2410,11 +2524,75 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     };
   });
 
+  /**
+   * Fast-forwards a branch that is not checked out, by fetching its upstream straight onto it.
+   * Git refuses a non-fast-forward ref update here, which is exactly the guard we want: a branch
+   * that moved on both sides is reported as diverged rather than rewritten.
+   */
+  const pullNamedBranch = Effect.fn("pullNamedBranch")(function* (cwd: string, refName: string) {
+    const trackingLine = yield* runGitStdout(
+      "GitVcsDriver.pullNamedBranch.upstream",
+      cwd,
+      [
+        "for-each-ref",
+        "--format=%(upstream:short)%09%(upstream:remotename)%09%(upstream:track,nobracket)",
+        `refs/heads/${refName}`,
+      ],
+      true,
+    ).pipe(Effect.map((stdout) => stdout.trim()));
+    const [upstreamRef, remoteName, track] = trackingLine.split("\t");
+    if (!upstreamRef || !remoteName) {
+      return yield* new GitCommandError({
+        ...gitCommandContext({ operation: "GitVcsDriver.pullNamedBranch", cwd, args: ["fetch"] }),
+        detail: `${refName} has no upstream configured.`,
+      });
+    }
+    const remoteBranch = upstreamRef.startsWith(`${remoteName}/`)
+      ? upstreamRef.slice(remoteName.length + 1)
+      : upstreamRef;
+    const result = yield* executeGit(
+      "GitVcsDriver.pullNamedBranch.fetch",
+      cwd,
+      ["fetch", "--quiet", remoteName, `${remoteBranch}:${refName}`],
+      {
+        allowNonZeroExit: true,
+        env: STATUS_UPSTREAM_REFRESH_ENV,
+        timeoutMs: 60_000,
+        fallbackErrorDetail: "git fetch failed",
+      },
+    );
+    if (result.exitCode !== 0) {
+      const tracking = parseUpstreamTracking(upstreamRef, track);
+      const detail = result.stderr.trim();
+      if ((tracking.aheadCount ?? 0) > 0 && (tracking.behindCount ?? 0) > 0) {
+        return {
+          status: "diverged" as const,
+          refName,
+          upstreamRef,
+          aheadCount: tracking.aheadCount ?? 0,
+          behindCount: tracking.behindCount ?? 0,
+          ...(detail.length > 0 ? { detail } : {}),
+        };
+      }
+      return yield* new GitCommandError({
+        ...gitCommandContext({ operation: "GitVcsDriver.pullNamedBranch", cwd, args: ["fetch"] }),
+        detail: detail.length > 0 ? detail : "git fetch failed",
+      });
+    }
+    const tracking = parseUpstreamTracking(upstreamRef, track);
+    return {
+      status:
+        (tracking.behindCount ?? 0) === 0 ? ("skipped_up_to_date" as const) : ("pulled" as const),
+      refName,
+      upstreamRef,
+    };
+  });
+
   const fetchCurrentBranch: GitVcsDriver.GitVcsDriver["Service"]["fetchCurrentBranch"] = Effect.fn(
     "fetchCurrentBranch",
-  )(function* (cwd) {
+  )(function* (cwd, options) {
     const details = yield* statusDetailsLocal(cwd);
-    if (!details.branch) {
+    if (details.branch === null && options?.scope !== "remote") {
       return yield* new GitCommandError({
         ...gitCommandContext({
           operation: "GitVcsDriver.fetchCurrentBranch",
@@ -2424,6 +2602,27 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         detail: "Cannot fetch for a detached HEAD.",
       });
     }
+    if (options?.scope === "remote") {
+      // Every branch's behind count comes from its remote-tracking ref, so refreshing the whole
+      // remote (and pruning what it dropped) is what makes the branch list tell the truth.
+      const remoteName = yield* resolvePrimaryRemoteName(cwd);
+      yield* executeGit(
+        "GitVcsDriver.fetchCurrentBranch.remote",
+        cwd,
+        ["fetch", "--quiet", "--prune", remoteName],
+        {
+          env: STATUS_UPSTREAM_REFRESH_ENV,
+          timeoutMs: 60_000,
+          fallbackErrorDetail: "git fetch failed",
+        },
+      );
+      const upstreamAfterFetch = yield* resolveCurrentUpstream(cwd);
+      return {
+        refName: details.branch ?? "HEAD",
+        upstreamRef: upstreamAfterFetch?.upstreamRef ?? null,
+      };
+    }
+    const branch = details.branch ?? "HEAD";
     const upstream = yield* resolveCurrentUpstream(cwd);
     if (!upstream) {
       // No tracking branch (e.g. a freshly created local branch): fall back to fetching the
@@ -2433,13 +2632,13 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       const remoteName = yield* resolvePrimaryRemoteName(cwd);
       yield* fetchRemote({ cwd, remoteName });
       return {
-        refName: details.branch,
+        refName: branch,
         upstreamRef: null,
       };
     }
     yield* fetchRemote({ cwd, remoteName: upstream.remoteName });
     return {
-      refName: details.branch,
+      refName: branch,
       upstreamRef: upstream.upstreamRef,
     };
   });
@@ -2488,11 +2687,20 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     };
   });
 
-  const readUntrackedReviewDiffs = Effect.fn("readUntrackedReviewDiffs")(function* (cwd: string) {
+  const readUntrackedReviewDiffs = Effect.fn("readUntrackedReviewDiffs")(function* (
+    cwd: string,
+    requestedPath?: string,
+  ) {
     const untrackedResult = yield* executeGit(
       "GitVcsDriver.readUntrackedReviewDiffs.list",
       cwd,
-      ["ls-files", "--others", "--exclude-standard", "-z"],
+      [
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        "-z",
+        ...(requestedPath ? ["--", requestedPath] : []),
+      ],
       {
         maxOutputBytes: WORKSPACE_FILES_MAX_OUTPUT_BYTES,
         appendTruncationMarker: true,
@@ -2503,8 +2711,13 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       return { diff: "", truncated: untrackedResult.stdoutTruncated };
     }
 
+    // An untracked environment can contain thousands of files. The overview must not spawn one
+    // process per file: selected files are fetched independently by the client below.
+    const previewPaths = requestedPath
+      ? untrackedPaths
+      : untrackedPaths.slice(0, REVIEW_UNTRACKED_PREVIEW_FILE_LIMIT);
     const diffs = yield* Effect.forEach(
-      untrackedPaths,
+      previewPaths,
       (relativePath) =>
         executeGit(
           "GitVcsDriver.readUntrackedReviewDiffs.diff",
@@ -2530,11 +2743,21 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       { concurrency: 4 },
     );
 
+    const combinedDiff = Arr.filterMap(diffs, (result) =>
+      result.stdout.trim().length > 0 ? Result.succeed(result.stdout) : Result.failVoid,
+    ).join("\n");
+    const encodedDiff = new TextEncoder().encode(combinedDiff);
+    const combinedDiffTruncated = encodedDiff.byteLength > REVIEW_DIFF_PATCH_MAX_OUTPUT_BYTES;
+    const diff = combinedDiffTruncated
+      ? `${new TextDecoder().decode(encodedDiff.slice(0, REVIEW_DIFF_PATCH_MAX_OUTPUT_BYTES))}${OUTPUT_TRUNCATED_MARKER}`
+      : combinedDiff;
     return {
-      diff: Arr.filterMap(diffs, (result) =>
-        result.stdout.trim().length > 0 ? Result.succeed(result.stdout) : Result.failVoid,
-      ).join("\n"),
-      truncated: untrackedResult.stdoutTruncated || diffs.some((result) => result.stdoutTruncated),
+      diff,
+      truncated:
+        untrackedResult.stdoutTruncated ||
+        untrackedPaths.length > previewPaths.length ||
+        combinedDiffTruncated ||
+        diffs.some((result) => result.stdoutTruncated),
     };
   });
 
@@ -2559,42 +2782,128 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
           )
         : null);
 
-    const dirtyTrackedResult = yield* executeGit(
-      "GitVcsDriver.getReviewDiffPreview.dirtyTracked",
-      input.cwd,
-      [
-        "diff",
-        "--patch",
-        "--no-color",
-        "--no-ext-diff",
-        "--no-textconv",
-        "--minimal",
-        ...(input.ignoreWhitespace ? ["--ignore-all-space"] : []),
-        "HEAD",
-        "--",
-      ],
-      {
-        maxOutputBytes: REVIEW_DIFF_PATCH_MAX_OUTPUT_BYTES,
-        appendTruncationMarker: true,
-      },
-    ).pipe(
-      Effect.orElseSucceed(() => ({
-        exitCode: 0,
-        stdout: "",
-        stderr: "",
-        stdoutTruncated: false,
-        stderrTruncated: false,
-      })),
-    );
-    const dirtyUntracked = yield* readUntrackedReviewDiffs(input.cwd).pipe(
-      Effect.orElseSucceed(() => ({ diff: "", truncated: false })),
-    );
+    const includeWorkingTree = input.sourceKind !== "branch-range";
+    const includeBranchRange = input.sourceKind !== "working-tree";
+    const includePatch = input.includePatch !== false;
+
+    // The file list comes from --numstat rather than from parsing the patch: it is complete even
+    // when the patch is capped, and it costs one small command.
+    const readNumstat = (operation: string, args: readonly string[]) =>
+      executeGit(operation, input.cwd, args, {
+        maxOutputBytes: WORKSPACE_FILES_MAX_OUTPUT_BYTES,
+        appendTruncationMarker: false,
+      }).pipe(
+        Effect.map((result) => parseGitNumstatZ(result.stdout)),
+        Effect.orElseSucceed(() => [] as ReviewDiffNumstatEntry[]),
+      );
+
+    const dirtyTrackedResult =
+      includeWorkingTree && includePatch
+        ? yield* executeGit(
+            "GitVcsDriver.getReviewDiffPreview.dirtyTracked",
+            input.cwd,
+            [
+              "diff",
+              "--patch",
+              "--no-color",
+              "--no-ext-diff",
+              "--no-textconv",
+              "--minimal",
+              ...(input.ignoreWhitespace ? ["--ignore-all-space"] : []),
+              "HEAD",
+              "--",
+              ...(input.path ? [input.path] : []),
+            ],
+            {
+              maxOutputBytes: REVIEW_DIFF_PATCH_MAX_OUTPUT_BYTES,
+              appendTruncationMarker: true,
+            },
+          ).pipe(
+            Effect.orElseSucceed(() => ({
+              exitCode: 0,
+              stdout: "",
+              stderr: "",
+              stdoutTruncated: false,
+              stderrTruncated: false,
+            })),
+          )
+        : { stdout: "", stdoutTruncated: false };
+    const dirtyUntracked =
+      includeWorkingTree && includePatch
+        ? yield* readUntrackedReviewDiffs(input.cwd, input.path).pipe(
+            Effect.orElseSucceed(() => ({ diff: "", truncated: false })),
+          )
+        : { diff: "", truncated: false };
     const dirtyDiff = [dirtyTrackedResult.stdout.trimEnd(), dirtyUntracked.diff.trimEnd()]
       .filter((diff) => diff.length > 0)
       .join("\n");
 
+    const workingTreeFiles = includeWorkingTree
+      ? yield* Effect.all([
+          readNumstat("GitVcsDriver.getReviewDiffPreview.dirtyNumstat", [
+            "diff",
+            "--numstat",
+            "-z",
+            "--no-color",
+            "--no-ext-diff",
+            "--no-textconv",
+            ...(input.ignoreWhitespace ? ["--ignore-all-space"] : []),
+            "HEAD",
+            "--",
+            ...(input.path ? [input.path] : []),
+          ]),
+          executeGit(
+            "GitVcsDriver.getReviewDiffPreview.untrackedList",
+            input.cwd,
+            [
+              "ls-files",
+              "--others",
+              "--exclude-standard",
+              "-z",
+              ...(input.path ? ["--", input.path] : []),
+            ],
+            { maxOutputBytes: WORKSPACE_FILES_MAX_OUTPUT_BYTES, appendTruncationMarker: false },
+          ).pipe(
+            Effect.map(splitNullSeparatedGitStdoutPaths),
+            Effect.orElseSucceed(() => [] as string[]),
+          ),
+        ]).pipe(
+          Effect.map(([tracked, untracked]) => [
+            ...tracked,
+            // Counting an untracked file's lines means reading every one of them; the panel fetches
+            // the real patch when the file is opened, so the list reports the counts as unknown.
+            ...untracked.map(
+              (path) =>
+                ({
+                  path,
+                  origPath: null,
+                  additions: null,
+                  deletions: null,
+                  binary: false,
+                }) satisfies ReviewDiffNumstatEntry,
+            ),
+          ]),
+        )
+      : [];
+
+    const branchRangeFiles =
+      includeBranchRange && baseRef && branch
+        ? yield* readNumstat("GitVcsDriver.getReviewDiffPreview.baseNumstat", [
+            "diff",
+            "--numstat",
+            "-z",
+            "--no-color",
+            "--no-ext-diff",
+            "--no-textconv",
+            ...(input.ignoreWhitespace ? ["--ignore-all-space"] : []),
+            `${baseRef}...HEAD`,
+            "--",
+            ...(input.path ? [input.path] : []),
+          ])
+        : [];
+
     const baseResult =
-      baseRef && branch
+      includeBranchRange && includePatch && baseRef && branch
         ? yield* executeGit(
             "GitVcsDriver.getReviewDiffPreview.base",
             input.cwd,
@@ -2607,6 +2916,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
               "--minimal",
               ...(input.ignoreWhitespace ? ["--ignore-all-space"] : []),
               `${baseRef}...HEAD`,
+              ...(input.path ? ["--", input.path] : []),
             ],
             {
               maxOutputBytes: REVIEW_DIFF_PATCH_MAX_OUTPUT_BYTES,
@@ -2643,26 +2953,38 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     ]);
 
     const sources: ReviewDiffPreviewSource[] = [
-      {
-        id: "working-tree",
-        kind: "working-tree",
-        title: "Dirty worktree",
-        baseRef: "HEAD",
-        headRef: null,
-        diff: dirtyDiff,
-        diffHash: dirtyDiffHash,
-        truncated: dirtyTrackedResult.stdoutTruncated || dirtyUntracked.truncated,
-      },
-      {
-        id: "branch-range",
-        kind: "branch-range",
-        title: baseRef ? `Against ${baseRef}` : "Against base branch",
-        baseRef,
-        headRef: branch ?? "HEAD",
-        diff: baseDiff,
-        diffHash: baseDiffHash,
-        truncated: baseResult?.stdoutTruncated ?? false,
-      },
+      ...(includeWorkingTree
+        ? [
+            {
+              id: "working-tree",
+              kind: "working-tree",
+              title: "Dirty worktree",
+              baseRef: "HEAD",
+              headRef: null,
+              diff: dirtyDiff,
+              diffHash: dirtyDiffHash,
+              truncated: dirtyTrackedResult.stdoutTruncated || dirtyUntracked.truncated,
+              files: workingTreeFiles,
+              patchOmitted: !includePatch,
+            } satisfies ReviewDiffPreviewSource,
+          ]
+        : []),
+      ...(includeBranchRange
+        ? [
+            {
+              id: "branch-range",
+              kind: "branch-range",
+              title: baseRef ? `Against ${baseRef}` : "Against base branch",
+              baseRef,
+              headRef: branch ?? "HEAD",
+              diff: baseDiff,
+              diffHash: baseDiffHash,
+              truncated: baseResult?.stdoutTruncated ?? false,
+              files: branchRangeFiles,
+              patchOmitted: !includePatch,
+            } satisfies ReviewDiffPreviewSource,
+          ]
+        : []),
     ];
 
     return {
@@ -2847,7 +3169,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
           [
             ...gitDirArgs,
             "for-each-ref",
-            "--format=%(refname)%09%(committerdate:unix)%09%(symref)",
+            "--format=%(refname)%09%(committerdate:unix)%09%(symref)%09%(upstream:short)%09%(upstream:track,nobracket)",
             "refs/heads",
             "refs/remotes",
           ],
@@ -2917,13 +3239,14 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
 
     for (const line of refsResult.stdout.split("\n")) {
       if (line.length === 0) continue;
-      const [fullRefName, lastCommitRaw, symbolicTarget] = line.split("\t");
+      const [fullRefName, lastCommitRaw, symbolicTarget, upstreamRaw, trackRaw] = line.split("\t");
       if (!fullRefName || symbolicTarget) continue;
       const parsedLastCommit = Number.parseInt(lastCommitRaw ?? "0", 10);
       const lastCommit = Number.isFinite(parsedLastCommit) ? parsedLastCommit : 0;
 
       if (fullRefName.startsWith("refs/heads/")) {
         const name = fullRefName.slice("refs/heads/".length);
+        const tracking = parseUpstreamTracking(upstreamRaw, trackRaw);
         localBranches.push({
           ref: {
             name,
@@ -2931,6 +3254,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
             isRemote: false,
             isDefault: name === defaultBranch,
             worktreePath: worktreeMap.get(name) ?? null,
+            ...tracking,
           },
           lastCommit,
         });
@@ -3554,7 +3878,21 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       withListRefsInvalidation(cwd, commit(cwd, subject, body, options)),
     pushCurrentBranch: (cwd, fallbackBranch, options) =>
       withListRefsInvalidation(cwd, pushCurrentBranch(cwd, fallbackBranch, options)),
-    pullCurrentBranch: (cwd) => withListRefsInvalidation(cwd, pullCurrentBranch(cwd)),
+    pullCurrentBranch: (cwd, refName) =>
+      withListRefsInvalidation(
+        cwd,
+        Effect.suspend(() =>
+          refName === undefined
+            ? pullCurrentBranch(cwd)
+            : statusDetailsLocal(cwd).pipe(
+                Effect.flatMap((details) =>
+                  details.branch === refName
+                    ? pullCurrentBranch(cwd)
+                    : pullNamedBranch(cwd, refName),
+                ),
+              ),
+        ),
+      ),
     stagedCommitContext,
     fileDiff,
     fetchCurrentBranch,

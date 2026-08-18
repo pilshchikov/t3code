@@ -978,6 +978,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   // ------------------------------------------------------------------
   const composerEditorRef = useRef<ComposerPromptEditorHandle>(null);
   const composerFormRef = useRef<HTMLFormElement>(null);
+  // The stash menu anchors to the whole composer, so it stays put while the prompt area collapses.
+  const [composerFormElement, setComposerFormElement] = useState<HTMLFormElement | null>(null);
+  const attachComposerFormRef = useCallback((element: HTMLFormElement | null) => {
+    composerFormRef.current = element;
+    setComposerFormElement(element);
+  }, []);
   const composerSurfaceRef = useRef<HTMLDivElement>(null);
   const providerInputRejectedRef = useRef(false);
   const composerSelectLockRef = useRef(false);
@@ -1909,6 +1915,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     ],
   );
   const expandMobileComposer = useCallback(() => {
+    // Pointer-down expands before focus moves, and the following click reaches
+    // the same handler. Treat that pair as one interaction so it cannot cancel
+    // and reschedule its own focus/expansion frames.
+    if (mobileComposerExpandInFlightRef.current) {
+      return;
+    }
     if (composerBlurFrameRef.current !== null) {
       window.cancelAnimationFrame(composerBlurFrameRef.current);
       composerBlurFrameRef.current = null;
@@ -2702,11 +2714,32 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   // ------------------------------------------------------------------
   return (
     <form
-      ref={composerFormRef}
+      ref={attachComposerFormRef}
       onSubmit={submitComposer}
-      className="mx-auto w-full min-w-0 max-w-3xl"
+      className="relative mx-auto w-full min-w-0 max-w-3xl"
       data-chat-composer-form="true"
     >
+      {/* Outside the collapsing prompt area: that container clips its overflow, so the badge lost
+          its top half as soon as the composer shrank. */}
+      <ComposerStashBadge
+        count={stashQueue.length}
+        pulseKey={stashPulse.key}
+        pulsing={stashPulse.active}
+        menuOpen={isStashMenuOpen}
+        onToggleMenu={toggleStashMenu}
+      />
+
+      {isStashMenuOpen && !composerMenuOpen && !isComposerApprovalState && (
+        <ComposerCommandMenuLayer anchor={composerFormElement}>
+          <ComposerStashMenu
+            entries={stashQueue}
+            onRestore={restoreStashEntry}
+            onDelete={deleteStashEntry}
+            onClose={() => setIsStashMenuOpen(false)}
+          />
+        </ComposerCommandMenuLayer>
+      )}
+
       <div
         className={cn(
           "group rounded-[22px] p-px transition-colors duration-200",
@@ -2936,29 +2969,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             <div
               ref={setComposerMenuAnchor}
               className={cn(
-                "relative px-3 pb-2 sm:px-4",
-                hasComposerHeader ? "pt-2.5 sm:pt-3" : "pt-3.5 sm:pt-4",
+                "relative px-3 pb-1.5 sm:px-4",
+                hasComposerHeader ? "pt-2 sm:pt-2.5" : "pt-2.5 sm:pt-3",
               )}
             >
-              <ComposerStashBadge
-                count={stashQueue.length}
-                pulseKey={stashPulse.key}
-                pulsing={stashPulse.active}
-                menuOpen={isStashMenuOpen}
-                onToggleMenu={toggleStashMenu}
-              />
-
-              {isStashMenuOpen && !composerMenuOpen && !isComposerApprovalState && (
-                <ComposerCommandMenuLayer anchor={composerMenuAnchor}>
-                  <ComposerStashMenu
-                    entries={stashQueue}
-                    onRestore={restoreStashEntry}
-                    onDelete={deleteStashEntry}
-                    onClose={() => setIsStashMenuOpen(false)}
-                  />
-                </ComposerCommandMenuLayer>
-              )}
-
               {composerMenuOpen && !isComposerApprovalState && (
                 <ComposerCommandMenuLayer anchor={composerMenuAnchor}>
                   <ComposerCommandMenu

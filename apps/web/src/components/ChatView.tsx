@@ -482,6 +482,11 @@ function eventPathContainsSelector(event: Event, selector: string): boolean {
   return path.some((target) => target instanceof Element && target.closest(selector));
 }
 
+/** A binding a text field would otherwise type, such as the section sign on a Mac ISO layout. */
+function isBarePrintableShortcutEvent(event: KeyboardEvent): boolean {
+  return !event.metaKey && !event.ctrlKey && [...event.key].length === 1;
+}
+
 function shouldTypeToFocusComposer(event: KeyboardEvent): boolean {
   if (event.defaultPrevented || event.isComposing) return false;
   if (event.metaKey || event.ctrlKey || event.altKey) return false;
@@ -1364,6 +1369,8 @@ function ChatViewContent(props: ChatViewProps) {
   const [maximizedRightPanelThreadKey, setMaximizedRightPanelThreadKey] = useState<string | null>(
     null,
   );
+  const globalShortcutKeyDownRef = useRef<((event: globalThis.KeyboardEvent) => void) | null>(null);
+  const globalShortcutBeforeInputRef = useRef<((event: InputEvent) => void) | null>(null);
   const [respondingRequestIds, setRespondingRequestIds] = useState<ApprovalRequestId[]>([]);
   const [respondingUserInputRequestIds, setRespondingUserInputRequestIds] = useState<
     ApprovalRequestId[]
@@ -1661,8 +1668,10 @@ function ChatViewContent(props: ChatViewProps) {
   const previewPanelOpen = activeRightPanelKind === "preview" && isPreviewSupportedInRuntime();
   const rightPanelOpen = rightPanelState.isOpen;
   const canMaximizeRightPanel = rightPanelOpen && !shouldUseRightPanelSheet;
+  // Keyed by the same thread as the panel state itself; keying it by the route desynced the
+  // maximize flag from the panel whenever a draft became a thread.
   const rightPanelMaximized =
-    canMaximizeRightPanel && maximizedRightPanelThreadKey === routeThreadKey;
+    canMaximizeRightPanel && maximizedRightPanelThreadKey === activeThreadKey;
   const inlineRightPanelOwnsTitleBar = rightPanelOpen && !shouldUseRightPanelSheet;
 
   useEffect(() => {
@@ -3503,11 +3512,11 @@ function ChatViewContent(props: ChatViewProps) {
     useRightPanelStore.getState().toggleVisibility(activeThreadRef);
   }, [activeThreadRef, closePreviewPanel, rightPanelOpen]);
   const toggleRightPanelMaximized = useCallback(() => {
-    if (!canMaximizeRightPanel) return;
+    if (!canMaximizeRightPanel || !activeThreadKey) return;
     setMaximizedRightPanelThreadKey((threadKey) =>
-      threadKey === routeThreadKey ? null : routeThreadKey,
+      threadKey === activeThreadKey ? null : activeThreadKey,
     );
-  }, [canMaximizeRightPanel, routeThreadKey]);
+  }, [activeThreadKey, canMaximizeRightPanel]);
   const cleanupRightPanelSurfaces = useCallback(
     (surfaces: readonly RightPanelSurface[]) => {
       if (!activeThreadRef) return;
@@ -3728,6 +3737,12 @@ function ChatViewContent(props: ChatViewProps) {
   const clearTimelineScrollCollapse = useCallback(() => {
     setTimelineScrolledThreadKey(null);
   }, []);
+  useEffect(() => {
+    // Collapse is a transient reading gesture, not thread state. In particular,
+    // returning to a thread must not restore a collapse armed during an earlier
+    // visit, and list positioning during thread open must start from expanded.
+    setTimelineScrolledThreadKey(null);
+  }, [routeThreadKey]);
   const pendingTimelineAnchorRef = useRef<MessageId | null>(null);
   const positionedTimelineAnchorRef = useRef<MessageId | null>(null);
   const settledTimelineAnchorRef = useRef<MessageId | null>(null);
@@ -3837,6 +3852,10 @@ function ChatViewContent(props: ChatViewProps) {
         const handleManualNavigation = () => {
           cancelTimelineLiveFollowForUserNavigationRef.current();
         };
+        const handleManualCollapseNavigation = () => {
+          markTimelineScrolled();
+          handleManualNavigation();
+        };
         // The gestures below must only break follow when they can actually
         // move the viewport away from the live edge. Follow now gates
         // LegendList's maintainScrollAtEnd, so a spurious break while pinned
@@ -3855,7 +3874,13 @@ function ChatViewContent(props: ChatViewProps) {
         // following either does nothing (at the end) or moves toward it.
         const handleWheel = (event: WheelEvent) => {
           if (event.deltaY < 0 && contentScrollsUp()) {
-            handleManualNavigation();
+            handleManualCollapseNavigation();
+            return;
+          }
+          // Scrolling back down is a request for the composer, wherever the viewport currently
+          // sits. Waiting for the live edge left the input collapsed through a long scroll back.
+          if (event.deltaY > 0) {
+            clearTimelineScrollCollapse();
           }
         };
         // Touch direction isn't observable here (touchmove fires on any
@@ -3864,7 +3889,7 @@ function ChatViewContent(props: ChatViewProps) {
         // gets there within its first few events and later touchmoves break.
         const handleTouchMove = () => {
           if (viewportIsAwayFromEnd()) {
-            handleManualNavigation();
+            handleManualCollapseNavigation();
           }
         };
         // Scrollbar drags produce no wheel/touch events; they are the only
@@ -3875,7 +3900,7 @@ function ChatViewContent(props: ChatViewProps) {
         const handlePointerDown = (event: PointerEvent) => {
           if (event.target === scrollNode) {
             if (contentScrollsUp()) {
-              handleManualNavigation();
+              handleManualCollapseNavigation();
             }
             return;
           }
@@ -3892,25 +3917,17 @@ function ChatViewContent(props: ChatViewProps) {
             case "Home":
             case "ArrowUp":
               if (contentScrollsUp()) {
-                handleManualNavigation();
+                handleManualCollapseNavigation();
               }
+              break;
+            case "PageDown":
+            case "End":
+            case "ArrowDown":
+              clearTimelineScrollCollapse();
               break;
             default:
               break;
           }
-        };
-        // LegendList's state is useful for anchoring, but its scroll callback
-        // can be coalesced while a trackpad gesture is in flight. Read the
-        // actual scroll container as well so the composer collapses on the
-        // first real upward movement.
-        let previousScrollTop: number | null = null;
-        const handleScroll = () => {
-          const scrollTop = scrollNode.scrollTop;
-          if (previousScrollTop !== null && scrollTop < previousScrollTop - 1) {
-            markTimelineScrolled();
-            handleManualNavigation();
-          }
-          previousScrollTop = scrollTop;
         };
         scrollNode.addEventListener("wheel", handleWheel, {
           passive: true,
@@ -3922,15 +3939,11 @@ function ChatViewContent(props: ChatViewProps) {
           passive: true,
         });
         scrollNode.addEventListener("keydown", handleKeyDown);
-        scrollNode.addEventListener("scroll", handleScroll, {
-          passive: true,
-        });
         removeListeners = () => {
           scrollNode.removeEventListener("wheel", handleWheel);
           scrollNode.removeEventListener("touchmove", handleTouchMove);
           scrollNode.removeEventListener("pointerdown", handlePointerDown);
           scrollNode.removeEventListener("keydown", handleKeyDown);
-          scrollNode.removeEventListener("scroll", handleScroll);
         };
       });
     };
@@ -3944,6 +3957,7 @@ function ChatViewContent(props: ChatViewProps) {
     };
   }, [
     activeThread?.id,
+    clearTimelineScrollCollapse,
     composerOverlayHeight,
     markTimelineScrolled,
     timelineRealContentOverflowsViewport,
@@ -4756,26 +4770,96 @@ function ChatViewContent(props: ChatViewProps) {
     terminalUiOpenByThreadRef.current[activeThreadKey] = current;
   }, [activeThreadKey, focusComposer, terminalUiState.terminalOpen]);
 
+  // Registered once, and dispatched through refs. Re-registering on every dependency change moved
+  // this listener behind ones mounted later (the right-panel launcher, the composer), which is why
+  // a configured shortcut sometimes reached the panel and sometimes did not.
   useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) =>
+      globalShortcutKeyDownRef.current?.(event);
+    const onBeforeInput = (event: InputEvent) => globalShortcutBeforeInputRef.current?.(event);
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("beforeinput", onBeforeInput, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("beforeinput", onBeforeInput, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    const getShortcutContext = () => ({
+      terminalFocus: getTerminalFocusOwner() !== null,
+      terminalOpen: Boolean(terminalUiState.terminalOpen),
+      modelPickerOpen: composerRef.current?.isModelPickerOpen() ?? false,
+    });
+
+    const beforeInputHandler = (event: InputEvent) => {
+      // macOS can deliver keys such as the section sign to an editable surface as text input
+      // without a matching keydown shape. Claim that final insertion event as a fallback so a
+      // character bound to a command never lands in the text, whatever has focus and whether or
+      // not a thread is open.
+      if (
+        isCommandPaletteOpen() ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.inputType !== "insertText" ||
+        event.data === null ||
+        [...event.data].length !== 1
+      ) {
+        return;
+      }
+      const command = resolveShortcutCommand(
+        {
+          key: event.data,
+          metaKey: false,
+          ctrlKey: false,
+          shiftKey: false,
+          altKey: false,
+        },
+        keybindings,
+        { context: getShortcutContext() },
+      );
+      if (!command) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      if (command === "rightPanel.toggle") {
+        toggleRightPanel();
+      } else if (command === "terminal.toggle") {
+        toggleTerminalVisibility();
+      }
+    };
+
     const handler = (event: globalThis.KeyboardEvent) => {
       if (preventRepeatedTerminalCloseShortcut(event, keybindings)) {
         event.stopPropagation();
         return;
       }
-      if (!activeThreadId || isCommandPaletteOpen()) {
+      if (isCommandPaletteOpen()) {
         return;
       }
       const terminalFocusOwner = getTerminalFocusOwner();
-      if (event.defaultPrevented && terminalFocusOwner === null) {
+      const shortcutContext = getShortcutContext();
+      // Resolve configured shortcuts before type-to-focus. Unmodified printable bindings such as
+      // § belong to the command system and must never be inserted into the composer first.
+      const command = resolveShortcutCommand(event, keybindings, {
+        context: shortcutContext,
+      });
+      if (!activeThreadId) {
+        // A draft has no thread to act on, but a bare printable binding still must not reach the
+        // composer as text.
+        if (command && isBarePrintableShortcutEvent(event)) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
         return;
       }
-      const shortcutContext = {
-        terminalFocus: terminalFocusOwner !== null,
-        terminalOpen: Boolean(terminalUiState.terminalOpen),
-        modelPickerOpen: composerRef.current?.isModelPickerOpen() ?? false,
-      };
+      if (event.defaultPrevented && terminalFocusOwner === null && !command) {
+        return;
+      }
 
       if (
+        !command &&
         !shortcutContext.terminalFocus &&
         !shortcutContext.modelPickerOpen &&
         shouldTypeToFocusComposer(event)
@@ -4787,9 +4871,6 @@ function ChatViewContent(props: ChatViewProps) {
         }
       }
 
-      const command = resolveShortcutCommand(event, keybindings, {
-        context: shortcutContext,
-      });
       if (!command) return;
 
       if (command === "terminal.toggle") {
@@ -4834,7 +4915,7 @@ function ChatViewContent(props: ChatViewProps) {
         // panel to open before the shortcut does anything reads as a dropped key.
         if (!rightPanelOpen) {
           toggleRightPanel();
-          setMaximizedRightPanelThreadKey(routeThreadKey);
+          setMaximizedRightPanelThreadKey(activeThreadKey);
           return;
         }
         toggleRightPanelMaximized();
@@ -4917,8 +4998,12 @@ function ChatViewContent(props: ChatViewProps) {
       event.stopPropagation();
       void runProjectScript(script);
     };
-    window.addEventListener("keydown", handler, true);
-    return () => window.removeEventListener("keydown", handler, true);
+    globalShortcutKeyDownRef.current = handler;
+    globalShortcutBeforeInputRef.current = beforeInputHandler;
+    return () => {
+      globalShortcutKeyDownRef.current = null;
+      globalShortcutBeforeInputRef.current = null;
+    };
   }, [
     activeProject,
     activeRightPanelSurface,
@@ -4938,7 +5023,7 @@ function ChatViewContent(props: ChatViewProps) {
     toggleRightPanel,
     toggleRightPanelMaximized,
     rightPanelOpen,
-    routeThreadKey,
+    activeThreadKey,
     shouldUseRightPanelSheet,
     activeFileEnvironmentId,
     activeFileWorkspaceRoot,
@@ -6495,7 +6580,6 @@ function ChatViewContent(props: ChatViewProps) {
                 liveFollowEnabled={timelineLiveFollowEnabled}
                 onIsAtEndChange={onIsAtEndChange}
                 onManualNavigation={cancelTimelineLiveFollowForUserNavigation}
-                onTimelineScroll={markTimelineScrolled}
                 hideEmptyPlaceholder={isDraftHeroState || threadDetailLoading}
                 topFadeEnabled={!hasTimelineTopBanner}
                 loadEarlier={loadEarlierTurns}

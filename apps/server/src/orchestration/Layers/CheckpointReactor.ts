@@ -556,13 +556,14 @@ const make = Effect.gen(function* () {
     }
   });
 
-  // A `git checkout` run inside a thread's dedicated worktree (by an agent or
-  // the user) bypasses T3's commands, so the thread's recorded branch goes
-  // stale. Since #4460 the client only attributes PR state to a thread when
-  // the checked-out branch equals the recorded one, so stale metadata silently
-  // orphans the thread's PR. Follow the drift here: adopt the checked-out
-  // branch as the thread's branch, but only when the worktree belongs to
-  // exactly this thread — for shared cwds the strict matching is the point.
+  // A `git checkout` run in the thread's working directory (by an agent or the user) bypasses
+  // T3's commands, so the thread's recorded branch goes stale. Since #4460 the client only
+  // attributes PR state to a thread when the checked-out branch equals the recorded one, so stale
+  // metadata silently orphans the thread's PR. Follow the drift here: adopt the checked-out branch
+  // as the thread's branch. A dedicated worktree must belong to exactly this thread before we
+  // adopt anything, because a shared worktree is what the strict matching is there to catch; a
+  // thread working in the project checkout has no such ambiguity — the branch it finished the turn
+  // on is where its work landed.
   const followWorktreeBranchDrift = Effect.fn("followWorktreeBranchDrift")(function* (input: {
     readonly threadId: ThreadId;
     readonly cwd: string;
@@ -583,19 +584,22 @@ const make = Effect.gen(function* () {
         !thread ||
         thread.branch === null ||
         thread.branch === checkedOutBranch ||
-        thread.worktreePath === null ||
-        thread.worktreePath !== input.cwd ||
         isTemporaryWorktreeBranch(thread.branch)
       ) {
         return;
       }
 
-      const shell = yield* projectionSnapshotQuery.getShellSnapshot();
-      const worktreeIsShared = shell.threads.some(
-        (other) => other.id !== thread.id && other.worktreePath === thread.worktreePath,
-      );
-      if (worktreeIsShared) {
-        return;
+      if (thread.worktreePath !== null) {
+        if (thread.worktreePath !== input.cwd) {
+          return;
+        }
+        const shell = yield* projectionSnapshotQuery.getShellSnapshot();
+        const worktreeIsShared = shell.threads.some(
+          (other) => other.id !== thread.id && other.worktreePath === thread.worktreePath,
+        );
+        if (worktreeIsShared) {
+          return;
+        }
       }
 
       // expectedBranch makes this a compare-and-swap in the decider: if the

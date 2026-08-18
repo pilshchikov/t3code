@@ -607,6 +607,38 @@ describe("CheckpointReactor", () => {
     expect(thread?.branch).toBe("t3code/original-branch");
   });
 
+  it("adopts a drifted checkout for a thread working in the project checkout", async () => {
+    const harness = await createHarness({
+      seedFilesystemCheckpoints: false,
+      threadWorktreePath: null,
+      threadBranch: "t3code/original-branch",
+      localStatusRefName: "t3code/moved-by-agent",
+    });
+
+    harness.provider.emit({
+      type: "turn.completed",
+      eventId: EventId.make("evt-turn-completed-branch-drift-checkout"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: "2026-01-01T00:00:00.000Z",
+      threadId: ThreadId.make("thread-1"),
+      turnId: asTurnId("turn-branch-drift-checkout"),
+      payload: { state: "completed" },
+    });
+
+    await harness.drain();
+    await waitForEvent(
+      harness.engine,
+      (event) =>
+        event.type === "thread.meta-updated" &&
+        (event as unknown as { payload: { branch?: string } }).payload.branch ===
+          "t3code/moved-by-agent",
+    );
+
+    const snapshot = await harness.readModel();
+    const thread = snapshot.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
+    expect(thread?.branch).toBe("t3code/moved-by-agent");
+  });
+
   it("does not adopt a temporary placeholder checkout as the thread branch", async () => {
     const harness = await createHarness({
       seedFilesystemCheckpoints: false,

@@ -300,3 +300,31 @@ export function shouldIncludeBranchPickerItem(input: {
     lowerItemValue.includes(sanitizedQuery)
   );
 }
+
+/**
+ * The brief handed to a fresh thread when a fast-forward is refused. It states the facts and the
+ * options and stops there: which way to reconcile a diverged branch is a judgement call about the
+ * work, and the agent has the repository in front of it.
+ */
+export function buildBranchConflictPrompt(input: {
+  refName: string;
+  upstreamRef: string | null;
+  aheadCount: number | null;
+  behindCount: number | null;
+  detail: string | null;
+}): string {
+  const upstream = input.upstreamRef ?? "its upstream";
+  const counts = [
+    input.aheadCount === null ? null : `${input.aheadCount} local commit(s) not on ${upstream}`,
+    input.behindCount === null ? null : `${input.behindCount} commit(s) on ${upstream} not local`,
+  ].filter((entry): entry is string => entry !== null);
+
+  return [
+    `\`${input.refName}\` and \`${upstream}\` have diverged, so \`git pull --ff-only\` was refused.`,
+    counts.length > 0 ? `There are ${counts.join(", and ")}.` : null,
+    input.detail === null ? null : `Git reported:\n\n\`\`\`\n${input.detail}\n\`\`\``,
+    "Please look at both sides, tell me whether a rebase or a merge fits this history better, and carry it out. Walk me through every conflict you have to resolve and why you picked the resolution you did. Do not force-push anything.",
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n\n");
+}

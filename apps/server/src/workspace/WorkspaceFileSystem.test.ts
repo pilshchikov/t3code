@@ -1,9 +1,13 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it, describe, expect } from "@effect/vitest";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Stream from "effect/Stream";
 
 import * as ServerConfig from "../config.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
@@ -187,6 +191,36 @@ it.layer(TestLayer, { excludeTestServices: true })("WorkspaceFileSystemLive", (i
         });
         expect(error.cause).toBeInstanceOf(Error);
         expect((error.cause as NodeJS.ErrnoException).code).toBe("ENOENT");
+      }),
+    );
+  });
+
+  describe("watchFile", () => {
+    it.effect("emits an invalidation when an externally-written file changes", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        yield* writeTextFile(cwd, "notes/status.md", "before\n");
+        const watcherReady = yield* Deferred.make<void>();
+        const eventsFiber = yield* workspaceFileSystem
+          .watchFile({ cwd, relativePath: "notes/status.md" })
+          .pipe(
+            Stream.tap((event) =>
+              event.revision === 0 ? Deferred.succeed(watcherReady, undefined) : Effect.void,
+            ),
+            Stream.take(2),
+            Stream.runCollect,
+            Effect.forkChild,
+          );
+
+        yield* Deferred.await(watcherReady);
+        yield* writeTextFile(cwd, "notes/status.md", "after\n");
+        const events = yield* Fiber.join(eventsFiber).pipe(Effect.timeout(Duration.seconds(5)));
+
+        expect(Array.from(events)).toEqual([
+          { relativePath: "notes/status.md", revision: 0 },
+          { relativePath: "notes/status.md", revision: 1 },
+        ]);
       }),
     );
   });

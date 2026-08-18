@@ -124,6 +124,7 @@ import {
   ProjectReadFileError,
   ProjectReadFileInput,
   ProjectReadFileResult,
+  ProjectFileChangedEvent,
   ProjectSearchContentsError,
   ProjectSearchContentsInput,
   ProjectSearchContentsResult,
@@ -208,6 +209,7 @@ import {
   ResourceTelemetrySnapshot,
 } from "./resourceTelemetry.ts";
 import { UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
+import { AccountLimitsSummary } from "./accountLimits.ts";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings.ts";
 import {
   SourceControlCloneRepositoryInput,
@@ -233,6 +235,7 @@ export const WS_METHODS = {
   projectsRemove: "projects.remove",
   projectsListEntries: "projects.listEntries",
   projectsReadFile: "projects.readFile",
+  projectsWatchFile: "projects.watchFile",
   projectsDeleteEntry: "projects.deleteEntry",
   projectsSearchCode: "projects.searchCode",
   projectsSearchContents: "projects.searchContents",
@@ -325,6 +328,7 @@ export const WS_METHODS = {
   serverReportHostPowerState: "server.reportHostPowerState",
   serverGetBackgroundPolicy: "server.getBackgroundPolicy",
   serverGetUsageSummary: "server.getUsageSummary",
+  serverGetAccountLimits: "server.getAccountLimits",
 
   // Cloud environment methods
   cloudGetRelayClientStatus: "cloud.getRelayClientStatus",
@@ -484,6 +488,12 @@ export const WsServerGetUsageSummaryRpc = Rpc.make(WS_METHODS.serverGetUsageSumm
   payload: UsageSummaryInput,
   success: UsageSummary,
   error: Schema.Union([EnvironmentAuthorizationError, UsageReadError]),
+});
+
+export const WsServerGetAccountLimitsRpc = Rpc.make(WS_METHODS.serverGetAccountLimits, {
+  payload: Schema.Struct({}),
+  success: AccountLimitsSummary,
+  error: EnvironmentAuthorizationError,
 });
 
 export const WsServerSignalProcessRpc = Rpc.make(WS_METHODS.serverSignalProcess, {
@@ -697,6 +707,13 @@ export const WsProjectsReadFileRpc = Rpc.make(WS_METHODS.projectsReadFile, {
   payload: ProjectReadFileInput,
   success: ProjectReadFileResult,
   error: Schema.Union([ProjectReadFileError, EnvironmentAuthorizationError]),
+});
+
+export const WsProjectsWatchFileRpc = Rpc.make(WS_METHODS.projectsWatchFile, {
+  payload: ProjectReadFileInput,
+  success: ProjectFileChangedEvent,
+  error: Schema.Union([ProjectReadFileError, EnvironmentAuthorizationError]),
+  stream: true,
 });
 
 export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
@@ -1147,6 +1164,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetResourceTelemetryHistoryRpc,
   WsServerRetryResourceTelemetryRpc,
   WsServerGetUsageSummaryRpc,
+  WsServerGetAccountLimitsRpc,
   WsServerSignalProcessRpc,
   WsServerReportClientActivityRpc,
   WsServerReportHostPowerStateRpc,
@@ -1174,6 +1192,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsSourceControlPublishRepositoryRpc,
   WsProjectsListEntriesRpc,
   WsProjectsReadFileRpc,
+  WsProjectsWatchFileRpc,
   WsSessionsListResumableRpc,
   WsProjectsSearchCodeRpc,
   WsProjectsDeleteEntryRpc,

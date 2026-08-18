@@ -112,7 +112,14 @@ function matchesShortcut(
   shortcut: KeybindingShortcut,
   platform = navigator.platform,
 ): boolean {
-  if (!matchesShortcutModifiers(event, shortcut, platform)) return false;
+  // On some macOS keyboard layouts the dedicated section-sign key arrives with Option asserted.
+  // Settings intentionally records that physical key as plain `§`, so runtime matching must make
+  // the same normalization or the composer wins before the configured command can run.
+  const modifierEvent =
+    shortcut.key === "§" && normalizeEventKey(event.key) === "§"
+      ? { ...event, altKey: false }
+      : event;
+  if (!matchesShortcutModifiers(modifierEvent, shortcut, platform)) return false;
   return resolveEventKeys(event).has(shortcut.key);
 }
 

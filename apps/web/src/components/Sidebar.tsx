@@ -185,6 +185,7 @@ import {
   type ComposerThreadDraftState,
   type DraftSessionState,
 } from "../composerDraftStore";
+import { applySidebarThreadOrder, useSidebarThreadOrderStore } from "../sidebarThreadOrderStore";
 
 // Settled-tail paging: recent history is the common lookup; the deep tail
 // stays behind an explicit Show more.
@@ -437,14 +438,14 @@ function SnoozePopoverButton(props: {
 // constraint keeps plain clicks working, and we skip dnd-kit's aria
 // attributes since there is no keyboard sensor and the card body already
 // carries its own button semantics.
-type SortablePinnedRowBag = Pick<
+type SortableThreadRowBag = Pick<
   ReturnType<typeof useSortable>,
   "listeners" | "setNodeRef" | "transform" | "transition" | "isDragging"
 >;
 
-function SortablePinnedThreadRow(props: {
+function SortableThreadRow(props: {
   id: string;
-  children: (bag: SortablePinnedRowBag) => ReactNode;
+  children: (bag: SortableThreadRowBag) => ReactNode;
 }) {
   const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: props.id,
@@ -703,7 +704,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   // Present only on pinned cards whose server supports reordering: dnd-kit
   // sortable bag applied to the card root so the whole card drags (the
   // pointer sensor's distance constraint keeps plain clicks working).
-  sortable?: SortablePinnedRowBag | undefined;
+  sortable?: SortableThreadRowBag | undefined;
   // Compact wake countdown ("2h") for rows in the snoozed shelf.
   snoozeWakeLabelText: string | null;
   // When a snooze ended (timer or early wake); drives the Woke pill until
@@ -2198,9 +2199,47 @@ export default function Sidebar() {
     return routeThread === undefined ? [] : [routeThread];
   }, [routeThreadKey, snoozedShelfExpanded, snoozedThreads]);
 
+  // Manual arrangement of the inbox rows. Client-local and purely visual, so it never writes to
+  // the server the way a pin reorder does.
+  const manualThreadOrder = useSidebarThreadOrderStore((state) => state.order);
+  const setManualThreadOrder = useSidebarThreadOrderStore((state) => state.setOrder);
+  const orderedActiveThreads = useMemo(
+    () =>
+      applySidebarThreadOrder({
+        items: activeThreads,
+        order: manualThreadOrder,
+        getId: (thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+      }),
+    [activeThreads, manualThreadOrder],
+  );
+  const activeThreadDragKeys = useMemo(
+    () =>
+      orderedActiveThreads.map((thread) =>
+        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+      ),
+    [orderedActiveThreads],
+  );
+  const handleActiveDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const activeKey = String(event.active.id);
+      const overKey = event.over === null ? null : String(event.over.id);
+      if (overKey === null || activeKey === overKey) return;
+      const fromIndex = activeThreadDragKeys.indexOf(activeKey);
+      const toIndex = activeThreadDragKeys.indexOf(overKey);
+      if (fromIndex === -1 || toIndex === -1) return;
+      setManualThreadOrder(arrayMove([...activeThreadDragKeys], fromIndex, toIndex));
+    },
+    [activeThreadDragKeys, setManualThreadOrder],
+  );
+
   const orderedThreads = useMemo(
-    () => [...pinnedThreads, ...activeThreads, ...visibleSnoozedThreads, ...renderedSettledThreads],
-    [pinnedThreads, activeThreads, visibleSnoozedThreads, renderedSettledThreads],
+    () => [
+      ...pinnedThreads,
+      ...orderedActiveThreads,
+      ...visibleSnoozedThreads,
+      ...renderedSettledThreads,
+    ],
+    [pinnedThreads, orderedActiveThreads, visibleSnoozedThreads, renderedSettledThreads],
   );
   const orderedThreadKeys = useMemo(
     () =>
@@ -3608,7 +3647,7 @@ export default function Sidebar() {
                   const renderThreadRow = (
                     thread: EnvironmentThreadShell,
                     section: "pinned" | "active" | "snoozed" | "settled",
-                    sortable?: SortablePinnedRowBag,
+                    sortable?: SortableThreadRowBag,
                   ) => {
                     const threadKey = scopedThreadKey(
                       scopeThreadRef(thread.environmentId, thread.id),
@@ -3747,9 +3786,9 @@ export default function Sidebar() {
                             return renderThreadRow(thread, "pinned");
                           }
                           return (
-                            <SortablePinnedThreadRow key={threadKey} id={threadKey}>
+                            <SortableThreadRow key={threadKey} id={threadKey}>
                               {(bag) => renderThreadRow(thread, "pinned", bag)}
-                            </SortablePinnedThreadRow>
+                            </SortableThreadRow>
                           );
                         })}
                       </SortableContext>
@@ -3765,8 +3804,32 @@ export default function Sidebar() {
                       />,
                     );
                   }
-                  for (const thread of activeThreads) {
-                    items.push(renderThreadRow(thread, "active"));
+                  if (orderedActiveThreads.length > 0) {
+                    items.push(
+                      <DndContext
+                        key="active-dnd"
+                        sensors={pinnedDndSensors}
+                        collisionDetection={closestCenter}
+                        modifiers={[restrictToVerticalAxis, restrictToFirstScrollableAncestor]}
+                        onDragEnd={handleActiveDragEnd}
+                      >
+                        <SortableContext
+                          items={activeThreadDragKeys}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          {orderedActiveThreads.map((thread) => {
+                            const threadKey = scopedThreadKey(
+                              scopeThreadRef(thread.environmentId, thread.id),
+                            );
+                            return (
+                              <SortableThreadRow key={threadKey} id={threadKey}>
+                                {(bag) => renderThreadRow(thread, "active", bag)}
+                              </SortableThreadRow>
+                            );
+                          })}
+                        </SortableContext>
+                      </DndContext>,
+                    );
                   }
                   // Snoozed shelf: between the inbox and Settled — out of the
                   // way, never gone. The header always renders while anything

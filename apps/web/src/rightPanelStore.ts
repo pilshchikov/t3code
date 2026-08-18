@@ -238,6 +238,21 @@ const upsertSurface = (
   activeSurfaceId: activate ? surface.id : current.activeSurfaceId,
 });
 
+/**
+ * Reopening a panel whose tabs were all closed used to leave `isOpen` true with nothing to show,
+ * so the toggle looked dead until the user opened a tab by hand. Seed the Files surface instead.
+ */
+const openThreadPanel = (current: ThreadRightPanelState): ThreadRightPanelState =>
+  current.surfaces.length === 0
+    ? upsertSurface(current, singletonSurface("files"))
+    : {
+        ...current,
+        isOpen: true,
+        activeSurfaceId: current.surfaces.some((surface) => surface.id === current.activeSurfaceId)
+          ? current.activeSurfaceId
+          : (current.surfaces.at(-1)?.id ?? null),
+      };
+
 const updateThread = (
   byThreadKey: Record<string, ThreadRightPanelState>,
   threadKey: string,
@@ -629,7 +644,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
       show: (ref) =>
         set((state) => ({
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) =>
-            current.isOpen ? current : { ...current, isOpen: true },
+            current.isOpen ? current : openThreadPanel(current),
           ),
         })),
       close: (ref) =>
@@ -640,10 +655,9 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       toggleVisibility: (ref) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => ({
-            ...current,
-            isOpen: !current.isOpen,
-          })),
+          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) =>
+            current.isOpen ? { ...current, isOpen: false } : openThreadPanel(current),
+          ),
         })),
       toggle: (ref, kind) =>
         set((state) => ({

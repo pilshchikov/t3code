@@ -298,6 +298,8 @@ export function createVcsEnvironmentAtoms<R, E>(
       tag: WS_METHODS.vcsFetch,
       scheduler: vcsCommandScheduler,
       concurrency: vcsCommandConcurrency,
+      // A fetch is what moves every branch's ahead/behind counts, so the cached ref list has to go.
+      onSettled: invalidateRefs,
     }),
     refreshStatus: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:vcs:refresh-status",

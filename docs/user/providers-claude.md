@@ -91,6 +91,17 @@ CLAUDE_CONFIG_DIR path: ~/.claude_personal_home
 Use the email shown in Settings to confirm each provider is using the intended account. Emails are
 blurred by default; click the blurred email to reveal it.
 
+### See each account's limits separately
+
+The Usage page and the sidebar Usage hover card keep account-limit snapshots separate by Claude
+provider instance. Give the providers distinct display names, such as `Claude Personal` and
+`Claude Work`, so their 5-hour and weekly rows are easy to identify.
+
+Claude limit data is received from a running Claude session. After adding or changing a provider,
+start one session for that provider before expecting its Limits row to appear. The first snapshot
+may be labeled **No limit data yet** until Claude sends a usage response; this is expected and does
+not mean the account is unconfigured.
+
 ## Can I Switch Claude Accounts In An Existing Thread?
 
 Usually, no.

@@ -111,6 +111,7 @@ import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
 import * as ProcessResourceMonitor from "./diagnostics/ProcessResourceMonitor.ts";
 import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import * as UsageService from "./usage/UsageService.ts";
+import * as AccountLimitsService from "./usage/AccountLimitsService.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
 import * as PullRequestService from "./pullRequest/PullRequestService.ts";
 import * as SourceControlDiscovery from "./sourceControl/SourceControlDiscovery.ts";
@@ -426,6 +427,7 @@ const makeWsRpcLayer = (
       const processResourceMonitor = yield* ProcessResourceMonitor.ProcessResourceMonitor;
       const resourceTelemetry = yield* ResourceTelemetry.ResourceTelemetry;
       const usage = yield* UsageService.UsageService;
+      const accountLimits = yield* AccountLimitsService.AccountLimitsService;
       const relayClient = yield* RelayClient.RelayClient;
       const authorizationError = (requiredScope: AuthEnvironmentScope) =>
         new EnvironmentAuthorizationError({
@@ -1582,6 +1584,10 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.serverGetUsageSummary, usage.readSummary(input), {
             "rpc.aggregate": "server",
           }),
+        [WS_METHODS.serverGetAccountLimits]: (_input) =>
+          observeRpcEffect(WS_METHODS.serverGetAccountLimits, accountLimits.readSummary(), {
+            "rpc.aggregate": "server",
+          }),
         [WS_METHODS.serverRetryResourceTelemetry]: (_input) =>
           observeRpcEffect(WS_METHODS.serverRetryResourceTelemetry, resourceTelemetry.retry, {
             "rpc.aggregate": "server",
@@ -1839,6 +1845,21 @@ const makeWsRpcLayer = (
             ),
             { "rpc.aggregate": "workspace" },
           ),
+        [WS_METHODS.projectsWatchFile]: (input) =>
+          observeRpcStream(
+            WS_METHODS.projectsWatchFile,
+            workspaceFileSystem.watchFile(input).pipe(
+              Stream.mapError(
+                (cause) =>
+                  new ProjectReadFileError({
+                    ...input,
+                    ...projectFileFailureContext(cause),
+                    cause,
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "workspace" },
+          ),
         [WS_METHODS.projectsWriteFile]: (input) =>
           observeRpcEffect(
             WS_METHODS.projectsWriteFile,
@@ -1981,7 +2002,7 @@ const makeWsRpcLayer = (
         [WS_METHODS.vcsPull]: (input) =>
           observeRpcEffect(
             WS_METHODS.vcsPull,
-            gitWorkflow.pullCurrentBranch(input.cwd).pipe(
+            gitWorkflow.pullCurrentBranch(input.cwd, input.refName).pipe(
               Effect.matchCauseEffect({
                 onFailure: (cause) => Effect.failCause(cause),
                 onSuccess: (result) =>
@@ -1994,7 +2015,7 @@ const makeWsRpcLayer = (
           observeRpcEffect(
             WS_METHODS.vcsFetch,
             gitWorkflow
-              .fetchCurrentBranch(input.cwd)
+              .fetchCurrentBranch(input.cwd, ...(input.scope ? [{ scope: input.scope }] : []))
               .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
             { "rpc.aggregate": "git" },
           ),
