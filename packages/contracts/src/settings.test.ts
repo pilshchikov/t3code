@@ -307,3 +307,22 @@ describe("ServerSettingsPatch string normalization", () => {
     expect(encoded.providers?.codex?.launchArgs).toBe("--strict-config");
   });
 });
+
+describe("ClientSettings accent colour", () => {
+  it("defaults to the theme's own accent", () => {
+    expect(decodeClientSettings({}).accentColor).toBeNull();
+  });
+
+  it("accepts short and long hex", () => {
+    expect(decodeClientSettings({ accentColor: "#f0a" }).accentColor).toBe("#f0a");
+    expect(decodeClientSettings({ accentColor: "#3b6ef0" }).accentColor).toBe("#3b6ef0");
+  });
+
+  // Rejected the same way an out-of-range glass opacity is, and the runtime parses the value again
+  // before it reaches the document, so neither layer can put arbitrary CSS in a custom property.
+  it("refuses anything that is not hex", () => {
+    for (const value of ["red", "var(--x)", "#12345", "url(evil)"]) {
+      expect(() => decodeClientSettings({ accentColor: value })).toThrow();
+    }
+  });
+});

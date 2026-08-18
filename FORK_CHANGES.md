@@ -771,6 +771,23 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
   to what is already open. Collapsing the tree stays the collapse button's job.
 - Source: `apps/web/src/components/files/NativeProjectFileTree.tsx`.
 
+## A configurable app accent
+
+- Appearance takes an accent colour: eight presets or any colour from the platform picker. It drives
+  primary buttons, the focus ring, the send action and the update pill, all of which derive from
+  `--primary`. Unset by default, which leaves the stock blue exactly where it was.
+- A chosen colour keeps its hue and chroma but is pulled into the lightness band the stock accent
+  occupies, separately per appearance, since that band is what everything painted on the accent was
+  contrast-checked against. The label colour is then picked for readability on the result, so a pale
+  yellow and a deep navy both stay legible. A grey, having no hue to preserve, is placed at the
+  standard lightness rather than left to dissolve into the surface.
+- Stored as hex and parsed again at the point it reaches the document, so neither the settings file
+  nor the runtime can put arbitrary CSS into a custom property. It is written as an inline property
+  on the root element; theme palettes only ever set `--app-theme-*`, so the two do not fight, and an
+  explicit accent wins over the active theme's until it is cleared.
+- Source: `packages/contracts/src/settings.ts`, `apps/web/src/themePalette.ts`,
+  `apps/web/src/routes/__root.tsx`, `apps/web/src/components/settings/SettingsPanels.tsx`.
+
 ## Validation Notes
 
 The fork-local changes above were validated with focused server tests, the full web unit suite,

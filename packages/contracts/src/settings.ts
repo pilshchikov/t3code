@@ -63,6 +63,16 @@ export const GlassOpacity = Schema.Int.check(
 );
 export type GlassOpacity = typeof GlassOpacity.Type;
 export const DEFAULT_GLASS_OPACITY: GlassOpacity = 80;
+
+/**
+ * The app's accent, as `#rgb` or `#rrggbb`. Hex rather than any CSS colour: this value reaches the
+ * document as a custom property, and a narrow shape is what keeps a settings file from being able
+ * to inject arbitrary CSS there.
+ */
+export const AccentColorPreference = Schema.String.check(
+  Schema.isPattern(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/),
+);
+export type AccentColorPreference = typeof AccentColorPreference.Type;
 /**
  * Font size preferences, in CSS pixels. The ranges are deliberately narrow:
  * the interface size scales every rem-based dimension in the app, so the
@@ -149,6 +159,10 @@ export const ClientSettingsSchema = Schema.Struct({
   ),
   glassOpacity: GlassOpacity.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_GLASS_OPACITY)),
+  ),
+  /** Null keeps whatever the active theme says the accent is. */
+  accentColor: Schema.NullOr(AccentColorPreference).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
   ),
   fontSizeInterface: InterfaceFontSize.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_INTERFACE_FONT_SIZE)),
@@ -802,6 +816,7 @@ export const ClientSettingsPatch = Schema.Struct({
   diffIgnoreWhitespace: Schema.optionalKey(Schema.Boolean),
   environmentIdentificationMode: Schema.optionalKey(EnvironmentIdentificationMode),
   glassOpacity: Schema.optionalKey(GlassOpacity),
+  accentColor: Schema.optionalKey(Schema.NullOr(AccentColorPreference)),
   fontSizeInterface: Schema.optionalKey(InterfaceFontSize),
   fontSizePrompt: Schema.optionalKey(PromptFontSize),
   fontSizeChatMessage: Schema.optionalKey(ChatMessageFontSize),

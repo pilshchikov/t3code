@@ -1186,6 +1186,47 @@ function readableThemeForeground(background: ThemeRgbColor): ThemeRgbColor {
     : THEME_BLACK_FOREGROUND;
 }
 
+/**
+ * The stock accent, per appearance: `oklch(0.488 0.217 264)` light and `oklch(0.571 0.21 264)` dark.
+ * A chosen accent keeps its own hue and chroma but is pulled into the same lightness band, because
+ * that band is what everything painted on the accent — button labels, the focus ring against the
+ * canvas — was contrast-checked against.
+ */
+const ACCENT_LIGHTNESS_BAND = {
+  light: { standard: 0.488, min: 0.4, max: 0.6 },
+  dark: { standard: 0.571, min: 0.48, max: 0.7 },
+} as const;
+
+export interface AccentColorVariables {
+  readonly primary: string;
+  readonly primaryForeground: string;
+}
+
+/**
+ * Resolves one chosen colour into the accent pair for an appearance. Returns null when the value is
+ * not a colour at all, so a bad setting leaves the stock accent alone rather than clearing it.
+ */
+export function resolveAccentColorVariables(
+  value: string,
+  appearance: ThemeAppearance,
+): AccentColorVariables | null {
+  const parsed = parseThemeColor(value);
+  if (!parsed) return null;
+  const band = ACCENT_LIGHTNESS_BAND[appearance];
+  const lightness =
+    parsed.color.C < 0.02
+      ? // A grey has no hue to preserve; place it at the standard lightness so it still reads as
+        // a deliberate accent rather than as part of the surface.
+        band.standard
+      : Math.min(band.max, Math.max(band.min, parsed.color.L));
+  const primary: ThemeOklch = { L: lightness, C: parsed.color.C, h: parsed.color.h };
+  const primaryRgb = themeOklchToRgb(primary);
+  return {
+    primary: formatOklchThemeColor(primary),
+    primaryForeground: themeRgbToThemeColor(readableThemeForeground(primaryRgb)),
+  };
+}
+
 function readableThemeText(
   background: ThemeRgbColor,
   foreground: ThemeRgbColor,

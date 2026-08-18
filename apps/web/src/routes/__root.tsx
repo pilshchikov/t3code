@@ -37,7 +37,8 @@ import {
   selectProjectGroupingSettings,
 } from "../logicalProject";
 import { useUiStateStore } from "../uiStateStore";
-import { syncBrowserChromeTheme } from "../hooks/useTheme";
+import { syncBrowserChromeTheme, useTheme } from "../hooks/useTheme";
+import { resolveAccentColorVariables } from "../themePalette";
 import { configureClientTracing } from "../observability/clientTracing";
 import { resolveInitialServerAuthGateState } from "../environments/primary";
 import { hasHostedPairingRequest, isHostedStaticApp } from "../hostedPairing";
@@ -131,6 +132,7 @@ function RootRouteView() {
       <AnchoredToastProvider>
         <DocumentTitleSync />
         <GlassAppearanceSync />
+        <AccentAppearanceSync />
         <FontAppearanceSync />
         {primaryEnvironmentAuthenticated ? <AuthenticatedTracingBootstrap /> : null}
         <RelayClientInstallDialog />
@@ -156,6 +158,31 @@ function GlassAppearanceSync() {
   useEffect(() => {
     document.documentElement.style.setProperty("--glass-opacity", `${glassOpacity}%`);
   }, [glassOpacity]);
+
+  return null;
+}
+
+/**
+ * The chosen accent, written straight onto the document. Theme palettes only ever set
+ * `--app-theme-*` custom properties, so an inline `--primary` here survives every theme change and
+ * a null setting simply hands the accent back to whichever theme is active.
+ */
+function AccentAppearanceSync() {
+  const accentColor = useClientSettings((settings) => settings.accentColor);
+  const { resolvedTheme } = useTheme();
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const variables =
+      accentColor === null ? null : resolveAccentColorVariables(accentColor, resolvedTheme);
+    if (variables === null) {
+      root.style.removeProperty("--primary");
+      root.style.removeProperty("--primary-foreground");
+      return;
+    }
+    root.style.setProperty("--primary", variables.primary);
+    root.style.setProperty("--primary-foreground", variables.primaryForeground);
+  }, [accentColor, resolvedTheme]);
 
   return null;
 }

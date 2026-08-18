@@ -77,7 +77,7 @@ import {
   sortProviderInstanceEntries,
 } from "../../providerInstances";
 import { ensureLocalApi, readLocalApi } from "../../localApi";
-import { isMacPlatform } from "../../lib/utils";
+import { cn, isMacPlatform } from "../../lib/utils";
 import { primaryServerObservabilityAtom, primaryServerProvidersAtom } from "../../state/server";
 import { useProjects } from "../../state/entities";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
@@ -498,6 +498,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.sidebarAutoSettleOnMerge !== DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge
         ? ["Auto-settle finished threads"]
         : []),
+      ...(settings.accentColor !== DEFAULT_UNIFIED_SETTINGS.accentColor ? ["Accent colour"] : []),
       ...(settings.wordWrap !== DEFAULT_UNIFIED_SETTINGS.wordWrap ? ["Word wrap"] : []),
       ...getChangedTypographySettingLabels(settings),
       ...(settings.diffIgnoreWhitespace !== DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace
@@ -553,6 +554,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.fontSizeInterface,
       settings.fontSizePrompt,
       settings.fontSizeTerminal,
+      settings.accentColor,
       settings.glassOpacity,
       settings.enableLegacyTokenStreaming,
       settings.enableProviderUpdateChecks,
@@ -631,6 +633,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       return;
     }
     updateSettings({
+      accentColor: DEFAULT_UNIFIED_SETTINGS.accentColor,
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       wordWrap: DEFAULT_UNIFIED_SETTINGS.wordWrap,
       diffIgnoreWhitespace: DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace,
@@ -948,6 +951,23 @@ function BackgroundActivityAdvancedDialog({
   );
 }
 
+/**
+ * Accent presets. Hues spread far enough apart to be told apart at swatch size; the exact lightness
+ * matters less than it looks, since the theme pulls a chosen colour into its own accent band.
+ */
+const APP_ACCENT_SWATCHES = [
+  { hex: "#3b6ef0", label: "Blue" },
+  { hex: "#0e9488", label: "Teal" },
+  { hex: "#16a34a", label: "Green" },
+  { hex: "#c2851b", label: "Amber" },
+  { hex: "#e0662c", label: "Orange" },
+  { hex: "#dc2626", label: "Red" },
+  { hex: "#db2777", label: "Pink" },
+  { hex: "#7c3aed", label: "Violet" },
+] as const;
+
+const DEFAULT_APP_ACCENT_HEX = APP_ACCENT_SWATCHES[0].hex;
+
 export function AppearanceSettingsPanel() {
   const {
     appearanceMode,
@@ -991,6 +1011,53 @@ export function AppearanceSettingsPanel() {
             onImportOpenChange={setIsImportThemeOpen}
           />
         </div>
+
+        <SettingsRow
+          {...searchableSetting("setting-accent-color")}
+          description="The colour of primary buttons, the focus ring, and the send action. Overrides the accent of whichever theme is active; clear it to hand that back."
+          resetAction={
+            settings.accentColor !== null ? (
+              <SettingResetButton
+                label="accent colour"
+                onClick={() => updateSettings({ accentColor: null })}
+              />
+            ) : null
+          }
+          control={
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              {APP_ACCENT_SWATCHES.map((swatch) => (
+                <button
+                  key={swatch.hex}
+                  type="button"
+                  aria-label={swatch.label}
+                  aria-pressed={settings.accentColor === swatch.hex}
+                  title={swatch.label}
+                  className={cn(
+                    "size-5 cursor-pointer rounded-full border transition-transform",
+                    settings.accentColor === swatch.hex
+                      ? "scale-110 border-foreground"
+                      : "border-border/70 hover:scale-110",
+                  )}
+                  style={{ backgroundColor: swatch.hex }}
+                  onClick={() => updateSettings({ accentColor: swatch.hex })}
+                />
+              ))}
+              <label
+                className="ms-1 inline-flex cursor-pointer items-center gap-1 text-xs text-secondary-label"
+                title="Pick any colour"
+              >
+                <input
+                  type="color"
+                  className="size-5 cursor-pointer rounded-full border border-border/70 bg-transparent p-0"
+                  value={settings.accentColor ?? DEFAULT_APP_ACCENT_HEX}
+                  aria-label="Custom accent colour"
+                  onChange={(event) => updateSettings({ accentColor: event.target.value })}
+                />
+                Custom
+              </label>
+            </div>
+          }
+        />
 
         <SettingsRow
           {...searchableSetting("setting-glass-opacity")}

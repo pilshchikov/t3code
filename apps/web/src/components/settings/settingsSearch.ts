@@ -56,6 +56,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     targetId: "appearance",
   },
   {
+    // Prefixed to match the other appearance controls that own a plainer id already.
+    id: "setting-accent-color",
+    title: "Accent colour",
+    to: "/settings/appearance",
+  },
+  {
     // Prefixed because the slider control already owns the `glass-opacity` id.
     id: "setting-glass-opacity",
     title: "Glass opacity",
