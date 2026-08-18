@@ -1488,9 +1488,12 @@ function ChatMarkdown({
       // Claimed on every open so a synchronous one supersedes a lookup already
       // in flight.
       const isLatestLookup = claimWorkspaceBasenameLookup();
+      // The link was resolved against this document's own root, so the surface is opened against
+      // it too. Left off, the panel fell back to the thread's checkout — and a document read from
+      // the project while the thread runs in a worktree links to files the worktree does not have.
       const openAt = (path: string) =>
-        useRightPanelStore.getState().openFile(threadRef, path, line);
-      if (!cwd || !needsWorkspaceBasenameLookup(workspaceRelativePath)) {
+        useRightPanelStore.getState().openFile(threadRef, path, line, workspaceRoot);
+      if (!workspaceRoot || !needsWorkspaceBasenameLookup(workspaceRelativePath)) {
         openAt(workspaceRelativePath);
         return;
       }
@@ -1498,7 +1501,9 @@ function ChatMarkdown({
         const result = await searchProjectEntries({
           environmentId: threadRef.environmentId,
           input: {
-            cwd,
+            // The workspace root, not the document's directory: the index is keyed by root, and a
+            // subdirectory finds nothing.
+            cwd: workspaceRoot,
             query: workspaceRelativePath,
             limit: WORKSPACE_BASENAME_LOOKUP_LIMIT,
             kind: "file",
@@ -1512,7 +1517,7 @@ function ChatMarkdown({
         openAt(match ?? workspaceRelativePath);
       })();
     },
-    [cwd, searchProjectEntries, threadRef],
+    [searchProjectEntries, threadRef, workspaceRoot],
   );
   /* eslint-disable react/no-unstable-nested-components -- ReactMarkdown requires component
    * renderers that close over this message's metadata. useMemo keeps them stable until that

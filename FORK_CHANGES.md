@@ -802,6 +802,18 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
   crosses out of view.
 - Source: `apps/web/src/components/Sidebar.tsx`.
 
+## Markdown links open against the document's own checkout
+
+- A link inside a previewed markdown file opened a file surface with no workspace root, so the panel
+  fell back to the thread's checkout. Reading a document from the project while the thread runs in a
+  worktree therefore produced dead links: the path was correct, the tree it was looked up in was
+  not. The surface now carries the root the link was resolved against, which is the root the
+  document itself was read from.
+- The basename lookup behind a bare `notes.md` link searched the document's directory rather than
+  its workspace root. The entry index is keyed by root, so a document in a subdirectory found
+  nothing to disambiguate with.
+- Source: `apps/web/src/components/ChatMarkdown.tsx`.
+
 ## Validation Notes
 
 The fork-local changes above were validated with focused server tests, the full web unit suite,

@@ -61,6 +61,33 @@ describe("resolveMarkdownFileLinkTarget", () => {
     });
   });
 
+  // The pairing the file preview relies on: a document read from one checkout links to a path
+  // relative to that checkout, and the panel opens it against the same root rather than against
+  // whichever tree the thread happens to be working in.
+  it("keeps a link relative to the document's own workspace root", () => {
+    expect(
+      resolveMarkdownFileLinkMeta(
+        "./notes/next.md",
+        "/Users/example/project/plans",
+        "/Users/example/project",
+      ),
+    ).toMatchObject({
+      targetPath: "/Users/example/project/plans/notes/next.md",
+      workspaceRelativePath: "plans/notes/next.md",
+    });
+    // The same document read from a worktree resolves against the worktree instead.
+    expect(
+      resolveMarkdownFileLinkMeta(
+        "./notes/next.md",
+        "/Users/example/worktrees/feature/plans",
+        "/Users/example/worktrees/feature",
+      ),
+    ).toMatchObject({
+      targetPath: "/Users/example/worktrees/feature/plans/notes/next.md",
+      workspaceRelativePath: "plans/notes/next.md",
+    });
+  });
+
   it("does not treat filename line references as external schemes", () => {
     expect(resolveMarkdownFileLinkTarget("script.ts:10", "/Users/julius/project")).toBe(
       "/Users/julius/project/script.ts:10",
