@@ -1,7 +1,15 @@
 import type { EnvironmentId, ProjectEntry } from "@t3tools/contracts";
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
 import { ChevronsDownUpIcon, RotateCw, Trash2Icon, XIcon } from "lucide-react";
-import { useCallback, useDeferredValue, useMemo, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 
 import { Button } from "~/components/ui/button";
 import { InputGroup, InputGroupInput } from "~/components/ui/input-group";
@@ -10,7 +18,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useComposerHandleContext } from "~/composerHandleContext";
 import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
 import { useTheme } from "~/hooks/useTheme";
-import { cn } from "~/lib/utils";
+import { cn, isMacPlatform } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
 import { projectEnvironment } from "~/state/projects";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -97,6 +105,14 @@ function FileSearchField(props: {
   );
 }
 
+/**
+ * Ceiling on what one delete keeps in memory to be undoable. Past it the delete still happens; it
+ * just stops promising it can be taken back.
+ */
+const UNDO_SNAPSHOT_MAX_BYTES = 8 * 1024 * 1024;
+
+const UNDO_SHORTCUT_LABEL = isMacPlatform(navigator.platform) ? "\u2318Z" : "Ctrl+Z";
+
 function uniqueProjectEntries(entries: ReadonlyArray<ProjectEntry>): ProjectEntry[] {
   return Array.from(
     new Map(
@@ -117,6 +133,8 @@ export default function FileBrowserPanel({
   const composerRef = useComposerHandleContext();
   const entriesQuery = useProjectEntriesQuery(environmentId, cwd);
   const deleteEntry = useAtomCommand(projectEnvironment.deleteEntry, { reportFailure: false });
+  const readFileOnce = useAtomCommand(projectEnvironment.readFileOnce, { reportFailure: false });
+  const writeFile = useAtomCommand(projectEnvironment.writeFile, { reportFailure: false });
   const entries = useMemo(
     () => uniqueProjectEntries(entriesQuery.data?.entries ?? []),
     [entriesQuery.data?.entries],
@@ -130,12 +148,85 @@ export default function FileBrowserPanel({
   const [selectedPaths, setSelectedPaths] = useState<ReadonlyArray<string>>([]);
   const [collapseRequestId, setCollapseRequestId] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
+  /**
+   * Contents of the last delete, so it can be put back. Only whole text files are held: a folder
+   * and a file too large to have been read in one piece cannot be reconstructed from this, and the
+   * confirmation says so rather than promising an undo that would restore part of the work.
+   */
+  const [undoableDelete, setUndoableDelete] = useState<ReadonlyArray<{
+    readonly relativePath: string;
+    readonly contents: string;
+  }> | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
   const selectedFiles = useMemo(
     () => selectedPaths.filter((path) => filePaths.has(path)),
     [filePaths, selectedPaths],
   );
 
   const clearSelection = useCallback(() => setSelectedPaths([]), []);
+  // An undo entry belongs to the directory it was taken from; carrying it across would write those
+  // files into a different workspace root.
+  useEffect(() => {
+    setUndoableDelete(null);
+  }, [cwd, environmentId]);
+
+  /**
+   * Reads every path back so a delete can be undone, or gives up on the whole set. Partial recovery
+   * is worse than none: it looks like the undo worked while quietly leaving files behind.
+   */
+  const snapshotPaths = useCallback(
+    async (paths: readonly string[]) => {
+      if (paths.some((path) => !filePaths.has(path))) return null;
+      let bytes = 0;
+      const snapshot: { relativePath: string; contents: string }[] = [];
+      for (const relativePath of paths) {
+        const result = await readFileOnce({ environmentId, input: { cwd, relativePath } });
+        // A binary or over-long file comes back truncated or not at all; either way what we hold is
+        // not the file, so there is nothing honest to put back.
+        if (result._tag === "Failure" || result.value.truncated) return null;
+        bytes += result.value.byteLength;
+        if (bytes > UNDO_SNAPSHOT_MAX_BYTES) return null;
+        snapshot.push({ relativePath, contents: result.value.contents });
+      }
+      return snapshot;
+    },
+    [cwd, environmentId, filePaths, readFileOnce],
+  );
+
+  const restoreSnapshot = useCallback(
+    async (snapshot: ReadonlyArray<{ relativePath: string; contents: string }>) => {
+      setIsRestoring(true);
+      const results = await Promise.all(
+        snapshot.map((file) =>
+          writeFile({
+            environmentId,
+            input: { cwd, relativePath: file.relativePath, contents: file.contents },
+          }),
+        ),
+      );
+      setIsRestoring(false);
+      setUndoableDelete(null);
+      entriesQuery.refresh();
+      const failed = results.filter((result) => result._tag === "Failure");
+      toastManager.add(
+        failed.length > 0
+          ? {
+              type: "error",
+              title: `Could not restore ${failed.length} of ${snapshot.length}`,
+              description: "The rest were written back.",
+            }
+          : {
+              type: "success",
+              title:
+                snapshot.length === 1
+                  ? `Restored ${snapshot[0]?.relativePath}`
+                  : `Restored ${snapshot.length} files`,
+            },
+      );
+    },
+    [cwd, entriesQuery, environmentId, writeFile],
+  );
 
   /**
    * Confirms and removes entries from disk. A directory goes with its contents, which is what the
@@ -149,14 +240,18 @@ export default function FileBrowserPanel({
       const directories = paths.filter((path) => !filePaths.has(path));
       const listedPaths = paths.slice(0, 6).map((path) => `• ${path}`);
       const remainingCount = paths.length - listedPaths.length;
+      const snapshot = await snapshotPaths(paths);
       const confirmed = await api.dialogs.confirm(
         [
           paths.length === 1 ? `Delete ${paths[0]}?` : `Delete ${paths.length} selected entries?`,
           ...(paths.length === 1 ? [] : listedPaths),
           ...(remainingCount > 0 ? [`• and ${remainingCount} more`] : []),
           directories.length > 0
-            ? "This permanently removes them from disk, folders with everything inside them."
-            : "This permanently removes them from disk.",
+            ? "This removes them from disk, folders with everything inside them."
+            : "This removes them from disk.",
+          snapshot === null
+            ? "This cannot be undone."
+            : `Undo with ${UNDO_SHORTCUT_LABEL} while the file list has focus.`,
         ].join("\n"),
         { variant: "destructive" },
       );
@@ -168,7 +263,10 @@ export default function FileBrowserPanel({
       const failed = results.filter((result) => result._tag === "Failure");
       setIsDeleting(false);
       setSelectedPaths([]);
+      setUndoableDelete(snapshot);
       entriesQuery.refresh();
+      // Focus survives the rows unmounting, so the undo shortcut still has somewhere to land.
+      panelRef.current?.focus({ preventScroll: true });
       if (failed.length > 0) {
         toastManager.add({
           type: "error",
@@ -180,9 +278,26 @@ export default function FileBrowserPanel({
       toastManager.add({
         type: "success",
         title: paths.length === 1 ? `Deleted ${paths[0]}` : `Deleted ${paths.length} entries`,
+        ...(snapshot === null
+          ? {}
+          : {
+              actionProps: {
+                children: "Undo",
+                onClick: () => void restoreSnapshot(snapshot),
+              },
+            }),
       });
     },
-    [cwd, deleteEntry, entriesQuery, environmentId, filePaths, isDeleting],
+    [
+      cwd,
+      deleteEntry,
+      entriesQuery,
+      environmentId,
+      filePaths,
+      isDeleting,
+      restoreSnapshot,
+      snapshotPaths,
+    ],
   );
 
   const showEntryContextMenu = useCallback(
@@ -262,9 +377,49 @@ export default function FileBrowserPanel({
     [deletePaths, selectedFiles],
   );
 
+  // Scoped to this panel rather than the window: Backspace is a text key everywhere else, and the
+  // editor owns undo while it has focus.
+  const onPanelKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (event.defaultPrevented) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest("input, textarea, [contenteditable]")) {
+        return;
+      }
+      if (
+        (event.key === "Backspace" || event.key === "Delete") &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        selectedFiles.length > 0
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        void deleteSelectedFiles();
+        return;
+      }
+      if (
+        event.key.toLowerCase() === "z" &&
+        (event.metaKey || event.ctrlKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        undoableDelete !== null &&
+        !isRestoring
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        void restoreSnapshot(undoableDelete);
+      }
+    },
+    [deleteSelectedFiles, isRestoring, restoreSnapshot, selectedFiles.length, undoableDelete],
+  );
+
   return (
     <div
-      className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
+      ref={panelRef}
+      tabIndex={-1}
+      onKeyDown={onPanelKeyDown}
+      className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background outline-none"
       data-file-browser-panel={`${environmentId}:${cwd}`}
     >
       <div className="surface-subheader shrink-0 gap-1 px-2" data-surface-subheader>

@@ -218,9 +218,18 @@ export function NativeProjectFileTree(props: {
     setExpanded(new Set(props.selectedPath ? ancestorDirectories(props.selectedPath) : []));
   }, [props.collapseRequestId, props.selectedPath]);
 
+  // Revealing a file expands its own ancestors and nothing else. It used to replace the expanded
+  // set, so opening a file in one directory shut every directory the reader had opened elsewhere.
+  // Collapsing the tree is the collapse button's job.
   useEffect(() => {
     if (!props.selectedPath) return;
-    setExpanded(new Set(ancestorDirectories(props.selectedPath)));
+    const ancestors = ancestorDirectories(props.selectedPath);
+    setExpanded((current) => {
+      if (ancestors.every((directory) => current.has(directory))) return current;
+      const next = new Set(current);
+      for (const directory of ancestors) next.add(directory);
+      return next;
+    });
     props.onSelectionChange([props.selectedPath]);
   }, [props.selectedPath, props.selectedPathRevealId]);
 

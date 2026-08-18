@@ -751,8 +751,25 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
   multi-select and a toolbar button. Folders had no context menu at all before. A folder's menu drops
   the two items that mean nothing for it (copy mention, add to chat), and the confirmation says when
   a folder takes its contents with it.
+- Backspace (or Delete) removes the selected entries while the file list has focus, and the delete
+  can be taken back with the platform's undo chord or the toast's Undo. Shift-click ranges and
+  Cmd-click toggles were already there and now feed both.
+- Undo restores from contents read just before the delete. It is offered only when every entry in
+  the set is a whole text file under 8 MB in total: a folder, a binary, or a file too large to have
+  been read in one piece cannot be reconstructed, and a partial restore reads as a working undo
+  while quietly leaving work behind. The confirmation says which of the two it is going to be.
+- The undo entry is scoped to the directory it was taken from, and the panel takes focus after a
+  delete so the chord still has somewhere to land once the rows unmount.
 - Source: `apps/web/src/components/files/FileBrowserPanel.tsx`,
-  `apps/web/src/components/files/NativeProjectFileTree.tsx`.
+  `apps/web/src/components/files/NativeProjectFileTree.tsx`,
+  `packages/client-runtime/src/state/projectCommands.ts`.
+
+## Revealing a file keeps the rest of the tree open
+
+- Opening a file expanded its ancestors by replacing the expanded set, so opening something in one
+  directory shut every directory the reader had opened elsewhere. The reveal now adds its ancestors
+  to what is already open. Collapsing the tree stays the collapse button's job.
+- Source: `apps/web/src/components/files/NativeProjectFileTree.tsx`.
 
 ## Validation Notes
 

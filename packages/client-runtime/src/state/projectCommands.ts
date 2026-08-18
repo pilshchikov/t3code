@@ -110,6 +110,20 @@ export function createProjectEnvironmentAtoms<R, E>(
       scheduler: projectScheduler,
       concurrency: projectConcurrency,
     }),
+    /**
+     * One-shot read for callers that need a file's contents at a moment in time rather than a
+     * subscription to them — snapshotting before a delete, so the delete can be undone.
+     */
+    readFileOnce: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:projects:read-file-once",
+      tag: WS_METHODS.projectsReadFile,
+      scheduler: fileScheduler,
+      concurrency: {
+        mode: "serial",
+        key: ({ environmentId, input }) =>
+          JSON.stringify([environmentId, input.cwd, input.relativePath]),
+      },
+    }),
     writeFile: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:projects:write-file",
       tag: WS_METHODS.projectsWriteFile,
