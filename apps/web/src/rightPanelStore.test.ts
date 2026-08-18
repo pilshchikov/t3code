@@ -8,6 +8,7 @@ import {
   selectActiveRightPanel,
   selectActiveRightPanelSurface,
   selectSelectedRightPanelSurface,
+  selectThreadRightPanelMaximized,
   selectThreadRightPanelState,
   updatePullRequestTabStatus,
   useRightPanelStore,
@@ -17,7 +18,7 @@ const refA = scopeThreadRef("env-1" as EnvironmentId, ThreadId.make("thread-A"))
 const refB = scopeThreadRef("env-1" as EnvironmentId, ThreadId.make("thread-B"));
 
 beforeEach(() => {
-  useRightPanelStore.setState({ byThreadKey: {} });
+  useRightPanelStore.setState({ byThreadKey: {}, maximizedThreadKey: null });
 });
 
 describe("rightPanelStore", () => {
@@ -729,5 +730,54 @@ describe("rightPanelStore", () => {
         (surface) => surface.id,
       ),
     ).toEqual(["terminal:term-1", "browser:tab-b", "browser:tab-c"]);
+  });
+});
+
+describe("maximized panel state", () => {
+  it("reports maximized only while the panel is also open", () => {
+    useRightPanelStore.getState().open(refA, "diff");
+    useRightPanelStore.getState().setMaximized(refA);
+    expect(selectThreadRightPanelMaximized(useRightPanelStore.getState(), refA)).toBe(true);
+    expect(selectThreadRightPanelMaximized(useRightPanelStore.getState(), refB)).toBe(false);
+  });
+
+  it("gives up the maximized state when the panel is hidden", () => {
+    useRightPanelStore.getState().open(refA, "diff");
+    useRightPanelStore.getState().setMaximized(refA);
+    useRightPanelStore.getState().close(refA);
+    expect(useRightPanelStore.getState().maximizedThreadKey).toBeNull();
+  });
+
+  // The blank-chat report: a panel hidden while maximized used to come back maximized, so the chat
+  // column stayed at zero width until a thread switch changed the key the flag hung on.
+  it("does not come back maximized after being toggled shut", () => {
+    useRightPanelStore.getState().open(refA, "diff");
+    useRightPanelStore.getState().setMaximized(refA);
+    useRightPanelStore.getState().toggleVisibility(refA);
+    useRightPanelStore.getState().toggleVisibility(refA);
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).isOpen,
+    ).toBe(true);
+    expect(selectThreadRightPanelMaximized(useRightPanelStore.getState(), refA)).toBe(false);
+  });
+
+  it("does not come back maximized after every tab was closed", () => {
+    useRightPanelStore.getState().open(refA, "diff");
+    useRightPanelStore.getState().setMaximized(refA);
+    useRightPanelStore.getState().closeAllSurfaces(refA);
+    useRightPanelStore.getState().toggleVisibility(refA);
+    expect(selectThreadRightPanelMaximized(useRightPanelStore.getState(), refA)).toBe(false);
+  });
+
+  it("toggles the flag for one thread at a time", () => {
+    useRightPanelStore.getState().open(refA, "diff");
+    useRightPanelStore.getState().open(refB, "diff");
+    useRightPanelStore.getState().toggleMaximized(refA);
+    expect(selectThreadRightPanelMaximized(useRightPanelStore.getState(), refA)).toBe(true);
+    useRightPanelStore.getState().toggleMaximized(refB);
+    expect(selectThreadRightPanelMaximized(useRightPanelStore.getState(), refA)).toBe(false);
+    expect(selectThreadRightPanelMaximized(useRightPanelStore.getState(), refB)).toBe(true);
+    useRightPanelStore.getState().toggleMaximized(refB);
+    expect(selectThreadRightPanelMaximized(useRightPanelStore.getState(), refB)).toBe(false);
   });
 });

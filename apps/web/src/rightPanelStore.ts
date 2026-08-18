@@ -87,6 +87,14 @@ export interface ThreadRightPanelState {
 
 interface RightPanelStoreState {
   byThreadKey: Record<string, ThreadRightPanelState>;
+  /**
+   * The one thread whose panel is filling the workspace, if any. Panel state rather than view
+   * state: the shortcut that toggles it has to work from anywhere in the app, not only from a
+   * mounted chat view.
+   */
+  maximizedThreadKey: string | null;
+  setMaximized: (ref: ScopedThreadRef | null) => void;
+  toggleMaximized: (ref: ScopedThreadRef) => void;
   open: (
     ref: ScopedThreadRef,
     kind: Exclude<RightPanelKind, "file" | "terminal" | "pull-request">,
@@ -252,6 +260,12 @@ const openThreadPanel = (current: ThreadRightPanelState): ThreadRightPanelState 
           ? current.activeSurfaceId
           : (current.surfaces.at(-1)?.id ?? null),
       };
+
+const clearMaximizedFor = (
+  state: { maximizedThreadKey: string | null },
+  ref: ScopedThreadRef,
+): { maximizedThreadKey?: string | null } =>
+  state.maximizedThreadKey === scopedThreadKey(ref) ? { maximizedThreadKey: null } : {};
 
 const updateThread = (
   byThreadKey: Record<string, ThreadRightPanelState>,
@@ -585,6 +599,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       closeAllSurfaces: (ref) =>
         set((state) => ({
+          ...clearMaximizedFor(state, ref),
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) =>
             current.surfaces.length === 0
               ? current
@@ -641,20 +656,35 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             };
           }),
         })),
+      maximizedThreadKey: null,
+      setMaximized: (ref) =>
+        set({ maximizedThreadKey: ref === null ? null : scopedThreadKey(ref) }),
+      toggleMaximized: (ref) =>
+        set((state) => {
+          const threadKey = scopedThreadKey(ref);
+          return { maximizedThreadKey: state.maximizedThreadKey === threadKey ? null : threadKey };
+        }),
       show: (ref) =>
         set((state) => ({
+          ...clearMaximizedFor(state, ref),
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) =>
             current.isOpen ? current : openThreadPanel(current),
           ),
         })),
       close: (ref) =>
         set((state) => ({
+          // A hidden panel cannot be maximized, and a stale flag would bring it back that way.
+          ...clearMaximizedFor(state, ref),
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) =>
             current.isOpen ? { ...current, isOpen: false } : current,
           ),
         })),
       toggleVisibility: (ref) =>
         set((state) => ({
+          // Cleared in both directions. Only an explicit maximize sets this flag, so a panel that
+          // was hidden while maximized never comes back filling the workspace and hiding the chat
+          // — which read as the chat going blank until a thread switch changed the key it hangs on.
+          ...clearMaximizedFor(state, ref),
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) =>
             current.isOpen ? { ...current, isOpen: false } : openThreadPanel(current),
           ),
@@ -700,6 +730,15 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
     },
   ),
 );
+
+/** True only while this thread's panel is both open and filling the workspace. */
+export function selectThreadRightPanelMaximized(
+  state: Pick<RightPanelStoreState, "byThreadKey" | "maximizedThreadKey">,
+  ref: ScopedThreadRef | null | undefined,
+): boolean {
+  if (!ref || state.maximizedThreadKey !== scopedThreadKey(ref)) return false;
+  return selectThreadRightPanelState(state.byThreadKey, ref).isOpen;
+}
 
 export function selectThreadRightPanelState(
   byThreadKey: Record<string, ThreadRightPanelState>,

@@ -814,6 +814,24 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
   nothing to disambiguate with.
 - Source: `apps/web/src/components/ChatMarkdown.tsx`.
 
+## The right panel's shortcuts answer from anywhere
+
+- They are owned by one listener mounted at the app root, ahead of everything else, instead of by
+  whichever chat view happened to be mounted. That is what made a bare printable binding — `§` on a
+  Mac ISO layout — work on some routes and type itself into a field on others, and it is why it
+  sometimes lost to a listener registered later. Settings is the one exception: it is where the
+  binding is read and edited, so a keypress there belongs to the page.
+- The key is claimed whether or not there is a thread to act on. A binding that types itself in some
+  places and not others is worse than one that occasionally does nothing.
+- Maximize moved from chat-view state into the panel store, where the rest of the panel's state
+  already lives, so the same listener can own both shortcuts.
+- Hiding a panel now gives up its maximized state, in every direction and by every route out
+  (toggle, close, closing the last tab). A panel hidden while maximized used to come back filling
+  the workspace, which left the chat column at zero width — the chat looked blank until switching
+  threads changed the key the stale flag hung on.
+- Source: `apps/web/src/components/RightPanelShortcuts.tsx`, `apps/web/src/rightPanelStore.ts`,
+  `apps/web/src/components/ChatView.tsx`, `apps/web/src/routes/__root.tsx`.
+
 ## Validation Notes
 
 The fork-local changes above were validated with focused server tests, the full web unit suite,

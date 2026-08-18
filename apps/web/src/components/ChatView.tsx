@@ -128,6 +128,7 @@ import { useEditorNavigationStore } from "../editorNavigationStore";
 import {
   selectActiveRightPanel,
   selectActiveRightPanelSurface,
+  selectThreadRightPanelMaximized,
   selectThreadRightPanelState,
   type RightPanelSurface,
   updatePullRequestTabStatus,
@@ -1366,9 +1367,6 @@ function ChatViewContent(props: ChatViewProps) {
   >({});
   const [isConnecting, _setIsConnecting] = useState(false);
   const [isRevertingCheckpoint, setIsRevertingCheckpoint] = useState(false);
-  const [maximizedRightPanelThreadKey, setMaximizedRightPanelThreadKey] = useState<string | null>(
-    null,
-  );
   const globalShortcutKeyDownRef = useRef<((event: globalThis.KeyboardEvent) => void) | null>(null);
   const globalShortcutBeforeInputRef = useRef<((event: InputEvent) => void) | null>(null);
   const [respondingRequestIds, setRespondingRequestIds] = useState<ApprovalRequestId[]>([]);
@@ -1668,10 +1666,12 @@ function ChatViewContent(props: ChatViewProps) {
   const previewPanelOpen = activeRightPanelKind === "preview" && isPreviewSupportedInRuntime();
   const rightPanelOpen = rightPanelState.isOpen;
   const canMaximizeRightPanel = rightPanelOpen && !shouldUseRightPanelSheet;
-  // Keyed by the same thread as the panel state itself; keying it by the route desynced the
-  // maximize flag from the panel whenever a draft became a thread.
-  const rightPanelMaximized =
-    canMaximizeRightPanel && maximizedRightPanelThreadKey === activeThreadKey;
+  // Lives in the panel store, so the shortcut that toggles it can be owned app-wide rather than by
+  // whichever chat view happens to be mounted.
+  const rightPanelMaximizedForThread = useRightPanelStore((state) =>
+    selectThreadRightPanelMaximized(state, activeThreadRef),
+  );
+  const rightPanelMaximized = canMaximizeRightPanel && rightPanelMaximizedForThread;
   const inlineRightPanelOwnsTitleBar = rightPanelOpen && !shouldUseRightPanelSheet;
 
   useEffect(() => {
@@ -3385,7 +3385,6 @@ function ChatViewContent(props: ChatViewProps) {
   }, [activePreviewState.activeTabId, activeThreadRef, createBrowserSurface, previewPanelOpen]);
   const closePreviewPanel = useCallback(() => {
     if (activeThreadRef) {
-      setMaximizedRightPanelThreadKey(null);
       useRightPanelStore.getState().close(activeThreadRef);
     }
   }, [activeThreadRef]);
@@ -3512,11 +3511,9 @@ function ChatViewContent(props: ChatViewProps) {
     useRightPanelStore.getState().toggleVisibility(activeThreadRef);
   }, [activeThreadRef, closePreviewPanel, rightPanelOpen]);
   const toggleRightPanelMaximized = useCallback(() => {
-    if (!canMaximizeRightPanel || !activeThreadKey) return;
-    setMaximizedRightPanelThreadKey((threadKey) =>
-      threadKey === activeThreadKey ? null : activeThreadKey,
-    );
-  }, [activeThreadKey, canMaximizeRightPanel]);
+    if (!canMaximizeRightPanel || !activeThreadRef) return;
+    useRightPanelStore.getState().toggleMaximized(activeThreadRef);
+  }, [activeThreadRef, canMaximizeRightPanel]);
   const cleanupRightPanelSurfaces = useCallback(
     (surfaces: readonly RightPanelSurface[]) => {
       if (!activeThreadRef) return;
@@ -4823,9 +4820,7 @@ function ChatViewContent(props: ChatViewProps) {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      if (command === "rightPanel.toggle") {
-        toggleRightPanel();
-      } else if (command === "terminal.toggle") {
+      if (command === "terminal.toggle") {
         toggleTerminalVisibility();
       }
     };
@@ -4880,13 +4875,6 @@ function ChatViewContent(props: ChatViewProps) {
         return;
       }
 
-      if (command === "rightPanel.toggle") {
-        event.preventDefault();
-        event.stopPropagation();
-        toggleRightPanel();
-        return;
-      }
-
       if (command === "editor.navigateBack" || command === "editor.navigateForward") {
         event.preventDefault();
         event.stopPropagation();
@@ -4903,22 +4891,6 @@ function ChatViewContent(props: ChatViewProps) {
         if (request && request.requestId !== previousRequestId) {
           openFileSurface(request.path, activeFileWorkspaceRoot);
         }
-        return;
-      }
-
-      if (command === "rightPanel.toggleMaximized") {
-        event.preventDefault();
-        event.stopPropagation();
-        // The sheet layout has no maximized state to reach.
-        if (shouldUseRightPanelSheet) return;
-        // One press from closed goes straight to maximized, since waiting for the
-        // panel to open before the shortcut does anything reads as a dropped key.
-        if (!rightPanelOpen) {
-          toggleRightPanel();
-          setMaximizedRightPanelThreadKey(activeThreadKey);
-          return;
-        }
-        toggleRightPanelMaximized();
         return;
       }
 

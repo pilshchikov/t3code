@@ -39,6 +39,7 @@ import {
 import { useUiStateStore } from "../uiStateStore";
 import { syncBrowserChromeTheme, useTheme } from "../hooks/useTheme";
 import { resolveAccentColorVariables } from "../themePalette";
+import { RightPanelShortcuts } from "../components/RightPanelShortcuts";
 import { configureClientTracing } from "../observability/clientTracing";
 import { resolveInitialServerAuthGateState } from "../environments/primary";
 import { hasHostedPairingRequest, isHostedStaticApp } from "../hostedPairing";
@@ -131,6 +132,8 @@ function RootRouteView() {
     <ToastProvider>
       <AnchoredToastProvider>
         <DocumentTitleSync />
+        {/* Before the app shell so its listener is registered ahead of anything mounted inside. */}
+        <RightPanelShortcuts />
         <GlassAppearanceSync />
         <AccentAppearanceSync />
         <FontAppearanceSync />
