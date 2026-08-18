@@ -218,8 +218,7 @@ function ThreadNavigationSidebarPane(
   const threadListV2Enabled = useThreadListV2Enabled();
   const preferencesResult = useAtomValue(mobilePreferencesAtom);
   const autoSettleOnMerge =
-    !AsyncResult.isSuccess(preferencesResult) ||
-    preferencesResult.value.autoSettleOnMerge !== false;
+    AsyncResult.isSuccess(preferencesResult) && preferencesResult.value.autoSettleOnMerge === true;
   const pendingTasks = usePendingNewTasks();
   const { openPendingTask, confirmDeletePendingTask } = usePendingTaskListActions();
   const environments = useMemo(

@@ -47,7 +47,11 @@ export function ResizableColumns(props: {
       className={cn("grid h-full min-h-0 min-w-0", props.className)}
       style={{ gridTemplateColumns: `${ratio * 100}% 5px minmax(0, 1fr)` }}
     >
-      <div className="flex h-full min-h-0 min-w-0 overflow-hidden">{props.first}</div>
+      {/* The child stretches to the column: a flex item defaults to its content width, which left
+          every caller's panel sized to its longest line and clipped instead of reflowing. */}
+      <div className="flex h-full min-h-0 min-w-0 overflow-hidden [&>*]:min-w-0 [&>*]:flex-1">
+        {props.first}
+      </div>
       <div
         role="separator"
         aria-label={props.separatorLabel ?? "Resize columns"}
@@ -78,7 +82,9 @@ export function ResizableColumns(props: {
       >
         <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/70 transition-colors group-hover:w-0.5 group-hover:bg-primary/50 group-focus-visible:w-0.5 group-focus-visible:bg-primary" />
       </div>
-      <div className="flex h-full min-h-0 min-w-0 overflow-hidden">{props.second}</div>
+      <div className="flex h-full min-h-0 min-w-0 overflow-hidden [&>*]:min-w-0 [&>*]:flex-1">
+        {props.second}
+      </div>
     </div>
   );
 }

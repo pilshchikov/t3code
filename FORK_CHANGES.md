@@ -668,6 +668,43 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
   `apps/web/src/components/ComposerPromptEditor.tsx`,
   `apps/web/src/components/chat/MessagesTimeline.tsx`, `apps/web/src/components/ChatView.tsx`.
 
+## Resizable columns stretch their panes
+
+- `ResizableColumns` put each pane in a flex item that never grew, so a pane was as wide as its own
+  longest line and the rest of the column was clipped. Dragging the divider moved the split without
+  the Git history commit description or diff reflowing into the space. Both panes now stretch.
+- Source: `apps/web/src/components/ui/resizable-columns.tsx`.
+
+## A finished pull request no longer settles its thread
+
+- Upstream settled a thread the moment its change request closed, and settled a merged one unless
+  `sidebarAutoSettleOnMerge` was off. One switch now governs both terminal states and defaults to
+  off, so a merged or closed pull request leaves the thread in the inbox until it is settled by
+  hand. Turning the switch on restores the upstream behaviour for both states.
+- Mobile reads the same preference and defaults it the same way.
+- Source: `packages/client-runtime/src/state/threadSettled.ts`, `packages/contracts/src/settings.ts`,
+  `apps/web/src/components/settings/SettingsPanels.tsx`,
+  `apps/mobile/src/features/threads/threadListV2.ts`.
+
+## Thread and project accent colours
+
+- Right-clicking a thread offers a Colour submenu: ten muted tones or none. The colour enters the
+  card from the left as a gradient that gives out by 29% of the width, over a two-pixel rule on the
+  leading edge. The tail fades to transparent rather than to a fixed dark, so the same colour reads
+  correctly on either theme.
+- A project takes a colour in its settings, from the same ten or any custom colour. It marks that
+  project's threads from the right, and only while the sidebar is showing every project: scoped to
+  one project it would paint every row alike and say nothing. Both gradients combine on one card.
+- The project's colour also washes its row in the sidebar's project scope menu and the trigger that
+  shows the current scope.
+- Colours are stored per device alongside the sidebar thread arrangement. They describe one
+  person's view of the work rather than the state of a thread or a project, so nothing crosses the
+  wire. Nothing is coloured until you colour it.
+- Source: `apps/web/src/lib/accentColors.ts`, `apps/web/src/accentColorStore.ts`,
+  `apps/web/src/components/threadActionMenu.logic.ts`, `apps/web/src/components/Sidebar.tsx`,
+  `apps/web/src/hooks/useThreadActionMenu.ts`,
+  `apps/web/src/components/settings/ProjectSettingsPanel.tsx`.
+
 ## Validation Notes
 
 The fork-local changes above were validated with focused server tests, the full web unit suite,

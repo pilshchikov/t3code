@@ -496,7 +496,7 @@ export function useSettingsRestore(onRestored?: () => void) {
         ? ["Auto-settle inactive threads"]
         : []),
       ...(settings.sidebarAutoSettleOnMerge !== DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge
-        ? ["Auto-settle merged threads"]
+        ? ["Auto-settle finished threads"]
         : []),
       ...(settings.wordWrap !== DEFAULT_UNIFIED_SETTINGS.wordWrap ? ["Word wrap"] : []),
       ...getChangedTypographySettingLabels(settings),
@@ -1899,7 +1899,7 @@ export function GeneralSettingsPanel() {
 
         <SettingsRow
           {...searchableSetting("auto-settle-merged-threads")}
-          description="Settle a thread when its pull request merges. Closed pull requests still settle automatically."
+          description="Settle a thread when its pull request merges or closes. Off by default: finishing a pull request leaves the thread where it is until you settle it."
           resetAction={
             settings.sidebarAutoSettleOnMerge !==
             DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge ? (
@@ -1919,7 +1919,7 @@ export function GeneralSettingsPanel() {
               onCheckedChange={(checked) =>
                 updateSettings({ sidebarAutoSettleOnMerge: Boolean(checked) })
               }
-              aria-label="Auto-settle merged threads"
+              aria-label="Auto-settle finished threads"
             />
           }
         />

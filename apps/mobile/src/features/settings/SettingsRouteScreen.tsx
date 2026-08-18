@@ -531,8 +531,7 @@ function GeneralSettingsSection() {
   const preferencesResult = useAtomValue(mobilePreferencesAtom);
   const savePreferences = useAtomSet(updateMobilePreferencesAtom);
   const autoSettleOnMerge =
-    !AsyncResult.isSuccess(preferencesResult) ||
-    preferencesResult.value.autoSettleOnMerge !== false;
+    AsyncResult.isSuccess(preferencesResult) && preferencesResult.value.autoSettleOnMerge === true;
 
   return (
     <SettingsSection title="General">

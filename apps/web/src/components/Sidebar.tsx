@@ -186,6 +186,12 @@ import {
   type DraftSessionState,
 } from "../composerDraftStore";
 import { applySidebarThreadOrder, useSidebarThreadOrderStore } from "../sidebarThreadOrderStore";
+import {
+  readThreadAccentColor,
+  setThreadAccentColor,
+  useAccentColorStore,
+} from "../accentColorStore";
+import { projectAccentStyle, threadCardAccentStyle } from "../lib/accentColors";
 
 // Settled-tail paging: recent history is the common lookup; the deep tail
 // stays behind an explicit Show more.
@@ -728,6 +734,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   onCancelRename: () => void;
   isRenaming: boolean;
   renamingTitle: string;
+  /**
+   * A project's colour marks its threads only while the list mixes projects; inside a single
+   * project it would paint every row the same and say nothing.
+   */
+  showProjectAccent: boolean;
   onContextMenu: (threadRef: ScopedThreadRef, position: { x: number; y: number }) => void;
   onSettle: (threadRef: ScopedThreadRef) => void;
   onUnsettle: (threadRef: ScopedThreadRef) => void;
@@ -769,6 +780,19 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
     [thread.environmentId, thread.id],
   );
   const threadKey = scopedThreadKey(threadRef);
+  const projectAccentKey = `${thread.environmentId}:${thread.projectId}`;
+  const threadAccentColor = useAccentColorStore((state) => state.threadColors[threadKey] ?? null);
+  const projectAccentColor = useAccentColorStore((state) =>
+    props.showProjectAccent ? (state.projectColors[projectAccentKey] ?? null) : null,
+  );
+  const accentStyle = useMemo(
+    () =>
+      threadCardAccentStyle({
+        threadColor: threadAccentColor,
+        projectColor: projectAccentColor,
+      }),
+    [projectAccentColor, threadAccentColor],
+  );
   const isRegeneratingTitle = thread.titleRegeneration != null;
   const lastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById[threadKey]);
   const isSelected = useThreadSelectionStore((state) => state.selectedThreadKeys.has(threadKey));
@@ -1197,6 +1221,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                 data-testid="sidebar-row-slim"
                 aria-busy={isRegeneratingTitle || undefined}
                 className={cn(rowSurfaceClassName, "flex h-9 items-center gap-2.5 px-2.5")}
+                style={accentStyle}
                 onClick={handleClick}
                 onDoubleClick={handleDoubleClick}
                 onKeyDown={handleKeyDown}
@@ -1344,6 +1369,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
               data-testid="sidebar-row-card"
               aria-busy={isRegeneratingTitle || undefined}
               className={rowSurfaceClassName}
+              style={accentStyle}
               onClick={handleClick}
               onDoubleClick={handleDoubleClick}
               onKeyDown={handleKeyDown}
@@ -1895,6 +1921,7 @@ export default function Sidebar() {
   // Project scope: one menu above the list. Scoping filters the list without
   // making the header width depend on the number or length of project names.
   const [projectScopeKey, setProjectScopeKey] = useState<string | null>(null);
+  const projectAccentColorByKey = useAccentColorStore((state) => state.projectColors);
   const scopedProjectGroup = useMemo(
     () =>
       projectScopeKey === null
@@ -3089,11 +3116,17 @@ export default function Sidebar() {
                 titleRegeneration: supportsTitleRegeneration,
               },
               snoozePresets,
+              accentColor: readThreadAccentColor(threadKey),
             }),
             position,
           ),
         );
         if (clicked._tag === "Failure") return;
+        if (clicked.value?.startsWith("color:")) {
+          const choice = clicked.value.slice("color:".length);
+          setThreadAccentColor(threadKey, choice === "none" ? null : choice);
+          return;
+        }
         if (clicked.value?.startsWith("snooze:")) {
           const preset = snoozePresets.find(
             (candidate) => `snooze:${candidate.id}` === clicked.value,
@@ -3484,7 +3517,14 @@ export default function Sidebar() {
                     render={
                       <SidebarMenuButton
                         aria-label="Filter threads by project"
-                        className="min-w-0 flex-1 ps-[calc(var(--sidebar-row-content-inset)-1px)] focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+                        className="min-w-0 flex-1 overflow-hidden ps-[calc(var(--sidebar-row-content-inset)-1px)] focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+                        style={projectAccentStyle(
+                          scopedProjectGroup === null
+                            ? null
+                            : projectAccentColorByKey[
+                                `${scopedProjectGroup.environmentId}:${scopedProjectGroup.id}`
+                              ],
+                        )}
                       />
                     }
                   >
@@ -3525,7 +3565,10 @@ export default function Sidebar() {
                             key={scopeKey}
                             value={scopeKey}
                             closeOnClick
-                            className="h-8 min-h-8 px-1 py-0 text-sm font-medium [&>span:last-child]:flex [&>span:last-child]:min-w-0 [&>span:last-child]:items-center [&>span:last-child]:gap-2"
+                            className="h-8 min-h-8 overflow-hidden px-1 py-0 text-sm font-medium [&>span:last-child]:flex [&>span:last-child]:min-w-0 [&>span:last-child]:items-center [&>span:last-child]:gap-2"
+                            style={projectAccentStyle(
+                              projectAccentColorByKey[`${project.environmentId}:${project.id}`],
+                            )}
                           >
                             <ProjectFavicon
                               environmentId={project.environmentId}
@@ -3734,6 +3777,7 @@ export default function Sidebar() {
                         onCancelRename={cancelThreadRename}
                         isRenaming={renamingThreadKey === threadKey}
                         renamingTitle={renamingThreadKey === threadKey ? renamingTitle : ""}
+                        showProjectAccent={projectScopeKey === null}
                         onContextMenu={handleThreadContextMenu}
                         onSettle={attemptSettle}
                         onUnsettle={attemptUnsettle}

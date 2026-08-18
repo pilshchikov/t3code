@@ -122,6 +122,8 @@ import {
   SettingsSection,
 } from "./settingsLayout";
 import { ProjectFaviconPickerDialog } from "./ProjectFaviconPickerDialog";
+import { useAccentColorStore } from "../../accentColorStore";
+import { ACCENT_COLOR_OPTIONS, accentColorLabel, resolveAccentHex } from "../../lib/accentColors";
 
 export const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, string> = {
   repository: "Group by repository",
@@ -349,6 +351,17 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
       (member) => member.environmentId === group.environmentId && member.id === group.id,
     ) ?? group.memberProjects[0]!;
   const faviconPath = representative.faviconPath ?? null;
+
+  // The colour marks every member so a thread in any of them resolves it without knowing the
+  // grouping. It stays on this device: it describes the view, not the project.
+  const projectAccentKeys = useMemo(
+    () => group.memberProjects.map((member) => `${member.environmentId}:${member.id}`),
+    [group.memberProjects],
+  );
+  const setProjectAccentColor = useAccentColorStore((state) => state.setProjectColor);
+  const projectAccentColor = useAccentColorStore(
+    (state) => state.projectColors[`${representative.environmentId}:${representative.id}`] ?? null,
+  );
 
   const threadCountByMember = useMemo(() => {
     const counts = new Map<string, number>();
@@ -852,6 +865,57 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
                   if (event.key === "Enter") event.currentTarget.blur();
                 }}
               />
+            }
+          />
+          <SettingsRow
+            title="Project colour"
+            description={
+              accentColorLabel(projectAccentColor) ??
+              "No colour. A colour washes this project's threads from the right while the sidebar shows every project."
+            }
+            resetAction={
+              projectAccentColor !== null ? (
+                <SettingResetButton
+                  label="project colour"
+                  onClick={() => setProjectAccentColor(projectAccentKeys, null)}
+                />
+              ) : null
+            }
+            control={
+              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                {ACCENT_COLOR_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    aria-label={option.label}
+                    aria-pressed={projectAccentColor === option.id}
+                    title={option.label}
+                    className={cn(
+                      "size-5 cursor-pointer rounded-full border transition-transform",
+                      projectAccentColor === option.id
+                        ? "border-foreground scale-110"
+                        : "border-border/70 hover:scale-110",
+                    )}
+                    style={{ backgroundColor: option.hex }}
+                    onClick={() => setProjectAccentColor(projectAccentKeys, option.id)}
+                  />
+                ))}
+                <label
+                  className="ms-1 inline-flex cursor-pointer items-center gap-1 text-xs text-secondary-label"
+                  title="Pick any colour"
+                >
+                  <input
+                    type="color"
+                    className="size-5 cursor-pointer rounded-full border border-border/70 bg-transparent p-0"
+                    value={resolveAccentHex(projectAccentColor) ?? "#6b7a8f"}
+                    aria-label="Custom project colour"
+                    onChange={(event) =>
+                      setProjectAccentColor(projectAccentKeys, event.target.value)
+                    }
+                  />
+                  Custom
+                </label>
+              </div>
             }
           />
           <SettingsRow

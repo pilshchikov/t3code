@@ -376,7 +376,7 @@ describe("resolveDisplayedThreadPr + nextThreadChangeRequestSnapshot", () => {
     ).toEqual(mergedPr);
   });
 
-  it("keeps effectiveSettled true for a retained merged PR after a main checkout", () => {
+  it("still feeds a retained merged PR to effectiveSettled after a main checkout", () => {
     const matchingStatus = status({
       refName: featureBranch,
       pr: mergedPr,
@@ -422,10 +422,13 @@ describe("resolveDisplayedThreadPr + nextThreadChangeRequestSnapshot", () => {
       hasActionableProposedPlan: false,
     } as OrchestrationThreadShell;
 
+    // Opt in explicitly: settling on a finished change request is off by default in this fork, and
+    // what this case is about is the retained snapshot reaching the classification at all.
     expect(
       effectiveSettled(shell, {
         now: "2026-04-10T00:00:00.000Z",
         autoSettleAfterDays: null,
+        autoSettleOnMerge: true,
         changeRequestState: displayed?.state ?? null,
       }),
     ).toBe(true);

@@ -25,10 +25,17 @@ describe("changeRequestAutoSettles", () => {
     ["open", true, false],
     ["merged", true, true],
     ["merged", false, false],
-    ["closed", false, true],
+    ["closed", true, true],
+    ["closed", false, false],
+    [null, true, false],
     [null, false, false],
   ] as const)("state=%s autoSettleOnMerge=%s returns %s", (state, autoSettleOnMerge, expected) => {
     expect(changeRequestAutoSettles(state, autoSettleOnMerge)).toBe(expected);
+  });
+
+  it("settles nothing on a finished change request unless asked", () => {
+    expect(changeRequestAutoSettles("merged")).toBe(false);
+    expect(changeRequestAutoSettles("closed")).toBe(false);
   });
 });
 
@@ -125,18 +132,18 @@ describe("effectiveSettled", () => {
             activityAt,
             running,
             pending,
-            // Settled iff nothing blocks (pending work / live session) AND
-            // the override says settled, or (with no override) a merged PR
-            // or staleness auto-settles. The "active" pin suppresses both
-            // auto signals, and an open PR suppresses the inactivity path:
-            // a thread with a PR out for review is never done, however quiet.
+            // Settled iff nothing blocks (pending work / live session) AND the override says
+            // settled, or (with no override) staleness auto-settles. A finished change request
+            // settles nothing on its own here: this table leaves autoSettleOnMerge unset, and it
+            // now defaults to off. The "active" pin suppresses the staleness signal, and an open
+            // PR suppresses it too: a thread with a PR out for review is never done, however quiet.
             expected:
               pending === undefined &&
               !running &&
               (settledOverride === "settled" ||
                 (settledOverride === null &&
-                  (changeRequestState === "merged" ||
-                    (changeRequestState !== "open" && inactivity === "stale")))),
+                  changeRequestState !== "open" &&
+                  inactivity === "stale")),
           })),
         ),
       ),
@@ -167,18 +174,7 @@ describe("effectiveSettled", () => {
     },
   );
 
-  it("treats closed change requests like merged ones", () => {
-    const shell = makeShell({ activityAt: null });
-    expect(
-      effectiveSettled(shell, {
-        now: NOW,
-        autoSettleAfterDays: null,
-        changeRequestState: "closed",
-      }),
-    ).toBe(true);
-  });
-
-  it("settles immediately when a change request merges or closes", () => {
+  it("leaves a finished change request where it is", () => {
     const recentlyActive = makeShell({ activityAt: "2026-04-09T23:59:59.999Z" });
     for (const changeRequestState of ["merged", "closed"] as const) {
       expect(
@@ -187,29 +183,30 @@ describe("effectiveSettled", () => {
           autoSettleAfterDays: null,
           changeRequestState,
         }),
-      ).toBe(true);
+      ).toBe(false);
+      expect(
+        effectiveSettled(recentlyActive, {
+          now: NOW,
+          autoSettleAfterDays: null,
+          autoSettleOnMerge: false,
+          changeRequestState,
+        }),
+      ).toBe(false);
     }
   });
 
-  it("can keep a merged change request active", () => {
+  it("settles a merged or closed change request once asked to", () => {
     const recentlyActive = makeShell({ activityAt: "2026-04-09T23:59:59.999Z" });
-    expect(
-      effectiveSettled(recentlyActive, {
-        now: NOW,
-        autoSettleAfterDays: null,
-        autoSettleOnMerge: false,
-        changeRequestState: "merged",
-      }),
-    ).toBe(false);
-
-    expect(
-      effectiveSettled(recentlyActive, {
-        now: NOW,
-        autoSettleAfterDays: null,
-        autoSettleOnMerge: false,
-        changeRequestState: "closed",
-      }),
-    ).toBe(true);
+    for (const changeRequestState of ["merged", "closed"] as const) {
+      expect(
+        effectiveSettled(recentlyActive, {
+          now: NOW,
+          autoSettleAfterDays: null,
+          autoSettleOnMerge: true,
+          changeRequestState,
+        }),
+      ).toBe(true);
+    }
   });
 
   it("never auto-settles a stale thread with an open change request", () => {

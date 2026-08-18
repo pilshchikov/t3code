@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import { ACCENT_COLOR_OPTIONS } from "~/lib/accentColors";
 import { buildThreadActionMenuItems, type ThreadActionMenuState } from "./threadActionMenu.logic";
 
 const baseState: ThreadActionMenuState = {
@@ -14,6 +15,7 @@ const baseState: ThreadActionMenuState = {
   snoozePresets: [
     { id: "hour", label: "In 1 hour", whenLabel: "3:00 PM", snoozedUntil: "2026-08-07T15:00:00Z" },
   ],
+  accentColor: null,
 };
 
 function ids(state: ThreadActionMenuState): string[] {
@@ -27,7 +29,15 @@ describe("buildThreadActionMenuItems", () => {
         ...baseState,
         supports: { settlement: false, snooze: false, pinning: false, titleRegeneration: false },
       }),
-    ).toEqual(["rename", "mark-unread", "copy-path", "copy-thread-id", "archive", "delete"]);
+    ).toEqual([
+      "rename",
+      "mark-unread",
+      "color",
+      "copy-path",
+      "copy-thread-id",
+      "archive",
+      "delete",
+    ]);
   });
 
   it("includes branch items only for threads with a branch", () => {
@@ -87,5 +97,30 @@ describe("buildThreadActionMenuItems", () => {
       (item) => item.id === "archive",
     );
     expect(archiveItem?.disabled).toBe(true);
+  });
+});
+
+describe("colour submenu", () => {
+  it("offers every palette colour plus a way back to none", () => {
+    const colour = buildThreadActionMenuItems(baseState).find((item) => item.id === "color");
+    expect(colour?.children?.map((child) => child.id)).toEqual([
+      "color:none",
+      ...ACCENT_COLOR_OPTIONS.map((option) => `color:${option.id}`),
+    ]);
+  });
+
+  it("checks the colour the thread is already marked with", () => {
+    const colour = buildThreadActionMenuItems({ ...baseState, accentColor: "teal" }).find(
+      (item) => item.id === "color",
+    );
+    expect(colour?.children?.find((child) => child.id === "color:teal")?.label).toBe("\u2713 Teal");
+    expect(colour?.children?.find((child) => child.id === "color:none")?.label).toBe("No colour");
+  });
+
+  it("checks none when the thread carries no colour", () => {
+    const colour = buildThreadActionMenuItems(baseState).find((item) => item.id === "color");
+    expect(colour?.children?.find((child) => child.id === "color:none")?.label).toBe(
+      "\u2713 No colour",
+    );
   });
 });

@@ -115,7 +115,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "auto-settle-merged-threads",
-    title: "Auto-settle merged threads",
+    title: "Auto-settle finished threads",
     to: "/settings/general",
   },
   {

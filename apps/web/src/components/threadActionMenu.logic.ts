@@ -1,6 +1,8 @@
 import type { ContextMenuItem } from "@t3tools/contracts";
 import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled";
 
+import { ACCENT_COLOR_OPTIONS } from "~/lib/accentColors";
+
 /**
  * Ids for the per-thread action menu. Snooze presets are dispatched as
  * `snooze:<presetId>` so the union stays closed while the preset list
@@ -18,6 +20,8 @@ export type ThreadActionMenuId =
   | "rename"
   | "regenerate-title"
   | "mark-unread"
+  | "color"
+  | `color:${string}`
   | "copy-path"
   | "copy-branch"
   | "copy-thread-id"
@@ -40,6 +44,8 @@ export interface ThreadActionMenuState {
     readonly titleRegeneration: boolean;
   };
   readonly snoozePresets: ReadonlyArray<SnoozePreset>;
+  /** Palette id or literal hex currently marking the thread, if any. */
+  readonly accentColor: string | null;
 }
 
 /**
@@ -102,6 +108,21 @@ export function buildThreadActionMenuItems(
         ]
       : []),
     { id: "mark-unread", label: "Mark unread" },
+    {
+      id: "color" as const,
+      label: "Colour",
+      // A native menu draws labels, not swatches, so the current colour is marked with a check.
+      children: [
+        {
+          id: "color:none" as const,
+          label: `${state.accentColor === null ? "\u2713 " : ""}No colour`,
+        },
+        ...ACCENT_COLOR_OPTIONS.map((option) => ({
+          id: `color:${option.id}` as const,
+          label: `${state.accentColor === option.id ? "\u2713 " : ""}${option.label}`,
+        })),
+      ],
+    },
     { id: "copy-path", label: "Copy path", icon: "copy" },
     ...(state.branch ? [{ id: "copy-branch" as const, label: "Copy branch", icon: "copy" }] : []),
     { id: "copy-thread-id", label: "Copy thread ID", icon: "copy" },

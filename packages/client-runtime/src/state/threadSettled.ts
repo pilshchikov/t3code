@@ -4,11 +4,17 @@ import type { OrchestrationThreadShell } from "@t3tools/contracts";
 export type ChangeRequestStateLike = "open" | "closed" | "merged";
 
 /** Returns whether the change request state settles the thread immediately. */
+/**
+ * A finished change request settles its thread only when the user has asked for it. Upstream
+ * settled a closed request unconditionally; in this fork one switch governs both terminal states,
+ * so a merged or closed pull request never files a thread away on its own.
+ */
 export function changeRequestAutoSettles(
   state: ChangeRequestStateLike | null | undefined,
-  autoSettleOnMerge = true,
+  autoSettleOnMerge = false,
 ): boolean {
-  return state === "closed" || (state === "merged" && autoSettleOnMerge);
+  if (!autoSettleOnMerge) return false;
+  return state === "closed" || state === "merged";
 }
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
@@ -267,7 +273,7 @@ export function effectiveSettled(
   // "active" is the explicit keep-active pin: it suppresses auto-settle
   // until real activity clears it server-side.
   if (shell.settledOverride === "active") return false;
-  if (changeRequestAutoSettles(options.changeRequestState, options.autoSettleOnMerge !== false)) {
+  if (changeRequestAutoSettles(options.changeRequestState, options.autoSettleOnMerge === true)) {
     return true;
   }
   // An open PR is unfinished business regardless of how long the thread has
