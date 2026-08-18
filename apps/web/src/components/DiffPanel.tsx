@@ -309,6 +309,8 @@ export default function DiffPanel({
     ? fallbackBranchDiffPreview
     : primaryBranchDiffPreview;
   const refreshBranchDiffPreview = branchDiffPreview.refresh;
+  // The refreshers below run from listeners that must not re-register on every query identity.
+  const refreshDiffRef = useRef<() => void>(() => {});
   const canRefreshGitDiff =
     isGitRepo && selectedTurnId === null && activeThread != null && activeCwd != null;
   const activeThreadRefreshKey = routeThreadRef
@@ -317,10 +319,10 @@ export default function DiffPanel({
 
   useEffect(() => {
     if (!canRefreshGitDiff) return;
-    const refreshOnFocus = () => refreshBranchDiffPreview();
+    const refreshOnFocus = () => refreshDiffRef.current();
     window.addEventListener("focus", refreshOnFocus);
     return () => window.removeEventListener("focus", refreshOnFocus);
-  }, [canRefreshGitDiff, refreshBranchDiffPreview]);
+  }, [canRefreshGitDiff]);
 
   useEffect(() => {
     const current = {
@@ -336,9 +338,9 @@ export default function DiffPanel({
       return;
     }
     if (previous.turnId === current.turnId) return;
-    refreshBranchDiffPreview();
+    refreshDiffRef.current();
     lastCompletedTurnRefreshRef.current = current;
-  }, [activeThreadRefreshKey, canRefreshGitDiff, latestTurn?.turnId, refreshBranchDiffPreview]);
+  }, [activeThreadRefreshKey, canRefreshGitDiff, latestTurn?.turnId]);
 
   const selectedGitSource = branchDiffPreview.data?.sources.find(
     (source) => source.kind === activeSourceKind,
@@ -411,6 +413,14 @@ export default function DiffPanel({
   const activeGitPatchSource = activeGitPatchQuery.data?.sources.find(
     (source) => source.kind === activeSourceKind,
   );
+  const refreshActiveGitPatch = activeGitPatchQuery.refresh;
+  // Refreshing has to move both queries: the file list and the patch on screen come from separate
+  // requests, so refreshing one alone leaves the other showing the previous state.
+  const refreshDiff = useCallback(() => {
+    refreshBranchDiffPreview();
+    refreshActiveGitPatch();
+  }, [refreshActiveGitPatch, refreshBranchDiffPreview]);
+  refreshDiffRef.current = refreshDiff;
   const loadDiffFiles = useMemo<FileDiffContentsLoader | undefined>(() => {
     if (selectedTurn || !activeThread || !gitPatchCwd || !activeGitPatchSource) {
       return undefined;
@@ -979,7 +989,7 @@ export default function DiffPanel({
                   size="icon-sm"
                   variant="ghost"
                   aria-label={branchDiffPreview.isPending ? "Refreshing diff" : "Refresh diff"}
-                  onClick={refreshBranchDiffPreview}
+                  onClick={refreshDiff}
                 />
               }
             >
