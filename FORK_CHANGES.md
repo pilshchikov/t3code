@@ -832,6 +832,17 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
 - Source: `apps/web/src/components/RightPanelShortcuts.tsx`, `apps/web/src/rightPanelStore.ts`,
   `apps/web/src/components/ChatView.tsx`, `apps/web/src/routes/__root.tsx`.
 
+## User documentation for the fork's behaviour
+
+- `docs/user/` now covers what this fork changed for a reader: numbered project slots and the
+  keybinding migration that lands them, the app-wide right-panel shortcuts, inbox drag ordering and
+  thread colours, a finished pull request no longer settling its thread, the per-account usage
+  breakdown, branch ahead/behind with fetch and pull, and file-tree selection, deletion and undo.
+- Two pages are new, `appearance.md` and `files.md`, both listed in `docs/README.md`.
+- Source: `docs/README.md`, `docs/user/keybindings.md`, `docs/user/thread-sidebar.md`,
+  `docs/user/project-settings.md`, `docs/user/usage.md`, `docs/user/source-control.md`,
+  `docs/user/appearance.md`, `docs/user/files.md`.
+
 ## Validation Notes
 
 The fork-local changes above were validated with focused server tests, the full web unit suite,

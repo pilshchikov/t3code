@@ -41,7 +41,8 @@ T3 Code works with the platforms your team already uses:
 - Open several reviews from the **Pull requests** page as tabs in the right panel
 - While working in a thread, open linked reviews in the same compact right-panel tabs without
   leaving the conversation
-- Open the review directly in your browser with one click
+- Open the review directly in your browser from the button beside the merge action, named for the
+  host it will take you to
 - Command-click (Control-click on Windows and Linux) a pull request number in the sidebar to open it in your browser instead of in T3 Code
 - Check out a teammate's branch to review code locally
 
@@ -52,6 +53,20 @@ T3 Code works with the platforms your team already uses:
 - Rewrite your own comments the same way, wherever they are shown
 - Works on GitHub, GitLab, and Bitbucket. Azure DevOps takes a new title and description; its
   comments stay read-only here, as they already were
+
+### Keep Branches in Step with the Remote
+
+Open the branch picker in the composer toolbar to see where every branch stands:
+
+- A blue down arrow counts commits waiting on the remote; a green up arrow counts commits you have
+  not pushed
+- The refresh button fetches and prunes the remote, which is what updates those counts for branches
+  other than the one you have checked out
+- A branch that is behind gets a pull button. The checked-out branch fast-forwards in place; any
+  other branch fast-forwards without being checked out
+- When a branch and its upstream have both moved, the fast-forward is refused rather than forced.
+  T3 Code offers to open a thread that already knows the branch, the upstream, how far each has
+  moved, and what Git said, so an agent can walk you through reconciling them
 
 ### Know Your Setup at a Glance
 

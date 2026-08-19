@@ -8,6 +8,26 @@ On web and desktop, drag a pinned thread to change its position. On mobile, open
 and choose **Move up** or **Move down**. The order is stored by the server and appears on your
 other connected devices.
 
+Threads in the inbox below the pinned section can be dragged into any order too. That arrangement
+is kept on the device you set it on rather than shared, and a thread the arrangement has not seen
+before still arrives at the top rather than below it.
+
+## Colors
+
+Right-click a thread and choose **Colour** to mark it with one of ten muted colors, or **No
+colour** to clear it. The color enters the card from the left and fades out across it.
+
+A project can carry a color of its own, set in its settings. It marks that project's threads from
+the right, and only while the sidebar is showing every project — scoped to one project it would
+paint every row alike. A thread with its own color shows both at once, one from each side. Nothing
+is colored until you color it, and colors are kept on the device you set them on.
+
+## Finished pull requests
+
+A thread whose pull request merges or closes stays where it is. To have T3 Code file those threads
+away for you, turn on **Auto-settle finished threads** in Settings. Threads still settle on their
+own after a period of inactivity, which is configured separately.
+
 If reordering is unavailable for one environment, update the T3 Code server running in that
 environment. Older servers can still pin and unpin threads, but do not understand synced ordering;
 their pinned threads keep the default newest-first order below the ones you have arranged.

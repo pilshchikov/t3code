@@ -49,8 +49,24 @@ Use **Inspect** to pick an element in the app and reveal its color token. Inspec
 successful pick; its hover glow and badge preview the element and color family that click will select.
 **Cancel** or `Escape` exits Inspect and clears its selection and spotlight.
 
-`rightPanel.toggleMaximized` maximizes or restores the open right panel, and defaults to
-`mod+alt+m`. Pressing it while the right panel is closed opens and maximizes it in one step.
+`rightPanel.toggle` shows or hides the right panel, and `rightPanel.toggleMaximized` maximizes or
+restores it, defaulting to `mod+alt+m`. Pressing the latter while the panel is closed opens and
+maximizes it in one step. Both answer wherever you are in the app and whatever has focus, which
+makes them safe to bind to a bare key such as `§`; the exception is Settings, where a keypress
+belongs to the page you are editing the binding on. Hiding the panel gives up its maximized state,
+so it never reopens filling the workspace.
+
+`project.jump.1` through `project.jump.9` scope the sidebar to a project, defaulting to `mod+1`
+through `mod+9`. To fill a slot, open the project menu at the top of the sidebar, point at a
+project, and press `ctrl+1` through `ctrl+9` (`project.assign.1` and up). The slot's shortcut then
+shows on that project's row, and a project answers to one slot at a time. Which project a number
+recalls is stored on the device you set it on.
+
+`structure.open` opens the file structure view and defaults to `mod+shift+1`. `thread.jump.1`
+through `thread.jump.9` still exist and can be bound, but no longer claim `mod+1` through `mod+9`
+by default. A keybindings file written before project slots existed is carried over on startup:
+numbered thread jumps become the matching project slots, and a `mod+1` file-structure rule moves to
+`mod+shift+1`.
 
 `editor.navigateBack` and `editor.navigateForward` step through the files you have opened in the
 editor, returning to the exact line you left. Each defaults to two shortcuts, `ctrl+left` and
