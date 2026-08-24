@@ -843,6 +843,13 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
   `docs/user/project-settings.md`, `docs/user/usage.md`, `docs/user/source-control.md`,
   `docs/user/appearance.md`, `docs/user/files.md`.
 
+## Upstream sync: 2026-08-20
+
+- Rebased the fork's merge base forward from `d484735c6` to upstream `main` at `8824f8f24`.
+- Preserved the fork's multi-directory projects, per-account Claude usage limits, file-tree selection and deletion, markdown-link roots, app-wide right-panel shortcuts, prompt collapse, thread colours, and right-click-only tab closing while integrating the upstream web, server, desktop, mobile, contracts, and runtime changes.
+- Kept the account-limit implementation from PR #5739 (`54d006d52`); that PR is not an ancestor of current upstream `main`, so its behavior was reconciled explicitly rather than relying on the upstream branch to contain it.
+- Added focused merge validation for the composer, thread actions, status indicators, right-panel tabs, usage attribution, and thread-settlement rules. The resolved merge is intentionally left uncommitted so it can be reviewed before it is recorded or pushed.
+
 ## Validation Notes
 
 The fork-local changes above were validated with focused server tests, the full web unit suite,

@@ -34,6 +34,7 @@ interface FileBrowserPanelProps {
   selectedPath: string | null;
   selectedPathRevealId: number;
   onOpenFile: (relativePath: string) => void;
+  onRefreshSelectedFile?: () => void;
 }
 
 function RefreshFilesButton(props: { isPending: boolean; onRefresh: () => void }) {
@@ -128,6 +129,7 @@ export default function FileBrowserPanel({
   selectedPath,
   selectedPathRevealId,
   onOpenFile,
+  onRefreshSelectedFile,
 }: FileBrowserPanelProps) {
   const { resolvedTheme } = useTheme();
   const composerRef = useComposerHandleContext();
@@ -371,6 +373,10 @@ export default function FileBrowserPanel({
     },
     [composerRef, cwd, deletePaths, filePaths],
   );
+  const handleRefresh = useCallback(() => {
+    entriesQuery.refresh();
+    onRefreshSelectedFile?.();
+  }, [entriesQuery, onRefreshSelectedFile]);
 
   const deleteSelectedFiles = useCallback(
     () => deletePaths(selectedFiles),
@@ -423,7 +429,7 @@ export default function FileBrowserPanel({
       data-file-browser-panel={`${environmentId}:${cwd}`}
     >
       <div className="surface-subheader shrink-0 gap-1 px-2" data-surface-subheader>
-        <RefreshFilesButton isPending={entriesQuery.isPending} onRefresh={entriesQuery.refresh} />
+        <RefreshFilesButton isPending={entriesQuery.isPending} onRefresh={handleRefresh} />
         <CollapseDirectoriesButton onCollapse={() => setCollapseRequestId((value) => value + 1)} />
         <FileSearchField
           name="project-files-search"

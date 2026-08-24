@@ -429,7 +429,7 @@ describe("resolveDisplayedThreadPr + nextThreadChangeRequestSnapshot", () => {
         now: "2026-04-10T00:00:00.000Z",
         autoSettleAfterDays: null,
         autoSettleOnMerge: true,
-        changeRequestState: displayed?.state ?? null,
+        changeRequest: displayed,
       }),
     ).toBe(true);
   });
