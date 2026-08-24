@@ -401,12 +401,6 @@ export function buildThreadListV2Items(input: {
       }
       continue;
     }
-    // A pin otherwise overrides the lifecycle: pinned threads render above
-    // the inbox and never auto-settle out of sight.
-    if (thread.pinnedAt != null) {
-      pinned.push(thread);
-      continue;
-    }
     if (
       supportsSettlement &&
       effectiveSettled(thread, {
@@ -417,6 +411,8 @@ export function buildThreadListV2Items(input: {
       })
     ) {
       settled.push(thread);
+    } else if (thread.pinnedAt != null) {
+      pinned.push(thread);
     } else {
       active.push(thread);
     }

@@ -1,10 +1,15 @@
-import { type ApprovalRequestId, type ProviderApprovalDecision } from "@t3tools/contracts";
+import {
+  type ApprovalRequestId,
+  type ProviderApprovalDecision,
+  type ProviderApprovalOption,
+} from "@t3tools/contracts";
 import { memo } from "react";
 import { Button } from "../ui/button";
 
 interface ComposerPendingApprovalActionsProps {
   requestId: ApprovalRequestId;
   isResponding: boolean;
+  options?: ReadonlyArray<ProviderApprovalOption> | undefined;
   onRespondToApproval: (
     requestId: ApprovalRequestId,
     decision: ProviderApprovalDecision,
@@ -16,6 +21,7 @@ const APPROVAL_ACTION_CLASS_NAME = "font-normal";
 export const ComposerPendingApprovalActions = memo(function ComposerPendingApprovalActions({
   requestId,
   isResponding,
+  options = DEFAULT_APPROVAL_OPTIONS,
   onRespondToApproval,
 }: ComposerPendingApprovalActionsProps) {
   return (
