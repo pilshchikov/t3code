@@ -32,7 +32,7 @@ import {
 } from "@t3tools/client-runtime/environment";
 import { PROJECT_JUMP_KEYBINDING_COMMANDS } from "@t3tools/contracts";
 import type { ScopedThreadRef, ThreadId } from "@t3tools/contracts";
-import type { TimestampFormat } from "@t3tools/contracts/settings";
+import type { SidebarAutoSettleMode, TimestampFormat } from "@t3tools/contracts/settings";
 import {
   AlarmClockIcon,
   AlarmClockOffIcon,
@@ -716,7 +716,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   // False on environments whose server predates thread.settle/unsettle:
   // the lifecycle affordances hide entirely rather than fail on click.
   settlementSupported: boolean;
-  autoSettleOnMerge: boolean;
+  autoSettleMode: SidebarAutoSettleMode;
   // Same contract for thread.snooze/unsnooze.
   snoozeSupported: boolean;
   // Pinned threads show the same pin marker in active, settled, and snoozed
@@ -859,10 +859,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   const isWoke =
     wokeAtDate !== null &&
     (lastVisitedDate === null || lastVisitedDate < wokeAtDate) &&
-    !changeRequestAutoSettles(pr, {
-      autoSettleOnMerge: props.autoSettleOnMerge,
-      thread,
-    });
+    !(props.autoSettleMode === "change-request" && changeRequestAutoSettles(pr, { thread }));
   // In-flight rows (working, or waiting on approval/input) fade as a whole:
   // there is nothing for the user to do yet, so prominence is reserved for
   // rows that need a human — done (unread), read-but-unsettled, failed, and
@@ -1767,7 +1764,7 @@ export default function Sidebar() {
   const { isMobile, setOpenMobile } = useSidebar();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const autoSettleAfterDays = useClientSettings((s) => s.sidebarAutoSettleAfterDays);
-  const autoSettleOnMerge = useClientSettings((s) => s.sidebarAutoSettleOnMerge);
+  const autoSettleMode = useClientSettings((s) => s.sidebarAutoSettleMode);
   const confirmThreadDelete = useClientSettings((s) => s.confirmThreadDelete);
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
   const sidebarProjectSortOrder = useClientSettings((s) => s.sidebarProjectSortOrder);
@@ -2160,7 +2157,7 @@ export default function Sidebar() {
         effectiveSettled(thread, {
           now,
           autoSettleAfterDays,
-          autoSettleOnMerge,
+          autoSettleMode,
           changeRequest,
         })
       ) {
@@ -2199,7 +2196,7 @@ export default function Sidebar() {
     };
   }, [
     autoSettleAfterDays,
-    autoSettleOnMerge,
+    autoSettleMode,
     changeRequestSnapshotByKey,
     nowMinute,
     scopedProjectKeys,
@@ -3908,7 +3905,7 @@ export default function Sidebar() {
                           serverConfigs.get(thread.environmentId)?.environment.capabilities
                             .threadSettlement === true
                         }
-                        autoSettleOnMerge={autoSettleOnMerge}
+                        autoSettleMode={autoSettleMode}
                         snoozeSupported={
                           serverConfigs.get(thread.environmentId)?.environment.capabilities
                             .threadSnooze === true

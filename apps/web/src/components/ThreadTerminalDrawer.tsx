@@ -11,6 +11,7 @@ import {
   SquareSplitVertical,
   TerminalSquare,
   Trash2,
+  XIcon,
 } from "lucide-react";
 import {
   type ContextMenuItem,

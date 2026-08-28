@@ -37,7 +37,7 @@ import {
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { UsageProviderChart, type UsageChartMetric } from "./UsageProviderChart";
-import { PROVIDER_ORDER, PROVIDER_PRESENTATION } from "./usageProviders";
+import { PROVIDER_ORDER, PROVIDER_PRESENTATION, providersWithUsage } from "./usageProviders";
 
 const WINDOW_OPTIONS = [
   { days: 1, label: "Past 24h" },
@@ -111,6 +111,17 @@ export function UsagePage() {
         : enumerateHourStarts(window.sinceTime, window.untilTime),
     [window.sinceTime, window.untilTime],
   );
+  const breakdownModels = useMemo(
+    () =>
+      breakdown === "model" && metric === "tokens"
+        ? merged.models.toSorted(
+            (left, right) => right.totalTokens - left.totalTokens || right.costUsd - left.costUsd,
+          )
+        : merged.models,
+    [breakdown, merged.models, metric],
+  );
+  const activeProviders = useMemo(() => providersWithUsage(merged.providers), [merged.providers]);
+  const timeValueColumnWidth = `${60 / (activeProviders.length + 2)}%`;
   // The hourly window is small enough to render every period: the table then
   // reads chronologically like the chart, instead of jumping between the hours
   // that happened to have activity. Daily windows can run 90 periods, so those

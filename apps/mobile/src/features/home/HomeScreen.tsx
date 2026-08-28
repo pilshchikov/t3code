@@ -23,7 +23,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Platform, Pressable, View } from "react-native";
 import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useThemeColor } from "../../lib/useThemeColor";
 
 import { AppText as Text } from "../../components/AppText";
 import { EmptyState } from "../../components/EmptyState";
@@ -31,6 +30,7 @@ import type { WorkspaceEnvironment, WorkspaceState } from "../../state/workspace
 import type { SavedRemoteConnection } from "../../lib/connection";
 import { scopedProjectKey } from "../../lib/scopedEntities";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
+import { resolveMobileAutoSettlePreferences } from "../../persistence/mobile-preferences";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
 import { useThreadSearch } from "../../state/queries";
 import { useThreadListV2Enabled } from "../threads/use-thread-list-v2-enabled";
@@ -209,13 +209,13 @@ export function HomeScreen(props: HomeScreenProps) {
   >(() => new Map());
   const preferencesResult = useAtomValue(mobilePreferencesAtom);
   const threadListV2Enabled = useThreadListV2Enabled();
-  const autoSettleOnMerge =
-    AsyncResult.isSuccess(preferencesResult) && preferencesResult.value.autoSettleOnMerge === true;
+  const autoSettlePreferences = resolveMobileAutoSettlePreferences(
+    AsyncResult.isSuccess(preferencesResult) ? preferencesResult.value : {},
+  );
   const savePreferences = useAtomSet(updateMobilePreferencesAtom);
   const openSwipeableRef = useRef<SwipeableMethods | null>(null);
   const listRef = useRef<LegendListRef | null>(null);
   const insets = useSafeAreaInsets();
-  const accentColor = useThemeColor("--color-icon-muted");
   const iosBottomToolbarClearance =
     Platform.OS === "ios" && !NATIVE_LIQUID_GLASS_SUPPORTED
       ? PRE_LIQUID_GLASS_BOTTOM_TOOLBAR_HEIGHT
@@ -679,7 +679,8 @@ export function HomeScreen(props: HomeScreenProps) {
       searchQuery: props.searchQuery,
       matchedThreadKeys,
       changeRequestByKey,
-      autoSettleOnMerge,
+      autoSettleAfterDays: autoSettlePreferences.autoSettleAfterDays,
+      autoSettleMode: autoSettlePreferences.autoSettleMode,
       settlementEnvironmentIds,
       snoozeEnvironmentIds,
       settledLimit: settledVisibleCount,
@@ -691,7 +692,8 @@ export function HomeScreen(props: HomeScreenProps) {
     });
   }, [
     changeRequestByKey,
-    autoSettleOnMerge,
+    autoSettlePreferences.autoSettleAfterDays,
+    autoSettlePreferences.autoSettleMode,
     nowMinute,
     snoozeWakeTick,
     snoozedShelfExpanded,
@@ -1087,7 +1089,7 @@ export function HomeScreen(props: HomeScreenProps) {
           />
           {emptyState.loading ? (
             <View className="mt-4 items-center">
-              <ActivityIndicator color={accentColor} />
+              <ActivityIndicator colorClassName={"accent-icon-muted"} />
             </View>
           ) : null}
         </View>

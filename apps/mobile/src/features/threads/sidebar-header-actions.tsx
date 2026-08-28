@@ -1,8 +1,6 @@
 import { SymbolView } from "../../components/AppSymbol";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { useThemeColor } from "../../lib/useThemeColor";
-
 export interface SidebarHeaderActionsProps {
   readonly onOpenSettings: () => void;
 }
@@ -25,7 +23,12 @@ function FallbackHeaderButton(props: {
       hitSlop={4}
       onPress={props.onPress}
     >
-      <SymbolView name={props.icon} size={18} tintColor={iconColor} type="monochrome" />
+      <SymbolView
+        name={props.icon}
+        size={18}
+        tintColorClassName="accent-foreground"
+        type="monochrome"
+      />
     </Pressable>
   );
 }

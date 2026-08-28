@@ -99,6 +99,7 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
                 <ComposerCommandMenuItem
                   key={item.id}
                   item={item}
+                  triggerKind={props.triggerKind}
                   resolvedTheme={props.resolvedTheme}
                   isActive={props.activeItemId === item.id}
                   onHighlight={props.onHighlightedItemChange}
@@ -207,5 +208,14 @@ function SkillSourceIcon(props: { kind: ProviderSkillSourceKind }) {
       <Icon aria-hidden="true" className="size-4 shrink-0 text-icon-muted" />
       <span className="sr-only">{SKILL_SOURCE_LABEL_BY_KIND[props.kind]} skill</span>
     </>
+  );
+}
+
+function SkillSourceBadge(props: { kind: ProviderSkillSourceKind; showSkillSuffix: boolean }) {
+  return (
+    <span className="ml-auto shrink-0 text-[10px] text-secondary-label">
+      {SKILL_SOURCE_LABEL_BY_KIND[props.kind]}
+      {props.showSkillSuffix ? " skill" : ""}
+    </span>
   );
 }

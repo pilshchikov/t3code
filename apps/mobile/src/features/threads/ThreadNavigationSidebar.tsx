@@ -27,8 +27,8 @@ import { ControlPillMenu } from "../../components/ControlPill";
 import { SymbolView } from "../../components/AppSymbol";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
+import { resolveMobileAutoSettlePreferences } from "../../persistence/mobile-preferences";
 import { scopedProjectKey, scopedThreadKey } from "../../lib/scopedEntities";
-import { useThemeColor } from "../../lib/useThemeColor";
 import { useProjects, useThreadShells } from "../../state/entities";
 import { mobilePreferencesAtom } from "../../state/preferences";
 import { useThreadSearch } from "../../state/queries";
@@ -165,19 +165,11 @@ export function ThreadNavigationSidebar(props: ThreadNavigationSidebarProps) {
 }
 
 function NativeSidebarContainer(props: ThreadNavigationSidebarProps) {
-  const backgroundColor = useThemeColor("--color-drawer");
-  const borderColor = useThemeColor("--color-border");
-
   return (
     <View
       testID="thread-navigation-sidebar"
-      className="flex-1"
-      style={{
-        width: props.width,
-        backgroundColor,
-        borderRightColor: borderColor,
-        borderRightWidth: StyleSheet.hairlineWidth,
-      }}
+      className="flex-1 border-border bg-drawer"
+      style={{ borderRightWidth: StyleSheet.hairlineWidth, width: props.width }}
     >
       <SidebarNavigationShell>
         <ThreadNavigationSidebarPane {...props} nativeChrome />
@@ -213,8 +205,9 @@ function ThreadNavigationSidebarPane(
   } = useThreadListActions();
   const threadListV2Enabled = useThreadListV2Enabled();
   const preferencesResult = useAtomValue(mobilePreferencesAtom);
-  const autoSettleOnMerge =
-    AsyncResult.isSuccess(preferencesResult) && preferencesResult.value.autoSettleOnMerge === true;
+  const autoSettlePreferences = resolveMobileAutoSettlePreferences(
+    AsyncResult.isSuccess(preferencesResult) ? preferencesResult.value : {},
+  );
   const pendingTasks = usePendingNewTasks();
   const { openPendingTask, confirmDeletePendingTask } = usePendingTaskListActions();
   const environments = useMemo(
@@ -557,7 +550,8 @@ function ThreadNavigationSidebarPane(
       searchQuery: props.searchQuery,
       matchedThreadKeys,
       changeRequestByKey,
-      autoSettleOnMerge,
+      autoSettleAfterDays: autoSettlePreferences.autoSettleAfterDays,
+      autoSettleMode: autoSettlePreferences.autoSettleMode,
       settlementEnvironmentIds,
       snoozeEnvironmentIds,
       settledLimit: settledVisibleCount,
@@ -569,7 +563,8 @@ function ThreadNavigationSidebarPane(
     });
   }, [
     changeRequestByKey,
-    autoSettleOnMerge,
+    autoSettlePreferences.autoSettleAfterDays,
+    autoSettlePreferences.autoSettleMode,
     nowMinute,
     snoozeWakeTick,
     snoozedShelfExpanded,
@@ -769,10 +764,6 @@ function ThreadNavigationSidebarPane(
     ],
   );
 
-  const backgroundColor = useThemeColor("--color-drawer");
-  const borderColor = useThemeColor("--color-border");
-  const mutedColor = useThemeColor("--color-foreground-muted");
-  const placeholderColor = useThemeColor("--color-placeholder");
   const [measuredHeaderHeight, setMeasuredHeaderHeight] = useState<number | null>(null);
   // The sticky header (title row, search field, optional connection status)
   // is measured so the list inset always matches its real height — no
@@ -1280,13 +1271,8 @@ function ThreadNavigationSidebarPane(
   return (
     <View
       testID="thread-navigation-sidebar"
-      className="flex-1"
-      style={{
-        width: props.width,
-        backgroundColor,
-        borderRightColor: borderColor,
-        borderRightWidth: StyleSheet.hairlineWidth,
-      }}
+      className="flex-1 border-r border-border bg-drawer"
+      style={{ width: props.width }}
     >
       <View className="flex-1" style={{ paddingBottom: insets.bottom }}>
         <SwipeableScrollGateProvider enabled={swipeEnabled}>
@@ -1324,14 +1310,11 @@ function ThreadNavigationSidebarPane(
       </View>
 
       <View
-        className="absolute inset-x-0 top-0 z-[4]"
+        className="absolute inset-x-0 top-0 z-[4] bg-drawer"
         collapsable={false}
         onLayout={handleStickyHeaderLayout}
         pointerEvents="auto"
-        style={{
-          paddingTop: insets.top,
-          backgroundColor,
-        }}
+        style={{ paddingTop: insets.top }}
       >
         <View className="h-[50px] flex-row items-end gap-0.5 pr-2 pl-5">
           {/* Title slot doubles as the connection status surface: while an
@@ -1356,7 +1339,12 @@ function ThreadNavigationSidebarPane(
         </View>
 
         <View className="mx-4 mt-[9px] h-[38px] flex-row items-center gap-1.5 rounded-xl bg-sidebar-search pr-2.5 pl-[11px]">
-          <SymbolView name="magnifyingglass" size={15} tintColor={mutedColor} type="monochrome" />
+          <SymbolView
+            name="magnifyingglass"
+            size={15}
+            tintColorClassName={"accent-foreground-muted"}
+            type="monochrome"
+          />
           <TextInput
             ref={searchInputRef}
             accessibilityLabel="Search threads"
@@ -1365,7 +1353,7 @@ function ThreadNavigationSidebarPane(
             clearButtonMode="while-editing"
             onChangeText={props.onSearchQueryChange}
             placeholder="Search"
-            placeholderTextColor={placeholderColor}
+            placeholderTextColorClassName={"accent-placeholder"}
             returnKeyType="search"
             className="h-[34px] flex-1 px-0 py-0 font-sans text-base text-foreground"
             value={props.searchQuery}

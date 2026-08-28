@@ -1900,6 +1900,38 @@ function ChatMarkdown({
     },
     [searchProjectEntries, threadRef, workspaceRoot],
   );
+  const revealMarkdownFileInFileManager = useCallback(
+    async (fileLinkMeta: MarkdownFileLinkMeta) => {
+      const workspaceRelativePath = fileLinkMeta.workspaceRelativePath;
+      let match: string | null = null;
+      if (
+        workspaceRoot &&
+        environmentId !== null &&
+        workspaceRelativePath &&
+        needsWorkspaceBasenameLookup(workspaceRelativePath)
+      ) {
+        const result = await searchProjectEntries({
+          environmentId,
+          input: {
+            cwd: workspaceRoot,
+            query: workspaceRelativePath,
+            limit: WORKSPACE_BASENAME_LOOKUP_LIMIT,
+            kind: "file",
+          },
+        });
+        match =
+          result._tag === "Success"
+            ? pickWorkspaceBasenameMatch(workspaceRelativePath, result.value.entries)
+            : null;
+      }
+      const filePath =
+        match && workspaceRoot
+          ? resolvePathLinkTarget(match, workspaceRoot)
+          : fileLinkMeta.filePath;
+      return revealFileInFileManager(filePath);
+    },
+    [environmentId, revealFileInFileManager, searchProjectEntries, workspaceRoot],
+  );
   /* eslint-disable react/no-unstable-nested-components -- ReactMarkdown requires component
    * renderers that close over this message's metadata. useMemo keeps them stable until that
    * metadata changes. */

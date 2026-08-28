@@ -1,8 +1,6 @@
 import { SymbolView } from "../../components/AppSymbol";
 import { Pressable, StyleSheet } from "react-native";
 
-import { useThemeColor } from "../../lib/useThemeColor";
-
 export type SidebarFilterButtonIcon =
   | "line.3.horizontal.decrease.circle"
   | "line.3.horizontal.decrease.circle.fill";
@@ -23,7 +21,12 @@ export function SidebarFilterButton(props: {
       accessibilityRole="button"
       hitSlop={4}
     >
-      <SymbolView name={props.icon} size={16} tintColor={iconColor} type="monochrome" />
+      <SymbolView
+        name={props.icon}
+        size={16}
+        tintColorClassName="accent-foreground"
+        type="monochrome"
+      />
     </Pressable>
   );
 }

@@ -16,7 +16,12 @@ import {
   activeThreadAnchorTimestampMs,
   sortPinnedThreadsByOrderKey,
 } from "@t3tools/client-runtime/state/thread-sort";
-import type { EnvironmentId, ProjectId, ThreadLinkedPullRequest } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  ProjectId,
+  SidebarAutoSettleMode,
+  ThreadLinkedPullRequest,
+} from "@t3tools/contracts";
 
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
 
@@ -369,7 +374,7 @@ export function buildThreadListV2Items(input: {
       contract as settlementEnvironmentIds. */
   readonly snoozeEnvironmentIds?: ReadonlySet<EnvironmentId>;
   readonly autoSettleAfterDays?: number;
-  readonly autoSettleOnMerge?: boolean;
+  readonly autoSettleMode?: SidebarAutoSettleMode;
   /** Max settled rows to render; the rest are counted, not built. */
   readonly settledLimit?: number;
   /** Injectable for tests; defaults to now. */
@@ -390,7 +395,7 @@ export function buildThreadListV2Items(input: {
   const now = input.now ?? new Date().toISOString();
   const snoozeNow = input.snoozeNow ?? now;
   const autoSettleAfterDays = input.autoSettleAfterDays ?? 3;
-  const autoSettleOnMerge = input.autoSettleOnMerge ?? false;
+  const autoSettleMode = input.autoSettleMode ?? "never";
   const query = input.searchQuery.trim().toLocaleLowerCase();
   const projectKeys = input.projectRefs
     ? new Set(input.projectRefs.map((ref) => `${ref.environmentId}:${ref.projectId}`))
@@ -424,6 +429,12 @@ export function buildThreadListV2Items(input: {
     const supportsSnooze = input.snoozeEnvironmentIds?.has(thread.environmentId) ?? true;
     const cachedChangeRequest =
       input.changeRequestByKey?.get(`${thread.environmentId}:${thread.id}`) ?? null;
+    const changeRequest =
+      cachedChangeRequest !== null &&
+      (cachedChangeRequest.linkedPullRequestKey ?? null) ===
+        linkedPullRequestKey(thread.linkedPullRequest)
+        ? cachedChangeRequest
+        : null;
     // Visibility parity with web: snooze outranks everything, including a
     // pin — a snoozed thread leaves the list until it wakes (or raises its
     // hand). The pin (and its pinOrderKey) survives underneath, so a woken
@@ -444,7 +455,7 @@ export function buildThreadListV2Items(input: {
       effectiveSettled(thread, {
         now,
         autoSettleAfterDays,
-        autoSettleOnMerge,
+        autoSettleMode,
         changeRequest,
       })
     ) {
