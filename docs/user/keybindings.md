@@ -73,6 +73,10 @@ editor, returning to the exact line you left. Each defaults to two shortcuts, `c
 `mod+[` for back, `ctrl+right` and `mod+]` for forward, because macOS reserves the `ctrl` pair for
 switching desktops.
 
+`thread.copyReference` copies the active thread's pull request link, or its thread ID when no pull
+request is available. Its default shortcut is `mod+shift+c`, and it does not replace terminal copy
+while the terminal has focus.
+
 `thread.settle` settles the active thread or restores it when it is already settled. Its default
 shortcut is `mod+shift+s`, and it does not run while the terminal has focus.
 

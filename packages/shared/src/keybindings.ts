@@ -57,6 +57,7 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   // Upstream's manual settle toggle does not conflict with the fork's project
   // slots. Keep it so auto-settlement can stay off without losing a quick
   // explicit action.
+  { key: "mod+shift+c", command: "thread.copyReference", when: "!terminalFocus" },
   { key: "mod+shift+s", command: "thread.settle", when: "!terminalFocus" },
   // Numbered slots recall a project into the sidebar's scope. Upstream spends mod+1..9 on jumping
   // to the Nth thread in the list; this fork spends them on projects, which is the switch that is

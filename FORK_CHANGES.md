@@ -996,6 +996,24 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
   `apps/web/src/components/DiffPanel.tsx`, and
   `apps/web/src/components/files/GitChangesPanel.tsx`.
 
+## Upstream sync: Claude Fable 5.1 and server-side settlement
+
+- Merged upstream `main` through `163d50846`, including Claude Fable 5.1, manifest-driven Claude
+  model discovery, provider and chat performance fixes, Electron 43 preview fixes, and the new
+  thread-reference shortcut.
+- Claude Fable 5.1 is bundled as `claude-fable-5-1` and requires Claude Code 2.1.257. The installed
+  CLI already meets that boundary.
+- Kept remote model-manifest requests behind `T3CODE_ENABLE_PROVIDER_VERSION_CHECKS=true`. The
+  bundled Claude catalog works without that opt-in; future manifest-only model additions require
+  the opt-in or another fork build.
+- Adopted upstream's server-side settlement reactor so web, desktop, and mobile use one projected
+  state. Preserved the fork's exclusive policies: **Never**, **When PR merges or closes**, and
+  **After inactivity**. **Never** remains the default.
+- Preserved per-account Claude usage attribution while integrating append-only transcript scans,
+  and preserved the fork's project slots, thread colours, composer stack, multi-directory files,
+  and app-wide right-panel behavior.
+- A recovery branch named `backup/pre-fable-5-1-upstream-sync-20260901` points to the pre-merge tip.
+
 ## Validation Notes
 
 The fork-local changes above were validated with focused server tests, the full web unit suite,

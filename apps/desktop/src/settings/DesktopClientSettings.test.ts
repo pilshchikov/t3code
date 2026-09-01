@@ -20,7 +20,7 @@ const clientSettings: ClientSettings = {
   browserDefaultAppearance: "dark",
   browserRecordingFrameRate: 30,
   browserAutoShowFloatingPreview: false,
-  confirmQuit: true,
+  confirmQuit: "double-click",
   confirmThreadArchive: true,
   confirmThreadDelete: false,
   confirmThreadUnpin: false,
@@ -43,9 +43,6 @@ const clientSettings: ClientSettings = {
   showEditorTabs: true,
   showSkillsInSlashMenu: false,
   providerModelPreferences: {},
-  sidebarAutoSettleAfterDays: 3,
-  sidebarAutoSettleMode: "change-request",
-  sidebarAutoSettleOnMerge: true,
   sidebarProjectGroupingMode: "repository_path",
   sidebarProjectGroupingOverrides: {
     "environment-1:/tmp/project-a": "separate",

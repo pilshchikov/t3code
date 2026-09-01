@@ -7,15 +7,23 @@ their project, including when you connect to more than one environment.
 To require confirmation before unpinning, enable **Settings → General → Unpin confirmation**. The
 confirmation applies to the sidebar controls, thread menus, and the `mod+shift+p` shortcut.
 
-Pinned threads still move to **Settled** when they become inactive. They also move when their pull
-request merges if **Auto-settle merged threads** is enabled.
+Pinned threads can still move to **Settled** when the selected automatic settlement policy applies.
+Their pin order remains intact if they return to the active list.
+
+Each environment owns one automatic settlement policy. The server checks it even when no web,
+desktop, or mobile client is connected. The default is **Never**, so threads move only when you
+settle them manually. **When PR merges or closes** settles a thread only when the finished pull
+request is not older than the user's latest activity. **After inactivity** uses the configured day
+count and keeps threads with open pull requests active. Active work, pending input, and live
+background work always keep the thread active. Change the policy in **Settings > General**. A
+settings change affects future settlement and does not reopen a settled thread.
 
 When you un-settle a thread, it returns to the top of the active list so you can find it right
 away. Its timestamps do not change. Other threads keep their positions.
 
 Right-click a pull request link in a thread and choose **Link to thread** to show that pull request
-in the sidebar. The thread settles when the linked pull request merges if **Auto-settle merged
-threads** is enabled. Right-click the same link and choose **Unlink from thread** to remove it.
+in the sidebar. With the finished-pull-request policy selected, that linked request can settle the
+thread. Right-click the same link and choose **Unlink from thread** to remove it.
 
 On web and desktop, drag a pinned thread to change its position. On mobile, open the thread's menu
 and choose **Move up** or **Move down**. The order is stored by the server and appears on your
@@ -37,9 +45,8 @@ is colored until you color it, and colors are kept on the device you set them on
 
 ## Finished pull requests
 
-A thread whose pull request merges or closes stays where it is. To have T3 Code file those threads
-away for you, turn on **Auto-settle finished threads** in Settings. Threads still settle on their
-own after a period of inactivity, which is configured separately.
+A thread whose pull request merges or closes stays where it is under the default policy. Select
+**When PR merges or closes** in Settings if those events should settle threads automatically.
 
 If reordering is unavailable for one environment, update the T3 Code server running in that
 environment. Older servers can still pin and unpin threads, but do not understand synced ordering;

@@ -71,6 +71,7 @@ export type ProjectKeybindingCommand = (typeof PROJECT_KEYBINDING_COMMANDS)[numb
 export const THREAD_KEYBINDING_COMMANDS = [
   "thread.previous",
   "thread.next",
+  "thread.copyReference",
   "thread.settle",
   "thread.pin",
   ...THREAD_JUMP_KEYBINDING_COMMANDS,
