@@ -80,6 +80,8 @@ export const VcsRef = Schema.Struct({
   current: Schema.Boolean,
   isDefault: Schema.Boolean,
   worktreePath: TrimmedNonEmptyStringSchema.pipe(Schema.NullOr),
+  /** Unix timestamp of the newest commit on this ref. */
+  lastCommitAt: Schema.optional(NonNegativeInt),
   /** The configured upstream, short form (`origin/main`). Null when the branch tracks nothing. */
   upstreamRef: Schema.optional(TrimmedNonEmptyStringSchema.pipe(Schema.NullOr)),
   /** Commits on this branch the upstream does not have. Null when there is no upstream. */

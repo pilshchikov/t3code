@@ -1425,9 +1425,14 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         assert.equal(yield* git(cwd, ["branch", "--show-current"]), "feature/renamed");
 
         const refs = yield* driver.listRefs({ cwd });
+        const expectedLastCommitAt = Number(yield* git(cwd, ["show", "-s", "--format=%ct"]));
         assert.equal(
           refs.refs.find((refName) => refName.name === "feature/renamed")?.current,
           true,
+        );
+        assert.equal(
+          refs.refs.find((refName) => refName.name === "feature/renamed")?.lastCommitAt,
+          expectedLastCommitAt,
         );
       }),
     );

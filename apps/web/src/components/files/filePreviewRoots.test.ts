@@ -35,57 +35,79 @@ describe("resolveFilePreviewRoots", () => {
 });
 
 describe("resolveFileWorktreeOptions", () => {
-  it("lists live worktrees with the active checkout first", () => {
+  it("lists live worktrees by newest commit", () => {
     expect(
       resolveFileWorktreeOptions("/worktrees/project/task-b", [
         {
           name: "main",
           current: false,
           worktreePath: "/repos/project",
+          lastCommitAt: 200,
         },
         {
           name: "feature/task-a",
           current: false,
           worktreePath: "/worktrees/project/task-a",
+          lastCommitAt: 300,
         },
         {
           name: "feature/task-b",
           current: true,
           worktreePath: "/worktrees/project/task-b",
+          lastCommitAt: 100,
         },
         {
           name: "origin/main",
           current: false,
           worktreePath: null,
+          lastCommitAt: 400,
         },
       ]),
     ).toEqual([
       {
+        path: "/worktrees/project/task-a",
+        refName: "feature/task-a",
+        current: false,
+        lastCommitAt: 300,
+      },
+      { path: "/repos/project", refName: "main", current: false, lastCommitAt: 200 },
+      {
         path: "/worktrees/project/task-b",
         refName: "feature/task-b",
         current: true,
+        lastCommitAt: 100,
       },
-      { path: "/worktrees/project/task-a", refName: "feature/task-a", current: false },
-      { path: "/repos/project", refName: "main", current: false },
     ]);
   });
 
   it("keeps a standalone active checkout available", () => {
-    expect(
-      resolveFileWorktreeOptions("/multiwork/project-copy/", [
-        { name: "main", current: false, worktreePath: "/repos/project" },
-      ]),
-    ).toEqual([
-      { path: "/multiwork/project-copy/", refName: null, current: true },
-      { path: "/repos/project", refName: "main", current: false },
+    expect(resolveFileWorktreeOptions("/multiwork/project-copy/", [])).toEqual([
+      {
+        path: "/multiwork/project-copy/",
+        refName: null,
+        current: true,
+        lastCommitAt: null,
+      },
     ]);
   });
 
   it("deduplicates equivalent paths with trailing separators", () => {
     expect(
       resolveFileWorktreeOptions("/repos/project/", [
-        { name: "main", current: true, worktreePath: "/repos/project" },
+        {
+          name: "main",
+          current: true,
+          worktreePath: "/repos/project",
+          lastCommitAt: 100,
+        },
       ]),
-    ).toEqual([{ path: "/repos/project", refName: "main", current: true }]);
+    ).toEqual([
+      {
+        path: "/repos/project",
+        refName: "main",
+        current: true,
+        lastCommitAt: 100,
+      },
+    ]);
   });
 });

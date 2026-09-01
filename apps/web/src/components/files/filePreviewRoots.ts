@@ -4,6 +4,7 @@ export interface FileWorktreeOption {
   readonly path: string;
   readonly refName: string | null;
   readonly current: boolean;
+  readonly lastCommitAt: number | null;
 }
 
 function comparablePath(path: string): string {
@@ -18,7 +19,7 @@ function comparablePath(path: string): string {
  */
 export function resolveFileWorktreeOptions(
   activeCwd: string,
-  refs: ReadonlyArray<Pick<VcsRef, "current" | "name" | "worktreePath">>,
+  refs: ReadonlyArray<Pick<VcsRef, "current" | "lastCommitAt" | "name" | "worktreePath">>,
 ): ReadonlyArray<FileWorktreeOption> {
   const activePath = comparablePath(activeCwd);
   const byPath = new Map<string, FileWorktreeOption>();
@@ -31,15 +32,22 @@ export function resolveFileWorktreeOptions(
       path: ref.worktreePath,
       refName: ref.name,
       current: ref.current || key === activePath,
+      lastCommitAt: ref.lastCommitAt ?? null,
     });
   }
 
   if (!byPath.has(activePath)) {
-    byPath.set(activePath, { path: activeCwd, refName: null, current: true });
+    byPath.set(activePath, {
+      path: activeCwd,
+      refName: null,
+      current: true,
+      lastCommitAt: null,
+    });
   }
 
   return [...byPath.values()].toSorted(
     (left, right) =>
+      (right.lastCommitAt ?? -1) - (left.lastCommitAt ?? -1) ||
       Number(right.current) - Number(left.current) ||
       (left.refName ?? left.path).localeCompare(right.refName ?? right.path),
   );
