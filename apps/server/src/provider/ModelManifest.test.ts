@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { ProviderDriverKind, type ServerProviderModel } from "@t3tools/contracts";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
@@ -112,11 +113,21 @@ const serviceLayers = (input: {
   readonly prefix: string;
   readonly response: () => Response;
   readonly settings?: Parameters<typeof ServerSettings.layerTest>[0];
+  readonly providerVersionChecksEnabled?: boolean;
 }) =>
   ServerConfig.layerTest(process.cwd(), { prefix: input.prefix }).pipe(
     Layer.provideMerge(NodeServices.layer),
     Layer.provideMerge(ServerSettings.layerTest(input.settings ?? {})),
     Layer.provideMerge(httpClientLayer(input.response)),
+    Layer.merge(
+      ConfigProvider.layer(
+        ConfigProvider.fromEnv({
+          env: input.providerVersionChecksEnabled
+            ? { T3CODE_ENABLE_PROVIDER_VERSION_CHECKS: "true" }
+            : {},
+        }),
+      ),
+    ),
   );
 
 describe("ModelManifest service", () => {
@@ -138,6 +149,7 @@ describe("ModelManifest service", () => {
         serviceLayers({
           prefix: "model-manifest-fetch-test",
           response: () => Response.json(REMOTE_MANIFEST),
+          providerVersionChecksEnabled: true,
         }),
       ),
     ),
@@ -153,10 +165,31 @@ describe("ModelManifest service", () => {
         serviceLayers({
           prefix: "model-manifest-malformed-test",
           response: () => Response.json({ version: 999, nonsense: true }),
+          providerVersionChecksEnabled: true,
         }),
       ),
     ),
   );
+
+  it.live("does not fetch without the fork's provider-version opt-in", () => {
+    let fetchCount = 0;
+    return Effect.gen(function* () {
+      const service = yield* make;
+      assert.deepStrictEqual(yield* service.refresh, BUNDLED_MODEL_MANIFEST);
+      assert.strictEqual(fetchCount, 0);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        serviceLayers({
+          prefix: "model-manifest-fork-optin-test",
+          response: () => {
+            fetchCount += 1;
+            return Response.json(REMOTE_MANIFEST);
+          },
+        }),
+      ),
+    );
+  });
 
   it.live("does not fetch when provider update checks are disabled", () =>
     Effect.gen(function* () {
@@ -178,6 +211,7 @@ describe("ModelManifest service", () => {
           prefix: "model-manifest-optout-test",
           response: () => Response.json(REMOTE_MANIFEST),
           settings: { enableProviderUpdateChecks: false },
+          providerVersionChecksEnabled: true,
         }),
       ),
     ),

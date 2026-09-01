@@ -195,6 +195,7 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
 
       assert.equal(defaultsByCommand.get("thread.previous"), "mod+shift+[");
       assert.equal(defaultsByCommand.get("thread.next"), "mod+shift+]");
+      assert.equal(defaultsByCommand.get("thread.settle"), "mod+shift+s");
       // mod+1..9 recall project slots in this fork; thread.jump.* stays a bindable command.
       assert.equal(defaultsByCommand.get("project.jump.1"), "mod+1");
       assert.equal(defaultsByCommand.get("project.jump.9"), "mod+9");

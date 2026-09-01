@@ -78,6 +78,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 interface BranchToolbarBranchSelectorProps {
   className?: string;
+  compact?: boolean;
   environmentId: EnvironmentId;
   threadId: ThreadId;
   draftId?: DraftId;
@@ -100,6 +101,7 @@ function toBranchActionErrorMessage(error: unknown): string {
 
 export function BranchToolbarBranchSelector({
   className,
+  compact = false,
   environmentId,
   threadId,
   draftId,
@@ -936,17 +938,26 @@ export function BranchToolbarBranchSelector({
         >
           <ComboboxTrigger
             render={<Button variant="ghost" size="xs" />}
-            className="min-w-0 max-w-full text-muted-foreground/70 hover:text-foreground/80"
+            className={cn(
+              "min-w-0 max-w-full text-muted-foreground/70 hover:text-foreground/80",
+              compact && "max-w-32",
+            )}
             disabled={isInitialBranchesLoadPending || isBranchActionPending}
           >
             <GitBranchIcon className="size-3 shrink-0 opacity-70" />
             <span
               data-composer-label
-              className="min-w-0 max-w-[240px] group-data-[compact]/composer-context:max-w-0"
+              className={cn(
+                "min-w-0 max-w-[240px] group-data-[compact]/composer-context:max-w-0",
+                compact && "max-w-24",
+              )}
             >
               <span
                 data-composer-label-motion
-                className="block w-full min-w-0 max-w-[240px] origin-left truncate transition-[opacity,transform] duration-180 ease-[cubic-bezier(0.32,0.72,0,1)] group-data-[compact]/composer-context:[transform:translateX(-0.25rem)_scaleX(0.95)] group-data-[compact]/composer-context:opacity-0 motion-reduce:transform-none motion-reduce:transition-opacity"
+                className={cn(
+                  "block w-full min-w-0 max-w-[240px] origin-left truncate transition-[opacity,transform] duration-180 ease-[cubic-bezier(0.32,0.72,0,1)] group-data-[compact]/composer-context:[transform:translateX(-0.25rem)_scaleX(0.95)] group-data-[compact]/composer-context:opacity-0 motion-reduce:transform-none motion-reduce:transition-opacity",
+                  compact && "max-w-24",
+                )}
               >
                 {triggerLabel}
               </span>

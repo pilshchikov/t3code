@@ -64,6 +64,7 @@ vi.mock("./usageProviders", async (importOriginal) => {
     PROVIDER_PRESENTATION: {
       codex: { color: "white", label: "Codex", mark: "span" },
       claude: { color: "orange", label: "Claude Code", mark: "span" },
+      grok: { color: "gray", label: "Grok Build", mark: "span" },
     },
   };
 });
@@ -135,14 +136,14 @@ beforeEach(() => {
 });
 
 describe("UsagePage hourly breakdown", () => {
-  it("keeps recent activity visible first without empty hourly rows", () => {
+  it("keeps every hourly period in chronological order", () => {
     const markup = renderToStaticMarkup(<UsagePage />);
     const body = markup.match(/<tbody>(.*?)<\/tbody>/)?.[1] ?? "";
 
-    expect(body.match(/<tr/g)).toHaveLength(2);
+    expect(body.match(/<tr/g)).toHaveLength(24);
     expect(body).toContain("$11.00");
     expect(body).toContain("$13.00");
-    expect(body.indexOf("$11.00")).toBeLessThan(body.indexOf("$13.00"));
+    expect(body.indexOf("$13.00")).toBeLessThan(body.indexOf("$11.00"));
   });
 
   it("keeps chronological ordering when the token metric is selected", () => {
@@ -151,7 +152,7 @@ describe("UsagePage hourly breakdown", () => {
     const markup = renderToStaticMarkup(<UsagePage />);
     const body = markup.match(/<tbody>(.*?)<\/tbody>/)?.[1] ?? "";
 
-    expect(body).toMatch(/\$11\.00.*\$13\.00/);
+    expect(body).toMatch(/\$13\.00.*\$11\.00/);
   });
 });
 

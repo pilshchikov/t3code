@@ -56,10 +56,16 @@ import Migration0040 from "./Migrations/040_ProjectionProjectFaviconPath.ts";
 import Migration0041 from "./Migrations/041_ProjectionProjectWorkspaceRoots.ts";
 import Migration0041AuthSessionConnection from "./Migrations/041_AuthSessionClientConnection.ts";
 import Migration0042 from "./Migrations/042_ProjectionThreadLinkedPullRequest.ts";
+// Migration 041 was already used by the multi-directory fork for workspace roots.
+// Keep the upstream client-session migration available under a new id so databases
+// created by either history can be upgraded without renumbering released migrations.
 import Migration0043 from "./Migrations/041_AuthSessionClientConnection.ts";
 import Migration0044 from "./Migrations/041_ProjectionProjectWorkspaceRoots.ts";
 import Migration0045 from "./Migrations/045_ProjectionThreadsUnsettledAt.ts";
 
+// Both fork histories used migration 041 for different additive schema changes.
+// Run both on fresh databases; 043/044 below repair databases created by either
+// history without rewriting the already-recorded migration 041.
 const Migration0041Combined = Migration0041.pipe(
   Effect.andThen(Migration0041AuthSessionConnection),
 );

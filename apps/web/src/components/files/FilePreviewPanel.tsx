@@ -770,7 +770,7 @@ function RenderedMarkdownSurface({
         cwd={workspaceDocumentDirectory(cwd, relativePath)}
         workspaceRoot={cwd}
         threadRef={threadRef}
-        className="mx-auto max-w-4xl px-6 py-5"
+        className="file-markdown-preview w-full px-6 py-5"
         onTaskListChange={({ markerOffset, checked }) => {
           const currentContents =
             getOptimisticProjectFileQueryData(environmentId, cwd, relativePath)?.contents ??

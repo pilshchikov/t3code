@@ -1,5 +1,5 @@
 import { SymbolView } from "../../components/AppSymbol";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 export interface SidebarHeaderActionsProps {
   readonly onOpenSettings: () => void;
@@ -10,11 +10,6 @@ function FallbackHeaderButton(props: {
   readonly icon: "gearshape" | "square.and.pencil";
   readonly onPress: () => void;
 }) {
-  const iconColor = useThemeColor("--color-foreground");
-  const pressedBackgroundColor = useThemeColor("--color-subtle");
-  const idleBackgroundColor = useThemeColor("--color-glass-surface");
-  const borderColor = useThemeColor("--color-header-border");
-
   return (
     <Pressable
       className="size-11 items-center justify-center rounded-full bg-subtle active:opacity-70"

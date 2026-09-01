@@ -449,10 +449,10 @@ export const ClaudeSettings = makeProviderSettingsSchema(
     homePath: TrimmedString.pipe(
       Schema.withDecodingDefault(Effect.succeed("")),
       Schema.annotateKey({
-        title: "CLAUDE_CONFIG_DIR path",
+        title: "Process HOME path",
         description:
-          "Custom Claude home and config directory. Keeps .claude.json and .claude separate.",
-        providerSettingsForm: { placeholder: "~/.claude", clearWhenEmpty: "omit" },
+          "Advanced: override the full HOME used by this Claude instance. Usually leave this empty and use Claude config directory instead.",
+        providerSettingsForm: { placeholder: "~", clearWhenEmpty: "omit" },
       }),
     ),
     customModels: Schema.Array(Schema.String).pipe(
@@ -486,7 +486,10 @@ export const ClaudeSettings = makeProviderSettingsSchema(
     ),
   },
   {
-    order: ["binaryPath", "configDir", "homePath", "launchArgs"],
+    // Keep the fork's per-account config directory beside upstream's
+    // auto-compaction control. A merge conflict previously kept each field in
+    // the schema but omitted autoCompactWindow from the intended form order.
+    order: ["binaryPath", "configDir", "homePath", "autoCompactWindow", "launchArgs"],
   },
 );
 export type ClaudeSettings = typeof ClaudeSettings.Type;

@@ -2352,7 +2352,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
           const status = yield* checkClaudeProviderStatus(
             {
               ...defaultClaudeSettings,
-              homePath: claudeConfigDir,
+              configDir: claudeConfigDir,
             },
             claudeCapabilities(),
           );

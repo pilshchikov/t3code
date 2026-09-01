@@ -1,6 +1,8 @@
 import { FolderGit2Icon, FolderGitIcon, FolderIcon, FoldersIcon, HistoryIcon } from "lucide-react";
 import { memo, useMemo } from "react";
 
+import { cn } from "../lib/utils";
+
 import {
   resolveCurrentWorkspaceLabel,
   resolveEnvModeLabel,
@@ -23,6 +25,7 @@ interface BranchToolbarEnvModeSelectorProps {
   envLocked: boolean;
   effectiveEnvMode: EnvMode;
   activeWorktreePath: string | null;
+  compact?: boolean;
   onEnvModeChange: (mode: EnvMode) => void;
   previousWorktreeLabel?: string | null;
   onUsePreviousWorktree?: () => void;
@@ -32,6 +35,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
   envLocked,
   effectiveEnvMode,
   activeWorktreePath,
+  compact = false,
   onEnvModeChange,
   previousWorktreeLabel,
   onUsePreviousWorktree,
@@ -52,7 +56,10 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
   if (envLocked) {
     return (
       <span
-        className="inline-flex h-7 shrink-0 items-center gap-1 border border-transparent px-[calc(--spacing(3)-1px)] text-sm font-medium text-muted-foreground/70 sm:h-6 sm:text-xs"
+        className={cn(
+          "inline-flex h-7 shrink-0 items-center gap-1 border border-transparent px-[calc(--spacing(3)-1px)] text-sm font-medium text-muted-foreground/70 sm:h-6 sm:text-xs",
+          compact && "max-w-28 truncate",
+        )}
         data-composer-context-control
       >
         {activeWorktreePath ? (
@@ -86,7 +93,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
       <SelectTrigger
         variant="ghost"
         size="xs"
-        className="min-w-0 shrink font-medium"
+        className={cn("min-w-0 shrink font-medium", compact && "max-w-28")}
         aria-label="Workspace"
         data-composer-context-control
       >
@@ -99,11 +106,17 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
         )}
         <span
           data-composer-label
-          className="min-w-0 max-w-[240px] group-data-[compact]/composer-context:max-w-0"
+          className={cn(
+            "min-w-0 max-w-[240px] group-data-[compact]/composer-context:max-w-0",
+            compact && "max-w-20",
+          )}
         >
           <span
             data-composer-label-motion
-            className="block w-full min-w-0 max-w-[240px] origin-left truncate transition-[opacity,transform] duration-180 ease-[cubic-bezier(0.32,0.72,0,1)] group-data-[compact]/composer-context:[transform:translateX(-0.25rem)_scaleX(0.95)] group-data-[compact]/composer-context:opacity-0 motion-reduce:transform-none motion-reduce:transition-opacity"
+            className={cn(
+              "block w-full min-w-0 max-w-[240px] origin-left truncate transition-[opacity,transform] duration-180 ease-[cubic-bezier(0.32,0.72,0,1)] group-data-[compact]/composer-context:[transform:translateX(-0.25rem)_scaleX(0.95)] group-data-[compact]/composer-context:opacity-0 motion-reduce:transform-none motion-reduce:transition-opacity",
+              compact && "max-w-20",
+            )}
           >
             <SelectValue />
           </span>

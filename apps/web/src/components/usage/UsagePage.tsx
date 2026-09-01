@@ -131,7 +131,6 @@ export function UsagePage() {
     const byHour = new Map(merged.hourly.map((entry) => [entry.hourStart, entry]));
     return hours.map((hourStart) => byHour.get(hourStart) ?? zeroHour(hourStart));
   }, [isPast24Hours, merged.daily, merged.hourly, hours]);
-
   const selectWindow = (days: number) => {
     setWindowSelection({
       days,

@@ -350,6 +350,8 @@ import {
   shouldReleaseTimelineAnchorForToolActivity,
   shouldShowBranchMismatchBanner,
   getStartedThreadModelChangeBlockReason,
+  COMPOSER_CONTEXT_STRIP_COLLAPSED_BY_PROJECT_KEY,
+  ComposerContextStripCollapsedByProjectSchema,
   LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
   LastInvokedScriptByProjectSchema,
   type LocalDispatchSnapshot,
@@ -409,6 +411,22 @@ const EMPTY_ACTIVITIES: OrchestrationThreadActivity[] = [];
 const EMPTY_PROVIDERS: ServerProvider[] = [];
 const EMPTY_PROVIDER_SKILLS: ServerProvider["skills"] = [];
 const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnswer> = {};
+
+function getComposerOverlayOccupiedHeight(element: HTMLElement): number {
+  const overlayRect = element.getBoundingClientRect();
+  let visualTop = overlayRect.top;
+  let visualBottom = overlayRect.bottom;
+
+  for (const tab of element.querySelectorAll<HTMLElement>(".chat-composer-shoulder-tab")) {
+    const tabRect = tab.getBoundingClientRect();
+    if (!Number.isFinite(tabRect.top) || !Number.isFinite(tabRect.bottom)) continue;
+    visualTop = Math.min(visualTop, tabRect.top);
+    visualBottom = Math.max(visualBottom, tabRect.bottom);
+  }
+
+  return Math.ceil(Math.max(0, visualBottom - visualTop));
+}
+
 function useDraftHeroLayoutTransition(isDraftHeroState: boolean) {
   const transitionGroupRef = useRef<HTMLDivElement | null>(null);
   const composerAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -1430,6 +1448,7 @@ function ChatViewContent(props: ChatViewProps) {
   const composerRef = useComposerHandleContext() ?? localComposerRef;
   const [isWorkspaceFileDragActive, setIsWorkspaceFileDragActive] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [timelineIsAtEnd, setTimelineIsAtEnd] = useState(true);
   const [expandedImage, setExpandedImage] = useState<ExpandedImagePreview | null>(null);
   const [optimisticUserMessages, setOptimisticUserMessages] = useState<ChatMessage[]>([]);
   const [feedbackSubmissionsByThreadKey, setFeedbackSubmissionsByThreadKey] = useState<
@@ -1509,7 +1528,7 @@ function ChatViewContent(props: ChatViewProps) {
     if (!composerOverlayElement) return;
 
     const updateHeight = () => {
-      const nextHeight = Math.ceil(composerOverlayElement.getBoundingClientRect().height);
+      const nextHeight = getComposerOverlayOccupiedHeight(composerOverlayElement);
       if (nextHeight <= 0) return;
       setComposerOverlayHeight((currentHeight) =>
         currentHeight === nextHeight ? currentHeight : nextHeight,
@@ -1517,11 +1536,34 @@ function ChatViewContent(props: ChatViewProps) {
     };
 
     updateHeight();
-    if (typeof ResizeObserver === "undefined") return;
 
-    const observer = new ResizeObserver(updateHeight);
-    observer.observe(composerOverlayElement);
-    return () => observer.disconnect();
+    let frame: number | null = null;
+    const scheduleHeightUpdate = () => {
+      if (frame !== null) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        updateHeight();
+      });
+    };
+
+    const resizeObserver =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleHeightUpdate);
+    resizeObserver?.observe(composerOverlayElement);
+
+    // Shoulder tabs are absolutely positioned, so mounting or removing one
+    // does not resize the overlay itself. Watch the subtree so task/stash
+    // badges reserve their visual height as soon as a turn starts or ends.
+    const mutationObserver =
+      typeof MutationObserver === "undefined" ? null : new MutationObserver(scheduleHeightUpdate);
+    mutationObserver?.observe(composerOverlayElement, { childList: true, subtree: true });
+
+    return () => {
+      resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
+      if (frame !== null) {
+        cancelAnimationFrame(frame);
+      }
+    };
   }, [composerOverlayElement]);
 
   const terminalUiState = useTerminalUiStateStore((state) =>
@@ -1841,6 +1883,30 @@ function ChatViewContent(props: ChatViewProps) {
     [activeThread?.environmentId, activeThread?.projectId],
   );
   const activeProject = useProject(activeProjectRef);
+  const [contextStripCollapsedByProjectId, setContextStripCollapsedByProjectId] = useLocalStorage(
+    COMPOSER_CONTEXT_STRIP_COLLAPSED_BY_PROJECT_KEY,
+    {},
+    ComposerContextStripCollapsedByProjectSchema,
+  );
+  const isComposerContextStripCollapsed = Boolean(
+    activeProject?.id && contextStripCollapsedByProjectId[activeProject.id],
+  );
+  const setComposerContextStripCollapsed = useCallback(
+    (collapsed: boolean) => {
+      const projectId = activeProject?.id;
+      if (!projectId) return;
+      setContextStripCollapsedByProjectId((current) => {
+        const next = { ...current };
+        if (collapsed) {
+          next[projectId] = true;
+        } else {
+          delete next[projectId];
+        }
+        return next;
+      });
+    },
+    [activeProject?.id, setContextStripCollapsedByProjectId],
+  );
   const handleNewThreadInActiveProject = useCallback(() => {
     startNewThreadForProject(activeProjectRef, handleNewThread);
   }, [activeProjectRef, handleNewThread]);
@@ -2894,7 +2960,7 @@ function ChatViewContent(props: ChatViewProps) {
   });
   const composerWorkspaceRootCount = Math.max(1, activeProject?.workspaceRoots?.length ?? 1);
   const composerContextShellStyle =
-    showComposerContextStrip && composerWorkspaceRootCount > 1
+    showComposerContextStrip && composerWorkspaceRootCount > 1 && !isComposerContextStripCollapsed
       ? ({
           "--chat-composer-context-extension": `${2 + (composerWorkspaceRootCount - 1) * 1.75}rem`,
         } as CSSProperties & { "--chat-composer-context-extension": string })
@@ -3204,7 +3270,8 @@ function ChatViewContent(props: ChatViewProps) {
           return { ...current, [activeProject.id]: script.id };
         });
       }
-      const targetCwd = options?.cwd ?? gitCwd ?? activeProject.workspaceRoot;
+      const targetCwd =
+        options?.cwd ?? script.workingDirectory ?? gitCwd ?? activeProject.workspaceRoot;
       const baseTerminalId =
         terminalUiState.activeTerminalId || activeKnownTerminalIds[0] || DEFAULT_THREAD_TERMINAL_ID;
       const isBaseTerminalBusy = runningTerminalIds.includes(baseTerminalId);
@@ -4015,6 +4082,38 @@ function ChatViewContent(props: ChatViewProps) {
     },
     [composerOverlayHeight],
   );
+  const reconcileTimelineLatestOutput = useCallback(() => {
+    if (!timelineLiveFollowEnabled) return;
+
+    const list = legendListRef.current;
+    if (!list) return;
+
+    if (timelineScrollModeRef.current === "following-end") {
+      void list.scrollToEnd?.({ animated: false });
+      return;
+    }
+
+    if (timelineScrollModeRef.current !== "anchoring-new-turn") {
+      return;
+    }
+    if (pendingTimelineAnchorRef.current !== null) {
+      return;
+    }
+    if (
+      positionedTimelineAnchorRef.current !== null &&
+      settledTimelineAnchorRef.current !== positionedTimelineAnchorRef.current
+    ) {
+      return;
+    }
+
+    const metrics = getActiveTimelineTurnMetrics(list);
+    if (!metrics || metrics.scrollDeltaToRevealEnd <= 1) {
+      return;
+    }
+
+    const nextOffset = list.getState().scroll + metrics.scrollDeltaToRevealEnd;
+    void list.scrollToOffset({ offset: nextOffset, animated: false });
+  }, [getActiveTimelineTurnMetrics, timelineLiveFollowEnabled]);
   const timelineRealContentOverflowsViewport = useCallback(
     (list?: LegendListRef | null) => {
       const resolvedList = list ?? legendListRef.current;
@@ -4048,6 +4147,7 @@ function ChatViewContent(props: ChatViewProps) {
   // gesture opts out.
   const scrollToEnd = useCallback((animated = false) => {
     isAtEndRef.current = true;
+    setTimelineIsAtEnd(true);
     timelineScrollModeRef.current = "following-end";
     liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
     setTimelineLiveFollowEnabled(true);
@@ -4261,6 +4361,7 @@ function ChatViewContent(props: ChatViewProps) {
   }, []);
 
   const onIsAtEndChange = useCallback((isAtEnd: boolean) => {
+    setTimelineIsAtEnd((current) => (current === isAtEnd ? current : isAtEnd));
     if (
       !isAtEnd &&
       liveFollowUserScrollGenerationRef.current === anchorUserScrollGenerationRef.current
@@ -4290,16 +4391,14 @@ function ChatViewContent(props: ChatViewProps) {
   }, []);
 
   // Anchored end space intentionally disables LegendList's normal end-follow so
-  // the sent message can stay near the top. T3 only owns streaming adjustments
-  // during that mode; LegendList owns ordinary end-follow everywhere else.
+  // the sent message can stay near the top. Reconcile both modes after layout
+  // changes: the composer can grow when task/monitoring rows appear, and the
+  // latest timeline row can be a work-log/tool/plan row rather than a message.
   useEffect(() => {
     if (!activeThread?.id) {
       return;
     }
-    if (liveFollowUserScrollGenerationRef.current !== anchorUserScrollGenerationRef.current) {
-      return;
-    }
-    if (timelineScrollModeRef.current !== "anchoring-new-turn") {
+    if (!timelineLiveFollowEnabled) {
       return;
     }
 
@@ -4309,27 +4408,7 @@ function ChatViewContent(props: ChatViewProps) {
         if (liveFollowUserScrollGenerationRef.current !== anchorUserScrollGenerationRef.current) {
           return;
         }
-        if (pendingTimelineAnchorRef.current !== null) {
-          return;
-        }
-        if (
-          positionedTimelineAnchorRef.current !== null &&
-          settledTimelineAnchorRef.current !== positionedTimelineAnchorRef.current
-        ) {
-          return;
-        }
-        const list = legendListRef.current;
-        if (!list) {
-          return;
-        }
-
-        const metrics = getActiveTimelineTurnMetrics(list);
-        if (!metrics || metrics.scrollDeltaToRevealEnd <= 1) {
-          return;
-        }
-
-        const nextOffset = list.getState().scroll + metrics.scrollDeltaToRevealEnd;
-        void list.scrollToOffset({ offset: nextOffset, animated: false });
+        reconcileTimelineLatestOutput();
       });
     });
 
@@ -4339,7 +4418,13 @@ function ChatViewContent(props: ChatViewProps) {
         cancelAnimationFrame(secondFrame);
       }
     };
-  }, [activeThread?.id, timelineEntries, getActiveTimelineTurnMetrics]);
+  }, [
+    activeThread?.id,
+    composerOverlayHeight,
+    reconcileTimelineLatestOutput,
+    timelineEntries,
+    timelineLiveFollowEnabled,
+  ]);
 
   useEffect(() => {
     setPullRequestDialogState(null);
@@ -4347,6 +4432,7 @@ function ChatViewContent(props: ChatViewProps) {
     timelineScrollModeRef.current = "following-end";
     liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
     setTimelineLiveFollowEnabled(true);
+    setTimelineIsAtEnd(true);
     pendingTimelineAnchorRef.current = null;
     positionedTimelineAnchorRef.current = null;
     settledTimelineAnchorRef.current = null;
@@ -7188,20 +7274,23 @@ function ChatViewContent(props: ChatViewProps) {
               />
 
               {/* scroll to end pill — shown when user has scrolled away from the live edge */}
-              {showScrollToBottom && (
+              {(showScrollToBottom ||
+                (isWorking &&
+                  (!timelineIsAtEnd ||
+                    timelineScrollModeRef.current === "anchoring-new-turn"))) && (
                 <div
                   className="pointer-events-none absolute left-1/2 z-30 flex -translate-x-1/2 justify-center py-1.5"
                   style={{ bottom: composerOverlayHeight + 4 }}
                 >
                   <Button
-                    aria-label="Scroll to end"
+                    aria-label={isWorking ? "Follow agent output" : "Scroll to latest"}
                     onClick={() => scrollToEnd(true)}
                     className="pointer-events-auto gap-1.5 rounded-full px-3 text-muted-foreground hover:text-foreground"
                     size="xs"
                     variant="glass"
                   >
                     <ChevronDownIcon className="size-3.5" />
-                    Scroll to end
+                    {isWorking ? "Follow agent" : "Scroll to latest"}
                   </Button>
                 </div>
               )}
@@ -7372,6 +7461,10 @@ function ChatViewContent(props: ChatViewProps) {
                                 showGitControls={isGitRepo}
                                 {...(routeKind === "draft" && draftId ? { draftId } : {})}
                                 onEnvModeChange={onEnvModeChange}
+                                contextStripCollapsed={
+                                  isComposerContextStripCollapsed && composerWorkspaceRootCount > 1
+                                }
+                                onContextStripCollapsedChange={setComposerContextStripCollapsed}
                                 allowWorkspaceModeChange={canChangeServerThreadWorkspace}
                                 startFromOrigin={startFromOrigin}
                                 onStartFromOriginChange={onStartFromOriginChange}

@@ -132,7 +132,7 @@ export const make = Effect.gen(function* () {
     }
 
     const terminalId = input.preferredTerminalId ?? `setup-${script.id}`;
-    const cwd = input.worktreePath;
+    const cwd = script.workingDirectory ?? input.worktreePath;
     const env = projectScriptRuntimeEnv({
       project: { cwd: project.workspaceRoot },
       worktreePath: input.worktreePath,

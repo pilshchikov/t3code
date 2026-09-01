@@ -456,7 +456,7 @@ describe("ClaudeAdapterLive", () => {
   });
 
   it.effect("runs Claude SDK sessions with the configured CLAUDE_CONFIG_DIR", () => {
-    const harness = makeHarness({ claudeConfig: { homePath: "~/.claude-work" } });
+    const harness = makeHarness({ claudeConfig: { configDir: "~/.claude-work" } });
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       yield* adapter.startSession({

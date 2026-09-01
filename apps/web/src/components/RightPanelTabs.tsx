@@ -1,4 +1,4 @@
-import type { ContextMenuItem, PreviewSessionSnapshot, PullRequestState } from "@t3tools/contracts";
+import type { PreviewSessionSnapshot, PullRequestState } from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import {
   Bot,
@@ -27,13 +27,11 @@ import { isElectron } from "~/env";
 import type { DesktopPreviewOverlay } from "~/previewStateStore";
 import type { RightPanelSurface } from "~/rightPanelStore";
 import { cn } from "~/lib/utils";
-import { readLocalApi } from "~/localApi";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { Kbd } from "~/components/ui/kbd";
 import { Menu, MenuItem, MenuPopup, MenuShortcut, MenuTrigger } from "~/components/ui/menu";
 import { ScrollArea } from "~/components/ui/scroll-area";
-import { PanelTabCloseButton } from "~/components/ui/panel-tab-close-button";
 import { faviconUrlForOrigin } from "~/lib/favicon";
 import { useTheme } from "~/hooks/useTheme";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
@@ -128,14 +126,6 @@ const SURFACE_UNAVAILABLE_HINTS = {
   pullRequest: "No pull request on this branch yet.",
   agents: "Available from a thread.",
 } as const;
-
-type TabContextMenuAction =
-  | "copy-path"
-  | "toggle-mute"
-  | "close"
-  | "close-others"
-  | "close-to-right"
-  | "close-all";
 
 /**
  * Desktop preview tab backing a surface, or null for non-preview surfaces, the
@@ -679,92 +669,12 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
   };
 
   const handleTabContextMenu = useCallback(
-    async (event: ReactMouseEvent, surface: RightPanelSurface) => {
+    (event: ReactMouseEvent<HTMLDivElement>, surface: RightPanelSurface) => {
       event.preventDefault();
       event.stopPropagation();
-
-      const api = readLocalApi();
-      if (!api) return;
-
-      const surfaceIndex = props.surfaces.findIndex((entry) => entry.id === surface.id);
-      if (surfaceIndex < 0) return;
-
-      const items: ContextMenuItem<TabContextMenuAction>[] = [];
-      if (surface.kind === "file") {
-        items.push({ id: "copy-path", label: "Copy path" });
-      }
-      const menuPreviewTabId = previewTabIdOf(surface, props.previewSessions);
-      // Desktop overlay state only arrives once the preview manager has created
-      // the tab. A server session id alone can still be ahead of that, and
-      // muting then fails with PreviewTabNotFoundError that nobody surfaces.
-      const menuOverlay = menuPreviewTabId
-        ? (props.desktopByTabId[menuPreviewTabId] ?? null)
-        : null;
-      const menuMuted = menuOverlay?.audioMuted ?? false;
-      if (surface.kind === "preview") {
-        // Not gated on audibility: silencing a quiet tab ahead of time is the
-        // point, so the item is offered whenever the tab is mutable at all.
-        items.push({
-          id: "toggle-mute",
-          ...tabMuteMenuItem({
-            overlay: menuOverlay,
-            canResolveRuntimeTabId: props.previewRuntimeTabId !== undefined,
-          }),
-        });
-      }
-      items.push(
-        { id: "close", label: "Close" },
-        {
-          id: "close-others",
-          label: "Close others",
-          disabled: props.surfaces.length <= 1,
-        },
-        {
-          id: "close-to-right",
-          label: "Close to the right",
-          disabled: surfaceIndex >= props.surfaces.length - 1,
-        },
-        {
-          id: "close-all",
-          label: "Close all",
-          disabled: props.surfaces.length === 0,
-        },
-      );
-
-      const action = await api.contextMenu.show(items, { x: event.clientX, y: event.clientY });
-      switch (action) {
-        case "copy-path":
-          if (surface.kind === "file") props.onCopyFilePath(surface.relativePath);
-          break;
-        case "toggle-mute": {
-          // menuOverlay repeats the disabled gate above: the desktop tab must
-          // exist before it can be addressed, however the menu was dismissed.
-          const runtimeTabId =
-            menuPreviewTabId && menuOverlay
-              ? (props.previewRuntimeTabId?.(menuPreviewTabId) ?? null)
-              : null;
-          if (runtimeTabId) {
-            void previewBridge?.setAudioMuted(runtimeTabId, !menuMuted).catch(() => undefined);
-          }
-          break;
-        }
-        case "close":
-          props.onCloseSurface(surface);
-          break;
-        case "close-others":
-          props.onCloseOtherSurfaces(surface);
-          break;
-        case "close-to-right":
-          props.onCloseSurfacesToRight(surface);
-          break;
-        case "close-all":
-          props.onCloseAllSurfaces();
-          break;
-        case null:
-          break;
-      }
+      props.onCloseSurface(surface);
     },
-    [props],
+    [props.onCloseSurface],
   );
 
   useEffect(() => {

@@ -266,11 +266,14 @@ import type { UnifiedSettings } from "@t3tools/contracts/settings";
 import type { SessionPhase, Thread } from "../../types";
 import type { PendingUserInputDraftAnswer } from "../../pendingUserInput";
 import type { PendingApproval, PendingUserInput } from "../../session-logic";
-import type { ContextWindowSnapshot } from "../../lib/contextWindow";
+import {
+  deriveLatestContextWindowSnapshot,
+  type ContextWindowSnapshot,
+} from "../../lib/contextWindow";
 import {
   formatProviderSkillDisplayName,
-  getProviderSlashCommandsForSlashMenu,
   getProviderSkillsForSlashMenu,
+  getProviderSlashCommandsForSlashMenu,
 } from "@t3tools/client-runtime/providerSkills";
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
@@ -2740,7 +2743,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     },
   });
 
-  const onComposerMentionDragLeaveCapture = (event: React.DragEvent<HTMLDivElement>) => {
+  const onComposerMentionDragLeaveCapture = (event: React.DragEvent<HTMLFormElement>) => {
     if (!dataTransferHasComposerMention(event.dataTransfer.types)) return;
     event.stopPropagation();
     const nextTarget = event.relatedTarget;
@@ -2954,6 +2957,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     <form
       ref={attachComposerFormRef}
       onSubmit={submitComposer}
+      onDragEnterCapture={composerMentionDragHandlers.onDragEnter}
+      onDragOverCapture={composerMentionDragHandlers.onDragOver}
+      onDragLeaveCapture={onComposerMentionDragLeaveCapture}
+      onDropCapture={composerMentionDragHandlers.onDrop}
       onFocusCapture={(event) => {
         const activeElement = event.target;
         if (
@@ -3001,10 +3008,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           "group rounded-[22px] p-px transition-colors duration-200",
           composerProviderState.composerFrameClassName,
         )}
-        onDragEnterCapture={composerMentionDragHandlers.onDragEnter}
-        onDragOverCapture={composerMentionDragHandlers.onDragOver}
-        onDragLeaveCapture={onComposerMentionDragLeaveCapture}
-        onDropCapture={composerMentionDragHandlers.onDrop}
       >
         {showComposerTopDrawer && (!isTasksDrawerOpen || hasBlockingComposerTopDrawer) ? (
           <div

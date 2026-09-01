@@ -253,8 +253,45 @@ export const ProjectScriptIcon = Schema.Literals([
   "configure",
   "build",
   "debug",
+  "deploy",
+  "frontend",
+  "backend",
+  "server",
+  "database",
+  "cloud",
+  "package",
+  "refresh",
+  "terminal",
+  "web",
+  "mobile",
+  "api",
+  "git",
+  "monitor",
+  "rocket",
+  "success",
+  "warning",
+  "search",
+  "settings",
+  "upload",
+  "download",
+  "layers",
+  "workflow",
+  "performance",
+  "security",
+  "code",
+  "network",
+  "storage",
+  "cpu",
+  "design",
+  "blocks",
 ]);
 export type ProjectScriptIcon = typeof ProjectScriptIcon.Type;
+
+/** Optional absolute directory where a project script should start. */
+export const ProjectScriptWorkingDirectory = TrimmedNonEmptyString.check(
+  Schema.isMaxLength(4_096),
+  Schema.isPattern(/^(?:\/|[A-Za-z]:[\\/])/),
+);
 
 export const ProjectScript = Schema.Struct({
   id: TrimmedNonEmptyString,
@@ -262,6 +299,7 @@ export const ProjectScript = Schema.Struct({
   command: TrimmedNonEmptyString,
   icon: ProjectScriptIcon,
   runOnWorktreeCreate: Schema.Boolean,
+  workingDirectory: Schema.optional(ProjectScriptWorkingDirectory),
   /**
    * URL to open in the in-app browser preview when this script runs (or
    * when the user explicitly requests a preview). Optional; only honored on

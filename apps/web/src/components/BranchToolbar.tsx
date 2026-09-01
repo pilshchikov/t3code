@@ -12,6 +12,7 @@ import type {
 import {
   CheckIcon,
   ChevronDownIcon,
+  ChevronUpIcon,
   CloudIcon,
   FolderGit2Icon,
   FolderGitIcon,
@@ -93,11 +94,14 @@ interface BranchToolbarProps {
   onComposerFocusRequest?: () => void;
   availableEnvironments?: readonly EnvironmentOption[];
   onEnvironmentChange?: (environmentId: EnvironmentId) => void;
+  contextStripCollapsed: boolean;
+  onContextStripCollapsedChange: (collapsed: boolean) => void;
 }
 
 function WorkspaceBadge(props: {
   workspace: ProjectWorkspace;
   index: number;
+  compact?: boolean;
   onColorChange: (color: ProjectWorkspaceColor) => void;
 }) {
   const color = resolveWorkspaceColor(props.workspace, props.index);
@@ -106,7 +110,7 @@ function WorkspaceBadge(props: {
       <MenuTrigger
         className={workspaceBadgeClassName(
           color,
-          "max-w-32 truncate rounded px-1.5 py-0.5 text-[10px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          `truncate rounded px-1.5 py-0.5 text-[10px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring ${props.compact ? "max-w-20" : "max-w-32"}`,
         )}
         title={`${props.workspace.path} · Change directory color`}
       >
@@ -484,6 +488,8 @@ export const BranchToolbar = memo(function BranchToolbar({
   onComposerFocusRequest,
   availableEnvironments,
   onEnvironmentChange,
+  contextStripCollapsed,
+  onContextStripCollapsedChange,
 }: BranchToolbarProps) {
   const threadRef = useMemo(
     () => scopeThreadRef(environmentId, threadId),
@@ -569,6 +575,8 @@ export const BranchToolbar = memo(function BranchToolbar({
           : [],
     [activeProject?.workspaceRoot, activeProject?.workspaceRoots],
   );
+  const canCollapseContextStrip = !isMobile && showGitControls && workspaceRoots.length > 1;
+  const isContextStripCollapsed = canCollapseContextStrip && contextStripCollapsed;
   const openDirectoryPicker = useOpenDirectoryCommandPalette();
   const reportWorkspaceRootFailure = useCallback(
     (result: Awaited<ReturnType<typeof updateProject>>) => {
@@ -671,15 +679,143 @@ export const BranchToolbar = memo(function BranchToolbar({
     </Tooltip>
   );
 
+  const expandContextStrip = useCallback(() => {
+    onContextStripCollapsedChange(false);
+  }, [onContextStripCollapsedChange]);
+
+  const compactContextStrip = isContextStripCollapsed ? (
+    <div
+      className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 overflow-x-auto overflow-y-hidden py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      onClick={(event) => {
+        const target = event.target;
+        if (target instanceof Element && target.closest("button,[role='button']")) {
+          return;
+        }
+        expandContextStrip();
+      }}
+      title="Click to expand project context"
+    >
+      {addWorkspaceRootButton}
+      {showEnvironmentIndicator && availableEnvironments ? (
+        <BranchToolbarEnvironmentSelector
+          compact
+          envLocked={envLocked}
+          environmentId={environmentId}
+          availableEnvironments={availableEnvironments}
+          {...(showEnvironmentPicker && onEnvironmentChange ? { onEnvironmentChange } : {})}
+        />
+      ) : null}
+      {workspaceRoots.map((root, rootIndex) => {
+        const isPrimary = rootIndex === 0;
+        return (
+          <div key={root.path} className="flex min-w-0 shrink-0 items-center gap-0.5">
+            <WorkspaceBadge
+              workspace={root}
+              index={rootIndex}
+              compact
+              onColorChange={(color) => setWorkspaceRootColor(root.path, color)}
+            />
+            <BranchToolbarEnvModeSelector
+              compact
+              envLocked={isPrimary ? envModeLocked : false}
+              effectiveEnvMode={
+                isPrimary ? effectiveEnvMode : (root.defaultThreadEnvMode ?? "local")
+              }
+              activeWorktreePath={isPrimary ? activeWorktreePath : null}
+              onEnvModeChange={(mode) =>
+                isPrimary ? onEnvModeChange(mode) : setWorkspaceRootMode(root.path, mode)
+              }
+              {...(isPrimary
+                ? {
+                    previousWorktreeLabel,
+                    onUsePreviousWorktree,
+                  }
+                : {})}
+            />
+            <AgentGuidanceButton workspace={root} onClick={() => openAgentGuidance(root)} />
+            <BranchToolbarBranchSelector
+              compact
+              className="min-w-0 max-w-36"
+              environmentId={environmentId}
+              threadId={threadId}
+              {...(draftId ? { draftId } : {})}
+              envLocked={isPrimary ? envLocked : false}
+              allowWorkspaceModeChange={isPrimary ? allowWorkspaceModeChange : false}
+              {...(isPrimary && effectiveEnvModeOverride
+                ? { effectiveEnvModeOverride }
+                : !isPrimary && root.defaultThreadEnvMode
+                  ? { effectiveEnvModeOverride: root.defaultThreadEnvMode }
+                  : {})}
+              {...(isPrimary && activeThreadBranchOverride !== undefined
+                ? { activeThreadBranchOverride }
+                : {})}
+              {...(isPrimary && onActiveThreadBranchOverrideChange
+                ? { onActiveThreadBranchOverrideChange }
+                : {})}
+              startFromOrigin={startFromOrigin}
+              onStartFromOriginChange={onStartFromOriginChange}
+              {...(isPrimary && onCheckoutPullRequestRequest
+                ? { onCheckoutPullRequestRequest }
+                : {})}
+              {...(isPrimary ? {} : { workspaceRootOverride: root.path })}
+              {...(onComposerFocusRequest ? { onComposerFocusRequest } : {})}
+            />
+          </div>
+        );
+      })}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className="ms-auto shrink-0"
+              aria-label="Expand project context"
+              onClick={expandContextStrip}
+            />
+          }
+        >
+          <ChevronDownIcon className="size-3" />
+        </TooltipTrigger>
+        <TooltipPopup side="top">Expand project context</TooltipPopup>
+      </Tooltip>
+    </div>
+  ) : null;
+
+  const collapseContextStripButton = canCollapseContextStrip ? (
+    <div className="pointer-events-none absolute end-0 bottom-1 start-1 z-20 flex">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className="pointer-events-auto bg-background/45 text-muted-foreground/70 shadow-xs hover:bg-background/75 hover:text-foreground"
+              aria-label="Collapse project context"
+              onClick={() => onContextStripCollapsedChange(true)}
+            />
+          }
+        >
+          <ChevronUpIcon className="size-3" />
+        </TooltipTrigger>
+        <TooltipPopup side="top">Collapse project context</TooltipPopup>
+      </Tooltip>
+    </div>
+  ) : null;
+
   if (!hasActiveThread || !activeProject) return null;
 
   return (
     <div
       ref={setStripElement}
-      data-compact={labelsOverflow ? "" : undefined}
+      data-compact={!isContextStripCollapsed && labelsOverflow ? "" : undefined}
+      data-collapsed={isContextStripCollapsed ? "true" : undefined}
       className="chat-composer-context-strip group/composer-context -mt-4 mx-auto flex w-[calc(100%-2.75rem)] max-w-[calc(48rem-2.75rem)] items-center gap-2 overflow-x-clip overflow-y-visible ps-1 pe-2 pt-5 pb-1"
     >
-      {isMobile && showGitControls ? (
+      {compactContextStrip}
+      {!isContextStripCollapsed && isMobile && showGitControls ? (
         <div className="flex min-w-0 flex-1 items-center gap-1">
           {addWorkspaceRootButton}
           <MobileRunContextSelector
@@ -697,7 +833,7 @@ export const BranchToolbar = memo(function BranchToolbar({
             onUsePreviousWorktree={onUsePreviousWorktree}
           />
         </div>
-      ) : (
+      ) : !isContextStripCollapsed ? (
         <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
           <div className="flex min-w-0 max-w-full items-center gap-1">
             {showGitControls ? addWorkspaceRootButton : null}
@@ -753,9 +889,9 @@ export const BranchToolbar = memo(function BranchToolbar({
               ))
             : null}
         </div>
-      )}
+      ) : null}
 
-      {showGitControls ? (
+      {!isContextStripCollapsed && showGitControls ? (
         <div className="flex min-w-0 flex-1 flex-col items-end gap-0.5 md:ml-auto md:flex-none">
           <div className="flex min-w-0 max-w-full items-center gap-1">
             {workspaceRoots[0] ? (
@@ -812,6 +948,7 @@ export const BranchToolbar = memo(function BranchToolbar({
           ))}
         </div>
       ) : null}
+      {!isContextStripCollapsed ? collapseContextStripButton : null}
       <Dialog
         open={guidanceWorkspace !== null}
         onOpenChange={(open) => {

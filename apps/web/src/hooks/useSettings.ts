@@ -115,7 +115,8 @@ async function hydrateClientSettings(): Promise<void> {
         return;
       }
       if (persistedSettings) {
-        replaceClientSettingsSnapshot({ ...DEFAULT_CLIENT_SETTINGS, ...persistedSettings });
+        const mergedSettings = { ...DEFAULT_CLIENT_SETTINGS, ...persistedSettings };
+        replaceClientSettingsSnapshot(mergedSettings);
       }
     } catch (error) {
       console.error(`${CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE} hydrate failed`, {

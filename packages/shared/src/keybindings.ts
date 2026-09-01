@@ -54,6 +54,10 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+]", command: "editor.navigateForward", when: "!terminalFocus" },
   { key: "mod+shift+[", command: "thread.previous" },
   { key: "mod+shift+]", command: "thread.next" },
+  // Upstream's manual settle toggle does not conflict with the fork's project
+  // slots. Keep it so auto-settlement can stay off without losing a quick
+  // explicit action.
+  { key: "mod+shift+s", command: "thread.settle", when: "!terminalFocus" },
   // Numbered slots recall a project into the sidebar's scope. Upstream spends mod+1..9 on jumping
   // to the Nth thread in the list; this fork spends them on projects, which is the switch that is
   // worth a chord. thread.jump.* stays a command, so anyone who wants it back can bind it.

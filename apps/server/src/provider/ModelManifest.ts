@@ -16,6 +16,7 @@
  */
 import type { ProviderDriverKind, ServerProviderModel } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -181,10 +182,20 @@ export const make = Effect.gen(function* () {
     if (isWithin(fetchedAtMs, MANIFEST_TTL_MS)) return manifest;
     if (isWithin(lastAttemptMs, MANIFEST_RETRY_MS)) return manifest;
 
-    // The same switch that gates provider CLI update checks. It stops network
-    // fetches only: a manifest already cached on disk from an earlier fetch
-    // stays in effect, since the setting is about phoning home, not about
-    // discarding data the server already holds.
+    // This fork disables provider/version network checks unless the process
+    // opts in. Upstream added this hosted manifest after that policy existed,
+    // so it must use the same gate rather than treating the UI default as
+    // permission to contact raw.githubusercontent.com.
+    const remoteRefreshEnabled = yield* Config.boolean(
+      "T3CODE_ENABLE_PROVIDER_VERSION_CHECKS",
+    ).pipe(
+      Config.withDefault(false),
+      Effect.orElseSucceed(() => false),
+    );
+    if (!remoteRefreshEnabled) return manifest;
+
+    // The UI switch is a second gate. It stops network fetches only: a
+    // manifest already cached on disk from an earlier fetch stays in effect.
     const settings = yield* settingsService.getSettings.pipe(
       Effect.catchCause(() => Effect.succeed(null)),
     );

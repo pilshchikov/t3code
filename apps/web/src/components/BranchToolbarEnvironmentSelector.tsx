@@ -2,6 +2,7 @@ import type { EnvironmentId } from "@t3tools/contracts";
 import { CloudIcon, MonitorIcon } from "lucide-react";
 import { memo, useMemo } from "react";
 
+import { cn } from "../lib/utils";
 import type { EnvironmentOption } from "./BranchToolbar.logic";
 import {
   Select,
@@ -17,6 +18,7 @@ interface BranchToolbarEnvironmentSelectorProps {
   envLocked: boolean;
   environmentId: EnvironmentId;
   availableEnvironments: readonly EnvironmentOption[];
+  compact?: boolean;
   // Absent when there is only one environment to show: the indicator still
   // renders (as a static label) so remote projects are always identifiable.
   onEnvironmentChange?: (environmentId: EnvironmentId) => void;
@@ -26,6 +28,7 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
   envLocked,
   environmentId,
   availableEnvironments,
+  compact = false,
   onEnvironmentChange,
 }: BranchToolbarEnvironmentSelectorProps) {
   const activeEnvironment = useMemo(() => {
@@ -49,7 +52,10 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
   if (envLocked || onEnvironmentChange === undefined) {
     return (
       <span
-        className="inline-flex h-7 min-w-0 max-w-full items-center gap-1 border border-transparent px-[calc(--spacing(3)-1px)] text-sm font-medium text-muted-foreground/70 sm:h-6 sm:text-xs"
+        className={cn(
+          "inline-flex h-7 min-w-0 max-w-full items-center gap-1 border border-transparent px-[calc(--spacing(3)-1px)] text-sm font-medium text-muted-foreground/70 sm:h-6 sm:text-xs",
+          compact && "max-w-28",
+        )}
         data-composer-context-control
       >
         {activeEnvironment?.isPrimary ? (
@@ -59,11 +65,17 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
         )}
         <span
           data-composer-label
-          className="min-w-0 max-w-[240px] group-data-[compact]/composer-context:max-w-0"
+          className={cn(
+            "min-w-0 max-w-[240px] group-data-[compact]/composer-context:max-w-0",
+            compact && "max-w-20",
+          )}
         >
           <span
             data-composer-label-motion
-            className="block w-full min-w-0 max-w-[240px] origin-left truncate transition-[opacity,transform] duration-180 ease-[cubic-bezier(0.32,0.72,0,1)] group-data-[compact]/composer-context:[transform:translateX(-0.25rem)_scaleX(0.95)] group-data-[compact]/composer-context:opacity-0 motion-reduce:transform-none motion-reduce:transition-opacity"
+            className={cn(
+              "block w-full min-w-0 max-w-[240px] origin-left truncate transition-[opacity,transform] duration-180 ease-[cubic-bezier(0.32,0.72,0,1)] group-data-[compact]/composer-context:[transform:translateX(-0.25rem)_scaleX(0.95)] group-data-[compact]/composer-context:opacity-0 motion-reduce:transform-none motion-reduce:transition-opacity",
+              compact && "max-w-20",
+            )}
           >
             {activeEnvironment?.label ?? "Run on"}
           </span>
@@ -82,7 +94,7 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
       <SelectTrigger
         variant="ghost"
         size="xs"
-        className="min-w-0 max-w-full font-medium"
+        className={cn("min-w-0 max-w-full font-medium", compact && "max-w-28")}
         aria-label="Run on"
         data-composer-context-control
       >
@@ -93,11 +105,17 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
         )}
         <span
           data-composer-label
-          className="min-w-0 max-w-[240px] group-data-[compact]/composer-context:max-w-0"
+          className={cn(
+            "min-w-0 max-w-[240px] group-data-[compact]/composer-context:max-w-0",
+            compact && "max-w-20",
+          )}
         >
           <span
             data-composer-label-motion
-            className="block w-full min-w-0 max-w-[240px] origin-left truncate transition-[opacity,transform] duration-180 ease-[cubic-bezier(0.32,0.72,0,1)] group-data-[compact]/composer-context:[transform:translateX(-0.25rem)_scaleX(0.95)] group-data-[compact]/composer-context:opacity-0 motion-reduce:transform-none motion-reduce:transition-opacity"
+            className={cn(
+              "block w-full min-w-0 max-w-[240px] origin-left truncate transition-[opacity,transform] duration-180 ease-[cubic-bezier(0.32,0.72,0,1)] group-data-[compact]/composer-context:[transform:translateX(-0.25rem)_scaleX(0.95)] group-data-[compact]/composer-context:opacity-0 motion-reduce:transform-none motion-reduce:transition-opacity",
+              compact && "max-w-20",
+            )}
           >
             <SelectValue />
           </span>

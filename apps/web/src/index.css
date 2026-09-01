@@ -2519,6 +2519,21 @@ code {
   overflow-wrap: anywhere;
 }
 
+/* File previews keep ordinary Markdown readable at the old 4xl measure, but
+   tables use the full preview panel. A wide table should not inherit the
+   prose column's max-width and force the reader to scroll through empty space
+   on both sides. The table's own horizontal scroller still handles content
+   wider than the panel. */
+.chat-markdown.file-markdown-preview > :not(.chat-markdown-table-container) {
+  width: min(100%, 56rem);
+  margin-inline: auto;
+}
+
+.chat-markdown.file-markdown-preview > .chat-markdown-table-container {
+  width: 100%;
+  max-width: none;
+}
+
 /* Prompt-stash save acknowledgement: the new count fades up from just below
    its resting position, once, then stops. One-shot and event-driven (React
    remounts the element by key on each stash) — no continuous animation. */

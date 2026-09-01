@@ -4,6 +4,17 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Upstream merge policy
+
+- Fork behavior wins when an upstream change touches the same feature. Merge upstream fixes and new
+  code paths around the fork's defaults instead of restoring upstream behavior.
+- Review persisted settings as well as source defaults. A changed schema default does not replace a
+  value already written by an older build.
+- Trace new alternate paths through the same fork policy. Linked pull requests, branch-discovered
+  pull requests, desktop, web, and mobile must all use the same settlement rule.
+- Add a regression test for each conflict found during an upstream sync. Do not rely on conflict
+  resolution alone when Git can merge both versions cleanly.
+
 ## Privacy-Hardened Desktop Startup
 
 - Packaged desktop auto-update checks are disabled by default.
@@ -12,7 +23,10 @@ fork-specific behavior so future upstream syncs are easier to review.
     `apps/desktop/src/updates/DesktopUpdates.ts`.
 - Provider npm latest-version advisory checks are disabled by default.
   - Opt in with `T3CODE_ENABLE_PROVIDER_VERSION_CHECKS=true`.
-  - Source: `apps/server/src/provider/providerMaintenance.ts`.
+  - The hosted model-classification manifest added upstream uses the same gate. Without the opt-in,
+    provider checks use the bundled manifest or an existing disk cache and make no manifest request.
+  - Source: `apps/server/src/provider/providerMaintenance.ts`,
+    `apps/server/src/provider/ModelManifest.ts`.
 - Automatic provider background refresh/checks are disabled by default.
   - Opt in with `T3CODE_ENABLE_PROVIDER_AUTO_REFRESH=true`.
   - Explicit/manual provider refresh still works.
@@ -473,8 +487,15 @@ fork-specific behavior so future upstream syncs are easier to review.
     authentication and configuration.
   - Named Claude instances appear independently in the existing provider/model selector.
   - The older full `HOME` override remains available as an advanced compatibility option.
+  - Upstream later reused the old `homePath` field for `CLAUDE_CONFIG_DIR`. This fork keeps the two
+    controls separate: `configDir` sets `CLAUDE_CONFIG_DIR`, while `homePath` sets process `HOME`.
+    Provider-session, status-probe, and text-generation tests use `configDir` so a future merge
+    cannot silently swap those meanings again.
   - Source: `packages/contracts/src/settings.ts`,
-    `apps/server/src/provider/Drivers/ClaudeHome.ts`.
+    `apps/server/src/provider/Drivers/ClaudeHome.ts`,
+    `apps/server/src/provider/Layers/ClaudeAdapter.test.ts`,
+    `apps/server/src/provider/Layers/ProviderRegistry.test.ts`,
+    `apps/server/src/textGeneration/ClaudeTextGeneration.test.ts`.
 
 ## Update-Safe Persistence
 
@@ -682,9 +703,28 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
   off, so a merged or closed pull request leaves the thread in the inbox until it is settled by
   hand. Turning the switch on restores the upstream behaviour for both states.
 - Mobile reads the same preference and defaults it the same way.
+- Older upstream builds persisted `true` as their default. Client hydration resets that inherited
+  value to `false`; the settings UI records later choices explicitly, so a deliberate opt-in stays
+  enabled. This migration also covers pull requests linked directly to a thread.
 - Source: `packages/client-runtime/src/state/threadSettled.ts`, `packages/contracts/src/settings.ts`,
-  `apps/web/src/components/settings/SettingsPanels.tsx`,
+  `apps/web/src/hooks/useSettings.ts`, `apps/web/src/components/settings/SettingsPanels.tsx`,
   `apps/mobile/src/features/threads/threadListV2.ts`.
+
+## Claude settings keep account isolation
+
+- Upstream's **Auto-compact after** field appears alongside the fork's `CLAUDE_CONFIG_DIR` field.
+  The last merge kept both schema fields but resolved the form order to the fork-only list, which
+  left the new control after the ordered fields and produced contradictory tests.
+- Source: `packages/contracts/src/settings.ts`,
+  `apps/web/src/components/settings/ProviderSettingsForm.test.ts`.
+
+## Manual settlement shortcut remains available
+
+- `mod+shift+s` settles or restores the active thread while the terminal is not focused. The merge
+  had the web handler and documentation but dropped the default binding from the shared list because
+  it landed beside the fork's numbered project-slot bindings.
+- Source: `packages/shared/src/keybindings.ts`, `apps/server/src/keybindings.test.ts`,
+  `apps/web/src/components/ChatView.tsx`, `docs/user/keybindings.md`.
 
 ## Thread and project accent colours
 
@@ -849,6 +889,57 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
 - Preserved the fork's multi-directory projects, per-account Claude usage limits, file-tree selection and deletion, markdown-link roots, app-wide right-panel shortcuts, prompt collapse, thread colours, and right-click-only tab closing while integrating the upstream web, server, desktop, mobile, contracts, and runtime changes.
 - Kept the account-limit implementation from PR #5739 (`54d006d52`); that PR is not an ancestor of current upstream `main`, so its behavior was reconciled explicitly rather than relying on the upstream branch to contain it.
 - Added focused merge validation for the composer, thread actions, status indicators, right-panel tabs, usage attribution, and thread-settlement rules. The resolved merge is intentionally left uncommitted so it can be reviewed before it is recorded or pushed.
+
+## Upstream sync audit: 2026-08-26
+
+- Audited merge `7f25b7c35`, whose parents are the fork at `3166b39d55` and upstream at
+  `b0a028126`. The audit covered every file changed on both sides, not only Git's conflict list.
+- Preserved the fork's pull-request settlement policy across branch-discovered and linked pull
+  requests. Old upstream-persisted `true` values now migrate to the fork default until the user
+  explicitly enables the setting.
+- Kept automatic hosted model-manifest requests behind
+  `T3CODE_ENABLE_PROVIDER_VERSION_CHECKS=true`, matching the fork's existing network policy.
+- Reconciled Claude settings so `configDir` remains the account-isolation control while `homePath`
+  remains the advanced process `HOME` override. Upstream's auto-compaction control appears beside
+  both instead of replacing either one.
+- Restored upstream's manual settlement shortcut without taking back the fork's `mod+1..9` project
+  slots.
+- Repaired the migration number collision. Migration 41 runs both additive changes on a fresh
+  database, and compatibility migrations 43 and 44 repair databases created from either history.
+
+## Upstream sync: Codex 0.150 compatibility
+
+- Merged upstream `main` through `d3c24a14b` in merge commit `87d9027dc`, while preserving the
+  fork's existing behavior and restoring all in-progress local work afterward.
+- Included upstream's Codex 0.150 protocol compatibility fix. Generated schemas now accept the new
+  multi-agent tools, the `interrupted` tool-call status, and completed subagent activity events.
+- Included upstream's static active-list behavior for restored threads: explicitly un-settling a
+  thread re-anchors it at the top without allowing ordinary activity to reorder the sidebar.
+- Moved upstream's new `ProjectionThreadsUnsettledAt` migration from 43 to 45. IDs 43 and 44 remain
+  reserved for this fork's existing migration-collision compatibility repairs.
+- Kept finished pull requests from settling threads unless the user explicitly enables
+  **Auto-settle finished threads**; the new upstream paths do not bypass that fork policy.
+- Imported upstream's release/preview workflow improvements and v0.0.35 package metadata without
+  building, installing, restarting, or otherwise touching the currently running app.
+
+## Upstream sync: 2026-08-28
+
+- Merged upstream `main` through `0bbecfabf` in merge commit `a370f51a7`, then restored the
+  fork's staged in-progress work. The pre-merge tree remains recoverable from
+  `backup/pre-upstream-sync-20260828` and the `pre-upstream-sync-20260828-fork-work` stash.
+- Reconciled upstream's exclusive thread-settling policy with the fork rule. Automatic settling is
+  now one explicit choice — **Never**, **Pull request merged or closed**, or **Inactivity** — and
+  defaults to **Never**. Missing or malformed pull-request timestamps keep a thread active.
+- Kept migration IDs 43 and 44 reserved for the fork's compatibility repairs and retained
+  `ProjectionThreadsUnsettledAt` as migration 45.
+- Preserved multi-directory projects, account-specific Claude usage, account limits, markdown links
+  rooted in the document checkout, project scripts/actions, right-panel behavior, typography,
+  branch controls, and the fork's provider/network defaults while integrating upstream Codex 0.150
+  plans, OpenCode child-session support, provider catalogs, mobile themes, preview fixes, and
+  provider/settings improvements.
+- Repaired clean-merge semantic collisions found by typechecking: appearance contrast, account-limit
+  RPC imports, provider skill menus, mobile settlement state, usage attribution including Grok,
+  OpenCode output bounds, analytics test wiring, and provider-refresh compatibility.
 
 ## Validation Notes
 

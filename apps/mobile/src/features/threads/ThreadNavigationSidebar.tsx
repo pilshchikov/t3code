@@ -9,6 +9,7 @@ import {
 import { LegendList } from "@legendapp/list/react-native";
 import type { MenuAction } from "@react-native-menu/menu";
 import { useAtomValue } from "@effect/atom-react";
+import { isLiquidGlassSupported, LiquidGlassView } from "@callstack/liquid-glass";
 import { AsyncResult } from "effect/unstable/reactivity";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { sortPinnedThreadsByOrderKey } from "@t3tools/client-runtime/state/thread-sort";
@@ -26,6 +27,7 @@ import { CompactBrandTitle } from "../../components/CompactBrandTitle";
 import { ControlPillMenu } from "../../components/ControlPill";
 import { SymbolView } from "../../components/AppSymbol";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
+import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { resolveMobileAutoSettlePreferences } from "../../persistence/mobile-preferences";
 import { scopedProjectKey, scopedThreadKey } from "../../lib/scopedEntities";
@@ -105,8 +107,9 @@ function SidebarHeaderButtonGroup(props: {
   readonly children: ReactNode;
   readonly colorScheme: "light" | "dark";
 }) {
-  const fallbackBackground = useThemeColor("--color-glass-surface");
-  const fallbackBorder = useThemeColor("--color-header-border");
+  const theme = useUniwindTheme();
+  const fallbackBackground = theme["--color-glass-surface"];
+  const fallbackBorder = theme["--color-header-border"];
   if (isLiquidGlassSupported) {
     return (
       <LiquidGlassView
@@ -1370,5 +1373,13 @@ const styles = StyleSheet.create({
   },
   threadListContent: {
     paddingHorizontal: 8,
+  },
+  headerButtonGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+    borderRadius: 16,
   },
 });

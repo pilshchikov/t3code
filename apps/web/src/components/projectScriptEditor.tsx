@@ -9,12 +9,42 @@ import {
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
 import {
+  BlocksIcon,
+  BracesIcon,
   BugIcon,
+  CheckCircle2Icon,
+  CloudIcon,
+  CpuIcon,
+  DatabaseIcon,
+  DownloadIcon,
   FlaskConicalIcon,
+  FolderGit2Icon,
+  FileCode2Icon,
+  GitBranchIcon,
+  GlobeIcon,
+  GaugeIcon,
   HammerIcon,
+  HardDriveIcon,
+  LayersIcon,
   ListChecksIcon,
+  MonitorIcon,
+  NetworkIcon,
+  PackageIcon,
   PlayIcon,
+  RefreshCwIcon,
+  RocketIcon,
+  SearchIcon,
+  ServerIcon,
+  SettingsIcon,
+  ShieldCheckIcon,
+  SmartphoneIcon,
+  TerminalIcon,
+  TriangleAlertIcon,
+  UploadIcon,
+  WorkflowIcon,
   WrenchIcon,
+  ZapIcon,
+  type LucideIcon,
 } from "lucide-react";
 import React, { type FormEvent, type KeyboardEvent, useEffect, useState } from "react";
 
@@ -56,7 +86,78 @@ export const SCRIPT_ICONS: Array<{ id: ProjectScriptIcon; label: string }> = [
   { id: "configure", label: "Configure" },
   { id: "build", label: "Build" },
   { id: "debug", label: "Debug" },
+  { id: "deploy", label: "Deploy" },
+  { id: "frontend", label: "Frontend" },
+  { id: "backend", label: "Backend" },
+  { id: "server", label: "Server" },
+  { id: "database", label: "Database" },
+  { id: "cloud", label: "Cloud" },
+  { id: "package", label: "Package" },
+  { id: "refresh", label: "Refresh" },
+  { id: "terminal", label: "Terminal" },
+  { id: "web", label: "Web" },
+  { id: "mobile", label: "Mobile" },
+  { id: "api", label: "API" },
+  { id: "git", label: "Git" },
+  { id: "monitor", label: "Monitor" },
+  { id: "rocket", label: "Rocket" },
+  { id: "success", label: "Success" },
+  { id: "warning", label: "Warning" },
+  { id: "search", label: "Search" },
+  { id: "settings", label: "Settings" },
+  { id: "upload", label: "Upload" },
+  { id: "download", label: "Download" },
+  { id: "layers", label: "Layers" },
+  { id: "workflow", label: "Workflow" },
+  { id: "performance", label: "Performance" },
+  { id: "security", label: "Security" },
+  { id: "code", label: "Code" },
+  { id: "network", label: "Network" },
+  { id: "storage", label: "Storage" },
+  { id: "cpu", label: "CPU" },
+  { id: "design", label: "Design" },
+  { id: "blocks", label: "Blocks" },
 ];
+
+const SCRIPT_ICON_COMPONENTS: Record<ProjectScriptIcon, LucideIcon> = {
+  play: PlayIcon,
+  test: FlaskConicalIcon,
+  lint: ListChecksIcon,
+  configure: WrenchIcon,
+  build: HammerIcon,
+  debug: BugIcon,
+  deploy: UploadIcon,
+  frontend: MonitorIcon,
+  backend: ServerIcon,
+  server: ServerIcon,
+  database: DatabaseIcon,
+  cloud: CloudIcon,
+  package: PackageIcon,
+  refresh: RefreshCwIcon,
+  terminal: TerminalIcon,
+  web: GlobeIcon,
+  mobile: SmartphoneIcon,
+  api: BracesIcon,
+  git: GitBranchIcon,
+  monitor: MonitorIcon,
+  rocket: RocketIcon,
+  success: CheckCircle2Icon,
+  warning: TriangleAlertIcon,
+  search: SearchIcon,
+  settings: SettingsIcon,
+  upload: UploadIcon,
+  download: DownloadIcon,
+  layers: LayersIcon,
+  workflow: WorkflowIcon,
+  performance: GaugeIcon,
+  security: ShieldCheckIcon,
+  code: FileCode2Icon,
+  network: NetworkIcon,
+  storage: HardDriveIcon,
+  cpu: CpuIcon,
+  design: BlocksIcon,
+  blocks: BlocksIcon,
+};
 
 export function ScriptIcon({
   icon,
@@ -65,12 +166,8 @@ export function ScriptIcon({
   icon: ProjectScriptIcon;
   className?: string;
 }) {
-  if (icon === "test") return <FlaskConicalIcon className={className} />;
-  if (icon === "lint") return <ListChecksIcon className={className} />;
-  if (icon === "configure") return <WrenchIcon className={className} />;
-  if (icon === "build") return <HammerIcon className={className} />;
-  if (icon === "debug") return <BugIcon className={className} />;
-  return <PlayIcon className={className} />;
+  const Icon = SCRIPT_ICON_COMPONENTS[icon] ?? PlayIcon;
+  return <Icon className={className} />;
 }
 
 export interface NewProjectScriptInput {
@@ -78,6 +175,7 @@ export interface NewProjectScriptInput {
   command: string;
   icon: ProjectScriptIcon;
   runOnWorktreeCreate: boolean;
+  workingDirectory: string | null;
   keybinding: string | null;
   /** Optional URL to open in the in-app preview when this script runs. */
   previewUrl: string | null;
@@ -92,6 +190,7 @@ export const EMPTY_PROJECT_SCRIPT_INPUT: NewProjectScriptInput = {
   command: "",
   icon: "play",
   runOnWorktreeCreate: false,
+  workingDirectory: null,
   keybinding: null,
   previewUrl: null,
   autoOpenPreview: false,
@@ -116,6 +215,7 @@ export function editorRequestForScript(
       command: script.command,
       icon: script.icon,
       runOnWorktreeCreate: script.runOnWorktreeCreate,
+      workingDirectory: script.workingDirectory ?? null,
       keybinding: keybindingValueForCommand(keybindings, commandForProjectScript(script.id)),
       previewUrl: script.previewUrl ?? null,
       autoOpenPreview: script.autoOpenPreview ?? false,
@@ -151,6 +251,7 @@ export function ProjectScriptEditorDialog({
   const [icon, setIcon] = useState<ProjectScriptIcon>("play");
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [runOnWorktreeCreate, setRunOnWorktreeCreate] = useState(false);
+  const [workingDirectory, setWorkingDirectory] = useState("");
   const [keybinding, setKeybinding] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
   const [autoOpenPreview, setAutoOpenPreview] = useState(false);
@@ -168,6 +269,7 @@ export function ProjectScriptEditorDialog({
     setIcon(request.initial.icon);
     setIconPickerOpen(false);
     setRunOnWorktreeCreate(request.initial.runOnWorktreeCreate);
+    setWorkingDirectory(request.initial.workingDirectory ?? "");
     setKeybinding(request.initial.keybinding ?? "");
     setPreviewUrl(request.initial.previewUrl ?? "");
     setAutoOpenPreview(request.initial.autoOpenPreview);
@@ -199,6 +301,14 @@ export function ProjectScriptEditorDialog({
       setValidationError("Command is required.");
       return;
     }
+    const trimmedWorkingDirectory = workingDirectory.trim();
+    if (
+      trimmedWorkingDirectory.length > 0 &&
+      !/^(?:\/|[A-Za-z]:[\\/])/.test(trimmedWorkingDirectory)
+    ) {
+      setValidationError("Working directory must be an absolute path.");
+      return;
+    }
 
     setValidationError(null);
     let payload: NewProjectScriptInput;
@@ -219,6 +329,7 @@ export function ProjectScriptEditorDialog({
         command: trimmedCommand,
         icon,
         runOnWorktreeCreate,
+        workingDirectory: trimmedWorkingDirectory.length > 0 ? trimmedWorkingDirectory : null,
         keybinding: keybindingRule?.key ?? null,
         previewUrl: trimmedPreviewUrl.length > 0 ? trimmedPreviewUrl : null,
         autoOpenPreview: trimmedPreviewUrl.length > 0 ? autoOpenPreview : false,
@@ -277,7 +388,7 @@ export function ProjectScriptEditorDialog({
                       <ScriptIcon icon={icon} className="size-4.5" />
                     </PopoverTrigger>
                     <PopoverPopup align="start">
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid max-h-80 grid-cols-4 gap-2 overflow-y-auto p-1">
                         {SCRIPT_ICONS.map((entry) => {
                           const isSelected = entry.id === icon;
                           return (
@@ -332,6 +443,18 @@ export function ProjectScriptEditorDialog({
                   value={command}
                   onChange={(event) => setCommand(event.target.value)}
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="script-working-directory">Working directory (optional)</Label>
+                <Input
+                  id="script-working-directory"
+                  placeholder="/absolute/path/to/run/from"
+                  value={workingDirectory}
+                  onChange={(event) => setWorkingDirectory(event.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Use an absolute path. Empty uses the active checkout or worktree.
+                </p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="script-preview-url">Preview URL (optional)</Label>

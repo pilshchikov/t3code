@@ -643,8 +643,8 @@ importers:
         version: 5.0.14(@types/react@19.2.16)(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6))
     devDependencies:
       '@clerk/clerk-js':
-        specifier: 6.29.2
-        version: 6.29.2(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+        specifier: 6.30.1
+        version: 6.30.1(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@effect/platform-node':
         specifier: 4.0.0-beta.103
         version: 4.0.0-beta.103(bufferutil@4.1.0)(effect@4.0.0-beta.103(patch_hash=af36b7948b6f9c56623074662b51dade5699880c1a7c71245de73e13c3185fb6))(ioredis@5.11.0)(utf-8-validate@6.0.6)

@@ -27,6 +27,7 @@ describe("ProviderSettingsForm helpers", () => {
       "binaryPath",
       "configDir",
       "homePath",
+      "autoCompactWindow",
       "launchArgs",
     ]);
   });
@@ -46,12 +47,13 @@ describe("ProviderSettingsForm helpers", () => {
     });
   });
 
-  it("shows the auto-compaction threshold for Claude providers", () => {
+  it("keeps account isolation when showing the upstream Claude compaction field", () => {
     const claude = DRIVER_OPTION_BY_VALUE[ProviderDriverKind.make("claudeAgent")];
     expect(claude).toBeDefined();
 
     expect(deriveProviderSettingsFields(claude!).map((field) => field.key)).toEqual([
       "binaryPath",
+      "configDir",
       "homePath",
       "autoCompactWindow",
       "launchArgs",

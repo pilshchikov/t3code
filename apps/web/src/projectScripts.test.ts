@@ -21,6 +21,7 @@ describe("projectScripts helpers", () => {
         command: "pnpm dev",
         icon: "debug",
         runOnWorktreeCreate: false,
+        workingDirectory: "/repo/frontend",
         previewUrl: "http://localhost:5733",
         autoOpenPreview: true,
       }),
@@ -30,6 +31,7 @@ describe("projectScripts helpers", () => {
       command: "pnpm dev",
       icon: "debug",
       runOnWorktreeCreate: false,
+      workingDirectory: "/repo/frontend",
       previewUrl: "http://localhost:5733",
       autoOpenPreview: true,
     });
@@ -42,6 +44,7 @@ describe("projectScripts helpers", () => {
         command: "pnpm test",
         icon: "test",
         runOnWorktreeCreate: false,
+        workingDirectory: null,
         previewUrl: null,
         autoOpenPreview: false,
       }),

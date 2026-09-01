@@ -2,7 +2,7 @@ import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 
 import { ThreadEnvMode } from "./environment.ts";
-import { ProjectScriptIcon } from "./orchestration.ts";
+import { ProjectScriptIcon, ProjectScriptWorkingDirectory } from "./orchestration.ts";
 
 /** File name of the checked-in T3 project file, resolved at the workspace root. */
 export const T3_PROJECT_FILE_NAME = "t3.json";
@@ -31,6 +31,12 @@ export const T3ProjectFileScript = Schema.Struct({
   command: trimmedNonEmpty({
     description: "Shell command executed in a T3 Code terminal at the project root.",
   }),
+  workingDirectory: Schema.optionalKey(
+    ProjectScriptWorkingDirectory.annotate({
+      description:
+        "Absolute directory where the script starts. When omitted, T3 Code uses the active checkout or worktree.",
+    }),
+  ),
   icon: Schema.optionalKey(
     ProjectScriptIcon.annotate({
       description: 'Icon shown next to the script in the scripts menu. Defaults to "play".',
