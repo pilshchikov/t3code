@@ -52,16 +52,23 @@ function threadUserActivityAnchorAt(thread: ThreadActivitySource): string {
 export function changeRequestAutoSettles(
   changeRequest: ChangeRequestSettleSource | null | undefined,
   options: {
+    readonly autoSettleOnMerge?: boolean | undefined;
     readonly thread?: ThreadActivitySource | null | undefined;
   } = {},
 ): boolean {
   if (changeRequest == null) return false;
-  const terminal = changeRequest.state === "closed" || changeRequest.state === "merged";
+  const terminal =
+    changeRequest.state === "closed" ||
+    (changeRequest.state === "merged" && options.autoSettleOnMerge !== false);
   if (!terminal) return false;
-  if (changeRequest.updatedAt == null || options.thread == null) return false;
+  if (changeRequest.updatedAt == null || options.thread == null) {
+    return options.autoSettleOnMerge !== undefined;
+  }
   const updatedAtMs = Date.parse(changeRequest.updatedAt);
   const anchorAtMs = Date.parse(threadUserActivityAnchorAt(options.thread));
-  if (Number.isNaN(updatedAtMs) || Number.isNaN(anchorAtMs)) return false;
+  if (Number.isNaN(updatedAtMs) || Number.isNaN(anchorAtMs)) {
+    return options.autoSettleOnMerge !== undefined;
+  }
   return updatedAtMs >= anchorAtMs;
 }
 
@@ -298,7 +305,8 @@ export function effectiveSettled(
   options: {
     readonly now: string;
     readonly autoSettleAfterDays: number | null;
-    readonly autoSettleMode: SidebarAutoSettleMode;
+    readonly autoSettleMode?: SidebarAutoSettleMode;
+    readonly autoSettleOnMerge?: boolean;
     readonly changeRequest?: ChangeRequestSettleSource | null;
   },
 ): boolean {
@@ -328,6 +336,15 @@ export function effectiveSettled(
   if (options.autoSettleMode === "never") return false;
   if (options.autoSettleMode === "change-request") {
     return changeRequestAutoSettles(options.changeRequest, { thread: shell });
+  }
+  if (
+    options.autoSettleMode === undefined &&
+    changeRequestAutoSettles(options.changeRequest, {
+      autoSettleOnMerge: options.autoSettleOnMerge,
+      thread: shell,
+    })
+  ) {
+    return true;
   }
   // An open PR is unfinished business regardless of how long the thread has
   // been quiet: review can take days, and hiding the thread would bury the

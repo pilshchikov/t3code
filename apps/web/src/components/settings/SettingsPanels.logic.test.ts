@@ -14,10 +14,9 @@ import {
   formatDiagnosticsDescription,
   getChangedBrowserSettingLabels,
   getChangedTypographySettingLabels,
-  hasChangedBackgroundActivitySettings,
-  hasChangedThreadSettlingSettings,
-  isProjectGroupingEnabled,
   isSamePreviewViewport,
+  hasChangedBackgroundActivitySettings,
+  isProjectGroupingEnabled,
   projectGroupingModeFromToggle,
   resolveBackgroundActivityProfileOption,
 } from "./SettingsPanels.logic";
@@ -153,24 +152,6 @@ describe("project grouping toggle", () => {
   });
 });
 
-describe("thread settling settings restore", () => {
-  it("detects changes to the mode or the hidden inactivity window", () => {
-    expect(hasChangedThreadSettlingSettings(DEFAULT_UNIFIED_SETTINGS)).toBe(false);
-    expect(
-      hasChangedThreadSettlingSettings({
-        ...DEFAULT_UNIFIED_SETTINGS,
-        sidebarAutoSettleMode: "inactivity",
-      }),
-    ).toBe(true);
-    expect(
-      hasChangedThreadSettlingSettings({
-        ...DEFAULT_UNIFIED_SETTINGS,
-        sidebarAutoSettleAfterDays: 30,
-      }),
-    ).toBe(true);
-  });
-});
-
 describe("formatDiagnosticsDescription", () => {
   it("collapses trace and metric URLs that share the same OTEL base path", () => {
     expect(
@@ -287,9 +268,16 @@ describe("getChangedBrowserSettingLabels", () => {
         browserDefaultViewport: { _tag: "freeform", width: 900, height: 600 },
         browserDefaultZoomFactor: 1.5,
         browserDefaultAppearance: "dark",
+        browserRecordingFrameRate: 60,
         browserAutoShowFloatingPreview: !DEFAULT_UNIFIED_SETTINGS.browserAutoShowFloatingPreview,
       }),
-    ).toEqual(["Browser viewport", "Browser zoom", "Browser appearance", "Floating preview"]);
+    ).toEqual([
+      "Browser viewport",
+      "Browser zoom",
+      "Browser appearance",
+      "Recording frame rate",
+      "Floating preview",
+    ]);
   });
 });
 

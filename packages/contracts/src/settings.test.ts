@@ -66,6 +66,26 @@ describe("ClientSettings word wrap", () => {
   });
 });
 
+describe("ClientSettings browser recording frame rate", () => {
+  it("defaults to 30 fps", () => {
+    expect(decodeClientSettings({}).browserRecordingFrameRate).toBe(30);
+  });
+
+  it.each([30, 60])("accepts a supported frame rate: %s", (frameRate) => {
+    expect(
+      decodeClientSettings({ browserRecordingFrameRate: frameRate }).browserRecordingFrameRate,
+    ).toBe(frameRate);
+    expect(
+      decodeClientSettingsPatch({ browserRecordingFrameRate: frameRate }).browserRecordingFrameRate,
+    ).toBe(frameRate);
+  });
+
+  it.each([24, 59, 120])("rejects an unsupported frame rate: %s", (frameRate) => {
+    expect(() => decodeClientSettings({ browserRecordingFrameRate: frameRate })).toThrow();
+    expect(() => decodeClientSettingsPatch({ browserRecordingFrameRate: frameRate })).toThrow();
+  });
+});
+
 describe("ClientSettings glass opacity", () => {
   it("defaults to a readable translucent surface", () => {
     expect(decodeClientSettings({}).glassOpacity).toBe(80);
@@ -121,7 +141,7 @@ describe("ClientSettings sidebar", () => {
     const settings = decodeClientSettings({});
     expect(settings.legacySidebarEnabled).toBe(false);
     expect(settings.sidebarAutoSettleAfterDays).toBe(3);
-    expect(settings.sidebarAutoSettleMode).toBe("never");
+    expect(settings.sidebarAutoSettleOnMerge).toBe(true);
   });
 
   it("drops the retired sidebar v2 beta keys, resetting everyone to the default", () => {
@@ -141,33 +161,25 @@ describe("ClientSettings sidebar", () => {
     );
   });
 
+  it("keeps unpin confirmation opt-in and patchable", () => {
+    expect(decodeClientSettings({}).confirmThreadUnpin).toBe(false);
+    expect(decodeClientSettingsPatch({ confirmThreadUnpin: true }).confirmThreadUnpin).toBe(true);
+    expect(() => decodeClientSettingsPatch({ confirmThreadUnpin: "yes" })).toThrow();
+  });
+
   it("allows auto-settle by inactivity to be disabled", () => {
     expect(
       decodeClientSettings({ sidebarAutoSettleAfterDays: null }).sidebarAutoSettleAfterDays,
     ).toBeNull();
   });
 
-  it("does not preserve the retired merge switch as a hidden automatic path", () => {
-    const decoded = decodeClientSettings({ sidebarAutoSettleOnMerge: true });
-    expect(decoded.sidebarAutoSettleMode).toBe("never");
-    expect(decoded).not.toHaveProperty("sidebarAutoSettleOnMerge");
-  });
-
-  it.each(["never", "change-request", "inactivity"] as const)(
-    "accepts the %s auto-settle mode",
-    (sidebarAutoSettleMode) => {
-      expect(decodeClientSettings({ sidebarAutoSettleMode }).sidebarAutoSettleMode).toBe(
-        sidebarAutoSettleMode,
-      );
-      expect(decodeClientSettingsPatch({ sidebarAutoSettleMode }).sidebarAutoSettleMode).toBe(
-        sidebarAutoSettleMode,
-      );
-    },
-  );
-
-  it("rejects unsupported auto-settle modes", () => {
-    expect(() => decodeClientSettings({ sidebarAutoSettleMode: "always" })).toThrow();
-    expect(() => decodeClientSettingsPatch({ sidebarAutoSettleMode: "always" })).toThrow();
+  it("allows auto-settle on merge to be disabled", () => {
+    expect(decodeClientSettings({ sidebarAutoSettleOnMerge: false }).sidebarAutoSettleOnMerge).toBe(
+      false,
+    );
+    expect(
+      decodeClientSettingsPatch({ sidebarAutoSettleOnMerge: false }).sidebarAutoSettleOnMerge,
+    ).toBe(false);
   });
 
   it.each([-1, 0, 91])("rejects an auto-settle threshold outside 1..90: %s", (value) => {
