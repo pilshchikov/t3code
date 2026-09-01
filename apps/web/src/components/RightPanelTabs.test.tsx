@@ -78,10 +78,12 @@ function renderTabs(
   second?: DesktopPreviewFavicon,
   audio?: { audible?: boolean; audioMuted?: boolean },
   previewRuntimeTabId: ((tabId: string) => string) | null = (tabId) => `runtime:${tabId}`,
+  showTabs = true,
 ) {
   return renderToStaticMarkup(
     <RightPanelTabs
       mode="inline"
+      showTabs={showTabs}
       surfaces={second ? [previewSurface, secondSurface] : [previewSurface]}
       activeSurfaceId={previewSurface.id}
       pendingSurfaceIds={new Set()}
@@ -123,6 +125,20 @@ describe("RightPanelTabs preview favicon", () => {
   it("does not render a left-click close control", () => {
     const html = renderTabs(null);
     expect(html).not.toContain('aria-label="Close ');
+  });
+
+  it("keeps compact surface controls when labeled tabs are hidden", () => {
+    const html = renderTabs(
+      null,
+      favicon("data:image/png;base64,BBBB", "http://24x.xf.local/admin"),
+      undefined,
+      null,
+      false,
+    );
+    expect(html).not.toContain(">Local site<");
+    expect(html).not.toContain(">Admin<");
+    expect(html).toContain('aria-label="Add panel surface"');
+    expect(html.match(/data-active-tab=/g)).toHaveLength(2);
   });
 
   it("prefers a live capture and never asks Google about a private hostname", () => {

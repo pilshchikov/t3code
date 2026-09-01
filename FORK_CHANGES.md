@@ -941,6 +941,57 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
   RPC imports, provider skill menus, mobile settlement state, usage attribution including Grok,
   OpenCode output bounds, analytics test wiring, and provider-refresh compatibility.
 
+## Fork guarantee audit: 2026-09-01
+
+- Added a host filesystem subscription for every visible workspace tree. Directory and file
+  changes now arrive through `projects.watchEntries`, are coalesced before crossing RPC, and
+  invalidate the Files tree, Git status, Working tree / Branch changes, and the Commit view. This
+  does not depend on Claude, Codex, or another provider reporting a `file_change` or
+  `command_execution` activity event; those events remain a supplemental refresh path.
+- Workspace file contents and full tree listings do not use the client query cache. Their query
+  atoms retain no previous value, have a zero idle TTL, and deliberately render an empty loading
+  state while each disk request is in flight. Opening a file, reopening the Files surface, toggling
+  the right panel, or pressing Refresh therefore completes a new server read before any contents or
+  entries are shown. The non-Git tree fallback also refreshes its filesystem index before every
+  listing instead of returning an older index snapshot.
+- A visible file keeps its narrower per-file watcher, while each visible tree has a root watcher, so
+  content rewrites and directory membership changes trigger another uncached read without relying
+  on provider activity events. Image URLs and open per-file commit diffs retain their own mutation
+  refresh behavior.
+- The Files panel now maps the project's primary directory slot to the thread's active checkout or
+  worktree. Previously, passing the project's multi-directory configuration replaced that active
+  root with the original checkout, so an agent could update a worktree while Files repeatedly read
+  an older same-named file from the main checkout. Secondary project directories keep their
+  configured roots.
+- Workspace selector synchronization cannot mutate a started thread. Only an explicit pointer or
+  keyboard item choice may detach a worktree. An intentional switch to **Current checkout** now
+  stores that checkout's real branch together with the null worktree path, preventing a thread from
+  advertising its old worktree branch while Files and the next agent use the main checkout.
+- Kept editable-file optimistic contents authoritative until their save settles, then applies any
+  pending external refresh. Multi-directory pending state is keyed by workspace root as well as
+  relative path, so the same file name in two roots cannot suppress the wrong refresh.
+- Restored the documented editor surfaces deleted or orphaned by merge reconciliation: Search
+  Everywhere, symbol navigation, back/forward history, clickable breadcrumb navigation, Files /
+  Structure / Commit explorer switching, and per-file Commit diffs. The restored integration uses
+  the current multi-root, resizable explorer and current diff renderer rather than reverting those
+  newer fork changes.
+- Restored the persisted **Editor tabs** preference and its Settings/Search Everywhere controls.
+  Hidden-tab mode retains compact surface icons and the add-surface control.
+- Restored the default-off `T3CODE_ENABLE_SAFE_STORAGE_KEYCHAIN` gate so ad-hoc local builds do not
+  touch macOS Safe Storage unless explicitly opted in.
+- Audited every repository path named in this file; all documented source paths are present.
+- Source for the filesystem subscription:
+  `apps/server/src/workspace/WorkspaceEntries.ts`, `apps/server/src/ws.ts`,
+  `packages/contracts/src/project.ts`, `packages/contracts/src/rpc.ts`,
+  `packages/client-runtime/src/state/projectCommands.ts`,
+  `packages/client-runtime/src/state/runtime.ts`,
+  `apps/web/src/components/files/projectFilesQueryState.ts`,
+  `apps/web/src/components/files/filePreviewRoots.ts`,
+  `apps/web/src/components/BranchToolbar.logic.ts`,
+  `apps/web/src/components/BranchToolbarEnvModeSelector.tsx`,
+  `apps/web/src/components/DiffPanel.tsx`, and
+  `apps/web/src/components/files/GitChangesPanel.tsx`.
+
 ## Validation Notes
 
 The fork-local changes above were validated with focused server tests, the full web unit suite,

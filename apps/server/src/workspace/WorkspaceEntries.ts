@@ -3,17 +3,21 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as RcMap from "effect/RcMap";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 
 import type {
   FilesystemBrowseInput,
   FilesystemBrowseResult,
   ProjectEntry,
+  ProjectEntriesChangedEvent,
   ProjectListEntriesInput,
   ProjectListEntriesResult,
   ProjectSearchContentsInput,
@@ -116,6 +120,18 @@ export const WorkspaceEntriesBrowseError = Schema.Union([
 ]);
 export type WorkspaceEntriesBrowseError = typeof WorkspaceEntriesBrowseError.Type;
 
+export class WorkspaceEntriesWatchError extends Schema.TaggedErrorClass<WorkspaceEntriesWatchError>()(
+  "WorkspaceEntriesWatchError",
+  {
+    cwd: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    return `Failed to watch workspace entries in '${this.cwd}'.`;
+  }
+}
+
 export const WorkspaceEntriesError = Schema.Union([
   WorkspacePaths.WorkspaceRootNotExistsError,
   WorkspacePaths.WorkspaceRootCreateFailedError,
@@ -124,6 +140,7 @@ export const WorkspaceEntriesError = Schema.Union([
   WorkspaceSearchIndex.WorkspaceSearchIndexCreateFailed,
   WorkspaceSearchIndex.WorkspaceSearchIndexScanTimedOut,
   WorkspaceSearchIndex.WorkspaceSearchIndexSearchFailed,
+  WorkspaceEntriesWatchError,
 ]);
 export type WorkspaceEntriesError = typeof WorkspaceEntriesError.Type;
 
@@ -136,6 +153,9 @@ export class WorkspaceEntries extends Context.Service<
     readonly list: (
       input: ProjectListEntriesInput,
     ) => Effect.Effect<ProjectListEntriesResult, WorkspaceEntriesError>;
+    readonly watch: (
+      input: ProjectListEntriesInput,
+    ) => Stream.Stream<ProjectEntriesChangedEvent, WorkspaceEntriesError>;
     readonly search: (
       input: ProjectSearchEntriesInput,
     ) => Effect.Effect<ProjectSearchEntriesResult, WorkspaceEntriesError>;
@@ -185,6 +205,7 @@ const resolveBrowseTarget = Effect.fn("WorkspaceEntries.resolveBrowseTarget")(fu
 });
 
 export const make = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const workspacePaths = yield* WorkspacePaths.WorkspacePaths;
   const workspaceSearchIndexes = yield* WorkspaceSearchIndex.WorkspaceSearchIndexMap;
@@ -195,6 +216,31 @@ export const make = Effect.gen(function* () {
   ): Effect.fn.Return<string, WorkspaceEntriesError> {
     return yield* workspacePaths.normalizeWorkspaceRoot(cwd);
   });
+
+  const watch: WorkspaceEntries["Service"]["watch"] = (input) =>
+    Stream.unwrap(
+      Effect.gen(function* () {
+        const normalizedCwd = yield* normalizeWorkspaceRoot(input.cwd);
+        const changes = fileSystem.watch(normalizedCwd).pipe(
+          Stream.filter((event) => {
+            const eventPath = path
+              .relative(normalizedCwd, path.resolve(normalizedCwd, event.path))
+              .replaceAll("\\", "/");
+            return eventPath !== ".git" && !eventPath.startsWith(".git/");
+          }),
+          Stream.debounce(Duration.millis(100)),
+          Stream.mapAccum(
+            () => 1,
+            (revision): readonly [number, ReadonlyArray<ProjectEntriesChangedEvent>] => [
+              revision + 1,
+              [{ revision }],
+            ],
+          ),
+          Stream.mapError((cause) => new WorkspaceEntriesWatchError({ cwd: normalizedCwd, cause })),
+        );
+        return Stream.concat(Stream.succeed({ revision: 0 }), changes);
+      }),
+    );
 
   const refresh: WorkspaceEntries["Service"]["refresh"] = Effect.fn("WorkspaceEntries.refresh")(
     function* (cwd) {
@@ -390,6 +436,11 @@ export const make = Effect.gen(function* () {
         }
       }
 
+      // The file tree is a live view, not a search-result cache. The first
+      // acquisition scans the workspace; every later list call refreshes the
+      // existing index before returning it so reopening the panel cannot
+      // resurrect an older directory snapshot.
+      yield* refresh(normalizedCwd);
       return yield* Effect.gen(function* () {
         const searchIndex = yield* WorkspaceSearchIndex.WorkspaceSearchIndex;
         return yield* searchIndex.list();
@@ -403,7 +454,7 @@ export const make = Effect.gen(function* () {
     },
   );
 
-  return WorkspaceEntries.of({ browse, list, refresh, search, searchContents, searchCode });
+  return WorkspaceEntries.of({ browse, list, refresh, search, searchContents, searchCode, watch });
 });
 
 export const layer = Layer.effect(WorkspaceEntries, make).pipe(

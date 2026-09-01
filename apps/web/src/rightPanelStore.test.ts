@@ -3,6 +3,7 @@ import { type EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import {
+  fileSurfaceId,
   migratePersistedRightPanelState,
   pullRequestSurfaceId,
   selectActiveRightPanel,
@@ -22,6 +23,13 @@ beforeEach(() => {
 });
 
 describe("rightPanelStore", () => {
+  it("keys the same file independently in each workspace root", () => {
+    expect(fileSurfaceId("src/index.ts", "/repo/one")).not.toBe(
+      fileSurfaceId("src/index.ts", "/repo/two"),
+    );
+    expect(fileSurfaceId("src/index.ts", "/repo/one")).toBe("file:%2Frepo%2Fone:src/index.ts");
+  });
+
   it("drops the legacy singleton terminal surface during migration", () => {
     expect(
       migratePersistedRightPanelState({

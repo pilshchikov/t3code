@@ -213,6 +213,11 @@ function projectEntriesFailureContext(error: WorkspaceEntries.WorkspaceEntriesEr
         failure: "workspace_root_not_directory",
         normalizedCwd: error.normalizedWorkspaceRoot,
       };
+    case "WorkspaceEntriesWatchError":
+      return {
+        failure: "workspace_watch_failed",
+        normalizedCwd: error.cwd,
+      };
     case "WorkspaceSearchIndexCreateFailed":
       return {
         failure: "search_index_create_failed",
@@ -2022,6 +2027,21 @@ const makeWsRpcLayer = (
             WS_METHODS.projectsListEntries,
             workspaceEntries.list(input).pipe(
               Effect.mapError(
+                (cause) =>
+                  new ProjectListEntriesError({
+                    ...input,
+                    ...projectEntriesFailureContext(cause),
+                    cause,
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "workspace" },
+          ),
+        [WS_METHODS.projectsWatchEntries]: (input) =>
+          observeRpcStream(
+            WS_METHODS.projectsWatchEntries,
+            workspaceEntries.watch(input).pipe(
+              Stream.mapError(
                 (cause) =>
                   new ProjectListEntriesError({
                     ...input,

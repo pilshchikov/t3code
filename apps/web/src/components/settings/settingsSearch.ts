@@ -149,6 +149,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["combine matching repositories environments sidebar"],
   },
   {
+    id: "editor-tabs",
+    title: "Editor tabs",
+    to: "/settings/general",
+    searchTerms: ["right panel surfaces compact hide show"],
+  },
+  {
     id: "auto-settle-inactive-threads",
     title: "Auto-settle inactive threads",
     to: "/settings/general",
@@ -160,7 +166,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["sidebar inactivity days no activity automatically"],
   },
   {
-    id: "auto-settle-merged-threads",
+    id: "auto-settle-change-request-threads",
     title: "Auto-settle merged threads",
     to: "/settings/general",
     searchTerms: ["pull request merge closed automatically sidebar"],

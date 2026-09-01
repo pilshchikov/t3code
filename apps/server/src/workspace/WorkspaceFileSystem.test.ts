@@ -77,6 +77,27 @@ it.layer(TestLayer, { excludeTestServices: true })("WorkspaceFileSystemLive", (i
       }),
     );
 
+    it.effect("rereads changed file contents instead of returning the previous read", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        yield* writeTextFile(cwd, "triage/index.md", "before\n");
+
+        const before = yield* workspaceFileSystem.readFile({
+          cwd,
+          relativePath: "triage/index.md",
+        });
+        expect(before.contents).toBe("before\n");
+
+        yield* writeTextFile(cwd, "triage/index.md", "after\n");
+        const reopened = yield* workspaceFileSystem.readFile({
+          cwd,
+          relativePath: "triage/index.md",
+        });
+        expect(reopened.contents).toBe("after\n");
+      }),
+    );
+
     it.effect("rejects reads outside the workspace root", () =>
       Effect.gen(function* () {
         const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;

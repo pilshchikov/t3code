@@ -49,6 +49,8 @@ interface RightPanelTabsProps {
   /** Forwarded to PreviewPanelShell as the initial width before a user resize. */
   defaultWidth?: number;
   layoutControls?: ReactNode;
+  /** Keep every surface reachable while allowing the persistent labeled strip to be compacted. */
+  showTabs?: boolean;
   surfaces: readonly RightPanelSurface[];
   activeSurfaceId: string | null;
   pendingSurfaceIds: ReadonlySet<string>;
@@ -728,7 +730,8 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                   data-active-tab={active}
                   onContextMenu={(event) => handleTabContextMenu(event, surface)}
                   className={cn(
-                    "cursor-pointer group/tab flex h-6 max-w-36 shrink-0 items-center gap-0.5 rounded-md pr-2 pl-1.5 text-xs",
+                    "cursor-pointer group/tab flex h-6 shrink-0 items-center gap-0.5 rounded-md text-xs",
+                    props.showTabs !== false ? "max-w-36 pr-2 pl-1.5" : "w-6 justify-center px-0.5",
                     active
                       ? "bg-accent text-foreground"
                       : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
@@ -785,7 +788,9 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                               />
                             ) : null}
                           </span>
-                          <span className="truncate">{title}</span>
+                          {props.showTabs !== false ? (
+                            <span className="truncate">{title}</span>
+                          ) : null}
                         </button>
                       }
                     />

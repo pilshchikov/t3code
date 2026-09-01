@@ -4,6 +4,8 @@ import {
   buildBranchConflictPrompt,
   dedupeRemoteBranchesWithLocalMatches,
   deriveLocalBranchNameFromRemoteRef,
+  isExplicitWorkspaceModeSelectionReason,
+  resolveCurrentCheckoutWorkspaceMetadata,
   resolveEnvironmentOptionLabel,
   resolveBranchSelectionTarget,
   resolveCurrentWorkspaceLabel,
@@ -482,6 +484,32 @@ describe("resolveEnvModeLabel", () => {
   it("uses explicit workspace labels", () => {
     expect(resolveEnvModeLabel("local")).toBe("Current checkout");
     expect(resolveEnvModeLabel("worktree")).toBe("New worktree");
+  });
+});
+
+describe("isExplicitWorkspaceModeSelectionReason", () => {
+  it("accepts pointer and keyboard choices from the open selector", () => {
+    expect(isExplicitWorkspaceModeSelectionReason("item-press")).toBe(true);
+    expect(isExplicitWorkspaceModeSelectionReason("list-navigation")).toBe(true);
+  });
+
+  it("rejects initialization and controlled-value synchronization", () => {
+    expect(isExplicitWorkspaceModeSelectionReason("none")).toBe(false);
+    expect(isExplicitWorkspaceModeSelectionReason("initial")).toBe(false);
+    expect(isExplicitWorkspaceModeSelectionReason("imperative-action")).toBe(false);
+  });
+});
+
+describe("resolveCurrentCheckoutWorkspaceMetadata", () => {
+  it("moves both the workspace and branch to the current checkout", () => {
+    expect(resolveCurrentCheckoutWorkspaceMetadata("master")).toEqual({
+      worktreePath: null,
+      branch: "master",
+    });
+  });
+
+  it("does not overwrite the branch before current-checkout status is known", () => {
+    expect(resolveCurrentCheckoutWorkspaceMetadata(null)).toEqual({ worktreePath: null });
   });
 });
 

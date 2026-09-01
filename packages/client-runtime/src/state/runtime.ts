@@ -53,6 +53,7 @@ interface EnvironmentQueryAtomOptions<Input, A, E, R> extends EnvironmentAtomOpt
   readonly staleTimeMs?: number;
   readonly idleTtlMs?: number;
   readonly refreshIntervalMs?: number;
+  readonly retainPreviousData?: boolean;
 }
 
 interface EnvironmentSubscriptionAtomOptions<Input, A, E, R> {
@@ -524,49 +525,55 @@ export function createEnvironmentQueryAtomFamily<R, ER, Input, A, E>(
   const family = Atom.family((key: string) => {
     const target = parseEnvironmentRpcKey<Input>(key);
     const idleTtlMs = options.idleTtlMs ?? 5 * 60_000;
-    const queryAtom = runtime
-      .atom<
-        A,
-        E | ConnectionAttemptError | EnvironmentNotRegisteredError | EnvironmentRpcUnavailableError
-      >((get) => {
-        const connection = Option.getOrNull(
-          AsyncResult.value(get(connectionAtom(target.environmentId))),
-        );
-        if (connection === null) {
-          return Effect.never;
-        }
-        const [connectionState, session] = connection;
-        switch (connectionState.phase) {
-          case "connected":
-            return Option.isSome(session)
-              ? runInEnvironment(target.environmentId, options.execute(target.input))
-              : Effect.never;
-          case "connecting":
-          case "backoff":
-            return Effect.never;
-          case "available":
-          case "offline":
-          case "blocked":
-            if (connectionState.lastFailure !== null) {
-              return Effect.fail(connectionState.lastFailure);
-            }
-            return Effect.fail(
-              new EnvironmentRpcUnavailableError({
-                environmentId: target.environmentId,
-                message: `Environment ${target.environmentId} is ${
-                  connectionState.phase === "available" ? "not connected" : connectionState.phase
-                }.`,
-              }),
-            );
-        }
-      })
-      .pipe(
-        Atom.swr({
-          staleTime: options.staleTimeMs ?? 30_000,
-          revalidateOnMount: true,
-        }),
-        Atom.setIdleTTL(idleTtlMs),
+    const baseQueryAtom = runtime.atom<
+      A,
+      E | ConnectionAttemptError | EnvironmentNotRegisteredError | EnvironmentRpcUnavailableError
+    >((get) => {
+      const connection = Option.getOrNull(
+        AsyncResult.value(get(connectionAtom(target.environmentId))),
       );
+      if (connection === null) {
+        return Effect.never;
+      }
+      const [connectionState, session] = connection;
+      switch (connectionState.phase) {
+        case "connected":
+          return Option.isSome(session)
+            ? runInEnvironment(target.environmentId, options.execute(target.input))
+            : Effect.never;
+        case "connecting":
+        case "backoff":
+          return Effect.never;
+        case "available":
+        case "offline":
+        case "blocked":
+          if (connectionState.lastFailure !== null) {
+            return Effect.fail(connectionState.lastFailure);
+          }
+          return Effect.fail(
+            new EnvironmentRpcUnavailableError({
+              environmentId: target.environmentId,
+              message: `Environment ${target.environmentId} is ${
+                connectionState.phase === "available" ? "not connected" : connectionState.phase
+              }.`,
+            }),
+          );
+      }
+    });
+    const queryAtom = (
+      options.retainPreviousData === false
+        ? baseQueryAtom.pipe(
+            Atom.map((result) =>
+              result.waiting ? AsyncResult.initial<A, E | ER | Error>(true) : result,
+            ),
+          )
+        : baseQueryAtom.pipe(
+            Atom.swr({
+              staleTime: options.staleTimeMs ?? 30_000,
+              revalidateOnMount: true,
+            }),
+          )
+    ).pipe(Atom.setIdleTTL(idleTtlMs));
     return (
       options.refreshIntervalMs === undefined
         ? queryAtom
@@ -640,6 +647,7 @@ export function createEnvironmentRpcQueryAtomFamily<R, ER, TTag extends Environm
     readonly staleTimeMs?: number;
     readonly idleTtlMs?: number;
     readonly refreshIntervalMs?: number;
+    readonly retainPreviousData?: boolean;
   },
 ) {
   return createEnvironmentQueryAtomFamily(runtime, {
@@ -649,6 +657,9 @@ export function createEnvironmentRpcQueryAtomFamily<R, ER, TTag extends Environm
     ...(options.refreshIntervalMs === undefined
       ? {}
       : { refreshIntervalMs: options.refreshIntervalMs }),
+    ...(options.retainPreviousData === undefined
+      ? {}
+      : { retainPreviousData: options.retainPreviousData }),
     execute: (input: EnvironmentRpcInput<TTag>) => request(options.tag, input),
   });
 }

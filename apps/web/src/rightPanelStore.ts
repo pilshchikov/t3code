@@ -162,15 +162,18 @@ const browserSurface = (tabId: string | null): RightPanelSurface =>
     ? { id: `browser:${tabId}`, kind: "preview", resourceId: tabId }
     : { id: "browser:new", kind: "preview", resourceId: null };
 
+export const fileSurfaceId = (relativePath: string, workspaceRoot?: string): `file:${string}` =>
+  workspaceRoot
+    ? `file:${encodeURIComponent(workspaceRoot)}:${relativePath}`
+    : `file:${relativePath}`;
+
 const fileSurface = (
   relativePath: string,
   revealLine: number | null,
   revealRequestId: number,
   workspaceRoot?: string,
 ): RightPanelSurface => ({
-  id: workspaceRoot
-    ? `file:${encodeURIComponent(workspaceRoot)}:${relativePath}`
-    : `file:${relativePath}`,
+  id: fileSurfaceId(relativePath, workspaceRoot),
   kind: "file",
   relativePath,
   ...(workspaceRoot ? { workspaceRoot } : {}),
@@ -439,9 +442,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             const withoutStandaloneExplorer = current.surfaces.filter(
               (surface) => surface.kind !== "files",
             );
-            const surfaceId = workspaceRoot
-              ? (`file:${encodeURIComponent(workspaceRoot)}:${relativePath}` as const)
-              : (`file:${relativePath}` as const);
+            const surfaceId = fileSurfaceId(relativePath, workspaceRoot);
             const existing = withoutStandaloneExplorer.find(
               (surface): surface is Extract<RightPanelSurface, { kind: "file" }> =>
                 surface.id === surfaceId && surface.kind === "file",

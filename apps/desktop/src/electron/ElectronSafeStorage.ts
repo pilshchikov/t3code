@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -68,12 +69,24 @@ export class ElectronSafeStorage extends Context.Service<
 
 export const make = Effect.gen(function* () {
   const platform = yield* HostProcessPlatform;
+  // Local fork builds are ad-hoc signed, so macOS treats every rebuild as a different app and asks
+  // for the Safe Storage Keychain secret again. Keep OS-keychain storage off unless the process
+  // explicitly opts in. Consumers already handle unavailable encryption by keeping credentials in
+  // memory only.
+  const keychainSecretStorageEnabled = yield* Config.boolean(
+    "T3CODE_ENABLE_SAFE_STORAGE_KEYCHAIN",
+  ).pipe(
+    Config.withDefault(false),
+    Effect.orElseSucceed(() => false),
+  );
 
   return ElectronSafeStorage.of({
-    isEncryptionAvailable: Effect.try({
-      try: () => Electron.safeStorage.isEncryptionAvailable(),
-      catch: (cause) => new ElectronSafeStorageAvailabilityError({ cause }),
-    }),
+    isEncryptionAvailable: keychainSecretStorageEnabled
+      ? Effect.try({
+          try: () => Electron.safeStorage.isEncryptionAvailable(),
+          catch: (cause) => new ElectronSafeStorageAvailabilityError({ cause }),
+        })
+      : Effect.succeed(false),
     encryptString: (value) =>
       Effect.try({
         try: () => Electron.safeStorage.encryptString(value),

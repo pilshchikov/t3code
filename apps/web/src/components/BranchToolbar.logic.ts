@@ -73,6 +73,20 @@ export function resolveEnvModeLabel(mode: EnvMode): string {
   return "Current checkout";
 }
 
+/** Only a real pointer/keyboard choice may move a started thread to another workspace. */
+export function isExplicitWorkspaceModeSelectionReason(reason: string): boolean {
+  return reason === "item-press" || reason === "list-navigation";
+}
+
+export function resolveCurrentCheckoutWorkspaceMetadata(
+  currentCheckoutBranch: string | null | undefined,
+): { readonly worktreePath: null; readonly branch?: string } {
+  return {
+    worktreePath: null,
+    ...(currentCheckoutBranch ? { branch: currentCheckoutBranch } : {}),
+  };
+}
+
 export function resolveCurrentWorkspaceLabel(activeWorktreePath: string | null): string {
   return activeWorktreePath ? "Current worktree" : resolveEnvModeLabel("local");
 }

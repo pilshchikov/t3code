@@ -1,6 +1,7 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import type {
   EnvironmentId,
+  ProjectEntriesChangedEvent,
   ProjectFileChangedEvent,
   ProjectListEntriesResult,
   ProjectReadFileResult,
@@ -22,6 +23,9 @@ const EMPTY_PROJECT_FILE_QUERY_ATOM = Atom.make(
 const EMPTY_PROJECT_FILE_WATCH_ATOM = Atom.make(
   AsyncResult.initial<ProjectFileChangedEvent, never>(false),
 ).pipe(Atom.withLabel("project-file-watch:empty"));
+const EMPTY_PROJECT_ENTRIES_WATCH_ATOM = Atom.make(
+  AsyncResult.initial<ProjectEntriesChangedEvent, never>(false),
+).pipe(Atom.withLabel("project-entries-watch:empty"));
 function optimisticFileAtom(environmentId: EnvironmentId, cwd: string, relativePath: string) {
   return projectEnvironment.optimisticFile({ environmentId, cwd, relativePath });
 }
@@ -132,13 +136,53 @@ export function useProjectEntriesQuery(
   const atom = getProjectEntriesQueryAtom(environmentId, cwd);
   const result = useAtomValue(atom);
   const refreshAtom = useAtomRefresh(atom);
+  useProjectEntriesWatchRefresh(environmentId, cwd, refreshAtom);
+  const targetKey = `${environmentId}\u0000${cwd}`;
+  const [freshTargetKey, setFreshTargetKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setFreshTargetKey(null);
+    void executeAtomQuery(appAtomRegistry, atom, {
+      reportDefect: false,
+      reportFailure: false,
+      refresh: true,
+    }).then(() => {
+      if (active) setFreshTargetKey(targetKey);
+    });
+    return () => {
+      active = false;
+    };
+  }, [atom, targetKey]);
+
   const refresh = useCallback(() => refreshAtom(), [refreshAtom]);
+  const awaitingFreshListing = freshTargetKey !== targetKey;
   return {
-    data: Option.getOrNull(AsyncResult.value(result)),
-    error: errorMessage(result),
-    isPending: result.waiting,
+    data:
+      awaitingFreshListing || result.waiting ? null : Option.getOrNull(AsyncResult.value(result)),
+    error: awaitingFreshListing || result.waiting ? null : errorMessage(result),
+    isPending: awaitingFreshListing || result.waiting,
     refresh,
   };
+}
+
+export function useProjectEntriesWatchRefresh(
+  environmentId: EnvironmentId | null,
+  cwd: string | null,
+  refresh: () => void,
+): void {
+  const watchAtom = (
+    environmentId !== null && cwd !== null
+      ? projectEnvironment.watchEntries({ environmentId, input: { cwd } })
+      : EMPTY_PROJECT_ENTRIES_WATCH_ATOM
+  ) as Atom.Atom<AsyncResult.AsyncResult<ProjectEntriesChangedEvent, unknown>>;
+  const watchResult = useAtomValue(watchAtom);
+  const watchRevision = AsyncResult.isSuccess(watchResult) ? watchResult.value.revision : null;
+
+  useEffect(() => {
+    if (watchRevision === null || watchRevision === 0) return;
+    refresh();
+  }, [refresh, watchRevision]);
 }
 
 /**
@@ -182,6 +226,7 @@ export function useProjectFileQuery(
   relativePath: string | null,
   enabled = true,
   watch = false,
+  preserveOptimistic = false,
 ): ProjectQueryState<ProjectReadFileResult> {
   const atom = enabled
     ? getProjectFileQueryAtom(environmentId, cwd, relativePath)
@@ -210,34 +255,46 @@ export function useProjectFileQuery(
       return;
     }
     let active = true;
-    refreshAtom();
+    if (!preserveOptimistic && relativePath !== null) {
+      clearProjectFileQueryData(environmentId, cwd, relativePath);
+    }
     void executeAtomQuery(appAtomRegistry, atom, {
       reportDefect: false,
       reportFailure: false,
+      refresh: true,
     }).then(() => {
       if (active) setFreshTargetKey(targetKey);
     });
     return () => {
       active = false;
     };
-  }, [atom, refreshAtom, targetKey]);
+  }, [atom, cwd, environmentId, preserveOptimistic, relativePath, targetKey]);
 
   useEffect(() => {
-    if (watchRevision === null) return;
+    if (watchRevision === null || watchRevision === 0) return;
+    if (!preserveOptimistic && relativePath !== null) {
+      clearProjectFileQueryData(environmentId, cwd, relativePath);
+    }
     refreshAtom();
-  }, [refreshAtom, watchRevision]);
-  const refresh = useCallback(() => refreshAtom(), [refreshAtom]);
+  }, [cwd, environmentId, preserveOptimistic, refreshAtom, relativePath, watchRevision]);
+  const refresh = useCallback(() => {
+    if (!preserveOptimistic && relativePath !== null) {
+      clearProjectFileQueryData(environmentId, cwd, relativePath);
+    }
+    refreshAtom();
+  }, [cwd, environmentId, preserveOptimistic, refreshAtom, relativePath]);
   const data = Option.getOrNull(AsyncResult.value(result));
   const optimisticResult = useAtomValue(
     optimisticFileAtom(environmentId, cwd, relativePath ?? EMPTY_PROJECT_FILE_PATH),
   );
   const optimisticFile = relativePath === null ? null : optimisticResult;
   const awaitingFreshRead = targetKey !== null && freshTargetKey !== targetKey;
+  const hideSettlingDiskRead = result.waiting && !preserveOptimistic;
 
   return {
-    data: awaitingFreshRead ? null : (optimisticFile?.data ?? data),
-    error: awaitingFreshRead ? null : errorMessage(result),
-    isPending: awaitingFreshRead || result.waiting,
+    data: awaitingFreshRead || hideSettlingDiskRead ? null : (optimisticFile?.data ?? data),
+    error: awaitingFreshRead || hideSettlingDiskRead ? null : errorMessage(result),
+    isPending: awaitingFreshRead || hideSettlingDiskRead || result.waiting,
     refresh,
   };
 }

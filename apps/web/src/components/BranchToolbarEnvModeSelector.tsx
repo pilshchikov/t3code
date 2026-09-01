@@ -4,6 +4,7 @@ import { memo, useMemo } from "react";
 import { cn } from "../lib/utils";
 
 import {
+  isExplicitWorkspaceModeSelectionReason,
   resolveCurrentWorkspaceLabel,
   resolveEnvModeLabel,
   resolveLockedWorkspaceLabel,
@@ -81,7 +82,8 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
     <Select
       modal={false}
       value={effectiveEnvMode}
-      onValueChange={(value: string | null) => {
+      onValueChange={(value: string | null, eventDetails) => {
+        if (!isExplicitWorkspaceModeSelectionReason(eventDetails.reason)) return;
         if (value === PREVIOUS_WORKTREE_SELECT_VALUE) {
           onUsePreviousWorktree?.();
           return;

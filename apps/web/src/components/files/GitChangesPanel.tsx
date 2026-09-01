@@ -28,6 +28,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProviderModelPicker } from "~/components/chat/ProviderModelPicker";
 import { toastManager } from "~/components/ui/toast";
 import { useClientSettings } from "~/hooks/useSettings";
+import { useWorkspaceMutationRefresh } from "~/hooks/useWorkspaceMutationRefresh";
 import { useThread } from "~/state/entities";
 import { serverEnvironment } from "~/state/server";
 import { threadEnvironment } from "~/state/threads";
@@ -49,6 +50,7 @@ import {
   unstageGitFiles,
   useGitDetailedStatus,
 } from "./gitChangesState";
+import { useProjectEntriesWatchRefresh } from "./projectFilesQueryState";
 
 interface GitChangesPanelProps {
   environmentId: EnvironmentId;
@@ -56,6 +58,7 @@ interface GitChangesPanelProps {
   threadRef: ScopedThreadRef;
   selectedPath?: string | null;
   onShowDiff: (relativePath: string) => void;
+  workspaceMutationId: string | null;
 }
 
 interface StatusBadge {
@@ -311,8 +314,15 @@ export default function GitChangesPanel({
   threadRef,
   selectedPath,
   onShowDiff,
+  workspaceMutationId,
 }: GitChangesPanelProps) {
   const status = useGitDetailedStatus(environmentId, cwd);
+  useWorkspaceMutationRefresh({
+    mutationId: workspaceMutationId,
+    refresh: status.refresh,
+    resourceKey: `commit-status:${environmentId}:${cwd}`,
+  });
+  useProjectEntriesWatchRefresh(environmentId, cwd, status.refresh);
   const clientSettings = useClientSettings();
   const activeThread = useThread(threadRef);
   const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));

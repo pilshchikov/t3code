@@ -75,14 +75,20 @@ export function createProjectEnvironmentAtoms<R, E>(
     listEntries: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:projects:list-entries",
       tag: WS_METHODS.projectsListEntries,
-      staleTimeMs: 30_000,
-      idleTtlMs: 5 * 60_000,
+      retainPreviousData: false,
+      idleTtlMs: 0,
+    }),
+    watchEntries: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:projects:watch-entries",
+      tag: WS_METHODS.projectsWatchEntries,
+      // Visible file trees own the host watcher; stop it as soon as the last consumer unmounts.
+      idleTtlMs: 0,
     }),
     readFile: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:projects:read-file",
       tag: WS_METHODS.projectsReadFile,
-      staleTimeMs: 30_000,
-      idleTtlMs: 5 * 60_000,
+      retainPreviousData: false,
+      idleTtlMs: 0,
     }),
     watchFile: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:projects:watch-file",

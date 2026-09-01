@@ -117,6 +117,10 @@ import {
 } from "../pendingUserInput";
 import { useUiStateStore } from "../uiStateStore";
 import {
+  latestWorkspaceMutationId,
+  useWorkspaceMutationRefresh,
+} from "../hooks/useWorkspaceMutationRefresh";
+import {
   buildPlanImplementationThreadTitle,
   buildPlanImplementationPrompt,
   resolvePlanFollowUpSubmission,
@@ -145,6 +149,7 @@ import {
   selectActiveRightPanelSurface,
   selectThreadRightPanelMaximized,
   selectThreadRightPanelState,
+  fileSurfaceId,
   type RightPanelSurface,
   updatePullRequestTabStatus,
   useRightPanelStore,
@@ -293,6 +298,7 @@ import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import { WorkspacePageHeader } from "./WorkspacePageHeader";
 import {
+  resolveCurrentCheckoutWorkspaceMetadata,
   resolveEffectiveEnvMode,
   resolveLocalCheckoutBranchMismatch,
   shouldShowComposerContextStrip,
@@ -1926,11 +1932,11 @@ function ChatViewContent(props: ChatViewProps) {
     ? (pendingFileSurfaceIdsByProject.get(activeProjectKey) ?? EMPTY_PENDING_FILE_SURFACE_IDS)
     : EMPTY_PENDING_FILE_SURFACE_IDS;
   const handleFilePendingChange = useCallback(
-    (relativePath: string, pending: boolean) => {
+    (relativePath: string, pending: boolean, workspaceRoot?: string) => {
       if (!activeProjectKey) return;
       setPendingFileSurfaceIdsByProject((currentByProject) => {
         const current = currentByProject.get(activeProjectKey) ?? EMPTY_PENDING_FILE_SURFACE_IDS;
-        const surfaceId = `file:${relativePath}`;
+        const surfaceId = fileSurfaceId(relativePath, workspaceRoot);
         if (current.has(surfaceId) === pending) return currentByProject;
         const next = new Set(current);
         if (pending) next.add(surfaceId);
@@ -2397,6 +2403,13 @@ function ChatViewContent(props: ChatViewProps) {
   const selectedProvider: ProviderDriverKind = lockedProvider ?? unlockedSelectedProvider;
   const phase = derivePhase(activeThread?.session ?? null);
   const threadActivities = activeThread?.activities ?? EMPTY_ACTIVITIES;
+  const latestCheckpointCompletedAt = activeThread?.checkpoints.at(-1)?.completedAt ?? null;
+  const workspaceMutationId = useMemo(() => {
+    const activityId = latestWorkspaceMutationId(threadActivities);
+    return activityId === null && latestCheckpointCompletedAt === null
+      ? null
+      : JSON.stringify([activityId, latestCheckpointCompletedAt]);
+  }, [latestCheckpointCompletedAt, threadActivities]);
   const activeContextWindow = useMemo(
     () => deriveLatestContextWindowSnapshot(threadActivities),
     [threadActivities],
@@ -2849,6 +2862,20 @@ function ChatViewContent(props: ChatViewProps) {
           input: { cwd: gitStatusCwd },
         }),
   );
+  const localCheckoutStatusQuery = useEnvironmentQuery(
+    activeProject !== null && activeThread?.worktreePath
+      ? vcsEnvironment.status({
+          environmentId,
+          input: { cwd: activeProject.workspaceRoot },
+        })
+      : null,
+  );
+  useWorkspaceMutationRefresh({
+    enabled: gitStatusCwd !== null,
+    mutationId: workspaceMutationId,
+    refresh: gitStatusQuery.refresh,
+    resourceKey: `git-status:${activeThreadKey ?? ""}:${gitStatusCwd ?? ""}`,
+  });
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const availableEditors = useAtomValue(primaryServerAvailableEditorsAtom);
   // Prefer an instance-id match so a custom Codex instance (e.g.
@@ -2935,6 +2962,14 @@ function ChatViewContent(props: ChatViewProps) {
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
   const activeFileWorkspaceRoot = activeFileSurface?.workspaceRoot ?? activeWorkspaceRoot;
+  const selectedFilePending =
+    activeFileSurface !== null && pendingFileSurfaceIds.has(activeFileSurface.id);
+  const handleActiveFilePendingChange = useCallback(
+    (relativePath: string, pending: boolean) => {
+      handleFilePendingChange(relativePath, pending, activeFileWorkspaceRoot);
+    },
+    [activeFileWorkspaceRoot, handleFilePendingChange],
+  );
   // Editor back/forward history. Recording the active file here, rather than at each call site
   // that can open one, means the tree, markdown links, the file picker, and symbol jumps all feed
   // one history. Replaying a back/forward step lands on the entry it just moved to, which
@@ -6879,7 +6914,13 @@ function ChatViewContent(props: ChatViewProps) {
             }
             const updateResult = await updateThreadMetadata({
               environmentId,
-              input: { threadId: activeThread.id, worktreePath: null },
+              input: {
+                threadId: activeThread.id,
+                // Leaving a worktree also changes which branch the thread actually sees.
+                // Persist both halves together so Files, Diff, terminals, and the next agent
+                // cannot retain a worktree branch label while reading the main checkout.
+                ...resolveCurrentCheckoutWorkspaceMetadata(localCheckoutStatusQuery.data?.refName),
+              },
             });
             if (updateResult._tag === "Failure") {
               setPendingServerThreadEnvMode(null);
@@ -6924,6 +6965,7 @@ function ChatViewContent(props: ChatViewProps) {
       composerDraftTarget,
       draftThread?.worktreePath,
       environmentId,
+      localCheckoutStatusQuery.data?.refName,
       isLocalDraftThread,
       primaryServerSettings.newWorktreesStartFromOrigin,
       setPendingServerThreadEnvMode,
@@ -7056,6 +7098,7 @@ function ChatViewContent(props: ChatViewProps) {
           mode="embedded"
           composerDraftTarget={composerDraftTarget}
           initialGitScope={initialDiffPanelGitScope}
+          workspaceMutationId={workspaceMutationId}
         />
       </Suspense>
     ) : activeRightPanelSurface?.kind === "git-history" && activeProject ? (
@@ -7121,6 +7164,7 @@ function ChatViewContent(props: ChatViewProps) {
         <FilePreviewPanel
           key={`${activeProject.environmentId}:${activeFileWorkspaceRoot}`}
           environmentId={activeProject.environmentId}
+          primaryCwd={activeWorkspaceRoot ?? activeFileWorkspaceRoot}
           cwd={activeFileWorkspaceRoot}
           projectName={activeProject.title}
           workspaceRoots={activeProject.workspaceRoots}
@@ -7134,7 +7178,9 @@ function ChatViewContent(props: ChatViewProps) {
           revealLine={activeFileSurface?.revealLine ?? null}
           revealRequestId={activeFileSurface?.revealRequestId ?? 0}
           onOpenFile={openFileSurface}
-          onPendingChange={handleFilePendingChange}
+          onPendingChange={handleActiveFilePendingChange}
+          selectedFilePending={selectedFilePending}
+          workspaceMutationId={workspaceMutationId}
         />
       </Suspense>
     ) : null
@@ -7583,6 +7629,7 @@ function ChatViewContent(props: ChatViewProps) {
       {!shouldUseRightPanelSheet && rightPanelOpen && activeThreadRef ? (
         <RightPanelTabs
           mode="inline"
+          showTabs={settings.showEditorTabs}
           maximized={rightPanelMaximized}
           surfaces={rightPanelState.surfaces}
           activeSurfaceId={activeRightPanelSurface?.id ?? null}
@@ -7621,6 +7668,7 @@ function ChatViewContent(props: ChatViewProps) {
         <RightPanelSheet open onClose={closePreviewPanel}>
           <RightPanelTabs
             mode="sheet"
+            showTabs={settings.showEditorTabs}
             // Same effective inset as the closed-state titlebar controls
             // (pr-3 in the tab bar plus this pixel equals the absolute
             // right inset plus mr-px), so the cluster does not creep when

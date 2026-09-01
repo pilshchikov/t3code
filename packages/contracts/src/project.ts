@@ -85,11 +85,18 @@ export const ProjectListEntriesResult = Schema.Struct({
 });
 export type ProjectListEntriesResult = typeof ProjectListEntriesResult.Type;
 
+/** Invalidation emitted while a visible workspace file tree is being watched. */
+export const ProjectEntriesChangedEvent = Schema.Struct({
+  revision: NonNegativeInt,
+});
+export type ProjectEntriesChangedEvent = typeof ProjectEntriesChangedEvent.Type;
+
 export const ProjectEntriesFailure = Schema.Literals([
   "workspace_root_not_found",
   "workspace_root_create_failed",
   "workspace_root_stat_failed",
   "workspace_root_not_directory",
+  "workspace_watch_failed",
   "search_index_create_failed",
   "search_index_scan_timed_out",
   "search_index_search_failed",

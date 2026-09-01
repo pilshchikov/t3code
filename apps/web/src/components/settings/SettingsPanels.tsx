@@ -502,6 +502,9 @@ export function useSettingsRestore(onRestored?: () => void) {
         : []),
       ...(isThreadSettlingDirty ? ["Thread settling"] : []),
       ...(settings.accentColor !== DEFAULT_UNIFIED_SETTINGS.accentColor ? ["Accent colour"] : []),
+      ...(settings.showEditorTabs !== DEFAULT_UNIFIED_SETTINGS.showEditorTabs
+        ? ["Editor tabs"]
+        : []),
       ...(settings.wordWrap !== DEFAULT_UNIFIED_SETTINGS.wordWrap ? ["Word wrap"] : []),
       ...getChangedTypographySettingLabels(settings),
       ...(settings.diffIgnoreWhitespace !== DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace
@@ -576,6 +579,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.enableProviderUpdateChecks,
       settings.sidebarProjectGroupingMode,
       settings.sidebarThreadPreviewCount,
+      settings.showEditorTabs,
       settings.showSkillsInSlashMenu,
       settings.timestampFormat,
       settings.wordWrap,
@@ -649,6 +653,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     }
     updateSettings({
       accentColor: DEFAULT_UNIFIED_SETTINGS.accentColor,
+      showEditorTabs: DEFAULT_UNIFIED_SETTINGS.showEditorTabs,
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       wordWrap: DEFAULT_UNIFIED_SETTINGS.wordWrap,
       diffIgnoreWhitespace: DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace,
@@ -1986,6 +1991,28 @@ export function GeneralSettingsPanel() {
   return (
     <SettingsPageContainer>
       <SettingsSection title="General">
+        <SettingsRow
+          {...searchableSetting("editor-tabs")}
+          description="Show labeled tabs above the right panel; when hidden, compact surface icons remain available."
+          resetAction={
+            settings.showEditorTabs !== DEFAULT_UNIFIED_SETTINGS.showEditorTabs ? (
+              <SettingResetButton
+                label="editor tabs"
+                onClick={() =>
+                  updateSettings({ showEditorTabs: DEFAULT_UNIFIED_SETTINGS.showEditorTabs })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.showEditorTabs}
+              onCheckedChange={(checked) => updateSettings({ showEditorTabs: Boolean(checked) })}
+              aria-label="Show editor tabs"
+            />
+          }
+        />
+
         <SettingsRow
           {...searchableSetting("project-grouping")}
           description="Combine matching repositories across environments."

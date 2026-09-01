@@ -3,11 +3,15 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { FileFinder } from "@ff-labs/fff-node";
 import { it, afterEach, describe, expect } from "@effect/vitest";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
+import * as Stream from "effect/Stream";
 import { vi } from "vite-plus/test";
 
 import * as ServerConfig from "../config.ts";
@@ -97,8 +101,38 @@ it.layer(TestLayer, { excludeTestServices: true })("WorkspaceEntries", (it) => {
     vi.restoreAllMocks();
   });
 
+  describe("watch", () => {
+    it.effect("invalidates the workspace when a nested file changes", () =>
+      Effect.gen(function* () {
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        const cwd = yield* makeTempDir({ prefix: "t3code-workspace-watch-" });
+        yield* workspaceEntries.list({ cwd });
+        const watcherReady = yield* Deferred.make<void>();
+        const eventsFiber = yield* workspaceEntries.watch({ cwd }).pipe(
+          Stream.tap((event) =>
+            event.revision === 0 ? Deferred.succeed(watcherReady, undefined) : Effect.void,
+          ),
+          Stream.take(2),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+
+        yield* Deferred.await(watcherReady);
+        yield* writeTextFile(cwd, "triage/new-result.md", "fresh\n");
+        const events = yield* Fiber.join(eventsFiber).pipe(Effect.timeout(Duration.seconds(5)));
+
+        expect(Array.from(events)).toEqual([{ revision: 0 }, { revision: 1 }]);
+        const listing = yield* workspaceEntries.list({ cwd });
+        expect(listing.entries).toContainEqual({
+          path: "triage/new-result.md",
+          kind: "file",
+        });
+      }),
+    );
+  });
+
   describe("list", () => {
-    it.effect("returns the complete cached workspace index", () =>
+    it.effect("returns a fresh complete workspace listing on every call", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTempDir();
         yield* writeTextFile(cwd, "src/components/Composer.tsx");
@@ -121,6 +155,13 @@ it.layer(TestLayer, { excludeTestServices: true })("WorkspaceEntries", (it) => {
         );
         expect(result.entries.some((entry) => entry.path.startsWith("node_modules"))).toBe(false);
         expect(result.truncated).toBe(false);
+
+        yield* writeTextFile(cwd, "triage/new-result.md", "fresh\n");
+        const reopened = yield* workspaceEntries.list({ cwd });
+        expect(reopened.entries).toContainEqual({
+          path: "triage/new-result.md",
+          kind: "file",
+        });
       }),
     );
 
@@ -141,6 +182,26 @@ it.layer(TestLayer, { excludeTestServices: true })("WorkspaceEntries", (it) => {
             { path: "src/index.ts", kind: "file" },
           ]),
         );
+      }),
+    );
+
+    it.effect("rereads a Git worktree after files are added and removed externally", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTempDir({ git: true });
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        yield* writeTextFile(cwd, "triage/index.md", "before\n");
+
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        const before = yield* workspaceEntries.list({ cwd });
+        expect(before.entries).toContainEqual({ path: "triage/index.md", kind: "file" });
+
+        yield* writeTextFile(cwd, "triage/new-result.md", "fresh\n");
+        yield* fileSystem.remove(path.join(cwd, "triage/index.md"));
+
+        const reopened = yield* workspaceEntries.list({ cwd });
+        expect(reopened.entries).toContainEqual({ path: "triage/new-result.md", kind: "file" });
+        expect(reopened.entries.some((entry) => entry.path === "triage/index.md")).toBe(false);
       }),
     );
 

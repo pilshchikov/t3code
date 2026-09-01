@@ -39,6 +39,7 @@ import {
 import {
   type EnvMode,
   type EnvironmentOption,
+  isExplicitWorkspaceModeSelectionReason,
   resolveCurrentWorkspaceLabel,
   resolveEnvModeLabel,
   resolveEffectiveEnvMode,
@@ -272,7 +273,8 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
           <MenuGroupLabel>Workspace</MenuGroupLabel>
           <MenuRadioGroup
             value={effectiveEnvMode}
-            onValueChange={(value) => {
+            onValueChange={(value, eventDetails) => {
+              if (!isExplicitWorkspaceModeSelectionReason(eventDetails.reason)) return;
               if (value === "previous-worktree") {
                 onUsePreviousWorktree();
                 return;

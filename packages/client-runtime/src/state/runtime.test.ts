@@ -79,6 +79,7 @@ function queryConnectionState(
 
 const makeEnvironmentQueryHarness = Effect.fn("TestEnvironmentQuery.makeHarness")(function* <A, E>(
   execute: Effect.Effect<A, E>,
+  options?: { readonly retainPreviousData?: boolean },
 ) {
   const supervisorState = yield* SubscriptionRef.make(queryConnectionState());
   const supervisorSession = yield* SubscriptionRef.make(Option.some(QUERY_RPC_SESSION));
@@ -108,6 +109,9 @@ const makeEnvironmentQueryHarness = Effect.fn("TestEnvironmentQuery.makeHarness"
   const family = createEnvironmentQueryAtomFamily(runtime, {
     label: "test.environment-query",
     staleTimeMs: 60_000,
+    ...(options?.retainPreviousData === undefined
+      ? {}
+      : { retainPreviousData: options.retainPreviousData }),
     execute: () => execute,
   });
 
@@ -543,6 +547,45 @@ describe("environment query lifecycle", () => {
             suspendOnWaiting: true,
           }),
         ).toBe("updated");
+      }),
+    ),
+  );
+
+  it.effect("drops the last value while a non-retaining query refreshes", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const refreshStarted = Latch.makeUnsafe();
+        const finishRefresh = Latch.makeUnsafe();
+        let executions = 0;
+        const execute = Effect.suspend(() => {
+          executions += 1;
+          if (executions === 1) return Effect.succeed("first");
+          refreshStarted.openUnsafe();
+          return finishRefresh.await.pipe(Effect.as("second"));
+        });
+        const harness = yield* makeEnvironmentQueryHarness(execute, {
+          retainPreviousData: false,
+        });
+        const registry = yield* mountEnvironmentQuery(harness.atom);
+
+        expect(
+          yield* AtomRegistry.getResult(registry, harness.atom, {
+            suspendOnWaiting: true,
+          }),
+        ).toBe("first");
+
+        registry.refresh(harness.atom);
+        yield* refreshStarted.await;
+        const refreshing = registry.get(harness.atom);
+        expect(refreshing.waiting).toBe(true);
+        expect(AsyncResult.value(refreshing)).toEqual(Option.none());
+
+        finishRefresh.openUnsafe();
+        expect(
+          yield* AtomRegistry.getResult(registry, harness.atom, {
+            suspendOnWaiting: true,
+          }),
+        ).toBe("second");
       }),
     ),
   );
