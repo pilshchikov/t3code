@@ -4,6 +4,12 @@ The **Files** tab in the right panel shows a project's directories. Opening a fi
 directories above it and leaves the rest of the tree as you had it; use the collapse button to shut
 the tree.
 
+## Switching worktrees
+
+Use the worktree menu above the file tree to browse any live Git worktree for that repository. The
+menu shows each checked-out branch and its absolute path. Switching here changes only the Files
+panel; it does not move the thread or check out another branch for the agent.
+
 ## Selecting
 
 Click a file to open it. Shift-click extends the selection to a range, and Command-click (Control

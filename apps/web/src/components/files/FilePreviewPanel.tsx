@@ -18,15 +18,18 @@ import {
 import {
   ArrowLeft,
   ArrowRight,
+  ChevronDown,
   ChevronRight,
   Code2,
   Eye,
   FileText,
   Folder,
+  FolderGit2,
   FolderTree,
   Globe2,
   GripHorizontal,
   LoaderCircle,
+  RefreshCw,
   X,
 } from "lucide-react";
 import * as Schema from "effect/Schema";
@@ -59,7 +62,16 @@ import {
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
 import { resolvePathLinkTarget } from "~/terminal-links";
 import { ScrollArea } from "~/components/ui/scroll-area";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
+import {
+  Menu,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuItem,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuTrigger,
+} from "~/components/ui/menu";
 import { Toggle } from "~/components/ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
@@ -70,8 +82,10 @@ import { assetEnvironment } from "~/state/assets";
 import { useEnvironmentHttpBaseUrl, usePrimaryEnvironmentId } from "~/state/environments";
 import { previewEnvironment } from "~/state/preview";
 import { projectEnvironment } from "~/state/projects";
+import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
+import { vcsEnvironment } from "~/state/vcs";
 
 import FileBrowserPanel from "./FileBrowserPanel";
 import FileStructurePanel from "./FileStructurePanel";
@@ -90,7 +104,11 @@ import {
 import { installFileEditorDismissal } from "./fileEditorDismissal";
 import { resolveFileEditorHistoryAction } from "./fileEditorUndo";
 import { resolveCenteredFileLineScrollTop } from "./fileLineReveal";
-import { resolveFilePreviewRoots } from "./filePreviewRoots";
+import {
+  resolveFilePreviewRoots,
+  resolveFileWorktreeOptions,
+  type FileWorktreeOption,
+} from "./filePreviewRoots";
 import { DiffCommentAnnotation } from "../diffs/DiffCommentAnnotation";
 import { projectFileCacheKey, projectFileEditorCacheKey } from "./fileContentRevision";
 import {
@@ -843,6 +861,83 @@ function projectEntryName(entry: ProjectEntry): string {
 
 const MIN_WORKSPACE_TREE_HEIGHT_PX = 96;
 
+function worktreeOptionLabel(option: FileWorktreeOption): string {
+  return option.refName ?? (workspaceDirectoryName(option.path) || "Current checkout");
+}
+
+function FileWorktreeToolbar(props: {
+  environmentId: EnvironmentId;
+  activeCwd: string;
+  onSelect: (path: string) => void;
+}) {
+  const refsQuery = useEnvironmentQuery(
+    vcsEnvironment.listRefs({
+      environmentId: props.environmentId,
+      input: {
+        cwd: props.activeCwd,
+        refKind: "local",
+        refresh: true,
+        limit: 200,
+      },
+    }),
+  );
+  const options = useMemo(
+    () => resolveFileWorktreeOptions(props.activeCwd, refsQuery.data?.refs ?? []),
+    [props.activeCwd, refsQuery.data?.refs],
+  );
+  const activeOption = options.find((option) => option.current) ?? options[0]!;
+
+  if (refsQuery.data?.isRepo === false) return null;
+
+  return (
+    <div
+      className="flex h-9 shrink-0 items-center gap-1 border-b border-border/60 px-2"
+      data-file-worktree-selector
+    >
+      <Menu
+        onOpenChange={(open) => {
+          if (open) refsQuery.refresh();
+        }}
+      >
+        <MenuTrigger className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded px-2 text-left text-xs text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+          <FolderGit2 className="size-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">{worktreeOptionLabel(activeOption)}</span>
+          <ChevronDown className="size-3.5 shrink-0 opacity-60" />
+        </MenuTrigger>
+        <MenuPopup align="start" className="w-80">
+          <MenuGroup>
+            <MenuGroupLabel>File tree worktree</MenuGroupLabel>
+            <MenuRadioGroup
+              value={activeOption.path}
+              onValueChange={(nextPath) => {
+                if (nextPath !== activeOption.path) props.onSelect(nextPath);
+              }}
+            >
+              {options.map((option) => (
+                <MenuRadioItem key={option.path} value={option.path}>
+                  <div className="min-w-0 py-0.5">
+                    <div className="truncate text-xs font-medium">
+                      {worktreeOptionLabel(option)}
+                    </div>
+                    <code className="block truncate text-[10px] text-muted-foreground">
+                      {option.path}
+                    </code>
+                  </div>
+                </MenuRadioItem>
+              ))}
+            </MenuRadioGroup>
+          </MenuGroup>
+          {refsQuery.error ? <MenuItem disabled>{refsQuery.error}</MenuItem> : null}
+          <MenuItem onClick={refsQuery.refresh}>
+            <RefreshCw className={cn("size-3.5", refsQuery.isPending && "animate-spin")} />
+            Refresh worktrees
+          </MenuItem>
+        </MenuPopup>
+      </Menu>
+    </div>
+  );
+}
+
 function MultiRootFileBrowser(props: {
   environmentId: EnvironmentId;
   roots: ReadonlyArray<ProjectWorkspace>;
@@ -1024,9 +1119,16 @@ export default function FilePreviewPanel({
     setSelectedRootCwd(cwd);
   }, [cwd]);
   const activeCwd = selectedRootCwd;
+  const selectFileTreeWorktree = useCallback(
+    (nextCwd: string) => {
+      setSelectedRootCwd(nextCwd);
+      if (relativePath !== null) onOpenFile(relativePath, nextCwd);
+    },
+    [onOpenFile, relativePath],
+  );
   const roots = useMemo(
-    () => resolveFilePreviewRoots(primaryCwd, workspaceRoots),
-    [primaryCwd, workspaceRoots],
+    () => resolveFilePreviewRoots(relativePath === null ? activeCwd : primaryCwd, workspaceRoots),
+    [activeCwd, primaryCwd, relativePath, workspaceRoots],
   );
   const environmentHttpBaseUrl = useEnvironmentHttpBaseUrl(environmentId);
   const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
@@ -1442,7 +1544,6 @@ export default function FilePreviewPanel({
                     <button
                       type="button"
                       className="max-w-40 truncate rounded px-1 py-0.5 text-left font-medium text-foreground hover:bg-accent"
-                      title={crumb.path || projectName}
                       onClick={() => onOpenFile(crumb.path, activeCwd)}
                     >
                       {crumb.label}
@@ -1454,7 +1555,6 @@ export default function FilePreviewPanel({
                           <button
                             type="button"
                             className="max-w-40 truncate rounded px-1 py-0.5 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
-                            title={crumb.path || projectName}
                           />
                         }
                       >
@@ -1590,6 +1690,11 @@ export default function FilePreviewPanel({
             first={previewSurface}
             second={
               <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-background">
+                <FileWorktreeToolbar
+                  environmentId={environmentId}
+                  activeCwd={activeCwd}
+                  onSelect={selectFileTreeWorktree}
+                />
                 <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border/60 px-1.5">
                   {(["files", "structure", "commit"] as const).map((view) => (
                     <button
@@ -1642,7 +1747,12 @@ export default function FilePreviewPanel({
         ) : relativePath ? (
           previewSurface
         ) : (
-          <aside className="flex min-h-0 min-w-0 flex-1 bg-background">
+          <aside className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+            <FileWorktreeToolbar
+              environmentId={environmentId}
+              activeCwd={activeCwd}
+              onSelect={selectFileTreeWorktree}
+            />
             <MultiRootFileBrowser
               environmentId={environmentId}
               roots={roots}

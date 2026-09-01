@@ -963,6 +963,9 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
   root with the original checkout, so an agent could update a worktree while Files repeatedly read
   an older same-named file from the main checkout. Secondary project directories keep their
   configured roots.
+- The file tree has its own worktree dropdown. It reads Git's live worktree list, shows the branch
+  and absolute path for each checkout, and switches only the Files panel root without changing the
+  thread workspace or checking out a branch for the agent.
 - Workspace selector synchronization cannot mutate a started thread. Only an explicit pointer or
   keyboard item choice may detach a worktree. An intentional switch to **Current checkout** now
   stores that checkout's real branch together with the null worktree path, preventing a thread from
@@ -987,6 +990,7 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
   `packages/client-runtime/src/state/runtime.ts`,
   `apps/web/src/components/files/projectFilesQueryState.ts`,
   `apps/web/src/components/files/filePreviewRoots.ts`,
+  `apps/web/src/components/files/FilePreviewPanel.tsx`,
   `apps/web/src/components/BranchToolbar.logic.ts`,
   `apps/web/src/components/BranchToolbarEnvModeSelector.tsx`,
   `apps/web/src/components/DiffPanel.tsx`, and
