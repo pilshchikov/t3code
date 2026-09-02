@@ -6,10 +6,14 @@ import type {
   ProjectListEntriesResult,
   ProjectReadFileResult,
 } from "@t3tools/contracts";
+import {
+  isWorkspaceImagePreviewPath,
+  isWorkspaceVideoPreviewPath,
+} from "@t3tools/shared/filePreview";
 import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { projectEnvironment } from "~/state/projects";
@@ -139,8 +143,13 @@ export function useProjectEntriesQuery(
   useProjectEntriesWatchRefresh(environmentId, cwd, refreshAtom);
   const targetKey = `${environmentId}\u0000${cwd}`;
   const [freshTargetKey, setFreshTargetKey] = useState<string | null>(null);
+  const freshTargetRef = useRef<string | null>(null);
+  const freshRefreshInFlightRef = useRef(false);
 
   useEffect(() => {
+    if (freshTargetRef.current === targetKey) return;
+    freshTargetRef.current = targetKey;
+    freshRefreshInFlightRef.current = true;
     let active = true;
     setFreshTargetKey(null);
     void executeAtomQuery(appAtomRegistry, atom, {
@@ -149,13 +158,17 @@ export function useProjectEntriesQuery(
       refresh: true,
     }).then(() => {
       if (active) setFreshTargetKey(targetKey);
+      freshRefreshInFlightRef.current = false;
     });
     return () => {
       active = false;
     };
   }, [atom, targetKey]);
 
-  const refresh = useCallback(() => refreshAtom(), [refreshAtom]);
+  const refresh = useCallback(() => {
+    if (freshRefreshInFlightRef.current) return;
+    refreshAtom();
+  }, [refreshAtom]);
   const awaitingFreshListing = freshTargetKey !== targetKey;
   return {
     data:
@@ -228,9 +241,13 @@ export function useProjectFileQuery(
   watch = false,
   preserveOptimistic = false,
 ): ProjectQueryState<ProjectReadFileResult> {
-  const atom = enabled
-    ? getProjectFileQueryAtom(environmentId, cwd, relativePath)
-    : EMPTY_PROJECT_FILE_QUERY_ATOM;
+  const isMedia =
+    relativePath !== null &&
+    (isWorkspaceImagePreviewPath(relativePath) || isWorkspaceVideoPreviewPath(relativePath));
+  const atom =
+    enabled && !isMedia
+      ? getProjectFileQueryAtom(environmentId, cwd, relativePath)
+      : EMPTY_PROJECT_FILE_QUERY_ATOM;
   const result = useAtomValue(atom);
   const refreshAtom = useAtomRefresh(atom);
   const shouldWatch = enabled && watch && relativePath !== null;

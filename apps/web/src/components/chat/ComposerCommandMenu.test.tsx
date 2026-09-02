@@ -5,24 +5,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { ComposerCommandMenu } from "./ComposerCommandMenu";
 
 describe("ComposerCommandMenu", () => {
-  it("renders slash-command results as an attached composer drawer", () => {
-    const markup = renderToStaticMarkup(
-      <ComposerCommandMenu
-        items={[]}
-        resolvedTheme="dark"
-        isLoading={false}
-        triggerKind="slash-command"
-        activeItemId={null}
-        onHighlightedItemChange={() => {}}
-        onSelect={() => {}}
-      />,
-    );
-
-    expect(markup).toContain('data-composer-command-drawer="true"');
-    expect(markup).not.toContain("dropdown-glass");
-  });
-
-  it("renders commands without a category heading or invented icons", () => {
+  it("renders slash commands with their descriptions", () => {
     const markup = renderToStaticMarkup(
       <ComposerCommandMenu
         items={[

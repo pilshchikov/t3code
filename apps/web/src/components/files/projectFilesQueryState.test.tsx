@@ -113,13 +113,20 @@ function file(contents: string): ProjectReadFileResult {
   };
 }
 
+function projectEntries(paths: readonly string[]): ProjectListEntriesResult {
+  return {
+    entries: paths.map((path) => ({ path, kind: "file" })),
+    truncated: false,
+  };
+}
+
 async function flushEffects(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
 }
 
-describe("project file query refresh", () => {
+describe("project query refresh", () => {
   beforeEach(() => {
     projectMocks.listEntries.mockReset();
     projectMocks.optimisticFile.mockReset();
@@ -267,6 +274,62 @@ describe("project file query refresh", () => {
       unmountWatch();
       unmountOptimistic();
       unmountRead();
+      atomHooks.registry = null;
+      resetAppAtomRegistryForTests();
+    }
+  });
+
+  it("revalidates cached entries when a workspace mutation is observed after mounting", async () => {
+    const requests: Array<ReturnType<typeof deferred<ProjectListEntriesResult>>> = [];
+    const entriesAtom = Atom.make(
+      Effect.promise(() => {
+        const request = deferred<ProjectListEntriesResult>();
+        requests.push(request);
+        return request.promise;
+      }),
+    ).pipe(Atom.swr({ staleTime: 30_000, revalidateOnMount: true }));
+    const registry = appAtomRegistry;
+    const unmount = registry.mount(entriesAtom);
+    const watchAtom = Atom.make(AsyncResult.success({ revision: 0 }));
+    const unmountWatch = registry.mount(watchAtom);
+    projectMocks.listEntries.mockReturnValue(entriesAtom);
+    projectMocks.watchEntries.mockReturnValue(watchAtom);
+    atomHooks.registry = registry;
+    let renderedPaths: readonly string[] = [];
+
+    const render = (mutationId: string | null) => {
+      reactHooks.beginRender();
+      const query = useProjectEntriesQuery(environmentId, "/repo");
+      renderedPaths = query.data?.entries.map((entry) => entry.path) ?? [];
+      useWorkspaceMutationRefresh({
+        mutationId,
+        refresh: query.refresh,
+        resourceKey: "files:environment-1:/repo",
+      });
+    };
+
+    try {
+      await flushEffects();
+      expect(requests).toHaveLength(1);
+      requests[0]!.resolve(projectEntries(["src/old.ts"]));
+      await flushEffects();
+
+      render("mutation-1");
+      // The fork deliberately hides the mounted snapshot while the first
+      // post-open disk refresh is in flight; stale listings must not flash.
+      expect(renderedPaths).toEqual([]);
+      await flushEffects();
+      expect(requests).toHaveLength(2);
+
+      requests[1]!.resolve(projectEntries(["src/new.ts"]));
+      await flushEffects();
+      await flushEffects();
+      render("mutation-1");
+      expect(renderedPaths).toEqual(["src/new.ts"]);
+      expect(requests).toHaveLength(2);
+    } finally {
+      unmountWatch();
+      unmount();
       atomHooks.registry = null;
       resetAppAtomRegistryForTests();
     }

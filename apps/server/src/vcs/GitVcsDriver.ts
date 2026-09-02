@@ -32,7 +32,7 @@ import {
   type VcsStatusInput,
   type VcsStatusResult,
 } from "@t3tools/contracts";
-import { makeGitVcsDriverCore } from "./GitVcsDriverCore.ts";
+import { makeGitVcsDriverCore, splitNullSeparatedGitStdoutPaths } from "./GitVcsDriverCore.ts";
 import * as VcsDriver from "./VcsDriver.ts";
 import * as VcsProcess from "./VcsProcess.ts";
 
@@ -393,17 +393,6 @@ const nowFreshness = Effect.fn("GitVcsDriver.nowFreshness")(function* () {
   };
 });
 
-function splitNullSeparatedPaths(input: string, truncated: boolean): string[] {
-  const parts = input.split("\0");
-  if (parts.length === 0) return [];
-
-  if (truncated && parts[parts.length - 1]?.length) {
-    parts.pop();
-  }
-
-  return parts.filter((value) => value.length > 0);
-}
-
 function chunkPathsForGitCheckIgnore(relativePaths: ReadonlyArray<string>): string[][] {
   const chunks: string[][] = [];
   let chunk: string[] = [];
@@ -587,7 +576,7 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
           ? Effect.gen(function* () {
               const freshness = yield* nowFreshness();
               return {
-                paths: splitNullSeparatedPaths(result.stdout, result.stdoutTruncated),
+                paths: splitNullSeparatedGitStdoutPaths(result),
                 truncated: result.stdoutTruncated,
                 freshness,
               };
@@ -630,7 +619,7 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
         ).pipe(
           Effect.flatMap((result) =>
             result.exitCode === 0
-              ? Effect.succeed(splitNullSeparatedPaths(result.stdout, result.stdoutTruncated))
+              ? Effect.succeed(splitNullSeparatedGitStdoutPaths(result))
               : Effect.fail(
                   new VcsProcessExitError({
                     operation: "GitVcsDriver.listIgnoredWorkspaceEntries",
@@ -741,7 +730,7 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
         });
       }
 
-      for (const ignoredPath of splitNullSeparatedPaths(result.stdout, result.stdoutTruncated)) {
+      for (const ignoredPath of splitNullSeparatedGitStdoutPaths(result)) {
         ignoredPaths.add(ignoredPath);
       }
     }

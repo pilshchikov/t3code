@@ -1014,6 +1014,22 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
   and app-wide right-panel behavior.
 - A recovery branch named `backup/pre-fable-5-1-upstream-sync-20260901` points to the pre-merge tip.
 
+## Upstream sync: 2026-09-02
+
+- Synced `upstream/main` at `0681d8549` (upstream v0.0.38), including the latest pull-request,
+  provider-skill, desktop-prerequisite, chat timeline, error-report, and performance fixes.
+- Resolved the merge manually with fork behavior taking priority wherever the same code path was
+  touched. In particular, multi-directory roots, fresh file reads and listings, worktree-aware
+  files and diffs, right-click-only tab closing, the `§` shortcut, prompt/live-follow behavior,
+  per-account Claude usage and limits, and default-off automatic settlement remain fork behavior.
+- Reconciled upstream's newer timeline presentation and attachment/media paths with the fork's
+  work-log grouping and live activity rows. Failed tool activity remains visible and selected file
+  diffs remain on-demand so large worktrees do not eagerly load every file.
+- Restored the fork's test-only atom reset and made updater tests opt in explicitly to the otherwise
+  disabled auto-update path. The product default remains privacy-safe and opt-in.
+- Validation for this sync: all package TypeScript checks pass with zero errors; focused web
+  timeline, markdown-link, and file-freshness tests pass (160 tests); desktop updater tests pass.
+
 ## Validation Notes
 
 The fork-local changes above were validated with focused server tests, the full web unit suite,

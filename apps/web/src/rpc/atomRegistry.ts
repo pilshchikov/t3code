@@ -8,7 +8,8 @@ export function AppAtomRegistryProvider({ children }: React.PropsWithChildren) {
   return createElement(RegistryContext.Provider, { value: appAtomRegistry }, children);
 }
 
-export function resetAppAtomRegistryForTests() {
+/** Replaces the process-wide registry so isolated hook tests cannot leak atoms between cases. */
+export function resetAppAtomRegistryForTests(): void {
   appAtomRegistry.dispose();
   appAtomRegistry = AtomRegistry.make();
 }

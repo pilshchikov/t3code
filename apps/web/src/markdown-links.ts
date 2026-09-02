@@ -214,10 +214,11 @@ function normalizeResolvedFileTarget(targetPath: string): string {
 export function resolveMarkdownFileLinkTarget(
   href: string | undefined,
   cwd?: string,
+  baseDir: string | undefined = cwd,
 ): string | null {
   if (!href) return null;
   const rawHref = normalizeMarkdownLinkDestination(href);
-  if (rawHref.length === 0 || rawHref.startsWith("#")) return null;
+  if (rawHref.length === 0 || rawHref.startsWith("#") || rawHref.startsWith("//")) return null;
 
   const fileUrlTarget = rawHref.toLowerCase().startsWith("file:")
     ? parseFileUrlHref(rawHref)
@@ -244,8 +245,8 @@ export function resolveMarkdownFileLinkTarget(
     return normalizeResolvedFileTarget(pathWithPosition);
   }
 
-  if (!cwd) return null;
-  return normalizeResolvedFileTarget(resolvePathLinkTarget(pathWithPosition, cwd));
+  if (!baseDir) return null;
+  return normalizeResolvedFileTarget(resolvePathLinkTarget(pathWithPosition, baseDir));
 }
 
 const INLINE_CODE_DISQUALIFIER_PATTERN = /[\s`]/;
@@ -405,6 +406,7 @@ export function resolveInlineCodeFileLinkMeta(
     }
   }
 
+  const directories = resolveMarkdownLinkDirectories(cwd, workspaceRoot);
   const resolved = resolveMarkdownFileLinkMeta(candidate, cwd, workspaceRoot);
   if (resolved) return resolved;
 
@@ -416,7 +418,10 @@ export function resolveInlineCodeFileLinkMeta(
     BARE_EXTENSIONLESS_POSITION_PATTERN.test(candidate) &&
     EXTENSIONLESS_FILE_NAMES.has(candidate.replace(POSITION_SUFFIX_PATTERN, ""))
   ) {
-    return buildFileLinkMetaFromTarget(resolvePathLinkTarget(candidate, cwd), workspaceRoot);
+    return buildFileLinkMetaFromTarget(
+      resolvePathLinkTarget(candidate, directories.baseDir ?? cwd),
+      directories.workspaceRoot,
+    );
   }
   return null;
 }
@@ -443,12 +448,40 @@ function workspaceRelativePath(path: string, workspaceRoot: string | undefined):
   return normalizedPath.slice(normalizedRoot.length + 1);
 }
 
+function pathIsWithin(path: string, root: string): boolean {
+  const normalizedPath = normalizeWindowsDrivePath(path.replaceAll("\\", "/")).replace(/\/+$/, "");
+  const normalizedRoot = normalizeWindowsDrivePath(root.replaceAll("\\", "/")).replace(/\/+$/, "");
+  const pathForCompare = normalizedPath.toLowerCase();
+  const rootForCompare = normalizedRoot.toLowerCase();
+  return pathForCompare === rootForCompare || pathForCompare.startsWith(`${rootForCompare}/`);
+}
+
+/**
+ * The third argument historically meant the workspace root in the fork, while
+ * upstream uses it as the directory containing the rendered markdown file.
+ * Infer which meaning the caller has from the paths so both call shapes keep
+ * resolving links correctly during the transition.
+ */
+function resolveMarkdownLinkDirectories(
+  cwd: string | undefined,
+  alternateDirectory: string | undefined,
+): { baseDir: string | undefined; workspaceRoot: string | undefined } {
+  if (!alternateDirectory || !cwd) {
+    return { baseDir: alternateDirectory ?? cwd, workspaceRoot: cwd };
+  }
+  if (pathIsWithin(cwd, alternateDirectory)) {
+    return { baseDir: cwd, workspaceRoot: alternateDirectory };
+  }
+  return { baseDir: alternateDirectory, workspaceRoot: cwd };
+}
+
 export function resolveMarkdownFileLinkMeta(
   href: string | undefined,
   cwd?: string,
-  workspaceRoot: string | undefined = cwd,
+  alternateDirectory: string | undefined = cwd,
 ): MarkdownFileLinkMeta | null {
-  const targetPath = resolveMarkdownFileLinkTarget(href, cwd);
+  const { baseDir, workspaceRoot } = resolveMarkdownLinkDirectories(cwd, alternateDirectory);
+  const targetPath = resolveMarkdownFileLinkTarget(href, cwd, baseDir);
   if (!targetPath) return null;
   return buildFileLinkMetaFromTarget(targetPath, workspaceRoot);
 }

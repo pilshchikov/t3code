@@ -56,6 +56,7 @@ export function CommitFileDiffView({
             fileDiff,
             filePath: resolveFileDiffPath(fileDiff),
             fileKey: buildFileDiffRenderKey(fileDiff),
+            fileVersion: 0,
             collapsed: false,
           }))
         : [],

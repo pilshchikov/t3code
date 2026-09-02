@@ -18,6 +18,12 @@ count and keeps threads with open pull requests active. Active work, pending inp
 background work always keep the thread active. Change the policy in **Settings > General**. A
 settings change affects future settlement and does not reopen a settled thread.
 
+The change is written to every environment you are
+connected to at that moment. An environment that is offline keeps its old value. When a connected
+environment holds a different value, **Settings > General** shows a warning that names it. Choose
+**Apply to all** to write your current values to every connected environment. The same applies to
+the new-thread workspace mode and the source control writing style.
+
 When you un-settle a thread, it returns to the top of the active list so you can find it right
 away. Its timestamps do not change. Other threads keep their positions.
 
