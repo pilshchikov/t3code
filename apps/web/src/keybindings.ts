@@ -67,6 +67,7 @@ const EVENT_CODE_KEY_ALIASES: Readonly<Record<string, readonly string[]>> = {
   Digit8: ["8"],
   Digit9: ["9"],
 };
+const MAC_SECTION_SIGN_CODES = new Set(["Backquote", "IntlBackslash"]);
 
 function normalizeEventKey(key: string): string {
   const normalized = key.toLowerCase();
@@ -77,6 +78,15 @@ function normalizeEventKey(key: string): string {
 function resolveEventKeys(event: ShortcutEventLike): Set<string> {
   const layoutKey = normalizeEventKey(event.key);
   const keys = new Set([layoutKey]);
+  // The dedicated macOS ISO key is labelled `§` and produces `±` with Shift. Electron has
+  // reported the shifted key as `±`, `§`, and `Unidentified` across releases. Preserve the
+  // physical pair so a binding recorded by Settings continues to work after an Electron update.
+  if (event.shiftKey && layoutKey === "§") {
+    keys.add("±");
+  }
+  if (event.code && MAC_SECTION_SIGN_CODES.has(event.code)) {
+    keys.add(event.shiftKey ? "±" : "§");
+  }
   // The physical-position fallback exists for layouts that type non-Latin
   // letters (Cyrillic, Greek) and for Option-modified symbols on macOS.
   // When the layout already produces a Latin letter, match on it alone;
@@ -119,8 +129,13 @@ function matchesShortcut(
   // On some macOS keyboard layouts the dedicated section-sign key arrives with Option asserted.
   // Settings intentionally records that physical key as plain `§`, so runtime matching must make
   // the same normalization or the composer wins before the configured command can run.
+  const layoutKey = normalizeEventKey(event.key);
+  const isSectionSignPhysicalKey =
+    layoutKey === "§" ||
+    layoutKey === "±" ||
+    (event.code !== undefined && MAC_SECTION_SIGN_CODES.has(event.code));
   const modifierEvent =
-    shortcut.key === "§" && normalizeEventKey(event.key) === "§"
+    !shortcut.altKey && (shortcut.key === "§" || shortcut.key === "±") && isSectionSignPhysicalKey
       ? { ...event, altKey: false }
       : event;
   if (!matchesShortcutModifiers(modifierEvent, shortcut, platform)) return false;
@@ -231,6 +246,27 @@ export function resolveShortcutCommand(
     return binding.command;
   }
   return null;
+}
+
+/** Resolve a one-character `beforeinput` event, which carries text but no modifier state. */
+export function resolveTextInputShortcutCommand(
+  text: string,
+  keybindings: ResolvedKeybindingsConfig,
+  options?: ShortcutMatchOptions,
+): KeybindingCommand | null {
+  if ([...text].length !== 1) return null;
+  return resolveShortcutCommand(
+    {
+      key: text,
+      metaKey: false,
+      ctrlKey: false,
+      // `±` is the text emitted by Shift+§ on the macOS ISO key. InputEvent omits shiftKey.
+      shiftKey: text === "±",
+      altKey: false,
+    },
+    keybindings,
+    options,
+  );
 }
 
 function formatShortcutKeyLabel(key: string): string {

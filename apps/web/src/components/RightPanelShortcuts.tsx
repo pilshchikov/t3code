@@ -3,7 +3,7 @@ import { useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 
 import { isCommandPaletteOpen } from "../commandPaletteBus";
-import { resolveShortcutCommand } from "../keybindings";
+import { resolveShortcutCommand, resolveTextInputShortcutCommand } from "../keybindings";
 import { primaryServerKeybindingsAtom } from "../state/server";
 import { useRightPanelStore } from "../rightPanelStore";
 import { resolveThreadRouteRef } from "../threadRoutes";
@@ -62,6 +62,16 @@ export function RightPanelShortcuts() {
         : null;
     };
 
+    const resolveTextInput = (text: string) => {
+      const current = stateRef.current;
+      if (current.pathname.startsWith("/settings")) return null;
+      if (isCommandPaletteOpen()) return null;
+      const command = resolveTextInputShortcutCommand(text, current.keybindings);
+      return command === "rightPanel.toggle" || command === "rightPanel.toggleMaximized"
+        ? command
+        : null;
+    };
+
     const run = (command: "rightPanel.toggle" | "rightPanel.toggleMaximized") => {
       const ref = stateRef.current.threadRef;
       // Off a thread there is no panel to act on, but the key is still claimed above: a binding
@@ -103,7 +113,7 @@ export function RightPanelShortcuts() {
       ) {
         return;
       }
-      const command = resolve(event.data);
+      const command = resolveTextInput(event.data);
       if (command === null) return;
       claim(event);
       run(command);

@@ -180,7 +180,11 @@ import {
 } from "@t3tools/client-runtime/state/subagentRuntime";
 import { DiffWorkerPoolProvider } from "./DiffWorkerPoolProvider";
 import { BranchToolbar } from "./BranchToolbar";
-import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
+import {
+  resolveShortcutCommand,
+  resolveTextInputShortcutCommand,
+  shortcutLabelForCommand,
+} from "../keybindings";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import {
   AlarmClockIcon,
@@ -5423,17 +5427,9 @@ function ChatViewContent(props: ChatViewProps) {
       ) {
         return;
       }
-      const command = resolveShortcutCommand(
-        {
-          key: event.data,
-          metaKey: false,
-          ctrlKey: false,
-          shiftKey: false,
-          altKey: false,
-        },
-        keybindings,
-        { context: getShortcutContext() },
-      );
+      const command = resolveTextInputShortcutCommand(event.data, keybindings, {
+        context: getShortcutContext(),
+      });
       if (!command) return;
 
       event.preventDefault();

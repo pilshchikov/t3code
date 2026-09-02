@@ -872,6 +872,14 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
 - Source: `apps/web/src/components/RightPanelShortcuts.tsx`, `apps/web/src/rightPanelStore.ts`,
   `apps/web/src/components/ChatView.tsx`, `apps/web/src/routes/__root.tsx`.
 
+- The macOS ISO section-sign key is treated as one physical shortcut pair across Electron versions.
+  Plain `§` toggles the right panel. Shift on that key, which macOS emits as `±`, toggles the
+  panel's maximized state and toggles it back. The matcher accepts `§`, `±`, and Electron's
+  `Unidentified` key value with the physical key code. The `beforeinput` fallback reconstructs the
+  missing Shift state from `±`, so neither character reaches the chat editor.
+- Regression coverage: `apps/web/src/keybindings.test.ts` exercises keydown and modifier-less text
+  input for both commands.
+
 ## User documentation for the fork's behaviour
 
 - `docs/user/` now covers what this fork changed for a reader: numbered project slots and the

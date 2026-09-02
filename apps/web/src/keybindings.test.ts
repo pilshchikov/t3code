@@ -21,6 +21,7 @@ import {
   isTerminalSplitVerticalShortcut,
   isTerminalToggleShortcut,
   resolveShortcutCommand,
+  resolveTextInputShortcutCommand,
   shouldShowModelPickerJumpHints,
   shouldShowThreadJumpHints,
   shortcutLabelForCommand,
@@ -821,6 +822,77 @@ describe("resolveShortcutCommand", () => {
         platform: "MacIntel",
       }),
       "rightPanel.toggle",
+    );
+    assert.strictEqual(
+      resolveShortcutCommand(
+        event({ key: "Unidentified", code: "Backquote", altKey: true }),
+        keybindings,
+        { platform: "MacIntel" },
+      ),
+      "rightPanel.toggle",
+    );
+  });
+
+  it("matches Shift+§ across macOS Electron key variants", () => {
+    const keybindings = compile([
+      {
+        shortcut: {
+          key: "±",
+          metaKey: false,
+          ctrlKey: false,
+          shiftKey: true,
+          altKey: false,
+          modKey: false,
+        },
+        command: "rightPanel.toggleMaximized",
+      },
+    ]);
+
+    for (const keyEvent of [
+      event({ key: "±", code: "Backquote", shiftKey: true }),
+      event({ key: "§", code: "Backquote", shiftKey: true }),
+      event({ key: "Unidentified", code: "Backquote", shiftKey: true, altKey: true }),
+    ]) {
+      assert.strictEqual(
+        resolveShortcutCommand(keyEvent, keybindings, { platform: "MacIntel" }),
+        "rightPanel.toggleMaximized",
+      );
+    }
+  });
+
+  it("resolves plain and shifted section-sign text input without modifier metadata", () => {
+    const keybindings = compile([
+      {
+        shortcut: {
+          key: "§",
+          metaKey: false,
+          ctrlKey: false,
+          shiftKey: false,
+          altKey: false,
+          modKey: false,
+        },
+        command: "rightPanel.toggle",
+      },
+      {
+        shortcut: {
+          key: "±",
+          metaKey: false,
+          ctrlKey: false,
+          shiftKey: true,
+          altKey: false,
+          modKey: false,
+        },
+        command: "rightPanel.toggleMaximized",
+      },
+    ]);
+
+    assert.strictEqual(
+      resolveTextInputShortcutCommand("§", keybindings, { platform: "MacIntel" }),
+      "rightPanel.toggle",
+    );
+    assert.strictEqual(
+      resolveTextInputShortcutCommand("±", keybindings, { platform: "MacIntel" }),
+      "rightPanel.toggleMaximized",
     );
   });
 
