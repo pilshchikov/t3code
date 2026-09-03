@@ -131,12 +131,14 @@ import {
   extractMarkdownLinkHrefs,
   isWindowsDrivePathHref,
   normalizeMarkdownLinkDestination,
+  resolveMarkdownFilePanelTarget,
   resolveInlineCodeFileLinkMeta,
   resolveMarkdownFileLinkMeta,
   rewriteMarkdownFileUriHref,
   shouldOpenMarkdownFileLinkInBrowserByDefault,
   shouldOpenMarkdownFileLinkInEditor,
   type MarkdownFileLinkMeta,
+  type MarkdownWorkspaceRootCandidate,
 } from "../markdown-links";
 import { readLocalApi } from "../localApi";
 import { useAssetUrlRefresh, useAssetUrlState } from "../assets/assetUrls";
@@ -2071,6 +2073,30 @@ function ChatMarkdown({
     serverEnvironment.configValueAtom(threadRef?.environmentId ?? environmentId),
   );
   const projects = useProjects();
+  const markdownWorkspaceRoots = useMemo<ReadonlyArray<MarkdownWorkspaceRootCandidate>>(() => {
+    const preferredRoot = workspaceRoot ?? cwd;
+    const threadShell = threadRef ? readThreadShell(threadRef) : null;
+    const project = threadShell
+      ? projects.find(
+          (candidate) =>
+            candidate.environmentId === threadRef?.environmentId &&
+            candidate.id === threadShell.projectId,
+        )
+      : undefined;
+    const configuredRoots = project?.workspaceRoots?.length
+      ? project.workspaceRoots
+      : project
+        ? [{ path: project.workspaceRoot }]
+        : [];
+    const candidates = [...(preferredRoot ? [{ path: preferredRoot }] : []), ...configuredRoots];
+    const seen = new Set<string>();
+    return candidates.filter((candidate) => {
+      const key = candidate.path.replaceAll("\\", "/").replace(/\/+$/, "").toLowerCase();
+      if (key.length === 0 || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [cwd, projects, threadRef, workspaceRoot]);
   const availableEditors = serverConfig?.availableEditors ?? [];
   const [preferredEditor] = usePreferredEditor(availableEditors);
   const preferredEditorMenuLabel = openInEditorMenuLabel(preferredEditor);
@@ -2268,41 +2294,47 @@ function ChatMarkdown({
   // A bare filename resolves to the workspace root, which is rarely where the
   // file is, so ask the index before opening. Absolute host paths open as-is.
   const openFileInPanel = useCallback(
-    (panelPath: string, line: number | undefined) => {
+    (fileLinkMeta: MarkdownFileLinkMeta, panelPath: string, line: number | undefined) => {
       if (!threadRef) return;
       // Claimed on every open so a synchronous one supersedes a lookup already
       // in flight.
       const isLatestLookup = claimWorkspaceBasenameLookup();
-      // The link was resolved against this document's own root, so the surface is opened against
-      // it too. Left off, the panel fell back to the thread's checkout — and a document read from
-      // the project while the thread runs in a worktree links to files the worktree does not have.
-      const openAt = (path: string) =>
-        useRightPanelStore.getState().openFile(threadRef, path, line, workspaceRoot);
-      if (!workspaceRoot || !needsWorkspaceBasenameLookup(panelPath)) {
-        openAt(panelPath);
+      const fallbackTarget = resolveMarkdownFilePanelTarget({
+        filePath: fileLinkMeta.filePath,
+        panelPath,
+        preferredWorkspaceRoot: workspaceRoot ?? cwd,
+        workspaceRoots: markdownWorkspaceRoots,
+      });
+      const openAt = (target: { path: string; workspaceRoot?: string | undefined }) =>
+        useRightPanelStore.getState().openFile(threadRef, target.path, line, target.workspaceRoot);
+      if (!needsWorkspaceBasenameLookup(panelPath) || markdownWorkspaceRoots.length === 0) {
+        openAt(fallbackTarget);
         return;
       }
       void (async () => {
-        const result = await searchProjectEntries({
-          environmentId: threadRef.environmentId,
-          input: {
-            // The workspace root, not the document's directory: the index is keyed by root, and a
-            // subdirectory finds nothing.
-            cwd: workspaceRoot,
-            query: panelPath,
-            limit: WORKSPACE_BASENAME_LOOKUP_LIMIT,
-            kind: "file",
-          },
-        });
-        const match =
-          result._tag === "Success"
-            ? pickWorkspaceBasenameMatch(panelPath, result.value.entries)
-            : null;
+        const matches = await Promise.all(
+          markdownWorkspaceRoots.map(async (root) => {
+            const result = await searchProjectEntries({
+              environmentId: threadRef.environmentId,
+              input: {
+                cwd: root.path,
+                query: panelPath,
+                limit: WORKSPACE_BASENAME_LOOKUP_LIMIT,
+                kind: "file",
+              },
+            });
+            const path =
+              result._tag === "Success"
+                ? pickWorkspaceBasenameMatch(panelPath, result.value.entries)
+                : null;
+            return path ? { path, workspaceRoot: root.path } : null;
+          }),
+        );
         if (!isLatestLookup()) return;
-        openAt(match ?? panelPath);
+        openAt(matches.find((match) => match !== null) ?? fallbackTarget);
       })();
     },
-    [searchProjectEntries, threadRef, workspaceRoot],
+    [cwd, markdownWorkspaceRoots, searchProjectEntries, threadRef, workspaceRoot],
   );
   const revealMarkdownFileInFileManager = useCallback(
     async (fileLinkMeta: MarkdownFileLinkMeta) => {
@@ -2382,7 +2414,7 @@ function ChatMarkdown({
           theme={resolvedTheme}
           threadRef={threadRef}
           {...(canUseShellActions ? { onOpen: openInPreferredEditor } : {})}
-          onOpenInPanel={openFileInPanel}
+          onOpenInPanel={(path, line) => openFileInPanel(fileLinkMeta, path, line)}
           onOpenMedia={
             threadRef && canPreviewMedia
               ? () => openMarkdownMedia(mediaPath, fileLinkMeta.filePath)

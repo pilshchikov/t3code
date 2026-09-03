@@ -56,6 +56,16 @@ export interface MarkdownFileLinkMeta {
   column?: number;
 }
 
+export interface MarkdownWorkspaceRootCandidate {
+  path: string;
+  label?: string | undefined;
+}
+
+export interface MarkdownFilePanelTarget {
+  path: string;
+  workspaceRoot?: string | undefined;
+}
+
 export function extractMarkdownLinkHrefs(markdown: string): string[] {
   const hrefs: string[] = [];
   for (const match of markdown.matchAll(MARKDOWN_LINK_HREF_PATTERN)) {
@@ -454,6 +464,75 @@ function pathIsWithin(path: string, root: string): boolean {
   const pathForCompare = normalizedPath.toLowerCase();
   const rootForCompare = normalizedRoot.toLowerCase();
   return pathForCompare === rootForCompare || pathForCompare.startsWith(`${rootForCompare}/`);
+}
+
+function comparableWorkspacePath(path: string): string {
+  return normalizeWindowsDrivePath(path.replaceAll("\\", "/")).replace(/\/+$/, "").toLowerCase();
+}
+
+function orderedWorkspaceRoots(
+  preferredWorkspaceRoot: string | undefined,
+  workspaceRoots: ReadonlyArray<MarkdownWorkspaceRootCandidate>,
+): MarkdownWorkspaceRootCandidate[] {
+  const roots = preferredWorkspaceRoot
+    ? [{ path: preferredWorkspaceRoot }, ...workspaceRoots]
+    : [...workspaceRoots];
+  const seen = new Set<string>();
+  return roots.filter((root) => {
+    const key = comparableWorkspacePath(root.path);
+    if (key.length === 0 || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * Chooses the project directory that owns a chat file link. A link may be absolute, relative to
+ * the active checkout, or prefixed by the name/label of a secondary project directory.
+ */
+export function resolveMarkdownFilePanelTarget(input: {
+  filePath: string;
+  panelPath: string;
+  preferredWorkspaceRoot?: string | undefined;
+  workspaceRoots: ReadonlyArray<MarkdownWorkspaceRootCandidate>;
+}): MarkdownFilePanelTarget {
+  const roots = orderedWorkspaceRoots(input.preferredWorkspaceRoot, input.workspaceRoots);
+  const normalizedPanelPath = normalizeWindowsDrivePath(input.panelPath.replaceAll("\\", "/"))
+    .replace(/^\.\//, "")
+    .replace(/\/+$/, "");
+  const panelSegments = normalizedPanelPath.split("/").filter(Boolean);
+
+  if (
+    panelSegments.length > 1 &&
+    !normalizedPanelPath.startsWith("/") &&
+    !WINDOWS_DRIVE_PATH_PATTERN.test(normalizedPanelPath)
+  ) {
+    const prefix = panelSegments[0]!.toLowerCase();
+    const aliasedRoot = roots.find((root) => {
+      const aliases = [basenameOfPath(root.path), root.label]
+        .filter((alias): alias is string => typeof alias === "string" && alias.length > 0)
+        .map((alias) => alias.toLowerCase());
+      return aliases.includes(prefix);
+    });
+    if (aliasedRoot) {
+      return {
+        path: panelSegments.slice(1).join("/"),
+        workspaceRoot: aliasedRoot.path,
+      };
+    }
+  }
+
+  const owningRoot = roots
+    .filter((root) => pathIsWithin(input.filePath, root.path))
+    .toSorted((left, right) => right.path.length - left.path.length)[0];
+  if (owningRoot) {
+    const relativePath = workspaceRelativePath(input.filePath, owningRoot.path);
+    if (relativePath !== null) {
+      return { path: relativePath, workspaceRoot: owningRoot.path };
+    }
+  }
+
+  return { path: input.filePath };
 }
 
 /**

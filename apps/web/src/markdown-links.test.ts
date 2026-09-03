@@ -7,12 +7,91 @@ import {
   extractMarkdownLinkHrefs,
   isWindowsDrivePathHref,
   resolveInlineCodeFileLinkMeta,
+  resolveMarkdownFilePanelTarget,
   resolveMarkdownFileLinkMeta,
   resolveMarkdownFileLinkTarget,
   rewriteMarkdownFileUriHref,
   shouldOpenMarkdownFileLinkInBrowserByDefault,
   shouldOpenMarkdownFileLinkInEditor,
 } from "./markdown-links";
+
+describe("resolveMarkdownFilePanelTarget", () => {
+  const roots = [
+    { path: "/work/app", label: "Primary directory" },
+    { path: "/work/qa-services", label: "QA" },
+  ];
+
+  it("opens an absolute secondary-directory link against its owning root", () => {
+    expect(
+      resolveMarkdownFilePanelTarget({
+        filePath: "/work/qa-services/src/check.ts",
+        panelPath: "/work/qa-services/src/check.ts",
+        preferredWorkspaceRoot: "/work/app",
+        workspaceRoots: roots,
+      }),
+    ).toEqual({ path: "src/check.ts", workspaceRoot: "/work/qa-services" });
+  });
+
+  it("recognizes a secondary directory name or label at the start of a relative link", () => {
+    expect(
+      resolveMarkdownFilePanelTarget({
+        filePath: "/work/app/qa-services/src/check.ts",
+        panelPath: "qa-services/src/check.ts",
+        preferredWorkspaceRoot: "/work/app",
+        workspaceRoots: roots,
+      }),
+    ).toEqual({ path: "src/check.ts", workspaceRoot: "/work/qa-services" });
+    expect(
+      resolveMarkdownFilePanelTarget({
+        filePath: "/work/app/QA/src/check.ts",
+        panelPath: "QA/src/check.ts",
+        preferredWorkspaceRoot: "/work/app",
+        workspaceRoots: roots,
+      }),
+    ).toEqual({ path: "src/check.ts", workspaceRoot: "/work/qa-services" });
+  });
+
+  it("keeps ordinary relative links in the active checkout", () => {
+    expect(
+      resolveMarkdownFilePanelTarget({
+        filePath: "/work/app/src/main.ts",
+        panelPath: "src/main.ts",
+        preferredWorkspaceRoot: "/work/app",
+        workspaceRoots: roots,
+      }),
+    ).toEqual({ path: "src/main.ts", workspaceRoot: "/work/app" });
+  });
+
+  it("uses the deepest configured root and leaves external host files absolute", () => {
+    expect(
+      resolveMarkdownFilePanelTarget({
+        filePath: "/work/app/packages/docs/readme.md",
+        panelPath: "/work/app/packages/docs/readme.md",
+        preferredWorkspaceRoot: "/work/app",
+        workspaceRoots: [...roots, { path: "/work/app/packages/docs" }],
+      }),
+    ).toEqual({ path: "readme.md", workspaceRoot: "/work/app/packages/docs" });
+    expect(
+      resolveMarkdownFilePanelTarget({
+        filePath: "/tmp/report.md",
+        panelPath: "/tmp/report.md",
+        preferredWorkspaceRoot: "/work/app",
+        workspaceRoots: roots,
+      }),
+    ).toEqual({ path: "/tmp/report.md" });
+  });
+
+  it("supports Windows project roots", () => {
+    expect(
+      resolveMarkdownFilePanelTarget({
+        filePath: "D:\\work\\qa-services\\src\\check.ts",
+        panelPath: "D:\\work\\qa-services\\src\\check.ts",
+        preferredWorkspaceRoot: "D:\\work\\app",
+        workspaceRoots: [{ path: "D:\\work\\qa-services" }],
+      }),
+    ).toEqual({ path: "src/check.ts", workspaceRoot: "D:\\work\\qa-services" });
+  });
+});
 
 describe("isWindowsDrivePathHref", () => {
   it.each([

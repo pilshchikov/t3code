@@ -854,6 +854,16 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
   nothing to disambiguate with.
 - Source: `apps/web/src/components/ChatMarkdown.tsx`.
 
+- Chat file links are resolved against the complete multi-directory project, not only the thread's
+  primary checkout. Absolute links select the configured root that contains the file. Relative
+  links may start with a directory basename or its configured label, which is stripped before the
+  file tab opens. Bare filenames are searched across all roots on click, with the active checkout
+  first. External host files remain absolute and read-only.
+- The selected file tab stores both the relative path and its owning workspace root. This prevents
+  the file viewer from asking the primary directory to read a path owned by a secondary directory.
+- Source: `apps/web/src/components/ChatMarkdown.tsx`, `apps/web/src/markdown-links.ts`.
+  Regression coverage: `apps/web/src/markdown-links.test.ts`.
+
 ## The right panel's shortcuts answer from anywhere
 
 - They are owned by one listener mounted at the app root, ahead of everything else, instead of by
