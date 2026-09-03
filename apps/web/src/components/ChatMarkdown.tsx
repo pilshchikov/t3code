@@ -159,6 +159,7 @@ import {
   claimWorkspaceBasenameLookup,
   needsWorkspaceBasenameLookup,
   pickWorkspaceBasenameMatch,
+  pickWorkspacePathMatch,
   WORKSPACE_BASENAME_LOOKUP_LIMIT,
 } from "../workspaceBasenameLookup";
 import {
@@ -2291,8 +2292,8 @@ function ChatMarkdown({
     },
     [cwd, environmentId, searchProjectEntries],
   );
-  // A bare filename resolves to the workspace root, which is rarely where the
-  // file is, so ask the index before opening. Absolute host paths open as-is.
+  // Relative paths in old chat messages do not carry a directory id. Ask every configured root
+  // which one owns the exact path before opening; absolute paths already identify their owner.
   const openFileInPanel = useCallback(
     (fileLinkMeta: MarkdownFileLinkMeta, panelPath: string, line: number | undefined) => {
       if (!threadRef) return;
@@ -2307,25 +2308,37 @@ function ChatMarkdown({
       });
       const openAt = (target: { path: string; workspaceRoot?: string | undefined }) =>
         useRightPanelStore.getState().openFile(threadRef, target.path, line, target.workspaceRoot);
-      if (!needsWorkspaceBasenameLookup(panelPath) || markdownWorkspaceRoots.length === 0) {
+      const searchAcrossRoots =
+        markdownWorkspaceRoots.length > 0 &&
+        (needsWorkspaceBasenameLookup(panelPath) ||
+          (!isAbsolutePath(panelPath) && markdownWorkspaceRoots.length > 1));
+      if (!searchAcrossRoots) {
         openAt(fallbackTarget);
         return;
       }
       void (async () => {
         const matches = await Promise.all(
           markdownWorkspaceRoots.map(async (root) => {
+            const sameAsFallbackRoot =
+              fallbackTarget.workspaceRoot !== undefined &&
+              root.path.replaceAll("\\", "/").replace(/\/+$/, "").toLowerCase() ===
+                fallbackTarget.workspaceRoot
+                  .replaceAll("\\", "/")
+                  .replace(/\/+$/, "")
+                  .toLowerCase();
+            const lookupPath = sameAsFallbackRoot ? fallbackTarget.path : panelPath;
             const result = await searchProjectEntries({
               environmentId: threadRef.environmentId,
               input: {
                 cwd: root.path,
-                query: panelPath,
+                query: lookupPath,
                 limit: WORKSPACE_BASENAME_LOOKUP_LIMIT,
                 kind: "file",
               },
             });
             const path =
               result._tag === "Success"
-                ? pickWorkspaceBasenameMatch(panelPath, result.value.entries)
+                ? pickWorkspacePathMatch(lookupPath, result.value.entries)
                 : null;
             return path ? { path, workspaceRoot: root.path } : null;
           }),

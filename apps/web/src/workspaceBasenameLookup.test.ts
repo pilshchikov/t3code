@@ -4,7 +4,35 @@ import {
   claimWorkspaceBasenameLookup,
   needsWorkspaceBasenameLookup,
   pickWorkspaceBasenameMatch,
+  pickWorkspacePathMatch,
 } from "./workspaceBasenameLookup";
+
+describe("pickWorkspacePathMatch", () => {
+  const entries = [
+    { path: "yb-cli/internal/commands/amp/lru.go", kind: "file" as const },
+    { path: "other/lru.go", kind: "file" as const },
+  ];
+
+  it("matches an exact relative path instead of only its basename", () => {
+    expect(pickWorkspacePathMatch("yb-cli/internal/commands/amp/lru.go", entries)).toBe(
+      "yb-cli/internal/commands/amp/lru.go",
+    );
+    expect(pickWorkspacePathMatch("missing/commands/amp/lru.go", entries)).toBeNull();
+  });
+
+  it("normalizes separators and allows one unambiguous case-only match", () => {
+    expect(pickWorkspacePathMatch(".\\yb-cli\\internal\\commands\\amp\\lru.go", entries)).toBe(
+      "yb-cli/internal/commands/amp/lru.go",
+    );
+    expect(pickWorkspacePathMatch("YB-CLI/INTERNAL/COMMANDS/AMP/LRU.GO", entries)).toBe(
+      "yb-cli/internal/commands/amp/lru.go",
+    );
+  });
+
+  it("retains basename lookup for old chat links", () => {
+    expect(pickWorkspacePathMatch("lru.go", entries)).toBe("yb-cli/internal/commands/amp/lru.go");
+  });
+});
 
 describe("needsWorkspaceBasenameLookup", () => {
   it("flags bare filenames", () => {

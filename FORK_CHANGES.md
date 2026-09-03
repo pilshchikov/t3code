@@ -857,12 +857,16 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
 - Chat file links are resolved against the complete multi-directory project, not only the thread's
   primary checkout. Absolute links select the configured root that contains the file. Relative
   links may start with a directory basename or its configured label, which is stripped before the
-  file tab opens. Bare filenames are searched across all roots on click, with the active checkout
-  first. External host files remain absolute and read-only.
+  file tab opens. Every relative path, including a path such as `yb-cli/internal/file.go` with no
+  project-directory prefix, is checked against every root on click. Bare filenames use the same
+  lookup, with the active checkout first. This resolution happens while opening the link, so old
+  chat messages gain the corrected behavior without being rewritten. External host files remain
+  absolute and read-only.
 - The selected file tab stores both the relative path and its owning workspace root. This prevents
   the file viewer from asking the primary directory to read a path owned by a secondary directory.
-- Source: `apps/web/src/components/ChatMarkdown.tsx`, `apps/web/src/markdown-links.ts`.
-  Regression coverage: `apps/web/src/markdown-links.test.ts`.
+- Source: `apps/web/src/components/ChatMarkdown.tsx`, `apps/web/src/markdown-links.ts`,
+  `apps/web/src/workspaceBasenameLookup.ts`. Regression coverage:
+  `apps/web/src/markdown-links.test.ts`, `apps/web/src/workspaceBasenameLookup.test.ts`.
 
 ## The right panel's shortcuts answer from anywhere
 
