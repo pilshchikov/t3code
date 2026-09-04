@@ -10,6 +10,9 @@ as-is, so new provider windows can appear without a client schema change.
 
 1. `ClaudeAdapter` and the Codex adapter emit normalized
    `account.rate-limits.updated` runtime events.
+   Claude's current stream carries fractional utilization for several windows under
+   `rate_limit_info.unifiedWindows`; the normalizer scales those values to percentages and keeps the
+   older single-window event as a fallback.
 2. `ProviderRuntimeIngestion` forwards those events to `AccountLimitsService` while preserving the
    `providerInstanceId` from the runtime envelope.
 3. `AccountLimitsService` normalizes provider-specific payloads into the shared contract, stores one

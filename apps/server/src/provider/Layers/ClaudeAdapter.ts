@@ -3550,9 +3550,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   /**
    * Pulls the full rate-limit window set (5h, weekly, model-scoped) through
    * the SDK usage control request and re-emits it as
-   * `account.rate-limits.updated`. The streamed `rate_limit_event` only ever
-   * names the single window currently binding, and Claude limits never reach
-   * disk, so this pull is the only source that shows every window at once.
+   * `account.rate-limits.updated`. Current streamed `rate_limit_event` values
+   * can carry the standard windows too, while this pull also supplies plan and
+   * model-scoped limits. Claude limits never reach disk.
    */
   const emitAccountUsageSnapshot = Effect.fn("emitAccountUsageSnapshot")(function* (
     context: ClaudeSessionContext,
@@ -3715,7 +3715,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       case "rate_limit_event":
         yield* handleSdkTelemetryMessage(context, message);
         if (message.type === "rate_limit_event") {
-          // The streamed event names one window; refresh the full set too.
+          // Refresh plan and model-scoped limits alongside the streamed windows.
           yield* refreshAccountUsageSnapshot(context);
         }
         return;

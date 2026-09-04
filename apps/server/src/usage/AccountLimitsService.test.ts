@@ -47,6 +47,20 @@ const claudeWindowPayload = (utilization: number) => ({
   },
 });
 
+/** The current streamed Claude event, carrying all windows as fractions. */
+const claudeUnifiedWindowsPayload = () => ({
+  type: "rate_limit_event",
+  rate_limit_info: {
+    status: "allowed",
+    resetsAt: 1_786_600_800,
+    rateLimitType: "five_hour",
+    unifiedWindows: {
+      five_hour: { utilization: 0.45, resetsAt: 1_786_600_800 },
+      seven_day: { utilization: 0.6, resetsAt: 1_786_677_720 },
+    },
+  },
+});
+
 /**
  * Every instance the tests ingest for must exist in settings: readSummary
  * evicts rows for deleted instances. Codex homes point at paths that do not
@@ -165,7 +179,7 @@ it.layer(NodeServices.layer)("account limits service", (it) => {
       });
       yield* service.ingest({
         provider: "claudeAgent",
-        payload: claudeWindowPayload(87.5),
+        payload: claudeWindowPayload(0.875),
         createdAt: "2026-08-15T12:00:01.000Z",
         providerInstanceId: asInstanceId("claude_partner"),
       });
@@ -182,6 +196,31 @@ it.layer(NodeServices.layer)("account limits service", (it) => {
       ]);
       expect(partner?.windows.map((window) => [window.id, window.usedPercent])).toEqual([
         ["five_hour", 87.5],
+      ]);
+    }).pipe(Effect.provide(makeLayer())),
+  );
+
+  it.effect("claude unified-window events patch every reported window for one instance", () =>
+    Effect.gen(function* () {
+      const service = yield* AccountLimitsServiceModule.AccountLimitsService;
+      yield* service.ingest({
+        provider: "claudeAgent",
+        payload: claudeUsagePayload(24, 18),
+        createdAt: "2026-08-15T12:00:00.000Z",
+        providerInstanceId: asInstanceId("claude_main"),
+      });
+      yield* service.ingest({
+        provider: "claudeAgent",
+        payload: claudeUnifiedWindowsPayload(),
+        createdAt: "2026-08-15T12:00:01.000Z",
+        providerInstanceId: asInstanceId("claude_main"),
+      });
+      const summary = yield* service.readSummary();
+      expect(
+        summary.snapshots[0]?.windows.map((window) => [window.id, window.usedPercent]),
+      ).toEqual([
+        ["five_hour", 45],
+        ["seven_day", 60],
       ]);
     }).pipe(Effect.provide(makeLayer())),
   );

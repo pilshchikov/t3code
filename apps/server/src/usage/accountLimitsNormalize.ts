@@ -6,9 +6,9 @@
  *
  * - Claude, full set: the SDK usage control response
  *   (`{ subscription_type, rate_limits: { five_hour, seven_day, ... } }`).
- * - Claude, single window: the streamed `rate_limit_event` SDK message
- *   (`{ rate_limit_info: { rateLimitType, utilization, resetsAt } }`), which
- *   only ever names the window that is currently binding.
+ * - Claude, streamed: the `rate_limit_event` SDK message. Current versions
+ *   carry all windows in `rate_limit_info.unifiedWindows`; older versions
+ *   expose one binding window through `rateLimitType` and `utilization`.
  * - Codex, live: the `account/rateLimits/updated` app-server notification
  *   (`{ rateLimits: { limitId, primary, secondary, planType, ... } }`,
  *   camelCase).
@@ -72,6 +72,7 @@ const CLAUDE_HIDDEN_WINDOW_KEYS = new Set([
   "seven_day_oauth_apps",
   "seven_day_opus",
   "seven_day_sonnet",
+  "seven_day_overage_included",
   "extra_usage",
   "overage",
 ]);
@@ -218,28 +219,65 @@ function claudeWindowFromLimitEntry(entry: unknown): AccountLimitsWindow | null 
   return null;
 }
 
-/**
- * Parses the streamed `rate_limit_event` SDK message into the one window it
- * names. Returns null for shapes that are not that message, and for windows
- * we hide.
- */
-export function claudeWindowFromRateLimitEvent(value: unknown): AccountLimitsWindow | null {
-  if (!isRecord(value)) return null;
-  const info = value.rate_limit_info;
-  if (!isRecord(info)) return null;
-  const type = readString(info.rateLimitType);
-  if (type === null) return null;
+/** Claude's streamed utilization is a 0-1 fraction; full usage reads are 0-100. */
+function claudeStreamUsedPercent(value: number): number {
+  // Treat values above one as already-percent for compatibility with any CLI
+  // version that emits the full-usage scale on this path.
+  return clampPercent(value <= 1 ? value * 100 : value);
+}
+
+function claudeWindowFromStreamEntry(type: string, entry: unknown): AccountLimitsWindow | null {
   const meta = claudeWindowMeta(type);
-  if (!meta) return null;
-  const utilization = readNumber(info.utilization);
-  const resetsAt = readNumber(info.resetsAt);
+  if (meta === null || !isRecord(entry)) return null;
+  const utilization = readNumber(entry.utilization);
+  if (utilization === null) return null;
+  const resetsAt = readNumber(entry.resetsAt ?? entry.resets_at);
   return {
     id: meta.id,
     label: meta.label,
-    usedPercent: utilization === null ? 0 : clampPercent(utilization),
+    usedPercent: claudeStreamUsedPercent(utilization),
     resetsAt: resetsAt === null ? null : isoFromUnixSeconds(resetsAt),
     windowMinutes: meta.minutes,
   };
+}
+
+/**
+ * Parses a streamed `rate_limit_event` SDK message. Current Claude Code
+ * attaches every known window under `rate_limit_info.unifiedWindows`; older
+ * versions only expose the currently binding window at the top level.
+ */
+export function claudeWindowsFromRateLimitEvent(value: unknown): AccountLimitsWindow[] {
+  if (!isRecord(value)) return [];
+  const info = value.rate_limit_info;
+  if (!isRecord(info)) return [];
+
+  const unifiedWindows = info.unifiedWindows ?? info.unified_windows;
+  if (isRecord(unifiedWindows)) {
+    const windows = Object.entries(unifiedWindows).flatMap(([type, entry]) => {
+      const window = claudeWindowFromStreamEntry(type, entry);
+      return window === null ? [] : [window];
+    });
+    if (windows.length > 0) return sortWindows(windows);
+  }
+
+  const type = readString(info.rateLimitType);
+  if (type === null) return [];
+  const meta = claudeWindowMeta(type);
+  if (!meta) return [];
+  const utilization = readNumber(info.utilization);
+  const resetsAt = readNumber(info.resetsAt);
+  // A missing figure must not erase a good snapshot. A rejected window is
+  // the one exception: Claude has told us enough to mark it exhausted.
+  if (utilization === null && readString(info.status) !== "rejected") return [];
+  return [
+    {
+      id: meta.id,
+      label: meta.label,
+      usedPercent: utilization === null ? 100 : claudeStreamUsedPercent(utilization),
+      resetsAt: resetsAt === null ? null : isoFromUnixSeconds(resetsAt),
+      windowMinutes: meta.minutes,
+    },
+  ];
 }
 
 // ---------------------------------------------------------------------------

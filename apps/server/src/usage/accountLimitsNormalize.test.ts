@@ -3,7 +3,7 @@ import * as DateTime from "effect/DateTime";
 
 import {
   claudeUsageSnapshotFromUnknown,
-  claudeWindowFromRateLimitEvent,
+  claudeWindowsFromRateLimitEvent,
   codexSnapshotFromUnknown,
   isPrimaryCodexLimit,
   windowHasTraffic,
@@ -97,32 +97,67 @@ describe("claudeUsageSnapshotFromUnknown", () => {
   });
 });
 
-describe("claudeWindowFromRateLimitEvent", () => {
-  it("maps the binding window with a unix-seconds reset", () => {
-    const window = claudeWindowFromRateLimitEvent({
+describe("claudeWindowsFromRateLimitEvent", () => {
+  it("maps the legacy binding window and scales its 0-1 utilization", () => {
+    const windows = claudeWindowsFromRateLimitEvent({
       type: "rate_limit_event",
       rate_limit_info: {
         status: "allowed_warning",
         rateLimitType: "five_hour",
-        utilization: 87.5,
+        utilization: 0.875,
         resetsAt: 1_786_600_800,
       },
     });
-    expect(window).toEqual({
-      id: "five_hour",
-      label: "5h",
-      usedPercent: 87.5,
-      resetsAt: DateTime.formatIso(DateTime.makeUnsafe(1_786_600_800_000)),
-      windowMinutes: 300,
+    expect(windows).toEqual([
+      {
+        id: "five_hour",
+        label: "5h",
+        usedPercent: 87.5,
+        resetsAt: DateTime.formatIso(DateTime.makeUnsafe(1_786_600_800_000)),
+        windowMinutes: 300,
+      },
+    ]);
+  });
+
+  it("reads every current unified window when top-level utilization is absent", () => {
+    const windows = claudeWindowsFromRateLimitEvent({
+      type: "rate_limit_event",
+      rate_limit_info: {
+        status: "allowed",
+        rateLimitType: "five_hour",
+        resetsAt: 1_787_977_800,
+        unifiedWindows: {
+          five_hour: { utilization: 0.45, resetsAt: 1_787_977_800 },
+          seven_day: { utilization: 0.6, resetsAt: 1_788_202_800 },
+          seven_day_overage_included: { utilization: 0.7, resetsAt: 1_788_202_800 },
+        },
+      },
     });
+    expect(windows.map((window) => [window.id, window.usedPercent])).toEqual([
+      ["five_hour", 45],
+      ["seven_day", 60],
+    ]);
+  });
+
+  it("does not replace a known window when an allowed event has no utilization", () => {
+    expect(
+      claudeWindowsFromRateLimitEvent({
+        rate_limit_info: { status: "allowed", rateLimitType: "five_hour" },
+      }),
+    ).toEqual([]);
+    expect(
+      claudeWindowsFromRateLimitEvent({
+        rate_limit_info: { status: "rejected", rateLimitType: "five_hour" },
+      })[0]?.usedPercent,
+    ).toBe(100);
   });
 
   it("drops hidden window types", () => {
     expect(
-      claudeWindowFromRateLimitEvent({
-        rate_limit_info: { rateLimitType: "seven_day_opus", utilization: 90 },
+      claudeWindowsFromRateLimitEvent({
+        rate_limit_info: { rateLimitType: "seven_day_opus", utilization: 0.9 },
       }),
-    ).toBeNull();
+    ).toEqual([]);
   });
 });
 

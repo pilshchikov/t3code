@@ -3,7 +3,7 @@
  *
  * Fed passively: runtime ingestion forwards every
  * `account.rate-limits.updated` event here (Claude usage snapshots and
- * single-window events, Codex app-server notifications), so the cache costs
+ * streamed window updates, Codex app-server notifications), so the cache costs
  * nothing while sessions run. When asked and Codex has no live snapshot, the
  * newest transcript snapshot is recovered from disk. Claude has no disk
  * fallback: its limits exist only on the live stream, which is why snapshots
@@ -52,7 +52,7 @@ import { expandHomePath } from "../pathExpansion.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import {
   claudeUsageSnapshotFromUnknown,
-  claudeWindowFromRateLimitEvent,
+  claudeWindowsFromRateLimitEvent,
   codexSnapshotFromUnknown,
   isPrimaryCodexLimit,
   sortWindows,
@@ -281,13 +281,14 @@ export const make = Effect.gen(function* () {
       });
       return;
     }
-    // The streamed event names one window; patch it into whatever set the
-    // last full snapshot from the same instance established.
-    const window = claudeWindowFromRateLimitEvent(payload);
-    if (window === null) return;
+    // Current streamed events can carry every window; older ones name only
+    // the binding window. Patch every reported id into this instance's set.
+    const updates = claudeWindowsFromRateLimitEvent(payload);
+    if (updates.length === 0) return;
+    const updatedIds = new Set(updates.map((window) => window.id));
     const windows = sortWindows([
-      ...(previous?.windows ?? []).filter((existing) => existing.id !== window.id),
-      window,
+      ...(previous?.windows ?? []).filter((existing) => !updatedIds.has(existing.id)),
+      ...updates,
     ]);
     yield* store({
       provider: "claude",

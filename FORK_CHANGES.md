@@ -577,6 +577,10 @@ fork-specific behavior so future upstream syncs are easier to review.
 - Claude limits are collected from the live SDK usage response and streamed rate-limit events. Claude
   has no trustworthy transcript fallback, so a newly configured instance remains empty until a
   session reports its limits; snapshots are persisted locally across server restarts.
+- Current Claude `rate_limit_event` payloads are read from `rate_limit_info.unifiedWindows`, with the
+  older single-window payload retained as a fallback. Streamed utilization fractions are converted
+  from `0..1` to percentages before they update the matching provider instance, and an event without
+  utilization no longer replaces a valid reading with `0%`.
 - Codex limits use live app-server notifications and may be recovered from transcripts only when a
   sessions directory has one unambiguous configured owner. Shared shadow-home transcripts are
   skipped rather than attributed to the wrong account.
