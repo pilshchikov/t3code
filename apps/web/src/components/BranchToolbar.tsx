@@ -40,6 +40,7 @@ import {
   type EnvMode,
   type EnvironmentOption,
   isExplicitWorkspaceModeSelectionReason,
+  resolveContextStripLabelsCompact,
   resolveCurrentWorkspaceLabel,
   resolveEnvModeLabel,
   resolveEffectiveEnvMode,
@@ -49,6 +50,7 @@ import {
   shouldShowEnvironmentIndicator,
 } from "./BranchToolbar.logic";
 import { BranchToolbarBranchSelector } from "./BranchToolbarBranchSelector";
+import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { BranchToolbarEnvironmentSelector } from "./BranchToolbarEnvironmentSelector";
 import { BranchToolbarEnvModeSelector } from "./BranchToolbarEnvModeSelector";
 import { Button } from "./ui/button";
@@ -76,6 +78,7 @@ import {
 import { Textarea } from "./ui/textarea";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
+import { composerFloatingLayerProps } from "./chat/composerEventScope";
 
 interface BranchToolbarProps {
   environmentId: EnvironmentId;
@@ -97,6 +100,9 @@ interface BranchToolbarProps {
   onEnvironmentChange?: (environmentId: EnvironmentId) => void;
   contextStripCollapsed: boolean;
   onContextStripCollapsedChange: (collapsed: boolean) => void;
+  /** Reserved host used by the upstream compact-composer layout. */
+  composerControlsHostRef?: (element: HTMLDivElement | null) => void;
+  contextStripVisible?: boolean;
 }
 
 function WorkspaceBadge(props: {
@@ -203,7 +209,6 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
       ? resolveEnvModeLabel("worktree")
       : resolveCurrentWorkspaceLabel(activeWorktreePath);
   const isLocked = envModeLocked;
-  const EnvironmentIcon = activeEnvironment?.isPrimary ? MonitorIcon : CloudIcon;
   const icon = showEnvironmentIndicator ? (
     // Button's base styles apply `-mx-0.5` to descendant SVGs, which eats 4px
     // out of whatever gap we set. mx-0! cancels that so gap-0.5 reads as 2px.
@@ -382,7 +387,6 @@ function useLabelsOverflow(element: HTMLDivElement | null): boolean {
       if (!(child instanceof HTMLElement) || child.offsetWidth <= 1) continue;
       needed += contentWidth(child);
       groups += 1;
-      needed += width;
     }
     needed += stripGap * Math.max(0, groups - 1);
     for (const label of current.querySelectorAll<HTMLElement>("[data-composer-label]")) {
@@ -526,6 +530,7 @@ export const BranchToolbar = memo(function BranchToolbar({
       ? scopeProjectRef(draftThread.environmentId, draftThread.projectId)
       : null;
   const activeProject = useProject(activeProjectRef);
+  const isMobile = useIsMobile();
   const updateProject = useAtomCommand(projectEnvironment.update, { reportFailure: false });
   const hasActiveThread = serverThread !== null || draftThread !== null;
   const activeWorktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
@@ -712,7 +717,6 @@ export const BranchToolbar = memo(function BranchToolbar({
         }
         expandContextStrip();
       }}
-      title="Click to expand project context"
     >
       {addWorkspaceRootButton}
       {showEnvironmentIndicator && availableEnvironments ? (
@@ -940,10 +944,7 @@ export const BranchToolbar = memo(function BranchToolbar({
           {workspaceRoots.slice(1).map((root, rootIndex) => (
             <div key={root.path} className="flex min-w-0 max-w-full items-center gap-1">
               {isMobile ? (
-                <span
-                  className="max-w-24 truncate text-[10px] text-muted-foreground/60"
-                  title={root.path}
-                >
+                <span className="max-w-24 truncate text-[10px] text-muted-foreground/60">
                   {workspaceDisplayName(root, rootIndex + 1)}
                 </span>
               ) : null}
@@ -984,10 +985,7 @@ export const BranchToolbar = memo(function BranchToolbar({
           </DialogHeader>
           <DialogPanel>
             <div className="space-y-2">
-              <p
-                className="truncate font-mono text-[11px] text-muted-foreground"
-                title={guidanceWorkspace?.path}
-              >
+              <p className="truncate font-mono text-[11px] text-muted-foreground">
                 {guidanceWorkspace?.path}
               </p>
               <Textarea

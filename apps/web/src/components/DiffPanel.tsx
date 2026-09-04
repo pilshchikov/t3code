@@ -16,6 +16,7 @@ import {
   ChevronsUpDownIcon,
   Columns2Icon,
   FolderGit2Icon,
+  FolderTreeIcon,
   PanelLeftOpenIcon,
   PilcrowIcon,
   RefreshCwIcon,
@@ -44,7 +45,6 @@ import {
   resolveDiffThemeName,
   resolveFileDiffPath,
 } from "../lib/diffRendering";
-import { PREFERRED_HIGHLIGHTER } from "../lib/syntaxHighlighting";
 import { areAllDiffFilesCollapsed, toggleAllDiffFiles } from "../lib/diffCollapse";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import { useWorkspaceMutationRefresh } from "../hooks/useWorkspaceMutationRefresh";
@@ -569,29 +569,6 @@ export default function DiffPanel({
     codeViewRef.current?.scrollTo({ type: "item", id: selectedDiffFileKey, align: "start" });
   }, [codeViewMountKey, selectedDiffFileKey, selectedFileRevealRequestId]);
 
-  // Held as state so the scroll runs after a collapsed file has been drawn open again; scrolling
-  // in the same tick would land on the folded header's position.
-  const [treeReveal, setTreeReveal] = useState<{ fileKey: string; id: number } | null>(null);
-  useEffect(() => {
-    if (treeReveal === null) return;
-    codeViewRef.current?.scrollTo({ type: "item", id: treeReveal.fileKey, align: "start" });
-  }, [treeReveal]);
-  const revealDiffFile = useCallback(
-    (filePath: string) => {
-      const file = codeViewFiles.find((candidate) => candidate.filePath === filePath);
-      if (!file) return;
-      if (file.collapsed) {
-        setCollapsedDiffFiles((current) => {
-          const next = new Set(current.scopeKey === collapseScopeKey ? current.fileKeys : []);
-          next.delete(file.fileKey);
-          return { scopeKey: collapseScopeKey, fileKeys: next };
-        });
-      }
-      setTreeReveal((current) => ({ fileKey: file.fileKey, id: (current?.id ?? 0) + 1 }));
-    },
-    [codeViewFiles, collapseScopeKey],
-  );
-
   const openDiffFile = useCallback(
     (filePath: string) => {
       openDiffFilePrimaryAction({
@@ -680,6 +657,9 @@ export default function DiffPanel({
       sectionId={reviewSectionId}
       sectionTitle={reviewSectionTitle}
       composerDraftTarget={composerDraftTarget}
+      renderHeaderFilenameSuffix={(fileDiff) => (
+        <DiffFilePathCopyButton filePath={resolveFileDiffPath(fileDiff)} />
+      )}
       renderHeaderPrefix={(fileDiff, fileKey, collapsed) => {
         const filePath = resolveFileDiffPath(fileDiff);
         return (
@@ -712,7 +692,7 @@ export default function DiffPanel({
         );
       }}
       options={{
-        diffStyle: diffRenderMode === "split" ? "split" : "unified",
+        diffStyle: diffLayout === "split" ? "split" : "unified",
         lineDiffType: "none",
         overflow: wordWrap ? "wrap" : "scroll",
         theme: resolveDiffThemeName(resolvedTheme),

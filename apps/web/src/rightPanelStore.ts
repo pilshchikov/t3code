@@ -110,6 +110,7 @@ interface RightPanelStoreState {
     line?: number,
     workspaceRoot?: string,
   ) => void;
+  openAttachment: (ref: ScopedThreadRef, attachment: ChatFileAttachment) => void;
   openPullRequest: (
     ref: ScopedThreadRef,
     target: { environmentId?: string; projectId: string; repository: string; number: number },

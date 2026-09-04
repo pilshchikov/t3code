@@ -29,9 +29,17 @@ import {
   scopeThreadRef,
   scopedThreadKey,
 } from "@t3tools/client-runtime/environment";
-import { PROJECT_JUMP_KEYBINDING_COMMANDS } from "@t3tools/contracts";
-import type { ScopedThreadRef, ThreadId } from "@t3tools/contracts";
-import type { SidebarAutoSettleMode, TimestampFormat } from "@t3tools/contracts/settings";
+import {
+  PROJECT_JUMP_KEYBINDING_COMMANDS,
+  resolveEnvironmentMachineKind,
+} from "@t3tools/contracts";
+import type {
+  EnvironmentMachineKind,
+  ProjectIconOverride,
+  ScopedThreadRef,
+  ThreadId,
+} from "@t3tools/contracts";
+import type { TimestampFormat } from "@t3tools/contracts/settings";
 import {
   AlarmClockIcon,
   AlarmClockOffIcon,
@@ -124,7 +132,6 @@ import { cn } from "~/lib/utils";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { buildThreadActionMenuItems } from "./threadActionMenu.logic";
 import {
-  animatePinnedLayoutChanges,
   buildBulkTitleRegenerationContextMenuItem,
   formatWorkingDurationLabel,
   firstValidTimestampMs,
@@ -3803,6 +3810,7 @@ export default function Sidebar() {
                             <ProjectFavicon
                               environmentId={project.environmentId}
                               cwd={project.workspaceRoot}
+                              projectName={project.displayName}
                               faviconPath={project.faviconPath}
                               className="size-4 shrink-0"
                             />

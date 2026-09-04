@@ -51,6 +51,7 @@ import { HostProcessEnvironment } from "@t3tools/shared/hostProcess";
 import { expandHomePath } from "../pathExpansion.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import {
+  accountWindowsFromProviderUpdate,
   claudeUsageSnapshotFromUnknown,
   claudeWindowsFromRateLimitEvent,
   codexSnapshotFromUnknown,
@@ -284,11 +285,13 @@ export const make = Effect.gen(function* () {
     // Current streamed events can carry every window; older ones name only
     // the binding window. Patch every reported id into this instance's set.
     const updates = claudeWindowsFromRateLimitEvent(payload);
-    if (updates.length === 0) return;
-    const updatedIds = new Set(updates.map((window) => window.id));
+    const normalizedUpdates =
+      updates.length > 0 ? updates : accountWindowsFromProviderUpdate(payload);
+    if (normalizedUpdates.length === 0) return;
+    const updatedIds = new Set(normalizedUpdates.map((window) => window.id));
     const windows = sortWindows([
       ...(previous?.windows ?? []).filter((existing) => !updatedIds.has(existing.id)),
-      ...updates,
+      ...normalizedUpdates,
     ]);
     yield* store({
       provider: "claude",
@@ -306,16 +309,18 @@ export const make = Effect.gen(function* () {
     instanceId: ProviderInstanceId,
   ) {
     const snapshot = codexSnapshotFromUnknown(payload);
-    if (snapshot === null) return;
+    const canonicalWindows = accountWindowsFromProviderUpdate(payload);
+    if (snapshot === null && canonicalWindows.length === 0) return;
     // Per-model side meters (Spark) are not surfaced.
-    if (!isPrimaryCodexLimit(snapshot.limitId)) return;
-    if (snapshot.windows.length === 0) return;
+    if (snapshot !== null && !isPrimaryCodexLimit(snapshot.limitId)) return;
+    const windows = snapshot?.windows.length ? snapshot.windows : canonicalWindows;
+    if (windows.length === 0) return;
     const previous = snapshots.get(slotKey("codex", instanceId));
     yield* store({
       provider: "codex",
       instanceId,
-      plan: snapshot.plan ?? previous?.plan ?? null,
-      windows: snapshot.windows,
+      plan: snapshot?.plan ?? previous?.plan ?? null,
+      windows,
       asOf: createdAt,
       source: "live",
     });

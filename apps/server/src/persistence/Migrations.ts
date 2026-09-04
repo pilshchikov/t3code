@@ -61,6 +61,10 @@ import Migration0042 from "./Migrations/042_ProjectionThreadLinkedPullRequest.ts
 import Migration0043 from "./Migrations/041_AuthSessionClientConnection.ts";
 import Migration0044 from "./Migrations/041_ProjectionProjectWorkspaceRoots.ts";
 import Migration0045 from "./Migrations/045_ProjectionThreadsUnsettledAt.ts";
+import Migration0046 from "./Migrations/044_ClearAutomaticProjectModelDefaults.ts";
+import Migration0047 from "./Migrations/045_ProjectionProjectsAutoPull.ts";
+import Migration0048 from "./Migrations/046_RepairAutomaticSettlementTimestamps.ts";
+import Migration0049 from "./Migrations/047_ProjectionProjectIcon.ts";
 
 // Both fork histories used migration 041 for different additive schema changes.
 // Run both on fresh databases; 043/044 below repair databases created by either
@@ -125,6 +129,10 @@ export const migrationEntries = [
   [43, "AuthSessionClientConnectionCompat", Migration0043],
   [44, "ProjectionProjectWorkspaceRootsCompat", Migration0044],
   [45, "ProjectionThreadsUnsettledAt", Migration0045],
+  [46, "ClearAutomaticProjectModelDefaults", Migration0046],
+  [47, "ProjectionProjectsAutoPull", Migration0047],
+  [48, "RepairAutomaticSettlementTimestamps", Migration0048],
+  [49, "ProjectionProjectIcon", Migration0049],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

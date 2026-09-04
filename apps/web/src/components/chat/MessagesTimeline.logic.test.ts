@@ -10,7 +10,6 @@ import {
   resolveWorkGroupScrollIndex,
   shouldFollowWorkGroupAppend,
   shouldPreserveAssistantLineBreaks,
-  type MessagesTimelineRow,
   workEntryDisplayLabel,
   workEntryIsVisibleInGroup,
 } from "./MessagesTimeline.logic";
@@ -777,7 +776,7 @@ describe("deriveMessagesTimelineRows", () => {
       "user-entry",
       "assistant-first-entry",
       "turn-fold:turn-1",
-      "work-toggle:work-entry-1",
+      "work-entry-1",
       "assistant-final-entry",
     ]);
     expect(

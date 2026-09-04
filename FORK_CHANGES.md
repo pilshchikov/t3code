@@ -1056,6 +1056,30 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
 - Validation for this sync: all package TypeScript checks pass with zero errors; focused web
   timeline, markdown-link, and file-freshness tests pass (160 tests); desktop updater tests pass.
 
+## Upstream sync: 2026-09-03
+
+- Merged `upstream/main` through `617edab65`, covering 169 upstream commits since the prior merge.
+  The sync includes Antigravity provider support, browser profiles and cookie import, provider
+  limit refreshes, project icons and auto-pull, diff-tree and preview improvements, current Codex
+  compatibility, and the latest chat, settings, desktop, and performance fixes.
+- Reconciled the merge semantically after the fork-first Git merge. Multi-directory projects,
+  worktree-aware fresh file reads, multi-root markdown links, the `§` and `Shift+§` right-panel
+  shortcuts, right-click-only tab closing, the compact project/composer strip, and the fork's
+  thread-settlement policy remain authoritative.
+- Kept per-account Claude and Codex limits while accepting the new provider-neutral limit event
+  shape. Canonical 300-minute and 10,080-minute windows map back to the fork's 5h and weekly rows,
+  and raw provider payloads remain available for account-specific parsing.
+- Reserved migration IDs 43 through 45 for the fork and assigned the incoming upstream migrations
+  IDs 46 through 49, avoiding collisions for both existing and newly created databases.
+- Repaired timeline integration so completed activity remains present-tense while a turn is still
+  active, single completed tool calls render directly, and the fork's activity presentation still
+  receives upstream tool identity, browser, and image metadata.
+- Validation for this sync: the complete workspace TypeScript check passes. Full web (3,712 tests),
+  mobile (1,183 tests), relay (209 tests), and contracts (339 tests) suites pass with bounded
+  concurrency. Focused server and fork regression coverage passes for settlement, per-account
+  limits, bootstrap cleanup, entrypoint handling, Antigravity discovery, keybindings, multi-root
+  links, file freshness, tabs, branches, and timeline behavior.
+
 ## Validation Notes
 
 The fork-local changes above were validated with focused server tests, the full web unit suite,

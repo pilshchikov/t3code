@@ -91,6 +91,7 @@ vi.mock("../lib/t3ProjectFileDefaults", () => ({
   readT3ProjectFileDefaultThreadEnvMode: () => testState.projectFileRead,
 }));
 vi.mock("../lib/utils", () => ({
+  cn: (...values: unknown[]) => values.filter(Boolean).join(" "),
   newDraftId: () => "draft-delayed",
   newThreadId: () => "thread-delayed",
 }));

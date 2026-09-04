@@ -6,7 +6,12 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 
-import { ModelSelection, ProjectScript, ProjectWorkspace } from "@t3tools/contracts";
+import {
+  ModelSelection,
+  ProjectIconOverride,
+  ProjectScript,
+  ProjectWorkspace,
+} from "@t3tools/contracts";
 import { toPersistenceSqlError } from "../Errors.ts";
 import {
   DeleteProjectionProjectInput,
@@ -20,6 +25,8 @@ const ProjectionProjectDbRow = ProjectionProject.mapFields(
   Struct.assign({
     defaultModelSelection: Schema.NullOr(Schema.fromJsonString(ModelSelection)),
     workspaceRoots: Schema.optional(Schema.fromJsonString(Schema.Array(ProjectWorkspace))),
+    autoPull: Schema.Number,
+    projectIcon: Schema.NullOr(Schema.fromJsonString(ProjectIconOverride)),
     scripts: Schema.fromJsonString(Schema.Array(ProjectScript)),
   }),
 );

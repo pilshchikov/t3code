@@ -58,6 +58,35 @@ export function sortWindows(windows: readonly AccountLimitsWindow[]): AccountLim
   );
 }
 
+/** Maps the provider-neutral runtime event shape into the fork's limits rows. */
+export function accountWindowsFromProviderUpdate(value: unknown): AccountLimitsWindow[] {
+  if (!isRecord(value) || !Array.isArray(value.windows)) return [];
+  const windows = value.windows.flatMap((entry): AccountLimitsWindow[] => {
+    if (!isRecord(entry)) return [];
+    const id = readString(entry.id);
+    const label = readString(entry.label);
+    const usedPercent = readNumber(entry.usedPercent);
+    if (id === null || label === null || usedPercent === null) return [];
+    const minutes = readNumber(entry.windowDurationMins);
+    const normalizedId =
+      minutes === FIVE_HOUR_MINUTES
+        ? "five_hour"
+        : minutes === SEVEN_DAY_MINUTES
+          ? "seven_day"
+          : id;
+    return [
+      {
+        id: normalizedId,
+        label: normalizedId === "five_hour" ? "5h" : normalizedId === "seven_day" ? "Week" : label,
+        usedPercent: clampPercent(usedPercent),
+        resetsAt: readString(entry.resetsAt),
+        windowMinutes: minutes,
+      },
+    ];
+  });
+  return sortWindows(windows);
+}
+
 // ---------------------------------------------------------------------------
 // Claude
 // ---------------------------------------------------------------------------

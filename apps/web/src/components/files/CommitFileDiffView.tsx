@@ -100,6 +100,7 @@ export function CommitFileDiffView({
       sectionId={`commit-diff:${path}`}
       sectionTitle={path}
       composerDraftTarget={composerDraftTarget}
+      renderHeaderFilenameSuffix={() => null}
       renderHeaderPrefix={() => null}
       options={{
         diffStyle: "unified",

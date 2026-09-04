@@ -18,7 +18,7 @@ import { useTheme } from "~/hooks/useTheme";
 import { workspaceDisplayName } from "~/lib/projectWorkspacePresentation";
 import { cn } from "~/lib/utils";
 import { gitEnvironment } from "~/state/git";
-import { useDiffPanelStore } from "~/diffPanelStore";
+import { useClientSettings, useUpdateClientSettings } from "~/hooks/useSettings";
 import {
   buildFileDiffRenderKey,
   getRenderablePatch,
@@ -94,7 +94,6 @@ function CommitRow(props: { commit: GitHistoryCommit; selected: boolean; onSelec
           <time
             className="shrink-0 text-[10px] text-muted-foreground"
             dateTime={props.commit.authoredAt}
-            title={new Date(props.commit.authoredAt).toLocaleString()}
           >
             {relativeCommitTime(props.commit.authoredAt)}
           </time>
@@ -174,8 +173,10 @@ export default function GitHistoryPanel(props: {
         })
       : null,
   );
-  const diffRenderMode = useDiffPanelStore((state) => state.diffRenderMode);
-  const setDiffRenderMode = useDiffPanelStore((state) => state.setDiffRenderMode);
+  const diffRenderMode = useClientSettings().diffLayout;
+  const updateClientSettings = useUpdateClientSettings();
+  const setDiffRenderMode = (diffLayout: "stacked" | "split") =>
+    updateClientSettings({ diffLayout });
   const [wordWrap, setWordWrap] = useState(false);
   useEffect(() => setSelectedFilePath(null), [activeCwd, resolvedSelectedSha]);
   const renderablePatch = useMemo(

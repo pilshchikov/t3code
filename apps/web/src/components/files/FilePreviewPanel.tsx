@@ -44,7 +44,6 @@ import { isBrowserPreviewFile, openFileInPreview } from "~/browser/openFileInPre
 import { useAssetUrlRefresh, useAssetUrlState } from "~/assets/assetUrls";
 import ChatMarkdown from "~/components/ChatMarkdown";
 import { OpenInPicker } from "~/components/chat/OpenInPicker";
-import { PierreEntryIcon } from "~/components/chat/PierreEntryIcon";
 import { MediaVideoPlayer } from "~/components/media/MediaVideoPlayer";
 import { MediaActions, type MediaActionSource } from "~/components/media/MediaActions";
 import {
@@ -1003,7 +1002,7 @@ function RenderedMarkdownSurface({
   relativePath,
   contents,
   threadRef,
-  readOnly,
+  readOnly: _readOnly,
   onPendingChange,
 }: Omit<
   EditableFileSurfaceProps,
@@ -1353,6 +1352,8 @@ export default function FilePreviewPanel({
   const isMedia = isImage || isVideo;
   const isPdf = relativePath !== null && isPdfPreviewFile(relativePath);
   const isHtml = relativePath !== null && !isPdf && isBrowserPreviewFile(relativePath);
+  const isHostFile =
+    attachment !== undefined || (relativePath !== null && isAbsolutePath(relativePath));
   const file = useProjectFileQuery(
     environmentId,
     activeCwd,
@@ -1847,26 +1848,7 @@ export default function FilePreviewPanel({
                 </div>
               ))}
             </div>
-          ) : (
-            <ScrollArea
-              ref={breadcrumbRef}
-              hideScrollbars
-              scrollFade
-              className="min-w-0 flex-1 rounded-none"
-              data-file-breadcrumbs
-            >
-              <div className="flex h-full w-max min-w-full items-center text-xs">
-                <FileBreadcrumbs
-                  cwd={cwd}
-                  environmentId={environmentId}
-                  onOpenFile={onOpenFile}
-                  projectName={projectName}
-                  relativePath={relativePath}
-                  workspaceMutationId={workspaceMutationId}
-                />
-              </div>
-            </ScrollArea>
-          )}
+          </ScrollArea>
           {absolutePath &&
           (environmentId === primaryEnvironmentId || remoteOpenState.mode !== "local-exec") ? (
             <OpenInPicker

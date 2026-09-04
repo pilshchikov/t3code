@@ -13,6 +13,7 @@ import {
   OrchestrationThread,
   OrchestrationThreadDetailSnapshot,
   ProjectScript,
+  ProjectIconOverride,
   ProjectWorkspace,
   TurnId,
   type OrchestrationCheckpointSummary,
@@ -86,6 +87,8 @@ const ProjectionProjectDbRowSchema = ProjectionProject.mapFields(
   Struct.assign({
     defaultModelSelection: Schema.NullOr(Schema.fromJsonString(ModelSelection)),
     workspaceRoots: Schema.optional(Schema.fromJsonString(Schema.Array(ProjectWorkspace))),
+    autoPull: Schema.Number,
+    projectIcon: Schema.NullOr(Schema.fromJsonString(ProjectIconOverride)),
     scripts: Schema.fromJsonString(Schema.Array(ProjectScript)),
   }),
 );

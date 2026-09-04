@@ -61,6 +61,11 @@ import {
   makeComposerMentionDragHandlers,
 } from "./composerMentionDrag";
 import {
+  composerFloatingLayerProps,
+  isInsideCollapsedComposerControls,
+  isInsideRestingComposerControlScope,
+} from "./composerEventScope";
+import {
   type ComposerImageAttachment,
   type DraftId,
   type PersistedComposerImageAttachment,
@@ -150,7 +155,10 @@ import {
   renderProviderTraitsPicker,
 } from "./composerProviderState";
 import { ContextWindowMeter } from "./ContextWindowMeter";
-import { resolveContextWindowModelDisplayName } from "./ContextWindowMeter.logic";
+import {
+  providerSupportsManualCompaction,
+  resolveContextWindowModelDisplayName,
+} from "./ContextWindowMeter.logic";
 import { buildExpandedImagePreview, type ExpandedImagePreview } from "./ExpandedImagePreview";
 import { basenameOfPath } from "../../pierre-icons";
 import { cn, randomUUID } from "~/lib/utils";
@@ -168,6 +176,7 @@ import {
 } from "./composerScrollGesture";
 import { selectionHoldsComposerOpen } from "./composerSelectionHold";
 import { prepareVideoFirstFrame } from "../../lib/videoFirstFrame";
+import { Separator } from "../ui/separator";
 
 type ComposerCommandMenuPosition = {
   bottom: number;
@@ -1309,6 +1318,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const composerDraft = useComposerThreadDraft(composerDraftTarget);
   const prompt = composerDraft.prompt;
   const composerImages = composerDraft.images;
+  const composerFiles = composerDraft.files;
   const composerTerminalContexts = composerDraft.terminalContexts;
   const composerElementContexts = composerDraft.elementContexts;
   const composerPreviewAnnotations = composerDraft.previewAnnotations;
@@ -1328,10 +1338,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         environmentId,
       })
     : null;
-  const sendDisabledReason =
-    externalSendDisabledReason ?? (activePendingProgress ? null : attachmentBlockReason);
-  const isSendDisabled = sendDisabledReason !== null;
-
   const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
   const addComposerDraftImage = useComposerDraftStore((store) => store.addImage);
   const addComposerDraftImages = useComposerDraftStore((store) => store.addImages);
@@ -1637,6 +1643,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     (isMobileViewport || compactWhenTimelineScrolled) &&
     !forceExpandedOnMobile &&
     (!isComposerFocused || compactWhenTimelineScrolled);
+  // Keep the fork's compact composer controls in the footer. The context
+  // strip is reserved for its multi-directory workspace rows.
+  const composerControlsInStrip = false;
+  const composerControlsHidden = false;
+  const fileStagingLimit = null;
 
   // ------------------------------------------------------------------
   // Refs
@@ -1649,6 +1660,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     composerFormRef.current = element;
     setComposerFormElement(element);
   }, []);
+  const composerFooterControlsRef = useRef<HTMLDivElement>(null);
   const composerSurfaceRef = useRef<HTMLDivElement>(null);
   const providerInputRejectedRef = useRef(false);
   const composerSelectLockRef = useRef(false);
@@ -4225,6 +4237,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               {/* Bottom toolbar */}
               {isComposerCollapsedMobile || isComposerApprovalState ? null : (
                 <div
+                  ref={composerFooterControlsRef}
                   data-chat-composer-footer="true"
                   data-chat-composer-footer-compact={isComposerFooterCompact ? "true" : "false"}
                   className={cn(
@@ -4278,9 +4291,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       <CompactComposerControlsMenu
                         interactionMode={interactionMode}
                         runtimeMode={runtimeMode}
-                        showInteractionModeToggle={
-                          composerProviderControls.showInteractionModeToggle
-                        }
+                        showInteractionModeToggle={planModeUiEnabled}
                         traitsMenuContent={providerTraitsMenuContent}
                         onToggleInteractionMode={toggleInteractionMode}
                         onRuntimeModeChange={handleRuntimeModeChange}
@@ -4297,9 +4308,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                           </>
                         ) : null}
                         <ComposerFooterModeControls
-                          showInteractionModeToggle={
-                            composerProviderControls.showInteractionModeToggle
-                          }
+                          showInteractionModeToggle={planModeUiEnabled}
                           interactionMode={interactionMode}
                           runtimeMode={runtimeMode}
                           onToggleInteractionMode={toggleInteractionMode}
@@ -4320,6 +4329,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     {showMobilePendingAnswerActions ? null : inlineTasksBadge}
                     <ComposerFooterPrimaryActions
                       compact={isComposerPrimaryActionsCompact}
+                      showSecondaryStatus
                       activeContextWindow={activeContextWindow}
                       activeThreadModelDisplayName={activeThreadModelDisplayName}
                       pendingAction={pendingPrimaryAction}

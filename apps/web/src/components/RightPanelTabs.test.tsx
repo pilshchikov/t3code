@@ -2,7 +2,12 @@ import type { DesktopPreviewFavicon, PreviewSessionSnapshot } from "@t3tools/con
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
-import { RightPanelTabs, surfaceShortcutActionForKey, tabMuteMenuItem } from "./RightPanelTabs";
+import {
+  RightPanelTabs,
+  shouldOpenDefaultBrowserProfileFromMenuClick,
+  surfaceShortcutActionForKey,
+  tabMuteMenuItem,
+} from "./RightPanelTabs";
 
 describe("browser profile submenu", () => {
   it("reserves touch clicks for opening the choices while mouse clicks use the default", () => {

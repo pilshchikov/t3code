@@ -906,6 +906,7 @@ interface ComposerPromptEditorProps {
   skills: ReadonlyArray<ServerProviderSkill>;
   disabled: boolean;
   placeholder: ReactNode;
+  containerClassName?: string;
   className?: string;
   placeholderClassName?: string;
   onRemoveTerminalContext: (contextId: string) => void;

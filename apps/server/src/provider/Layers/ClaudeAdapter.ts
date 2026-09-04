@@ -23,7 +23,11 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { parseCliArgs } from "@t3tools/shared/cliArgs";
 import { isWorkspaceImagePreviewPath } from "@t3tools/shared/filePreview";
-import { type ClaudeScopedLimitNames, claudeRateLimitEventToUpdate } from "./claudeUsageLimits.ts";
+import {
+  type ClaudeScopedLimitNames,
+  claudeRateLimitEventToUpdate,
+  claudeUsageResponseToLimits,
+} from "./claudeUsageLimits.ts";
 import {
   ApprovalRequestId,
   type CanonicalItemType,
@@ -3591,6 +3595,13 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     if (!usage || usage.rate_limits === null || usage.rate_limits === undefined) return;
 
     const stamp = yield* makeEventStamp();
+    const normalized = claudeUsageResponseToLimits({
+      response: usage,
+      checkedAt: stamp.createdAt,
+    });
+    if (options?.scopedLimitNames) {
+      yield* Ref.set(options.scopedLimitNames, normalized.names);
+    }
     yield* offerRuntimeEvent({
       eventId: stamp.eventId,
       provider: PROVIDER,
@@ -3601,7 +3612,8 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       // Only the limit fields travel: the full response also carries session
       // cost and a local behaviors scan that have no consumer here.
       payload: {
-        rateLimits: {
+        limits: { windows: normalized.limits.windows },
+        sourcePayload: {
           subscription_type: usage.subscription_type,
           rate_limits: usage.rate_limits,
         },
@@ -3692,7 +3704,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       yield* offerRuntimeEvent({
         ...base,
         type: "account.rate-limits.updated",
-        payload: { limits },
+        payload: { limits, sourcePayload: message },
       });
       return;
     }

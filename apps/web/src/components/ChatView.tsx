@@ -25,7 +25,6 @@ import {
 } from "@t3tools/contracts";
 import { type EnvironmentConnectionPresentation } from "@t3tools/client-runtime/connection";
 import { wasBootstrapThreadDeleted } from "@t3tools/client-runtime/errors";
-import { type CodexArtifactTemplate } from "@t3tools/client-runtime/codex-artifact-templates";
 import { effectiveSnoozed, threadWokeAt } from "@t3tools/client-runtime/state/thread-settled";
 import {
   codexFeedbackMessage,
@@ -130,7 +129,6 @@ import {
   DEFAULT_THREAD_TERMINAL_ID,
   MAX_TERMINALS_PER_GROUP,
   type ChatMessage,
-  isBrowserPreviewAttachment,
   isImageAttachment,
   type SessionPhase,
   type Thread,
@@ -306,6 +304,7 @@ import { expandedImageKey, type ExpandedImagePreview } from "./chat/ExpandedImag
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import { WorkspacePageHeader } from "./WorkspacePageHeader";
 import {
+  type EnvironmentOption,
   resolveCurrentCheckoutWorkspaceMetadata,
   resolveEffectiveEnvMode,
   resolveLocalCheckoutBranchMismatch,
@@ -366,6 +365,9 @@ import {
   shouldDockDraftHeroForSubmission,
   shouldReleaseTimelineAnchorForToolActivity,
   shouldShowBranchMismatchBanner,
+  shouldOpenProactivePullRequest,
+  shouldOpenProactiveTurnDiff,
+  shouldRenderPreviewMiniPlayer,
   getStartedThreadModelChangeBlockReason,
   COMPOSER_CONTEXT_STRIP_COLLAPSED_BY_PROJECT_KEY,
   ComposerContextStripCollapsedByProjectSchema,
@@ -401,7 +403,6 @@ import {
 import { sanitizeThreadErrorMessage } from "~/rpc/transportError";
 import { RightPanelSheet } from "./RightPanelSheet";
 import { previewEnvironment } from "../state/preview";
-import { appAtomRegistry } from "../rpc/atomRegistry";
 import { useAtomCommand } from "../state/use-atom-command";
 import { Button } from "./ui/button";
 import {
@@ -580,11 +581,8 @@ function isBarePrintableShortcutEvent(event: KeyboardEvent): boolean {
   return !event.metaKey && !event.ctrlKey && [...event.key].length === 1;
 }
 
-function shouldTypeToFocusComposer(event: KeyboardEvent): boolean {
-  if (event.defaultPrevented || event.isComposing) return false;
-  if (event.metaKey || event.ctrlKey || event.altKey) return false;
-  if (event.key.length !== 1) return false;
-
+function shouldRedirectInputToComposer(event: Event): boolean {
+  if (event.defaultPrevented) return false;
   if (eventPathContainsSelector(event, TYPE_TO_FOCUS_EDITABLE_SELECTOR)) return false;
   if (eventPathContainsSelector(event, TYPE_TO_FOCUS_INTERACTIVE_SELECTOR)) return false;
   if (document.querySelector(TYPE_TO_FOCUS_FLOATING_LAYER_SELECTOR)) return false;
@@ -1620,6 +1618,7 @@ function ChatViewContent(props: ChatViewProps) {
   );
   const [composerOverlayElement, setComposerOverlayElement] = useState<HTMLDivElement | null>(null);
   const [composerOverlayHeight, setComposerOverlayHeight] = useState(0);
+  const composerOverlayHeightRef = useRef(0);
   const isAtEndRef = useRef(true);
   const isTimelineAtLogicalEnd = useCallback(() => isAtEndRef.current, []);
   const attachmentPreviewHandoffByMessageIdRef = useRef<Record<string, string[]>>({});
@@ -1855,6 +1854,8 @@ function ChatViewContent(props: ChatViewProps) {
   const activeRightPanelSurface = useRightPanelStore((state) =>
     selectActiveRightPanelSurface(state.byThreadKey, activeThreadRef),
   );
+  const activeFileSurface =
+    activeRightPanelSurface?.kind === "file" ? activeRightPanelSurface : null;
   const refreshVcsStatus = useAtomCommand(vcsEnvironment.refreshStatus, { reportFailure: false });
   const sidebarPrRefreshKeyRef = useRef<string | null>(null);
   const threadPrRelinkKeysRef = useRef(new Map<string, string>());
@@ -5028,7 +5029,6 @@ function ChatViewContent(props: ChatViewProps) {
     [activeThreadBranch, activeWorktreePath, envMode, gitStatusQuery.data?.refName, isServerThread],
   );
   // The server-projected settled state keeps the banner and sidebar in sync.
-  const activeThreadShell = useThreadShell(isServerThread ? activeThreadRef : null);
   const activeComposerTasksProgress =
     activeLatestTurn !== null && !latestTurnSettled
       ? (activeThreadShell?.planProgress ?? null)
@@ -5046,9 +5046,6 @@ function ChatViewContent(props: ChatViewProps) {
       composerOverlayHeightRef.current = nextHeight;
       setComposerOverlayHeight(nextHeight);
     }
-    setScrollToEndClearance((currentClearance) =>
-      currentClearance === nextHeight ? currentClearance : nextHeight,
-    );
   }, []);
 
   useLayoutEffect(() => {
@@ -7732,7 +7729,8 @@ function ChatViewContent(props: ChatViewProps) {
         environmentId={activeThreadRef?.environmentId ?? null}
         threadId={activeThreadRef?.threadId ?? null}
       />
-    ) : (activeRightPanelSurface?.kind === "files" || activeRightPanelSurface?.kind === "file") &&
+    ) : (renderedRightPanelSurface?.kind === "files" ||
+        renderedRightPanelSurface?.kind === "file") &&
       activeProject &&
       activeFileWorkspaceRoot ? (
       <Suspense fallback={null}>

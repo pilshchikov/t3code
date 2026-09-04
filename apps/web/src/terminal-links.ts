@@ -111,6 +111,20 @@ export function isAbsolutePath(value: string): boolean {
   return value.startsWith("/") || isWindowsAbsolutePath(value);
 }
 
+/** Compatibility helper retained for the fork's multi-root markdown resolver. */
+export function splitPathAndPosition(value: string): {
+  path: string;
+  line: string | undefined;
+  column: string | undefined;
+} {
+  const position = splitFilePathPosition(value);
+  return {
+    path: position.path,
+    line: position.line === undefined ? undefined : String(position.line),
+    column: position.column === undefined ? undefined : String(position.column),
+  };
+}
+
 function isWindowsPathStyle(value: string): boolean {
   return isWindowsAbsolutePath(value) || /[A-Za-z]:\\/.test(value);
 }

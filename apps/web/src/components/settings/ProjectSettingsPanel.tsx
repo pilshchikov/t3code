@@ -15,6 +15,7 @@ import {
 import type {
   ContextMenuItem,
   ModelSelection,
+  ProjectIconOverride,
   ProjectWorkspace,
   ProviderDriverKind,
   SidebarProjectGroupingMode,
@@ -944,7 +945,6 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
                     type="button"
                     aria-label={option.label}
                     aria-pressed={projectAccentColor === option.id}
-                    title={option.label}
                     className={cn(
                       "size-5 cursor-pointer rounded-full border transition-transform",
                       projectAccentColor === option.id
@@ -955,10 +955,7 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
                     onClick={() => setProjectAccentColor(projectAccentKeys, option.id)}
                   />
                 ))}
-                <label
-                  className="ms-1 inline-flex cursor-pointer items-center gap-1 text-xs text-secondary-label"
-                  title="Pick any colour"
-                >
+                <label className="ms-1 inline-flex cursor-pointer items-center gap-1 text-xs text-secondary-label">
                   <input
                     type="color"
                     className="size-5 cursor-pointer rounded-full border border-border/70 bg-transparent p-0"

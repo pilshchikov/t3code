@@ -2,12 +2,53 @@ import { describe, expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 
 import {
+  accountWindowsFromProviderUpdate,
   claudeUsageSnapshotFromUnknown,
   claudeWindowsFromRateLimitEvent,
   codexSnapshotFromUnknown,
   isPrimaryCodexLimit,
   windowHasTraffic,
 } from "./accountLimitsNormalize.ts";
+
+describe("accountWindowsFromProviderUpdate", () => {
+  it("normalizes canonical provider windows into the fork limits ids", () => {
+    expect(
+      accountWindowsFromProviderUpdate({
+        windows: [
+          {
+            id: "primary",
+            label: "Session",
+            usedPercent: 23,
+            resetsAt: "2026-09-03T20:00:00.000Z",
+            windowDurationMins: 300,
+          },
+          {
+            id: "secondary",
+            label: "Weekly",
+            usedPercent: 41,
+            resetsAt: "2026-09-08T20:00:00.000Z",
+            windowDurationMins: 10_080,
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        id: "five_hour",
+        label: "5h",
+        usedPercent: 23,
+        resetsAt: "2026-09-03T20:00:00.000Z",
+        windowMinutes: 300,
+      },
+      {
+        id: "seven_day",
+        label: "Week",
+        usedPercent: 41,
+        resetsAt: "2026-09-08T20:00:00.000Z",
+        windowMinutes: 10_080,
+      },
+    ]);
+  });
+});
 
 describe("claudeUsageSnapshotFromUnknown", () => {
   it("keeps 5h, weekly and Fable; hides oauth-apps and model weeklies", () => {

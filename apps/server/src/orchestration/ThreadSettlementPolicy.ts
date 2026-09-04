@@ -69,31 +69,28 @@ export function resolveAutoSettlementAt(input: {
   readonly autoSettleAfterDays: number | null;
   readonly autoSettleOnMerge: boolean;
   readonly autoSettleMode?: SidebarAutoSettleMode;
-}): boolean {
+}): string | null {
   const { thread, pullRequest } = input;
-  if (!isAutoSettlementCandidate(thread, input.now)) return false;
-  if (input.autoSettleMode === "never") return false;
-  if (input.autoSettleMode === "change-request") {
-    return pullRequest !== null && pullRequestSettles(thread, pullRequest, true);
-  }
-  if (pullRequest !== null && input.autoSettleMode !== "inactivity") {
-    if (pullRequestSettles(thread, pullRequest, input.autoSettleOnMerge)) return true;
-    if (pullRequest.state === "open") return false;
-  }
-  if (input.autoSettleMode === "inactivity" && pullRequest?.state === "open") return false;
-  if (input.autoSettleAfterDays === null) return false;
+  if (!isAutoSettlementCandidate(thread, input.now)) return null;
+  if (input.autoSettleMode === "never") return null;
   const activityAt = latestTimestamp([
     thread.latestUserMessageAt,
     thread.latestTurn?.requestedAt,
     thread.latestTurn?.startedAt,
     thread.latestTurn?.completedAt,
   ]);
-  if (pullRequest !== null) {
+  if (input.autoSettleMode === "change-request") {
+    return pullRequest !== null && pullRequestSettles(thread, pullRequest, true)
+      ? (activityAt ?? thread.createdAt)
+      : null;
+  }
+  if (pullRequest !== null && input.autoSettleMode !== "inactivity") {
     if (pullRequestSettles(thread, pullRequest, input.autoSettleOnMerge)) {
       return activityAt ?? thread.createdAt;
     }
     if (pullRequest.state === "open") return null;
   }
+  if (input.autoSettleMode === "inactivity" && pullRequest?.state === "open") return null;
   if (input.autoSettleAfterDays === null || activityAt === null) return null;
   return Date.parse(activityAt) < Date.parse(input.now) - input.autoSettleAfterDays * DAY_MS
     ? activityAt

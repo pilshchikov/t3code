@@ -157,16 +157,15 @@ export const make = Effect.gen(function* () {
               Effect.gen(function* () {
                 const settings = yield* settingsService.getSettings;
                 const decisionNow = DateTime.formatIso(yield* DateTime.now);
-                if (
-                  !shouldAutoSettleThread({
-                    thread,
-                    pullRequest,
-                    now: decisionNow,
-                    autoSettleAfterDays: settings.sidebarAutoSettleAfterDays,
-                    autoSettleOnMerge: settings.sidebarAutoSettleOnMerge,
-                    autoSettleMode: settings.sidebarAutoSettleMode,
-                  })
-                ) {
+                const settledAt = resolveAutoSettlementAt({
+                  thread,
+                  pullRequest,
+                  now: decisionNow,
+                  autoSettleAfterDays: settings.sidebarAutoSettleAfterDays,
+                  autoSettleOnMerge: settings.sidebarAutoSettleOnMerge,
+                  autoSettleMode: settings.sidebarAutoSettleMode,
+                });
+                if (settledAt === null) {
                   return;
                 }
                 const uuid = yield* crypto.randomUUIDv4;

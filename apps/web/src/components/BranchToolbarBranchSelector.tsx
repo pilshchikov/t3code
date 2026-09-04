@@ -842,43 +842,68 @@ export function BranchToolbarBranchSelector({
         <div className="flex w-full min-w-0 items-center justify-between gap-2">
           <span className="min-w-0 flex-1 truncate">{itemValue}</span>
           {behindCount > 0 ? (
-            <span
-              className="inline-flex shrink-0 items-center gap-0.5 text-[10px] font-medium tabular-nums text-blue-600 dark:text-blue-400"
-              title={`${behindCount} commit(s) to pull from ${refName.upstreamRef ?? "the upstream"}`}
-            >
-              <ArrowDownIcon aria-hidden="true" className="size-3" />
-              {behindCount}
-            </span>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span className="inline-flex shrink-0 items-center gap-0.5 text-[10px] font-medium tabular-nums text-blue-600 dark:text-blue-400" />
+                }
+              >
+                <ArrowDownIcon aria-hidden="true" className="size-3" />
+                {behindCount}
+              </TooltipTrigger>
+              <TooltipPopup side="top">
+                {behindCount} commit(s) to pull from {refName.upstreamRef ?? "the upstream"}
+              </TooltipPopup>
+            </Tooltip>
           ) : null}
           {aheadCount > 0 ? (
-            <span
-              className="inline-flex shrink-0 items-center gap-0.5 text-[10px] font-medium tabular-nums text-green-600 dark:text-green-400"
-              title={`${aheadCount} commit(s) not pushed to ${refName.upstreamRef ?? "the upstream"}`}
-            >
-              <ArrowUpIcon aria-hidden="true" className="size-3" />
-              {aheadCount}
-            </span>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span className="inline-flex shrink-0 items-center gap-0.5 text-[10px] font-medium tabular-nums text-green-600 dark:text-green-400" />
+                }
+              >
+                <ArrowUpIcon aria-hidden="true" className="size-3" />
+                {aheadCount}
+              </TooltipTrigger>
+              <TooltipPopup side="top">
+                {aheadCount} commit(s) not pushed to {refName.upstreamRef ?? "the upstream"}
+              </TooltipPopup>
+            </Tooltip>
           ) : null}
           {refName.upstreamGone ? (
-            <span className="shrink-0 text-[10px] text-muted-foreground/45" title="Upstream gone">
-              gone
-            </span>
+            <Tooltip>
+              <TooltipTrigger
+                render={<span className="shrink-0 text-[10px] text-muted-foreground/45" />}
+              >
+                gone
+              </TooltipTrigger>
+              <TooltipPopup side="top">Upstream gone</TooltipPopup>
+            </Tooltip>
           ) : null}
           {canPull ? (
-            <button
-              type="button"
-              aria-label={`Pull ${itemValue}`}
-              title={`Pull ${behindCount} commit(s) into ${itemValue}`}
-              disabled={pullingRefName !== null}
-              className="inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-default disabled:text-muted-foreground/50"
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                pullRef(itemValue);
-              }}
-            >
-              <DownloadIcon aria-hidden="true" className="size-3" />
-            </button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={`Pull ${itemValue}`}
+                    disabled={pullingRefName !== null}
+                    className="inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-default disabled:text-muted-foreground/50"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      pullRef(itemValue);
+                    }}
+                  />
+                }
+              >
+                <DownloadIcon aria-hidden="true" className="size-3" />
+              </TooltipTrigger>
+              <TooltipPopup side="top">
+                Pull {behindCount} commit(s) into {itemValue}
+              </TooltipPopup>
+            </Tooltip>
           ) : null}
           {badge && <span className="shrink-0 text-[10px] text-muted-foreground/45">{badge}</span>}
         </div>

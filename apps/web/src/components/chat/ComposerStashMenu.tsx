@@ -21,7 +21,11 @@ function stashEntrySnippet(entry: PromptStashEntry): string {
     return trimmed.length > SNIPPET_MAX_CHARS ? `${trimmed.slice(0, SNIPPET_MAX_CHARS)}…` : trimmed;
   }
   const imageCount = entry.attachments.length + entry.droppedImageNames.length;
-  return imageCount > 0 ? `(${imageCount} image${imageCount === 1 ? "" : "s"})` : "(empty)";
+  const fileCount = entry.files?.length ?? 0;
+  const attachmentCount = imageCount + fileCount;
+  if (attachmentCount === 0) return "(empty)";
+  const label = imageCount > 0 && fileCount > 0 ? "attachment" : fileCount > 0 ? "file" : "image";
+  return `(${attachmentCount} ${label}${attachmentCount === 1 ? "" : "s"})`;
 }
 
 /**

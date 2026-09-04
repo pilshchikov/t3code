@@ -7,8 +7,9 @@ import type { DailyTotals, HourlyTotals } from "@t3tools/shared/usageMerge";
 import { isElectron } from "../../env";
 import { cn } from "../../lib/utils";
 import { useAccountLimits } from "../../state/accountLimits";
+import { usePrimaryEnvironmentId } from "../../state/environments";
 import { useAtomValue } from "@effect/atom-react";
-import { primaryServerProvidersAtom } from "../../state/server";
+import { primaryServerProvidersAtom, serverEnvironment } from "../../state/server";
 import { deriveProviderInstanceEntries } from "../../providerInstances";
 import { useUsage, type EnvironmentUsageStatus } from "../../state/usage";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -28,6 +29,7 @@ import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SidebarInset } from "../ui/sidebar";
+import { Skeleton } from "../ui/skeleton";
 import { AccountLimitsSection } from "./AccountLimits";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import {
@@ -88,6 +90,10 @@ export function UsagePage() {
   const { days: windowDays, window } = windowSelection;
   const isPast24Hours = windowDays === 1;
   const { merged, environments, isPending, isPartial, refresh: refreshUsage } = useUsage(window);
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const refreshProviders = useAtomCommand(serverEnvironment.refreshProviders, {
+    reportFailure: false,
+  });
   // Only worth naming the account on a model row when that provider has more than one.
   const namedAccountProviders = useMemo(() => {
     const counts = new Map<UsageProviderKind, Set<string>>();
@@ -426,7 +432,7 @@ export function UsagePage() {
                       daily={merged.daily}
                       hours={hours}
                       hourly={merged.hourly}
-                      metric={metric}
+                      metric={metric === "limits" ? "cost" : metric}
                       referenceTime={window.untilTime}
                       resolution={isPast24Hours ? "hour" : "day"}
                       timeZone={window.timeZone}

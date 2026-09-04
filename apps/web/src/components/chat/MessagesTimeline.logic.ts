@@ -8,7 +8,7 @@ import {
   summarizeToolGroup,
   toolGroupAction,
   toolGroupSummaryKind,
-  workLogEntryIsLocalCodeSearch,
+  workEntryViewedImagePath,
   type ToolGroupSummaryKind,
 } from "@t3tools/client-runtime/work-log/presentation";
 export {
@@ -20,6 +20,7 @@ export {
 import {
   formatDuration,
   workEntryDisplayIndicatesToolFailure,
+  workEntryIndicatesToolSuccess,
   workEntryIndicatesToolNeutralStatus,
   workLogEntryIsToolLike,
   type TimelineEntry,
@@ -320,6 +321,9 @@ export type MessagesTimelineRow =
       onlyToolEntries: boolean;
       summary: string | null;
       summaryKind: ToolGroupSummaryKind | null;
+      toolSurface?: WorkLogEntry["toolSurface"];
+      toolIcon?: WorkLogEntry["toolIcon"];
+      summaryToolIcon?: "browser" | "t3-code";
       hasFailure: boolean;
     }
   | {
@@ -601,9 +605,6 @@ function deriveTurnFolds(input: {
       if (entry.id === firstAssistantEntry?.id || entry.id === group.terminalEntry?.id) {
         continue;
       }
-      if (index > terminalEntryIndex) {
-        continue;
-      }
       // Agent-spawn CTA rows never fold: workflows outlive their launching
       // turn (dynamic spawns, background execution), and folding the CTA
       // when the turn settles makes a still-running fleet invisible.
@@ -812,24 +813,6 @@ export function deriveMessagesTimelineRows(input: {
       (entry.sourceActivityKind === "task.progress" || workLogEntryIsToolLike(entry)));
   const isVisibleActiveToolEntry = (entry: WorkLogEntry) =>
     workLogEntryIsToolLike(entry) && workEntryIsVisibleInGroup(entry, true);
-  const activeEntries = input.isWorking
-    ? input.timelineEntries.filter((entry, index) => entryBelongsToActiveTurn(entry, index))
-    : [];
-  const activeTurnHasVisibleContent = activeEntries.some((entry) => {
-    if (entry.kind === "message") {
-      return entry.message.role === "assistant" && (entry.message.text?.trim().length ?? 0) > 0;
-    }
-    if (entry.kind === "work") {
-      return (
-        entry.entry.agentSpawn === undefined &&
-        workLogEntryIsToolLike(entry.entry) &&
-        entry.entry.toolLifecycleStatus === "inProgress"
-      );
-    }
-    if (entry.kind === "proposed-plan" || entry.kind === "turn-plan") return true;
-    return false;
-  });
-
   const activeToolEntries: Array<Extract<TimelineEntry, { kind: "work" }>> = [];
   for (let index = input.timelineEntries.length - 1; index >= activeTurnHeaderIndex; index -= 1) {
     const entry = input.timelineEntries[index]!;
@@ -858,7 +841,10 @@ export function deriveMessagesTimelineRows(input: {
     latestVisibleToolEntry !== undefined &&
     latestVisibleToolEntry.entry.toolLifecycleStatus !== "declined" &&
     workEntryDisplayIndicatesToolFailure(latestVisibleToolEntry.entry);
-  const latestToolKeepsActivityLive = latestRunningToolEntry !== undefined;
+  const latestToolKeepsActivityLive =
+    latestRunningToolEntry !== undefined ||
+    (latestVisibleToolEntry !== undefined &&
+      workEntryIndicatesToolSuccess(latestVisibleToolEntry.entry));
   const activeWorkPlacementEntryId = latestVisibleToolEntry?.id;
   const activeWorkRow =
     activeWorkAnchor && latestVisibleToolEntry && !latestToolFailed
@@ -881,7 +867,6 @@ export function deriveMessagesTimelineRows(input: {
   const activeWorkEntryIds = new Set(
     activeWorkRow !== null || latestToolFailed ? activeToolEntries.map((entry) => entry.id) : [],
   );
-  let hasActivityRow = false;
   const appendWorkingRow = () => {
     nextRows.push({
       kind: "working",
@@ -893,7 +878,6 @@ export function deriveMessagesTimelineRows(input: {
   const appendActiveWorkRows = () => {
     if (activeWorkRow === null) return;
     nextRows.push(activeWorkRow);
-    hasActivityRow = true;
     if (!activeWorkRow.expanded) return;
     nextRows.push(
       expandedWorkGroupRow(
@@ -1001,10 +985,47 @@ export function deriveMessagesTimelineRows(input: {
               expandedWorkGroupRow(groupId, timelineEntry.createdAt, visibleGroupedEntries),
             );
           }
+        } else if (onlyToolEntries && visibleGroupedEntries.length === 1) {
+          const singleEntry = visibleGroupedEntries[0]!;
+          nextRows.push({
+            kind: "work",
+            id: timelineEntry.id,
+            createdAt: timelineEntry.createdAt,
+            groupedEntries: visibleGroupedEntries,
+            isExpandedToolGroup: false,
+            displayLabel:
+              toolGroupAction(singleEntry) === "edit"
+                ? summarizeToolGroup(visibleGroupedEntries)
+                : singleToolCallLabel(singleEntry),
+          });
         } else if (onlyToolEntries) {
           const groupId = workGroupId(timelineEntry.id, timelineEntry.entry);
           const expanded = input.expandedWorkGroupIds?.has(groupId) ?? false;
           const summaryKind = toolGroupSummaryKind(visibleGroupedEntries);
+          const primarySourceEntry = visibleGroupedEntries.find(
+            (entry) => entry.toolSource !== undefined,
+          );
+          const primarySourceKey = primarySourceEntry?.toolSource?.key;
+          const primarySourceIcon = primarySourceKey
+            ? (visibleGroupedEntries.find(
+                (entry) =>
+                  entry.toolSource?.key === primarySourceKey && entry.toolIcon !== undefined,
+              )?.toolIcon ?? primarySourceEntry?.toolSource?.icon)
+            : undefined;
+          const groupToolSurface =
+            primarySourceEntry?.toolSurface ??
+            visibleGroupedEntries.findLast((entry) => entry.toolSurface !== undefined)?.toolSurface;
+          const groupToolIcon =
+            primarySourceIcon ??
+            visibleGroupedEntries.findLast((entry) => entry.toolIcon !== undefined)?.toolIcon;
+          const singleEntry =
+            visibleGroupedEntries.length === 1 ? (visibleGroupedEntries[0] ?? null) : null;
+          const summaryToolIcon =
+            singleEntry !== null &&
+            workLogEntryIsToolLike(singleEntry) &&
+            toolGroupAction(singleEntry) !== "edit"
+              ? resolveWorkEntryToolPresentation(singleEntry, "completed")?.icon
+              : undefined;
           nextRows.push({
             kind: "work-toggle",
             id: `work-toggle:${timelineEntry.id}`,

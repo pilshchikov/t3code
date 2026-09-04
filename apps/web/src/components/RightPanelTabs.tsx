@@ -1,4 +1,9 @@
-import type { PreviewSessionSnapshot, PullRequestState } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  PreviewSessionSnapshot,
+  ProjectId,
+  PullRequestState,
+} from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import {
   Bot,
@@ -161,6 +166,12 @@ const SURFACE_UNAVAILABLE_HINTS = {
   pullRequest: "No pull request on this branch yet.",
   agents: "Available from a thread.",
 } as const;
+
+const TAB_SCROLL_EDGE_TOLERANCE = 1;
+
+function tabScrollViewport(root: HTMLDivElement | null): HTMLDivElement | null {
+  return root?.querySelector<HTMLDivElement>('[data-slot="scroll-area-viewport"]') ?? null;
+}
 
 /**
  * Desktop preview tab backing a surface, or null for non-preview surfaces, the
@@ -978,7 +989,8 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                               sessions={props.previewSessions}
                               desktopByTabId={props.desktopByTabId}
                               theme={resolvedTheme}
-                              pullRequestStatuses={props.pullRequestStatuses}
+                              environmentId={props.environmentId}
+                              pullRequestStatusSeeds={props.pullRequestStatusSeeds}
                             />
                             {pending ? (
                               <span

@@ -50,9 +50,31 @@ const decide = (
     autoSettleAfterDays: settings.days === undefined ? 3 : settings.days,
     autoSettleOnMerge: settings.merge ?? true,
     ...(settings.mode === undefined ? {} : { autoSettleMode: settings.mode }),
-  });
+  }) !== null;
 
 describe("shouldAutoSettleThread", () => {
+  it("persists the last activity time instead of the sweep time", () => {
+    expect(
+      resolveAutoSettlementAt({
+        thread: makeThread({
+          latestTurn: {
+            turnId: TurnId.make("turn-terminal"),
+            state: "completed",
+            requestedAt: "2026-08-19T00:00:00.000Z",
+            startedAt: "2026-08-19T00:01:00.000Z",
+            completedAt: "2026-08-21T00:00:00.000Z",
+            assistantMessageId: null,
+          },
+        }),
+        pullRequest: null,
+        now: NOW,
+        autoSettleAfterDays: 3,
+        autoSettleOnMerge: true,
+        autoSettleMode: "inactivity",
+      }),
+    ).toBe("2026-08-21T00:00:00.000Z");
+  });
+
   it("keeps automatic settlement disabled by the fork default", () => {
     expect(decide(makeThread(), null, { mode: "never" })).toBe(false);
     expect(decide(makeThread(), { state: "merged", updatedAt: NOW }, { mode: "never" })).toBe(

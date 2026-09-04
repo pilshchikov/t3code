@@ -93,6 +93,7 @@ export const STATIC_KEYBINDING_COMMANDS = [
   "terminal.close",
   "rightPanel.toggle",
   "rightPanel.toggleMaximized",
+  "rightPanel.close",
   "editor.toggle",
   "editor.navigateBack",
   "editor.navigateForward",

@@ -759,6 +759,8 @@ export type AccountUpdatedPayload = typeof AccountUpdatedPayload.Type;
  */
 const AccountRateLimitsUpdatedPayload = Schema.Struct({
   limits: ProviderUsageLimitsUpdate,
+  /** Fork-only native payload retained for the per-account limits history. */
+  sourcePayload: Schema.optional(Schema.Unknown),
 });
 export type AccountRateLimitsUpdatedPayload = typeof AccountRateLimitsUpdatedPayload.Type;
 
