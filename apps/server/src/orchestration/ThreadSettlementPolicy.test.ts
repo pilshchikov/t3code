@@ -6,7 +6,7 @@ import {
   TurnId,
   type OrchestrationThreadShell,
 } from "@t3tools/contracts";
-import { shouldAutoSettleThread } from "./ThreadSettlementPolicy.ts";
+import { resolveAutoSettlementAt } from "./ThreadSettlementPolicy.ts";
 
 const NOW = "2026-08-28T12:00:00.000Z";
 const makeThread = (
@@ -43,7 +43,7 @@ const decide = (
     mode?: "never" | "change-request" | "inactivity";
   } = {},
 ) =>
-  shouldAutoSettleThread({
+  resolveAutoSettlementAt({
     thread,
     pullRequest,
     now: NOW,

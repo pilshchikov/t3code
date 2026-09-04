@@ -1,48 +1,8 @@
 import { formatWorkspaceRelativePath } from "./filePathDisplay";
-import {
-  isTerminalLinkActivation,
-  resolvePathLinkTarget,
-  splitPathAndPosition,
-} from "./terminal-links";
+import { isTerminalLinkActivation, resolvePathLinkTarget } from "./terminal-links";
 
-const WINDOWS_DRIVE_PATH_PATTERN = /^[A-Za-z]:[\\/]/;
-const WINDOWS_UNC_PATH_PATTERN = /^\\\\/;
-const EXTERNAL_SCHEME_PATTERN = /^([A-Za-z][A-Za-z0-9+.-]*):(.*)$/;
-const RELATIVE_PATH_PREFIX_PATTERN = /^(~\/|\.{1,2}\/)/;
-const RELATIVE_FILE_PATH_PATTERN =
-  /^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$/;
-const RELATIVE_FILE_NAME_PATTERN =
-  /^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$/;
-const POSITION_SUFFIX_PATTERN = /:\d+(?::\d+)?$/;
-const POSITION_ONLY_PATTERN = /^\d+(?::\d+)?$/;
-// Standard OS and dev-container roots; deliberately excludes app-route-ish
-// prefixes like /app/ or /chat/ so SPA routes never read as files.
-const POSIX_FILE_ROOT_PREFIXES = [
-  "/Users/",
-  "/home/",
-  "/tmp/",
-  "/var/",
-  "/etc/",
-  "/opt/",
-  "/mnt/",
-  "/Volumes/",
-  "/private/",
-  "/root/",
-  "/usr/",
-  "/bin/",
-  "/sbin/",
-  "/lib/",
-  "/lib64/",
-  "/srv/",
-  "/dev/",
-  "/proc/",
-  "/sys/",
-  "/run/",
-  "/boot/",
-  "/media/",
-  "/workspace/",
-  "/workspaces/",
-] as const;
+export { normalizeMarkdownLinkDestination };
+
 const MARKDOWN_LINK_HREF_PATTERN =
   /\[[^\]]*]\(\s*(?:<([^>\n]+)>|([^\s)]+))(?:\s+["'][^"']*["'])?\s*\)/g;
 
@@ -86,112 +46,14 @@ export function shouldOpenMarkdownFileLinkInBrowserByDefault(path: string): bool
   return /\.pdf$/i.test(path.split(/[?#]/, 1)[0] ?? "");
 }
 
-function safeDecode(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
 export function isWindowsDrivePathHref(href: string): boolean {
-  return WINDOWS_DRIVE_PATH_PATTERN.test(safeDecode(href));
-}
-
-function unwrapMarkdownLinkDestination(value: string): string {
-  return value.startsWith("<") && value.endsWith(">") ? value.slice(1, -1) : value;
-}
-
-export function normalizeMarkdownLinkDestination(value: string): string {
-  return unwrapMarkdownLinkDestination(value.trim());
-}
-
-function stripSearchAndHash(value: string): { path: string; hash: string } {
-  const hashIndex = value.indexOf("#");
-  const pathWithSearch = hashIndex >= 0 ? value.slice(0, hashIndex) : value;
-  const rawHash = hashIndex >= 0 ? value.slice(hashIndex) : "";
-  const queryIndex = pathWithSearch.indexOf("?");
-  const path = queryIndex >= 0 ? pathWithSearch.slice(0, queryIndex) : pathWithSearch;
-  return { path, hash: rawHash };
-}
-
-function normalizeWindowsDrivePath(path: string): string {
-  return /^\/[A-Za-z]:[\\/]/.test(path) ? path.slice(1) : path;
-}
-
-function parseFileUrlHref(
-  href: string,
-  options?: { readonly decodePath?: boolean },
-): { path: string; hash: string } | null {
-  try {
-    const parsed = new URL(href);
-    if (parsed.protocol.toLowerCase() !== "file:") return null;
-
-    const uncHostname = parsed.hostname.toLowerCase() === "localhost" ? "" : parsed.hostname;
-    const rawPath = uncHostname
-      ? `\\\\${uncHostname}${parsed.pathname.replaceAll("/", "\\")}`
-      : parsed.pathname;
-    if (rawPath.length === 0) return null;
-
-    // Browser URL parser encodes "C:/foo" as "/C:/foo" for file URLs.
-    const normalizedPath = normalizeWindowsDrivePath(rawPath);
-
-    return {
-      path: options?.decodePath === false ? normalizedPath : safeDecode(normalizedPath),
-      hash: parsed.hash,
-    };
-  } catch {
-    return null;
-  }
+  return /^[A-Za-z]:[\\/]/.test(safeDecodeURIComponent(href));
 }
 
 export function rewriteMarkdownFileUriHref(href: string | undefined): string | null {
   if (!href) return null;
-  const normalizedHref = normalizeMarkdownLinkDestination(href);
-  const target = parseFileUrlHref(normalizedHref, { decodePath: false });
-  if (!target) return null;
-  return `${target.path}${target.hash}`;
-}
-
-function looksLikePosixFilesystemPath(path: string): boolean {
-  if (!path.startsWith("/")) return false;
-  if (POSIX_FILE_ROOT_PREFIXES.some((prefix) => path.startsWith(prefix))) return true;
-  if (POSITION_SUFFIX_PATTERN.test(path)) return true;
-  const basename = path.slice(path.lastIndexOf("/") + 1);
-  return /\.[A-Za-z0-9_-]+$/.test(basename);
-}
-
-function appendLineColumnFromHash(path: string, hash: string): string {
-  if (!hash || POSITION_SUFFIX_PATTERN.test(path)) return path;
-  const match = hash.match(/^#L(\d+)(?:C(\d+))?$/i);
-  if (!match?.[1]) return path;
-  const line = match[1];
-  const column = match[2];
-  return `${path}:${line}${column ? `:${column}` : ""}`;
-}
-
-function isLikelyPathCandidate(path: string): boolean {
-  if (WINDOWS_DRIVE_PATH_PATTERN.test(path) || WINDOWS_UNC_PATH_PATTERN.test(path)) return true;
-  if (RELATIVE_PATH_PREFIX_PATTERN.test(path)) return true;
-  if (path.startsWith("/")) return looksLikePosixFilesystemPath(path);
-  return RELATIVE_FILE_PATH_PATTERN.test(path) || RELATIVE_FILE_NAME_PATTERN.test(path);
-}
-
-function isRelativePath(path: string): boolean {
-  return (
-    RELATIVE_PATH_PREFIX_PATTERN.test(path) ||
-    (!path.startsWith("/") &&
-      !WINDOWS_DRIVE_PATH_PATTERN.test(path) &&
-      !WINDOWS_UNC_PATH_PATTERN.test(path))
-  );
-}
-
-function hasExternalScheme(path: string): boolean {
-  const match = path.match(EXTERNAL_SCHEME_PATTERN);
-  if (!match) return false;
-  const rest = match[2] ?? "";
-  if (rest.startsWith("//")) return true;
-  return !POSITION_ONLY_PATTERN.test(rest);
+  const target = parseFileUrlHref(normalizeMarkdownLinkDestination(href));
+  return target ? `${target.path}${target.hash}` : null;
 }
 
 function normalizeResolvedFileTarget(targetPath: string): string {
@@ -255,6 +117,8 @@ export function resolveMarkdownFileLinkTarget(
     return normalizeResolvedFileTarget(pathWithPosition);
   }
 
+  const pathWithPosition = formatFilePathPosition(target);
+  if (!isRelativeFilePath(pathWithPosition)) return pathWithPosition;
   if (!baseDir) return null;
   return normalizeResolvedFileTarget(resolvePathLinkTarget(pathWithPosition, baseDir));
 }

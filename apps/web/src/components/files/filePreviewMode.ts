@@ -1,3 +1,5 @@
+import { isAbsolutePath } from "~/terminal-links";
+
 export const isMarkdownPreviewFile = (path: string): boolean => /\.(?:md|mdx)$/i.test(path);
 
 export type MarkdownPreviewMode = "source" | "rendered";
