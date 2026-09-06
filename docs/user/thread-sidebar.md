@@ -1,11 +1,9 @@
-# Organizing threads
+# Working with threads
 
-Pin a thread from its context menu to keep it in the pinned section above your active work.
-`mod+shift+p` pins or unpins the thread you have open. Pinned threads are shown independently of
-their project, including when you connect to more than one environment.
+Use a new thread for a separate task. Choose **New worktree** when its code changes
+need a separate branch and working directory.
 
-To require confirmation before unpinning, enable **Settings → General → Unpin confirmation**. The
-confirmation applies to the sidebar controls, thread menus, and the `mod+shift+p` shortcut.
+## Start a thread
 
 Pinned threads can still move to **Settled** when the selected automatic settlement policy applies.
 Their pin order remains intact if they return to the active list.
@@ -24,16 +22,15 @@ environment holds a different value, **Settings > General** shows a warning that
 **Apply to all** to write your current values to every connected environment. The same applies to
 the new-thread workspace mode and the source control writing style.
 
-When you un-settle a thread, it returns to the top of the active list so you can find it right
-away. Its timestamps do not change. Other threads keep their positions.
+Pin a thread from its menu to keep it above your active work. Drag pinned threads
+to reorder them on web and desktop, or use **Move up** and **Move down** on mobile.
+The order syncs across devices.
 
 Right-click a pull request link in a thread and choose **Link to thread** to show that pull request
 in the sidebar. With the finished-pull-request policy selected, that linked request can settle the
 thread. Right-click the same link and choose **Unlink from thread** to remove it.
 
-On web and desktop, drag a pinned thread to change its position. On mobile, open the thread's menu
-and choose **Move up** or **Move down**. The order is stored by the server and appears on your
-other connected devices.
+## Settle finished work
 
 Threads in the inbox below the pinned section can be dragged into any order too. That arrangement
 is kept on the device you set it on rather than shared, and a thread the arrangement has not seen
@@ -58,37 +55,40 @@ If reordering is unavailable for one environment, update the T3 Code server runn
 environment. Older servers can still pin and unpin threads, but do not understand synced ordering;
 their pinned threads keep the default newest-first order below the ones you have arranged.
 
-## Panel motion
+By default, environments settle inactive threads after three days and settle
+threads whose pull request merged. A closed pull request can also settle an idle
+thread. Work in progress, pending questions or approvals, and live background work
+prevent automatic settlement. An open pull request does not prevent inactivity
+settlement, but an old closed or merged pull request does not settle work you
+resumed after it closed.
 
-The main sidebar, right panel, and terminal drawer open and close immediately by default. Under
-**Settings → Appearance → Motion**, move the **Panel animations** slider above 0 ms to add motion.
-The duration can be set up to 400 ms. Clicking the preview replays all three panel transitions; at
-0 ms, it snaps between the same open and closed states.
+Change these rules in **Settings → General**. They continue to run when your apps
+are closed. Changes apply to connected environments that support shared settings;
+offline environments and older servers keep their previous values. If connected
+environments disagree, **Apply to all** copies your current settings to those named
+in the warning. Changing a rule does not reopen already settled threads.
 
-## Environment icons
+## Link a pull request
 
-When you are connected to more than one environment, every thread that lives somewhere other than
-the machine you are on wears a small icon for that machine at the end of its row: a server, a cloud
-VM, a desktop, a laptop, a Mac mini, or a Mac Studio. In the hosted web app and the mobile app,
-where every environment is remote, each row wears its machine so you can tell them apart at a
-glance. The same icon appears wherever an environment is named: the thread tooltip, the command
-palette, the "Run on" picker, the pull request server filter, the provider settings device tabs,
-and the environment lists under **Settings → Connections**. On mobile it appears in the thread
-lists, the archive, the new-task environment picker, and the Environments and storage settings.
+On web and desktop, right-click a pull request link in a thread and choose
+**Link to thread**. Use **Unlink from thread** on the same link to remove it.
+The linked pull request participates in automatic settlement.
 
-Servers pick the icon themselves from the hardware they run on. A Mac reports its model, a Linux
-machine reports its chassis type and whether it is a virtual machine, and anything without a usable
-signal shows a generic server. To override it, open **Settings → Connections** and choose an icon
-for that environment; **Automatic** goes back to what the server detected. The choice is stored on
-that server, so every device that connects to it sees the same icon.
+## Find and reference work
 
-## Environment artwork
+On web and desktop, open the command palette with `Cmd/Ctrl+K` to search threads
+across connected environments. Message search starts after two characters and
+includes your messages and final agent responses.
 
-Dev and Nightly environments can identify themselves with artwork at the top of the sidebar and in
-the send button. Choose **Artwork**, **Version pill**, or **None** in Settings under environment
-identification. Artwork is recolored to match each built-in theme. Custom themes use the **Version
-pill** fallback because their colors are not controlled by T3 Code.
+Use **Settings → Keybindings** to find or customize shortcuts for searching files
+and copying a thread reference. A copied reference uses the thread's pull request
+link when available, otherwise its thread ID. See [keybindings](./keybindings.md)
+for custom configuration.
 
-To generate a fresh title from the conversation, open a thread's context menu and choose
-**Regenerate title**. While T3 Code is generating it, the action reads **Regenerating…** and cannot
-be selected again. The option is hidden when the connected environment needs a server update.
+## Inspect agent work
+
+On web and desktop, use **Agents** to follow work delegated to subagents.
+
+Expand a tool call in the conversation to see its full command and output.
+Summaries shorten shell wrappers and can still describe the latest call after it
+finishes; the call's own result shows its status.

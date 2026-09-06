@@ -53,7 +53,7 @@ function RefreshFilesButton(props: { isPending: boolean; onRefresh: () => void }
           />
         }
       >
-        <RotateCw className={cn(props.isPending && "animate-spin")} />
+        <RefreshIcon refreshing={props.isPending} />
       </TooltipTrigger>
       <TooltipPopup>{props.isPending ? "Refreshing…" : "Refresh files"}</TooltipPopup>
     </Tooltip>
@@ -513,3 +513,4 @@ export default function FileBrowserPanel({
     </div>
   );
 }
+import { RefreshIcon } from "~/components/ui/refresh-icon";

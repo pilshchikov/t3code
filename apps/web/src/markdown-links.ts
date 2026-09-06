@@ -452,8 +452,8 @@ function workspaceRelativePath(path: string, workspaceRoot: string | undefined):
     /\/+$/,
     "",
   );
-  const pathForCompare = normalizedPath.toLowerCase();
-  const rootForCompare = normalizedRoot.toLowerCase();
+  const pathForCompare = comparableWorkspacePath(normalizedPath);
+  const rootForCompare = comparableWorkspacePath(normalizedRoot);
   if (!pathForCompare.startsWith(`${rootForCompare}/`)) return null;
   return normalizedPath.slice(normalizedRoot.length + 1);
 }
@@ -461,13 +461,16 @@ function workspaceRelativePath(path: string, workspaceRoot: string | undefined):
 function pathIsWithin(path: string, root: string): boolean {
   const normalizedPath = normalizeWindowsDrivePath(path.replaceAll("\\", "/")).replace(/\/+$/, "");
   const normalizedRoot = normalizeWindowsDrivePath(root.replaceAll("\\", "/")).replace(/\/+$/, "");
-  const pathForCompare = normalizedPath.toLowerCase();
-  const rootForCompare = normalizedRoot.toLowerCase();
+  const pathForCompare = comparableWorkspacePath(normalizedPath);
+  const rootForCompare = comparableWorkspacePath(normalizedRoot);
   return pathForCompare === rootForCompare || pathForCompare.startsWith(`${rootForCompare}/`);
 }
 
 function comparableWorkspacePath(path: string): string {
-  return normalizeWindowsDrivePath(path.replaceAll("\\", "/")).replace(/\/+$/, "").toLowerCase();
+  const normalized = normalizeWindowsDrivePath(path.replaceAll("\\", "/")).replace(/\/+$/, "");
+  return WINDOWS_DRIVE_PATH_PATTERN.test(normalized) || normalized.startsWith("//")
+    ? normalized.toLowerCase()
+    : normalized;
 }
 
 function orderedWorkspaceRoots(

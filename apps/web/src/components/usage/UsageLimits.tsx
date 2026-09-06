@@ -1,8 +1,11 @@
-import type {
+import {
+  type EnvironmentId,
+  type ProviderConsumeResetCreditOutcome,
+  ProviderInstanceId,
   ServerProvider,
+  ServerProviderResetCredits,
   ServerProviderUsageWindow,
   UsageLimitSourceAccount,
-  UsageLimitSourceId,
   UsageLimitSourceSnapshot,
   UsageProviderKind,
 } from "@t3tools/contracts";
@@ -11,22 +14,21 @@ import {
   collectLimitSources,
   collectLimitsGroups,
   elapsedShare,
+  formatDuration,
   formatResetsIn,
   limitsNotice,
   type LimitPace,
   paceOf,
   providerLimitsLabel,
+  remainingPercent,
 } from "@t3tools/shared/usageLimits";
-import { GaugeIcon, PlusIcon, TrendingDownIcon, TrendingUpIcon } from "lucide-react";
+import { GaugeIcon, TrendingDownIcon, TrendingUpIcon } from "lucide-react";
 import { Fragment, useState } from "react";
 
-import {
-  usePrimarySettings,
-  usePrimarySettingsAvailable,
-  useUpdatePrimarySettings,
-} from "../../hooks/useSettings";
-import { usePrimaryEnvironmentId } from "../../state/environments";
+import { usePrimarySettings } from "../../hooks/useSettings";
 import { environmentPresentations } from "../../state/presentation";
+import { serverEnvironment } from "../../state/server";
+import { useAtomCommand } from "../../state/use-atom-command";
 import { formatUpcomingTimestamp } from "../../timestampFormat";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { getDriverOption } from "../settings/providerDriverMeta";
@@ -40,10 +42,8 @@ import {
   AlertDialogPopup,
   AlertDialogTitle,
 } from "../ui/alert-dialog";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { AddUsageLimitSourceDialog } from "./AddUsageLimitSourceDialog";
 import { PROVIDER_PRESENTATION } from "./usageProviders";
 
 const PACE: Record<LimitPace, { readonly label: string; readonly icon: typeof GaugeIcon }> = {
@@ -96,14 +96,16 @@ function WindowBar({
   readonly now: number;
 }) {
   const timestampFormat = usePrimarySettings((settings) => settings.timestampFormat);
-  const used = Math.max(0, Math.min(100, window.usedPercent));
+  const remaining = remainingPercent(window);
   const elapsed = elapsedShare(window, now);
+  // The fill is quota left, so the even-spending mark is the time left.
+  const timeLeft = elapsed === null ? null : Math.round((1 - elapsed) * 100);
   const resetsIn = formatResetsIn(window, now);
   const resetsAt = window.resetsAt
     ? formatUpcomingTimestamp(window.resetsAt, timestampFormat, now)
     : null;
-  const summary = `${window.label}: ${Math.round(used)}% used${
-    elapsed === null ? "" : `, ${Math.round(elapsed * 100)}% of the window elapsed`
+  const summary = `${window.label}: ${remaining}% left${
+    timeLeft === null ? "" : `, ${timeLeft}% of the window left`
   }${resetsIn ? `, ${resetsIn}` : ""}`;
 
   return (
@@ -119,27 +121,26 @@ function WindowBar({
         }
       >
         <div className="absolute inset-x-0 inset-y-1.5 rounded-full bg-muted" />
-        {used > 0 ? (
+        {remaining > 0 ? (
           <div
             className="absolute inset-y-1.5 left-0 rounded-full"
-            style={{ width: `${used}%`, backgroundColor: color }}
+            style={{ width: `${remaining}%`, backgroundColor: color }}
           />
         ) : null}
-        {elapsed !== null ? (
+        {timeLeft !== null ? (
           <span
             aria-hidden
             className="absolute inset-y-0.5 w-px -translate-x-1/2 bg-foreground/60"
-            style={{ left: `${elapsed * 100}%` }}
+            style={{ left: `${timeLeft}%` }}
           />
         ) : null}
       </TooltipTrigger>
       <TooltipPopup side="top" className="max-w-72 text-xs">
         <div className="flex flex-col gap-0.5">
           <span className="text-foreground">
-            {Math.round(used)}% used
-            {elapsed !== null ? ` · ${Math.round(elapsed * 100)}% of the window elapsed` : ""}
+            {remaining}% left{timeLeft !== null ? ` · ${timeLeft}% of the window left` : ""}
           </span>
-          {elapsed !== null ? (
+          {timeLeft !== null ? (
             <span className="text-muted-foreground">The line is where even spending would be.</span>
           ) : null}
           {resetsAt ? (
@@ -154,24 +155,31 @@ function WindowBar({
   );
 }
 
-/** One account's windows as rows: label and percent, bar, pace and countdown. */
-function LimitWindows({
+/**
+ * One account's windows as rows: label and percent, bar, pace and countdown.
+ * Compact rows fit the composer panel with narrower columns.
+ */
+export function LimitWindows({
   driver,
   windows,
   now,
+  compact = false,
 }: {
   readonly driver: ServerProvider["driver"];
   readonly windows: ReadonlyArray<ServerProviderUsageWindow>;
   readonly now: number;
+  readonly compact?: boolean;
 }) {
   const color = barColor(driver);
   return (
-    <div className="grid grid-cols-[11rem_minmax(0,1fr)_7rem] gap-x-4 gap-y-1">
-      {windows.map((window, index) => {
-        // Windows that reset together show the countdown once.
-        const previous = windows[index - 1];
-        const sharesReset =
-          previous?.resetsAt !== undefined && previous.resetsAt === window.resetsAt;
+    <div
+      className={
+        compact
+          ? "grid grid-cols-[minmax(0,9rem)_minmax(3rem,1fr)_auto] gap-x-3 gap-y-0.5"
+          : "grid grid-cols-[11rem_minmax(0,1fr)_7rem] gap-x-4 gap-y-1"
+      }
+    >
+      {windows.map((window) => {
         const pace = paceOf(window, now);
         const resetsIn = formatResetsIn(window, now);
         return (
@@ -179,13 +187,13 @@ function LimitWindows({
             <span className="flex min-w-0 items-center gap-2 text-xs">
               <span className="truncate text-muted-foreground">{window.label}</span>
               <span className="ms-auto shrink-0 font-medium text-foreground tabular-nums">
-                {Math.round(window.usedPercent)}%
+                {remainingPercent(window)}% left
               </span>
             </span>
             <WindowBar color={color} window={window} now={now} />
-            <span className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+            <span className="flex items-center gap-2 text-xs whitespace-nowrap text-muted-foreground tabular-nums">
               {pace ? <PaceIcon pace={pace} /> : null}
-              <span className="ms-auto shrink-0">{sharesReset ? "" : (resetsIn ?? "")}</span>
+              <span className="ms-auto shrink-0">{resetsIn ?? ""}</span>
             </span>
           </Fragment>
         );
@@ -195,29 +203,29 @@ function LimitWindows({
 }
 
 /**
- * Heading shared by local providers and source accounts: icon, name, plan,
+ * Heading shared by local providers and source accounts: icon, driver, instance, plan,
  * and the signed-in email blurred until clicked, as provider settings do.
  */
 function AccountHeading({
   driver,
   label,
+  instanceLabel,
   plan,
   email,
   accentColor,
-  badge,
 }: {
   readonly driver: ServerProvider["driver"];
   readonly label: string;
+  readonly instanceLabel: string;
   readonly plan: string | undefined;
   readonly email: string | undefined;
   readonly accentColor?: string | undefined;
-  readonly badge?: string | undefined;
 }) {
   return (
-    <h2 className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
+    <h2 className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-foreground">
       <ProviderInstanceIcon
         driverKind={driver}
-        displayName={label}
+        displayName={instanceLabel}
         accentColor={accentColor}
         showBadge={Boolean(accentColor)}
         indicatorBackground="var(--background)"
@@ -225,7 +233,12 @@ function AccountHeading({
         iconClassName="size-4 text-foreground/80"
       />
       <span className="truncate">{label}</span>
-      {plan ? <span className="shrink-0 font-normal text-muted-foreground">· {plan}</span> : null}
+      {instanceLabel !== label ? (
+        <span className="min-w-0 truncate text-xs font-normal text-muted-foreground">
+          · {instanceLabel}
+        </span>
+      ) : null}
+      {plan ? <span className="font-normal text-muted-foreground">· {plan}</span> : null}
       {email ? (
         <RedactedSensitiveText
           value={email}
@@ -234,20 +247,17 @@ function AccountHeading({
           hideTooltip="Click to hide email"
         />
       ) : null}
-      {badge ? (
-        <Badge variant="outline" size="sm" className="ms-auto shrink-0 font-normal">
-          {badge}
-        </Badge>
-      ) : null}
     </h2>
   );
 }
 
 function ProviderLimits({
   provider,
+  environmentId,
   now,
 }: {
   readonly provider: ServerProvider;
+  readonly environmentId: EnvironmentId;
   readonly now: number;
 }) {
   const limits = provider.usageLimits;
@@ -257,7 +267,8 @@ function ProviderLimits({
     <section className="flex flex-col gap-3">
       <AccountHeading
         driver={provider.driver}
-        label={providerLimitsLabel(provider, (driver) => getDriverOption(driver)?.label)}
+        label={getDriverOption(provider.driver)?.label ?? String(provider.driver)}
+        instanceLabel={providerLimitsLabel(provider, (driver) => getDriverOption(driver)?.label)}
         plan={provider.auth.label}
         email={provider.auth.email}
         accentColor={provider.accentColor}
@@ -267,7 +278,98 @@ function ProviderLimits({
       ) : (
         <LimitWindows driver={provider.driver} windows={limits.windows} now={now} />
       )}
+      {limits.resetCredits ? (
+        <ResetCredits
+          environmentId={environmentId}
+          instanceId={provider.instanceId}
+          credits={limits.resetCredits}
+          now={now}
+        />
+      ) : null}
     </section>
+  );
+}
+
+const OUTCOME_TEXT: Record<ProviderConsumeResetCreditOutcome, string> = {
+  reset: "Reset applied. Your windows have cleared.",
+  nothingToReset: "Nothing to reset right now.",
+  noCredit: "No reset credit left.",
+  alreadyRedeemed: "That credit was already redeemed.",
+};
+
+/**
+ * Banked reset credits with a confirmed redeem action. Redeeming spends a
+ * credit the provider granted the user, so it never fires on a bare click.
+ */
+export function ResetCredits({
+  environmentId,
+  instanceId,
+  credits,
+  now,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly instanceId: ProviderInstanceId;
+  readonly credits: ServerProviderResetCredits;
+  readonly now: number;
+}) {
+  const consume = useAtomCommand(serverEnvironment.consumeResetCredit, { reportFailure: false });
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  if (credits.availableCount === 0 && status === null) return null;
+
+  const expiresIn = credits.nextExpiresAt
+    ? formatDuration(Date.parse(credits.nextExpiresAt) - now)
+    : null;
+  const summary =
+    credits.availableCount === 0
+      ? "No reset credits banked"
+      : `${credits.availableCount} ${credits.availableCount === 1 ? "reset credit" : "reset credits"} banked${
+          expiresIn ? ` · next expires in ${expiresIn}` : ""
+        }`;
+
+  const redeem = async () => {
+    setConfirming(false);
+    setBusy(true);
+    setStatus(null);
+    const result = await consume({ environmentId, input: { instanceId } });
+    setBusy(false);
+    if (result._tag === "Success") {
+      setStatus(OUTCOME_TEXT[result.value.outcome]);
+      return;
+    }
+    setStatus(
+      "error" in result.cause && result.cause.error instanceof Error
+        ? result.cause.error.message
+        : "Could not use the reset credit.",
+    );
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      <span className="tabular-nums">{summary}</span>
+      {credits.availableCount > 0 ? (
+        <Button size="xs" variant="outline" disabled={busy} onClick={() => setConfirming(true)}>
+          {busy ? "Using…" : "Use reset"}
+        </Button>
+      ) : null}
+      {status ? <span className="text-foreground">{status}</span> : null}
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialogPopup>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Use a reset credit?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This redeems one credit on your account and clears the current rate-limit windows. It
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
+            <Button onClick={() => void redeem()}>Use credit</Button>
+          </AlertDialogFooter>
+        </AlertDialogPopup>
+      </AlertDialog>
+    </div>
   );
 }
 
@@ -287,9 +389,9 @@ function SourceAccountLimits({
       <AccountHeading
         driver={account.driver}
         label={getDriverOption(account.driver)?.label ?? String(account.driver)}
+        instanceLabel={sourceKind}
         plan={account.plan}
         email={account.email}
-        badge={`via ${sourceKind}`}
       />
       {notice ? (
         <span className="text-xs text-muted-foreground">{notice}</span>
@@ -300,83 +402,25 @@ function SourceAccountLimits({
   );
 }
 
-/**
- * Accounts a configured source (a CLIProxyAPI hub) pools, grouped under the
- * source's name. Unlike provider rows these are read-only: nothing on this
- * environment can run a turn against them.
- */
 const SOURCE_KIND_LABEL: Record<UsageLimitSourceSnapshot["kind"], string> = {
-  cliproxy: "CLIProxyAPI",
+  cliproxy: "CLI Proxy",
 };
 
-/**
- * Removing a hub also deletes its management key from the server, so it
- * asks first and says so. A bare icon that acted on click was too easy to
- * hit while reaching for the row beside it.
- */
-function RemoveSourceButton({
-  source,
-  onConfirm,
-}: {
-  readonly source: UsageLimitSourceSnapshot;
-  readonly onConfirm: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <Button size="xs" variant="ghost" onClick={() => setOpen(true)}>
-        Remove
-      </Button>
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogPopup>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove {source.label}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The hub's management key is deleted from this server. Its accounts leave the Limits
-              view; the hub itself is untouched. Add it again with the URL and key to bring them
-              back.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                setOpen(false);
-                onConfirm();
-              }}
-            >
-              Remove hub
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogPopup>
-      </AlertDialog>
-    </>
-  );
-}
+type LimitsSource = ReturnType<typeof collectLimitSources>[number];
 
-function SourceLimits({
-  source,
-  now,
-  onRemove,
-}: {
-  readonly source: UsageLimitSourceSnapshot;
-  readonly now: number;
-  readonly onRemove: (() => void) | null;
-}) {
+/** Read-only accounts pooled by a configured usage source. */
+function SourceLimits({ source, now }: { readonly source: LimitsSource; readonly now: number }) {
   const kind = SOURCE_KIND_LABEL[source.kind];
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-xs tracking-wide text-muted-foreground uppercase">
-          {source.label} · {kind}
-        </h2>
-        {onRemove ? <RemoveSourceButton source={source} onConfirm={onRemove} /> : null}
-      </div>
       {source.error ? (
         <span className="text-xs text-muted-foreground">{source.error}</span>
       ) : source.accounts.length === 0 ? (
-        <span className="text-xs text-muted-foreground">No accounts reported.</span>
+        <span className="text-xs text-muted-foreground">
+          {source.hiddenAccountCount > 0
+            ? "All accounts are shown by connected providers."
+            : "No accounts reported."}
+        </span>
       ) : (
         source.accounts.map((account) => (
           <SourceAccountLimits key={account.id} account={account} sourceKind={kind} now={now} />
@@ -391,53 +435,30 @@ function SourceLimits({
  * Countdowns anchor to render time rather than ticking: a live clock would
  * repaint the page every minute for no decision-changing gain.
  */
-export function UsageLimitsSection() {
+export function UsageLimitsSection({
+  selectedEnvironmentIds,
+}: {
+  readonly selectedEnvironmentIds: ReadonlySet<EnvironmentId> | null;
+}) {
   const presentations = useAtomValue(environmentPresentations.presentationsAtom);
-  const groups = collectLimitsGroups(presentations);
-  const sources = collectLimitSources(presentations);
-  const configuredSources = usePrimarySettings((settings) => settings.usageLimitSources);
-  const canEditSources = usePrimarySettingsAvailable();
-  const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const updateSettings = useUpdatePrimarySettings();
-  const [adding, setAdding] = useState(false);
+  const selected =
+    selectedEnvironmentIds === null
+      ? presentations
+      : new Map([...presentations].filter(([id]) => selectedEnvironmentIds.has(id)));
+  const groups = collectLimitsGroups(selected);
+  const sources = collectLimitSources(selected);
   // Anchored once per mount on purpose: countdowns must not tick (see below).
   const [now] = useState(() => Date.now());
-
-  // The patch names only this entry, so two edits in flight cannot clobber
-  // each other's map.
-  const removeSource = (id: UsageLimitSourceId) => {
-    updateSettings({ usageLimitSources: { [id]: null } });
-  };
-
-  const addHubButton = canEditSources ? (
-    <Button size="xs" variant="outline" onClick={() => setAdding(true)}>
-      <PlusIcon className="size-3" aria-hidden />
-      Add CLIProxyAPI hub
-    </Button>
-  ) : null;
 
   return (
     <div className="flex flex-col gap-8">
       {groups.length === 0 && sources.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No provider on a connected environment reports subscription limits.
+          No provider on the selected environments reports subscription limits.
         </p>
       ) : null}
       {sources.map((source) => (
-        <SourceLimits
-          key={source.key}
-          source={source}
-          now={now}
-          // Only the primary environment's own sources can be edited from
-          // here; a remote environment's row with the same id is read-only.
-          onRemove={
-            canEditSources &&
-            source.environmentId === primaryEnvironmentId &&
-            source.id in configuredSources
-              ? () => removeSource(source.id)
-              : null
-          }
-        />
+        <SourceLimits key={source.key} source={source} now={now} />
       ))}
       {groups.map((group) => (
         <div key={group.environmentId} className="flex flex-col gap-6">
@@ -447,12 +468,15 @@ export function UsageLimitsSection() {
             </h2>
           ) : null}
           {group.providers.map((provider) => (
-            <ProviderLimits key={provider.instanceId} provider={provider} now={now} />
+            <ProviderLimits
+              key={provider.instanceId}
+              provider={provider}
+              environmentId={group.environmentId}
+              now={now}
+            />
           ))}
         </div>
       ))}
-      {addHubButton ? <div>{addHubButton}</div> : null}
-      <AddUsageLimitSourceDialog open={adding} onOpenChange={setAdding} />
     </div>
   );
 }

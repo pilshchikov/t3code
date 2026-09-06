@@ -4,6 +4,32 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Upstream sync and collapsible chat images, September 5
+
+- Merged all 350 missing commits from `upstream/main` through `ab67795dd`. The sync includes
+  streaming timeline reuse, deferred attachment URLs and diff workers, hidden-terminal rendering
+  fixes, bounded server history, provider updates, prompt history, citations, and usage-limit banners.
+- Reconciled those changes around the fork's compact composer and stash chip, inline turn plans,
+  multi-directory file navigation, uncached file reads, account-specific usage and limits, branch
+  drift handling, and default-off provider checks, updates, keychain access, and automatic settlement.
+  Restored missing row-level attachment loading and citation wiring after the fork-first merge.
+- Web and desktop chat images have Hide image / Show image controls. Hiding a screenshot removes
+  the preview without deleting the message. The choice survives virtualized row remounts and signed
+  asset URL renewal during the current client session. Inline badges and icons stay unchanged.
+  Sources: `apps/web/src/components/chat/CollapsibleChatImage.tsx`,
+  `apps/web/src/components/ChatMarkdown.tsx`, and
+  `apps/web/src/components/chat/MessagesTimeline.tsx`.
+- Regression tests cover image hide/restore, turn-plan preservation during streaming, file-path
+  case sensitivity, manual and signal-triggered uncached reads, and the fork's provider/settlement
+  opt-ins. Checkpoint tests now observe the upstream pull-request invalidation service.
+- Validation: 1,041 focused tests pass across web, server, desktop, contracts, shared helpers, and
+  client runtime. Web, server, desktop, contracts, shared, and client-runtime native TypeScript
+  checks pass. Mobile passes `tsc`;
+  `tsgo` still reports React Navigation route typing errors. Targeted lint has warnings but no
+  errors. No browser verification, app rebuild, reinstall, restart, or push was performed.
+- `backup/pre-upstream-sync-20260905` preserves the pre-merge fork, including the composer and Astra
+  changes committed before the merge.
+
 ## Composer spacing and GPT-6 Astra, September 4
 
 - The web and desktop composer collapses to one row without hidden editor padding. Expanded

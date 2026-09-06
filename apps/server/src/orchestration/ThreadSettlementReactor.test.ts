@@ -127,6 +127,8 @@ function makePullRequestSummary(input: {
     headBranch: "feature",
     baseBranch: "main",
     updatedAt: input.updatedAt ?? NOW,
+    closedAt: input.state === "closed" ? (input.updatedAt ?? NOW) : null,
+    mergedAt: input.state === "merged" ? (input.updatedAt ?? NOW) : null,
   };
 }
 
@@ -376,7 +378,9 @@ describe("ThreadSettlementReactor", () => {
             }),
           ]),
           branchPullRequest: () =>
-            Ref.get(pullRequest).pipe(Effect.map((state) => ({ state, updatedAt: NOW }))),
+            Ref.get(pullRequest).pipe(
+              Effect.map((state) => ({ state, updatedAt: NOW, closedAt: NOW, mergedAt: NOW })),
+            ),
         });
 
         yield* Effect.gen(function* () {
@@ -412,6 +416,7 @@ describe("ThreadSettlementReactor", () => {
         const fixture = yield* makeHarness({
           snapshot: makeSnapshot([
             makeThread("merged-in-app", {
+              latestUserMessageAt: "2026-08-27T00:00:00.000Z",
               linkedPullRequest: {
                 projectId: PROJECT_ID,
                 repository: "owner/repository",
@@ -419,7 +424,10 @@ describe("ThreadSettlementReactor", () => {
                 url: "https://example.test/owner/repository/pull/42",
               },
             }),
-            makeThread("slow-periodic-lookup", { branch: "another-feature" }),
+            makeThread("slow-periodic-lookup", {
+              branch: "another-feature",
+              latestUserMessageAt: "2026-08-27T00:00:00.000Z",
+            }),
           ]),
           branchPullRequest: () =>
             Ref.updateAndGet(branchLookupCount, (count) => count + 1).pipe(
@@ -432,6 +440,7 @@ describe("ThreadSettlementReactor", () => {
                     ),
               ),
             ),
+          settings: { ...DEFAULT_SERVER_SETTINGS, sidebarAutoSettleMode: "change-request" },
           onDispatch: () => Deferred.succeed(mergedThreadSettled, undefined),
         });
 
@@ -464,11 +473,22 @@ describe("ThreadSettlementReactor", () => {
           const state = yield* Ref.make<"open" | "merged">("open");
           const mergedThreadSettled = yield* Deferred.make<void>();
           const fixture = yield* makeHarness({
-            snapshot: makeSnapshot([makeThread("branch-thread", { branch: "saved-feature" })]),
+            snapshot: makeSnapshot([
+              makeThread("branch-thread", {
+                branch: "saved-feature",
+                latestUserMessageAt: "2026-08-27T00:00:00.000Z",
+              }),
+            ]),
             branchPullRequest: () =>
               Ref.get(state).pipe(
-                Effect.map((pullRequestState) => ({ state: pullRequestState, updatedAt: NOW })),
+                Effect.map((pullRequestState) => ({
+                  state: pullRequestState,
+                  updatedAt: NOW,
+                  closedAt: NOW,
+                  mergedAt: NOW,
+                })),
               ),
+            settings: { ...DEFAULT_SERVER_SETTINGS, sidebarAutoSettleMode: "change-request" },
             onDispatch: () => Deferred.succeed(mergedThreadSettled, undefined),
           });
 
@@ -504,6 +524,7 @@ describe("ThreadSettlementReactor", () => {
         const fixture = yield* makeHarness({
           snapshot: makeSnapshot([
             makeThread("merged-in-app", {
+              latestUserMessageAt: "2026-08-27T00:00:00.000Z",
               linkedPullRequest: {
                 projectId: PROJECT_ID,
                 repository: "owner/repository",
@@ -512,6 +533,7 @@ describe("ThreadSettlementReactor", () => {
               },
             }),
             makeThread("unrelated-linked", {
+              latestUserMessageAt: "2026-08-27T00:00:00.000Z",
               linkedPullRequest: {
                 projectId: PROJECT_ID,
                 repository: "owner/repository",
@@ -533,6 +555,7 @@ describe("ThreadSettlementReactor", () => {
               ),
               Effect.map(() => makePullRequestSummary({ ...input, state: "open" })),
             ),
+          settings: { ...DEFAULT_SERVER_SETTINGS, sidebarAutoSettleMode: "change-request" },
           onDispatch: () => Deferred.succeed(mergedThreadSettled, undefined),
         });
 
@@ -597,7 +620,12 @@ describe("ThreadSettlementReactor", () => {
                     : Effect.void,
               ),
               Effect.andThen(Ref.get(state)),
-              Effect.map((pullRequestState) => ({ state: pullRequestState, updatedAt: NOW })),
+              Effect.map((pullRequestState) => ({
+                state: pullRequestState,
+                updatedAt: NOW,
+                closedAt: NOW,
+                mergedAt: NOW,
+              })),
             ),
         });
 
@@ -691,7 +719,10 @@ describe("ThreadSettlementReactor", () => {
         const fixture = yield* makeHarness({
           snapshot: makeSnapshot(
             [
-              makeThread("missing-own-project", { linkedPullRequest }),
+              makeThread("missing-own-project", {
+                latestUserMessageAt: "2026-08-27T00:00:00.000Z",
+                linkedPullRequest,
+              }),
               makeThread("missing-branch-project", { branch: "saved-feature" }),
             ],
             [makeProject(LINKED_PROJECT_ID, "/workspace/linked")],
@@ -743,7 +774,8 @@ describe("ThreadSettlementReactor", () => {
               makeProject(LINKED_PROJECT_ID, "/workspace/linked-root"),
             ],
           ),
-          branchPullRequest: () => Effect.succeed({ state: "closed", updatedAt: NOW }),
+          branchPullRequest: () =>
+            Effect.succeed({ state: "closed", updatedAt: NOW, closedAt: NOW }),
           pullRequestSummary: (input) =>
             Effect.succeed(makePullRequestSummary({ ...input, state: "merged" })),
         });

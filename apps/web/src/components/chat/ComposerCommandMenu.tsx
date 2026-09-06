@@ -94,7 +94,7 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
         data-composer-command-drawer="true"
       >
         {props.items.length > 0 ? (
-          <CommandList className="max-h-72 scroll-pb-6">
+          <CommandList className="max-h-72 min-h-0 scroll-pb-6">
             <CommandGroup>
               {props.items.map((item) => (
                 <ComposerCommandMenuItem

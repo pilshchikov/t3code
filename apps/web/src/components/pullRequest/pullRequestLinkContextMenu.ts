@@ -29,7 +29,7 @@ const HOST_DISPLAY_NAMES: Partial<Record<string, string>> = {
 export const hostDisplayName = (provider: string): string => HOST_DISPLAY_NAMES[provider] ?? "host";
 
 /** Copy first: it is the reason to right-click a number rather than click it. */
-export function pullRequestLinkContextMenuItems(
+function pullRequestLinkContextMenuItems(
   openLabel: string,
 ): readonly ContextMenuItem<PullRequestLinkContextMenuAction>[] {
   return [

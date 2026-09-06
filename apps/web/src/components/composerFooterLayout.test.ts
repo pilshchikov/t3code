@@ -4,7 +4,9 @@ import { resolveContextStripLabelsCompact } from "./BranchToolbar.logic";
 import {
   COMPOSER_FOOTER_COMPACT_BREAKPOINT_PX,
   COMPOSER_FOOTER_WIDE_ACTIONS_COMPACT_BREAKPOINT_PX,
+  COMPOSER_RESTING_EXPANSION_MIN_PX,
   getRestingComposerImagePreviewCounts,
+  resolveComposerTimelineInset,
   resolveRestingComposerControlsLayout,
   resolveRestingComposerControlsNaturalWidth,
   shouldAnimateComposerRestingTransition,
@@ -74,6 +76,26 @@ describe("shouldUseCompactComposerPrimaryActions", () => {
   });
 });
 
+describe("resolveComposerTimelineInset", () => {
+  it("follows the expanded overlay height", () => {
+    expect(
+      resolveComposerTimelineInset({ currentInset: 160, overlayHeight: 140, isResting: false }),
+    ).toBe(140);
+  });
+
+  it("keeps a larger expanded reservation while resting", () => {
+    expect(
+      resolveComposerTimelineInset({ currentInset: 200, overlayHeight: 60, isResting: true }),
+    ).toBe(200);
+  });
+
+  it("reserves the empty expansion when no larger height is known", () => {
+    expect(
+      resolveComposerTimelineInset({ currentInset: 0, overlayHeight: 60, isResting: true }),
+    ).toBe(60 + COMPOSER_RESTING_EXPANSION_MIN_PX);
+  });
+});
+
 describe("shouldUseRestingComposerLayout", () => {
   const resting = {
     isExistingThread: true,
@@ -82,6 +104,7 @@ describe("shouldUseRestingComposerLayout", () => {
     isScrollCollapsed: false,
     hasExpandedChrome: false,
     collapseOnBlur: true,
+    timelineOverflows: true,
   };
 
   it("uses the resting layout for an unfocused desktop composer", () => {
@@ -107,6 +130,17 @@ describe("shouldUseRestingComposerLayout", () => {
         collapseOnBlur: false,
       }),
     ).toBe(true);
+  });
+
+  it("keeps the composer expanded while the timeline fits above it", () => {
+    expect(shouldUseRestingComposerLayout({ ...resting, timelineOverflows: false })).toBe(false);
+    expect(
+      shouldUseRestingComposerLayout({
+        ...resting,
+        isScrollCollapsed: true,
+        timelineOverflows: false,
+      }),
+    ).toBe(false);
   });
 
   it("keeps new-thread composers expanded", () => {

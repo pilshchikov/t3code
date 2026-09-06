@@ -34,6 +34,8 @@ const stackCapBorderClass: Record<ComposerBannerStackItem["variant"], string> = 
 };
 
 export interface ComposerBannerStackItem {
+  readonly priority?: "notice" | "urgent";
+  readonly children?: ReactNode;
   readonly id: string;
   readonly variant: "default" | "error" | "info" | "success" | "warning";
   // Ordering hint for stack assemblers: front this banner even though its
@@ -208,6 +210,7 @@ function ComposerBannerStackAlert({
       {item.icon}
       <AlertTitle>{item.title}</AlertTitle>
       {item.description ? <AlertDescription>{item.description}</AlertDescription> : null}
+      {item.children ? <div className="col-span-full min-w-0">{item.children}</div> : null}
       {item.actions || item.onDismiss ? (
         <AlertAction
           className={cn(

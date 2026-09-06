@@ -81,7 +81,7 @@ function queryConnectionState(
 
 const makeEnvironmentQueryHarness = Effect.fn("TestEnvironmentQuery.makeHarness")(function* <A, E>(
   execute: Effect.Effect<A, E>,
-  options?: { readonly retainPreviousData?: boolean },
+  options?: { readonly retainPreviousData?: boolean; readonly refreshSignal?: Atom.Atom<unknown> },
 ) {
   const supervisorState = yield* SubscriptionRef.make(queryConnectionState());
   const supervisorSession = yield* SubscriptionRef.make(Option.some(QUERY_RPC_SESSION));
@@ -111,6 +111,9 @@ const makeEnvironmentQueryHarness = Effect.fn("TestEnvironmentQuery.makeHarness"
   const family = createEnvironmentQueryAtomFamily(runtime, {
     label: "test.environment-query",
     staleTimeMs: 60_000,
+    ...(options?.refreshSignal === undefined
+      ? {}
+      : { refreshTrigger: () => options.refreshSignal! }),
     ...(options?.retainPreviousData === undefined
       ? {}
       : { retainPreviousData: options.retainPreviousData }),
@@ -553,44 +556,51 @@ describe("environment query lifecycle", () => {
     ),
   );
 
-  it.effect("drops the last value while a non-retaining query refreshes", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const refreshStarted = Latch.makeUnsafe();
-        const finishRefresh = Latch.makeUnsafe();
-        let executions = 0;
-        const execute = Effect.suspend(() => {
-          executions += 1;
-          if (executions === 1) return Effect.succeed("first");
-          refreshStarted.openUnsafe();
-          return finishRefresh.await.pipe(Effect.as("second"));
-        });
-        const harness = yield* makeEnvironmentQueryHarness(execute, {
-          retainPreviousData: false,
-        });
-        const registry = yield* mountEnvironmentQuery(harness.atom);
+  for (const refreshBySignal of [false, true]) {
+    it.effect(
+      `drops the last value while a non-retaining query refreshes by ${refreshBySignal ? "signal" : "command"}`,
+      () =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const refreshStarted = Latch.makeUnsafe();
+            const finishRefresh = Latch.makeUnsafe();
+            const refreshSignal = Atom.make(0);
+            let executions = 0;
+            const execute = Effect.suspend(() => {
+              executions += 1;
+              if (executions === 1) return Effect.succeed("first");
+              refreshStarted.openUnsafe();
+              return finishRefresh.await.pipe(Effect.as("second"));
+            });
+            const harness = yield* makeEnvironmentQueryHarness(execute, {
+              retainPreviousData: false,
+              ...(refreshBySignal ? { refreshSignal } : {}),
+            });
+            const registry = yield* mountEnvironmentQuery(harness.atom);
 
-        expect(
-          yield* AtomRegistry.getResult(registry, harness.atom, {
-            suspendOnWaiting: true,
+            expect(
+              yield* AtomRegistry.getResult(registry, harness.atom, {
+                suspendOnWaiting: true,
+              }),
+            ).toBe("first");
+
+            if (refreshBySignal) registry.set(refreshSignal, 1);
+            else registry.refresh(harness.atom);
+            yield* refreshStarted.await;
+            const refreshing = registry.get(harness.atom);
+            expect(refreshing.waiting).toBe(true);
+            expect(AsyncResult.value(refreshing)).toEqual(Option.none());
+
+            finishRefresh.openUnsafe();
+            expect(
+              yield* AtomRegistry.getResult(registry, harness.atom, {
+                suspendOnWaiting: true,
+              }),
+            ).toBe("second");
           }),
-        ).toBe("first");
-
-        registry.refresh(harness.atom);
-        yield* refreshStarted.await;
-        const refreshing = registry.get(harness.atom);
-        expect(refreshing.waiting).toBe(true);
-        expect(AsyncResult.value(refreshing)).toEqual(Option.none());
-
-        finishRefresh.openUnsafe();
-        expect(
-          yield* AtomRegistry.getResult(registry, harness.atom, {
-            suspendOnWaiting: true,
-          }),
-        ).toBe("second");
-      }),
-    ),
-  );
+        ),
+    );
+  }
 });
 
 describe("Atom.fn mutation semantics", () => {
@@ -724,6 +734,24 @@ describe("executeAtomQuery", () => {
       expect(second.value).toBe("second");
     }
 
+    registry.dispose();
+  });
+
+  it("settles when its caller aborts a waiting query", async () => {
+    const registry = AtomRegistry.make();
+    const controller = new AbortController();
+    const resultPromise = executeAtomQuery(registry, Atom.make(Effect.never), {
+      reportDefect: false,
+      signal: controller.signal,
+    });
+
+    controller.abort();
+
+    const result = await resultPromise;
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(Cause.hasInterruptsOnly(result.cause)).toBe(true);
+    }
     registry.dispose();
   });
 });
