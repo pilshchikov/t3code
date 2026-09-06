@@ -623,7 +623,11 @@ function composerCommandMenuPositionsEqual(
   );
 }
 
-function ComposerCommandMenuLayer(props: { anchor: HTMLElement | null; children: ReactNode }) {
+function ComposerCommandMenuLayer(props: {
+  anchor: HTMLElement | null;
+  children: ReactNode;
+  compact?: boolean;
+}) {
   const [position, setPosition] = useState<ComposerCommandMenuPosition | null>(null);
 
   useLayoutEffect(() => {
@@ -638,7 +642,11 @@ function ComposerCommandMenuLayer(props: { anchor: HTMLElement | null; children:
       const mainSurface = form?.querySelector<HTMLElement>(
         '[data-chat-composer-main-surface="true"]',
       );
-      const rect = (mainSurface ?? form ?? anchor).getBoundingClientRect();
+      const rect = (
+        props.compact
+          ? (form?.querySelector('[data-prompt-stash-badge="true"]') ?? anchor)
+          : (mainSurface ?? form ?? anchor)
+      ).getBoundingClientRect();
       const rootFontSizePx =
         Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
       const drawerInsetRem =
@@ -656,6 +664,15 @@ function ComposerCommandMenuLayer(props: { anchor: HTMLElement | null; children:
         maxHeight: Math.max(96, rect.top - 24 + composerOverlap),
         width: Math.max(0, rect.width - drawerInset * 2),
       };
+      if (props.compact) {
+        next.width = Math.min(360, window.innerWidth - 24);
+        next.left = Math.max(
+          12,
+          Math.min(rect.right - next.width, window.innerWidth - next.width - 12),
+        );
+        next.bottom = window.innerHeight - rect.top + 6;
+        next.maxHeight = Math.max(96, rect.top - 18);
+      }
       setPosition((current) =>
         current && composerCommandMenuPositionsEqual(current, next) ? current : next,
       );
@@ -683,7 +700,7 @@ function ComposerCommandMenuLayer(props: { anchor: HTMLElement | null; children:
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [props.anchor]);
+  }, [props.anchor, props.compact]);
 
   if (!position) return null;
 
@@ -3713,6 +3730,15 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
   // Render
   // ------------------------------------------------------------------
+  const stashBadge = (
+    <ComposerStashBadge
+      count={stashQueue.length}
+      pulseKey={stashPulse.key}
+      pulsing={stashPulse.active}
+      menuOpen={isStashMenuOpen}
+      onToggleMenu={toggleStashMenu}
+    />
+  );
   return (
     <form
       ref={attachComposerFormRef}
@@ -3747,18 +3773,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       className="relative mx-auto w-full min-w-0 max-w-3xl"
       data-chat-composer-form="true"
     >
-      {/* Outside the collapsing prompt area: that container clips its overflow, so the badge lost
-          its top half as soon as the composer shrank. */}
-      <ComposerStashBadge
-        count={stashQueue.length}
-        pulseKey={stashPulse.key}
-        pulsing={stashPulse.active}
-        menuOpen={isStashMenuOpen}
-        onToggleMenu={toggleStashMenu}
-      />
-
       {isStashMenuOpen && !composerMenuOpen && !isComposerApprovalState && (
-        <ComposerCommandMenuLayer anchor={composerFormElement}>
+        <ComposerCommandMenuLayer anchor={composerFormElement} compact>
           <ComposerStashMenu
             entries={stashQueue}
             onRestore={restoreStashEntry}
@@ -3906,7 +3922,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           !isComposerCollapsedMobile ? (
             <ComposerTasksBadge
               expanded={false}
-              hasTrailingShoulder={stashQueue.length > 0}
               onDismiss={dismissTasks}
               onToggle={toggleTasksDrawer}
               progress={visibleTasksProgress}
@@ -3933,12 +3948,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             >
               {showCollapsedMobilePromptRow ? (
                 <div
-                  className="flex cursor-text items-center justify-between gap-2 px-3 py-2"
+                  className="flex cursor-text items-center justify-between gap-2 px-3 py-1"
                   data-chat-composer-collapsed-row="true"
                   onPointerDown={(event) => {
                     if (
                       event.target instanceof Element &&
-                      event.target.closest('[data-chat-composer-send-action="true"]')
+                      event.target.closest(
+                        '[data-chat-composer-send-action="true"], [data-prompt-stash-badge="true"]',
+                      )
                     ) {
                       return;
                     }
@@ -3948,7 +3965,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   onClick={(event) => {
                     if (
                       event.target instanceof Element &&
-                      event.target.closest('[data-chat-composer-send-action="true"]')
+                      event.target.closest(
+                        '[data-chat-composer-send-action="true"], [data-prompt-stash-badge="true"]',
+                      )
                     ) {
                       return;
                     }
@@ -3982,6 +4001,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                         ))}
                   </button>
                   {inlineTasksBadge}
+                  {stashBadge}
                   <button
                     type="button"
                     className="flex size-8 shrink-0 items-center justify-center rounded-full bg-message-action text-message-action-foreground hover:bg-message-action-hover disabled:opacity-30"
@@ -4010,9 +4030,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               <div
                 ref={setComposerMenuAnchor}
                 className={cn(
-                  "relative px-3 pb-2 sm:px-4",
-                  "pt-3.5 sm:pt-4",
-                  isComposerApprovalState && "pb-3 sm:pb-4",
+                  "relative px-3 sm:px-4",
+                  isComposerCollapsedMobile ? "py-0" : "pt-3 pb-2",
+                  !isComposerCollapsedMobile && isComposerApprovalState && "pb-3 sm:pb-4",
                   "chat-composer-scroll-collapse",
                   isComposerCollapsedMobile && "chat-composer-scroll-collapse-collapsed",
                 )}
@@ -4241,13 +4261,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   data-chat-composer-footer="true"
                   data-chat-composer-footer-compact={isComposerFooterCompact ? "true" : "false"}
                   className={cn(
-                    "flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-visible px-3 pb-3 sm:px-4 sm:pb-4",
+                    "flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-visible px-3 pb-2 sm:px-4",
                     pendingUserInputs.length > 0 && "pt-2",
                     isComposerFooterCompact ? "gap-1.5" : "gap-2 sm:gap-0",
                     showMobilePendingAnswerActions && "hidden sm:flex",
                   )}
                 >
                   <div className="-m-1 -ms-3.5 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 ps-3.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {stashBadge}
                     {noProviderAvailable ? (
                       <Button
                         type="button"

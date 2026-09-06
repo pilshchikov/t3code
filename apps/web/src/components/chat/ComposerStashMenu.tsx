@@ -116,7 +116,7 @@ export const ComposerStashMenu = memo(function ComposerStashMenu(props: {
     <Command autoHighlight={false} mode="none">
       <div
         ref={drawerRef}
-        className="chat-composer-drawer-surface chat-composer-drawer-attached relative w-full overflow-hidden"
+        className="relative w-full overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg"
         data-composer-stash-drawer="true"
       >
         <div className="flex h-7 items-center justify-end px-2 pt-1">

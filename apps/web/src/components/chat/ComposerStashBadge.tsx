@@ -2,10 +2,9 @@ import { BookmarkIcon } from "lucide-react";
 import { memo } from "react";
 
 import { cn } from "~/lib/utils";
-import { ComposerBanner } from "./ComposerBanner";
 
 /**
- * Bookmark tab that shows the stash count beside the composer's other attachments
+ * Compact chip that shows the stash count beside the composer controls
  * and opens the stash menu.
  *
  * On save the badge gives one quiet acknowledgement: it lifts to full
@@ -21,7 +20,7 @@ export const ComposerStashBadge = memo(function ComposerStashBadge(props: {
 }) {
   if (props.count === 0) return null;
   const count = (
-    <ComposerBanner.Count
+    <span
       key={props.pulseKey}
       className={cn(
         props.pulsing
@@ -30,37 +29,28 @@ export const ComposerStashBadge = memo(function ComposerStashBadge(props: {
       )}
     >
       {props.count}
-    </ComposerBanner.Count>
+    </span>
   );
 
   return (
-    <ComposerBanner.Root
-      density="comfortable"
-      width="content"
-      data-composer-shoulder-tab
-      className="ml-auto"
+    <button
+      type="button"
+      data-chat-composer-collapsed-controls="true"
+      data-prompt-stash-badge="true"
+      aria-label={`Stashed prompts: ${props.count}. Open stash.`}
+      aria-expanded={props.menuOpen}
+      className={cn(
+        "relative z-20 flex h-6 w-fit shrink-0 items-center gap-1.5 rounded-full border border-border bg-popover px-2.5 text-xs shadow-sm transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-ring",
+        props.menuOpen || props.pulsing
+          ? "text-foreground"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+      onPointerDown={(event) => event.preventDefault()}
+      onClick={props.onToggleMenu}
     >
-      <ComposerBanner.Row
-        render={<button type="button" />}
-        data-prompt-stash-badge="true"
-        aria-label={`Stashed prompts: ${props.count}. Open stash.`}
-        aria-expanded={props.menuOpen}
-        className={cn(
-          "transition-colors duration-200",
-          props.menuOpen && "pointer-events-none",
-          props.menuOpen || props.pulsing
-            ? "text-foreground"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-        onPointerDown={(event) => event.preventDefault()}
-        onClick={props.onToggleMenu}
-      >
-        <ComposerBanner.Icon>
-          <BookmarkIcon />
-        </ComposerBanner.Icon>
-        <ComposerBanner.Content>Stash</ComposerBanner.Content>
-        <ComposerBanner.Actions>{count}</ComposerBanner.Actions>
-      </ComposerBanner.Row>
-    </ComposerBanner.Root>
+      <BookmarkIcon className="size-3" />
+      <span>Stash</span>
+      {count}
+    </button>
   );
 });

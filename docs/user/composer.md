@@ -180,6 +180,10 @@ open the stack. Interacting with the attached banner or composer does not open t
 
 ## Prompt stash
 
+On web and desktop, the Stash chip shows your saved prompt count beside the composer controls.
+It opens a small menu without expanding a collapsed composer. Expanded drafts grow from one line
+as you type.
+
 Use the default shortcut, `Cmd+S` on macOS or `Ctrl+S` on Windows and Linux, to stash the current
 prompt and its attachments after all file uploads finish. Restore the entry later from the stash
 menu. Stashes that contain files must be restored in the environment where those files were

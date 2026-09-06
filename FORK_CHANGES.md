@@ -4,6 +4,22 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Composer spacing and GPT-6 Astra, September 4
+
+- The web and desktop composer collapses to one row without hidden editor padding. Expanded
+  drafts start at one line and grow with their text. Attached banners and the context strip
+  overlap their backdrop edges to cover fractional-pixel seams.
+- Stashed prompts use an inline chip and a small floating menu. Opening the chip preserves the
+  collapsed composer. Sources: `apps/web/src/components/chat/ChatComposer.tsx`,
+  `ComposerStashBadge.tsx`, `ComposerStashMenu.tsx`, `apps/web/src/components/ComposerPromptEditor.tsx`,
+  and `apps/web/src/index.css`.
+- Integrated upstream `bc03c3640` and `bfef973d9`: GPT-6 Astra is a current Codex model, and successful
+  catalog refreshes remove retired models. Sources: `apps/server/src/provider/model-manifest.json`
+  and `apps/server/src/provider/Layers/ProviderRegistry.ts`, with upstream regression coverage.
+- Validation: 14 composer tests, four Codex inventory tests, ten manifest tests, and web/server
+  typechecks pass. The broader registry run hits a startup-probe assertion outside these changes.
+  Browser layout verification has not been run.
+
 ## Upstream merge policy
 
 - Fork behavior wins when an upstream change touches the same feature. Merge upstream fixes and new
