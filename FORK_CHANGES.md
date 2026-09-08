@@ -736,6 +736,9 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
 
 ## Composer density and the stash badge
 
+- The editor must apply both `containerClassName` and `placeholderClassName`. The resting
+  layout uses them to give the editor available row width and clip the placeholder to one line.
+  Dropping these bindings makes an empty editor shrink and its placeholder spill over the toolbar.
 - The editor starts at one line and grows with its text. The compact composer uses a single prompt
   row, and the expanded view keeps tighter padding than upstream.
 - Upstream's scroll-driven resting layout owns collapse and expansion. Losing focus alone does
@@ -834,6 +837,9 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
   presentation and pooled limits UI instead of the fork's separate account spend cards.
 - Native account badges in pooled limits reuse configured provider accents. The fork's
   past-24-hours breakdown keeps every hour in chronological order.
+- Each pooled account segment uses its configured accent for the remaining fill, reset hatching,
+  and name marker, with the provider color as fallback. A persistent colored edge identifies
+  exhausted accounts too. Narrow-screen legend rows use the same colors and keep account names.
 - Sources: `packages/contracts/src/usage.ts`, `apps/server/src/usage/UsageService.ts`,
   `packages/shared/src/usageMerge.ts`, `apps/web/src/components/usage/UsageLimitsPooled.tsx`,
   `apps/web/src/components/usage/UsagePage.tsx`.

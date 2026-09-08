@@ -331,6 +331,58 @@ describe("pools", () => {
   };
   const laptop = { entry: { target: { label: "Laptop" } } };
 
+  it("keeps personal and work accents attached to their separate pooled allowances", () => {
+    const profiles = [
+      {
+        name: "Personal",
+        color: "#22c55e",
+        usedPercent: 100,
+        resetsAt: "2026-09-03T14:00:00.000Z",
+      },
+      { name: "Work", color: "#a855f7", usedPercent: 25, resetsAt: "2026-09-03T13:00:00.000Z" },
+    ];
+    const input = new Map([
+      [
+        EnvironmentId.make("env-a"),
+        {
+          ...laptop,
+          serverConfig: {
+            providers: profiles.map((profile) =>
+              provider({
+                driver: claude,
+                instanceId: ProviderInstanceId.make(profile.name),
+                displayName: profile.name,
+                accentColor: profile.color,
+                auth: {
+                  status: "authenticated",
+                  email: `${profile.name.toLowerCase()}@example.com`,
+                },
+                usageLimits: {
+                  checkedAt,
+                  windows: [
+                    { ...window, usedPercent: profile.usedPercent, resetsAt: profile.resetsAt },
+                  ],
+                },
+              }),
+            ),
+          },
+        },
+      ],
+    ]);
+    const [pool] = collectLimitPools(collectLimitAccounts(input), now);
+    expect(pool?.accounts).toHaveLength(2);
+    expect(
+      pool?.windows[0]?.members.map(({ account, window }) => ({
+        name: account.displayName,
+        color: account.accentColor,
+        remaining: remainingPercent(window),
+      })),
+    ).toEqual([
+      { name: "Work", color: "#a855f7", remaining: 75 },
+      { name: "Personal", color: "#22c55e", remaining: 0 },
+    ]);
+  });
+
   it("merges one account reported natively on two environments and by a hub into one entry", () => {
     const native = provider({
       driver: claude,

@@ -96,21 +96,30 @@ function AccountAvatar({
 function AccountName({
   account,
   className,
+  color = account.accentColor,
 }: {
   readonly account: LimitAccount;
   readonly className?: string;
+  readonly color?: string;
 }) {
-  if (account.displayName) return <span className={className}>{account.displayName}</span>;
-  if (account.email) {
-    return (
-      <span className={cn("inline-flex min-w-0 items-center", className)}>
-        <AccountChip email={account.email} />
-      </span>
-    );
-  }
   return (
-    <span className={className}>
-      {getDriverOption(account.driver)?.label ?? String(account.driver)}
+    <span className={cn("inline-flex min-w-0 items-center gap-1.5", className)}>
+      {color ? (
+        <span
+          aria-hidden
+          className="size-2 shrink-0 rounded-full"
+          style={{ backgroundColor: color }}
+        />
+      ) : null}
+      {account.displayName ? (
+        <span className="min-w-0 truncate">{account.displayName}</span>
+      ) : account.email ? (
+        <AccountChip email={account.email} />
+      ) : (
+        <span className="min-w-0 truncate">
+          {getDriverOption(account.driver)?.label ?? String(account.driver)}
+        </span>
+      )}
     </span>
   );
 }
@@ -266,6 +275,12 @@ function PoolSegment({
             }}
           />
         ) : null}
+        {/* Keep account identity visible even when its remaining allowance is zero. */}
+        <span
+          aria-hidden
+          className="absolute inset-x-0 bottom-0 h-0.5"
+          style={{ backgroundColor: color }}
+        />
         <span
           aria-hidden
           className="absolute inset-0 flex items-center justify-center text-[10px] leading-none font-semibold text-foreground/80 tabular-nums @2xl/pool:hidden"
@@ -273,7 +288,11 @@ function PoolSegment({
           {index}
         </span>
         <div className="relative hidden h-full min-w-0 items-center gap-1.5 px-2 text-xs @2xl/pool:flex">
-          <AccountName account={account} className="min-w-0 truncate font-medium text-foreground" />
+          <AccountName
+            account={account}
+            color={color}
+            className="min-w-0 truncate font-medium text-foreground"
+          />
           <span className="shrink-0 font-semibold text-foreground tabular-nums">{remaining}%</span>
           {/* Countdown and badge get their own plate: fill and hatching run under them otherwise. */}
           <span className="ms-auto flex shrink-0 items-center gap-1.5 rounded-sm bg-background/85 px-1.5 py-0.5 text-[11px] text-foreground tabular-nums">
@@ -355,7 +374,11 @@ function LegendRow({
         <span className="sr-only">Segment </span>
         <span className="relative">{index}</span>
       </span>
-      <AccountName account={account} className="min-w-0 truncate font-medium text-foreground" />
+      <AccountName
+        account={account}
+        color={color}
+        className="min-w-0 truncate font-medium text-foreground"
+      />
       <span className="shrink-0 font-semibold text-foreground tabular-nums">{remaining}%</span>
       <span className="ms-auto flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground tabular-nums">
         {resetsIn?.replace("resets in ", "↻ ") ?? ""}
@@ -457,7 +480,7 @@ function PoolBar({
             account={account}
             window={window}
             reset={restores.get(account.key)}
-            color={color}
+            color={account.accentColor ?? color}
             now={now}
             index={position + 1}
           />
