@@ -6,38 +6,10 @@
 environments. It shows token use, cache savings, model breakdowns, and estimated API-equivalent
 cost. These estimates are not your subscription bill.
 
-## Account limits
-
-The **Limits** section at the top of the Usage page shows the subscription windows reported by each
-provider, including the percentage used and the next reset time. Hovering the Usage item in the
-sidebar shows the same information in a compact form. The refresh button refreshes both usage
-analytics and limit snapshots.
-
-Limit rows are kept separate for each configured provider instance and environment. For example,
-two Claude providers configured with different `CLAUDE_CONFIG_DIR` values appear as two labeled
-Claude rows; one account cannot overwrite the other account's numbers. The provider display name is
-used as the label, so choose names such as `Claude Personal` and `Claude Work` in Settings.
-
-The limits are provider-reported snapshots, not an independent billing calculation:
-
-- Claude reports its 5-hour, weekly, and any additional supported windows while a Claude session is
-  running. Claude does not provide a reliable on-disk limit source, so a new installation may show
-  **No limit data yet** until that account starts a session through T3 Code.
-- Codex uses live app-server notifications and can recover the latest snapshot from Codex session
-  transcripts when available. A transcript from a shared/shadow home is not assigned to an account
-  unless ownership is unambiguous.
-- A timestamp is shown when a snapshot becomes stale. It is better to show the age than to imply
-  that an older provider response is current.
-
-Limit meters and account captions take the accent color set on the provider instance in Settings,
-so two Claude accounts read apart at a glance. An instance without an accent color falls back to
-the provider's own color.
-
 ## Model breakdown
 
-The model breakdown lists one row per model per account. Two Claude subscriptions running the same
-model are two separate lines of spend, and the account is named on the row whenever its provider
-has more than one configured.
+The breakdown shows model usage and estimated spend. The past-24-hours table includes every
+hour in chronological order, including hours without activity.
 
 If recent work is missing or a new model shows no cost, refresh to rescan session history and
 update model pricing.
@@ -65,9 +37,18 @@ the dialog.
 
 ## Track subscription limits
 
-**Usage → Limits** shows how much quota is left in each window and when it resets, for Codex and
-Claude subscriptions. For windows with timing data, each bar also marks how much of the window is
-left, so you can judge your pace before the next reset.
+**Usage → Limits** pools every subscription account it can see per provider, so with several Codex
+or Claude accounts across your environments and hubs you read one number per window rather than a
+list. Each window card shows how much of the pool is left and a bar with one segment per account,
+ordered by which resets soonest; when the provider reports reset times, the card also says when
+the next reset lands and how much it hands back. The hatched
+part of a segment is what that reset restores. Tap a segment or account row for the account's plan,
+where it is signed in, and its reset time. On web, you can hover too. Codex accounts with banked
+reset credits show a ticket count and the **Use reset** action in the account details. On narrow screens, numbered rows below
+the bar show each account's quota, countdown, and credits. Tap a row to open its details.
+
+The same account signed in on more than one environment, or reported by a hub as well, counts once.
+Filter with the environment dropdown to see what a single machine has.
 
 If a window looks stale, refresh Limits to re-check every provider and hub.
 
@@ -84,6 +65,9 @@ using a proxy through `ANTHROPIC_AUTH_TOKEN`.
 To see pooled accounts, open **Settings → Providers → Usage providers → Add hub**. Choose the
 environment that will connect to the hub and enter its URL and management key.
 
-The accounts appear under **Usage → Limits**. This connection supplies usage information; configure
+The accounts appear under **Usage → Limits**. Codex accounts show banked reset credits; select an
+account and choose **Use reset** to redeem one. No hub plugin is required.
+
+This connection supplies usage information; configure
 the provider separately to send agent requests through the hub. Remove the hub from the same
 settings section when you no longer need it.

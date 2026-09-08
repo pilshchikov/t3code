@@ -69,6 +69,7 @@ export const PROJECT_KEYBINDING_COMMANDS = [
 export type ProjectKeybindingCommand = (typeof PROJECT_KEYBINDING_COMMANDS)[number];
 
 export const THREAD_KEYBINDING_COMMANDS = [
+  "thread.stop",
   "thread.previous",
   "thread.next",
   "thread.copyReference",

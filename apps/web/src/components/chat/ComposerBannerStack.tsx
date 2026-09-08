@@ -34,7 +34,7 @@ const stackCapBorderClass: Record<ComposerBannerStackItem["variant"], string> = 
 };
 
 export interface ComposerBannerStackItem {
-  readonly priority?: "notice" | "urgent";
+  readonly priority?: "activity" | "notice" | "urgent";
   readonly children?: ReactNode;
   readonly id: string;
   readonly variant: "default" | "error" | "info" | "success" | "warning";

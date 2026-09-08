@@ -178,12 +178,6 @@ const TIMESTAMP_FORMAT_LABELS = {
   "24-hour": "24-hour",
 } as const;
 
-const COMPOSER_COLLAPSE_TRIGGER_LABELS = {
-  blur: "On unfocus",
-  scroll: "On scroll",
-} as const;
-type ComposerCollapseTrigger = keyof typeof COMPOSER_COLLAPSE_TRIGGER_LABELS;
-
 const DIFF_LAYOUT_LABELS: Record<DiffLayout, string> = {
   stacked: "Stacked",
   split: "Split",
@@ -551,9 +545,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.showSkillsInSlashMenu !== DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu
         ? ["Show skills in slash menu"]
         : []),
-      ...(settings.composerCollapseOnBlur !== DEFAULT_UNIFIED_SETTINGS.composerCollapseOnBlur ||
-      settings.composerCollapseOnScroll !== DEFAULT_UNIFIED_SETTINGS.composerCollapseOnScroll
-        ? ["Collapse composer"]
+      ...(settings.composerCollapseOnScroll !== DEFAULT_UNIFIED_SETTINGS.composerCollapseOnScroll
+        ? ["Collapse composer on scroll"]
         : []),
       ...(settings.contextWindowMeterEnabled !== DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled
         ? ["Context window indicator"]
@@ -606,6 +599,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.confirmQuit,
       settings.confirmThreadArchive,
       settings.confirmThreadDelete,
+      settings.confirmThreadUnpin,
+      settings.composerCollapseOnScroll,
       settings.addProjectBaseDirectory,
       settings.defaultThreadEnvMode,
       settings.newWorktreesStartFromOrigin,
@@ -711,7 +706,6 @@ export function useSettingsRestore(onRestored?: () => void) {
       diffLayout: DEFAULT_UNIFIED_SETTINGS.diffLayout,
       proactivePanelsEnabled: DEFAULT_UNIFIED_SETTINGS.proactivePanelsEnabled,
       showSkillsInSlashMenu: DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu,
-      composerCollapseOnBlur: DEFAULT_UNIFIED_SETTINGS.composerCollapseOnBlur,
       composerCollapseOnScroll: DEFAULT_UNIFIED_SETTINGS.composerCollapseOnScroll,
       contextWindowMeterEnabled: DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled,
       environmentIdentificationMode: DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode,
@@ -1138,7 +1132,6 @@ export function AppearanceSettingsPanel() {
                   type="button"
                   aria-label={swatch.label}
                   aria-pressed={settings.accentColor === swatch.hex}
-                  title={swatch.label}
                   className={cn(
                     "size-5 cursor-pointer rounded-full border transition-transform",
                     settings.accentColor === swatch.hex
@@ -1149,10 +1142,7 @@ export function AppearanceSettingsPanel() {
                   onClick={() => updateSettings({ accentColor: swatch.hex })}
                 />
               ))}
-              <label
-                className="ms-1 inline-flex cursor-pointer items-center gap-1 text-xs text-secondary-label"
-                title="Pick any colour"
-              >
+              <label className="ms-1 inline-flex cursor-pointer items-center gap-1 text-xs text-secondary-label">
                 <input
                   type="color"
                   className="size-5 cursor-pointer rounded-full border border-border/70 bg-transparent p-0"
@@ -2096,13 +2086,6 @@ export function GeneralSettingsPanel() {
   const serverProviders = useAtomValue(primaryServerProvidersAtom);
   const supportsAutoSettlement =
     useAtomValue(primaryServerConfigAtom)?.environment.capabilities.threadAutoSettlement === true;
-  const composerCollapseTriggers = useMemo<ComposerCollapseTrigger[]>(
-    () => [
-      ...(settings.composerCollapseOnBlur ? (["blur"] as const) : []),
-      ...(settings.composerCollapseOnScroll ? (["scroll"] as const) : []),
-    ],
-    [settings.composerCollapseOnBlur, settings.composerCollapseOnScroll],
-  );
   const diagnosticsDescription = formatDiagnosticsDescription({
     localTracingEnabled: observability?.localTracingEnabled ?? false,
     otlpTracesEnabled: observability?.otlpTracesEnabled ?? false,
@@ -2442,16 +2425,14 @@ export function GeneralSettingsPanel() {
 
         <SettingsRow
           {...searchableSetting("composer-collapse")}
-          description="Rest the composer of an existing thread into a single line when it loses focus, when you scroll the conversation, or both. Pick neither to keep it expanded."
+          description="Rest the composer of an existing thread into a single line when you scroll the conversation. Focus the composer or start typing to expand it again."
           resetAction={
-            settings.composerCollapseOnBlur !== DEFAULT_UNIFIED_SETTINGS.composerCollapseOnBlur ||
             settings.composerCollapseOnScroll !==
-              DEFAULT_UNIFIED_SETTINGS.composerCollapseOnScroll ? (
+            DEFAULT_UNIFIED_SETTINGS.composerCollapseOnScroll ? (
               <SettingResetButton
-                label="collapse composer"
+                label="collapse composer on scroll"
                 onClick={() =>
                   updateSettings({
-                    composerCollapseOnBlur: DEFAULT_UNIFIED_SETTINGS.composerCollapseOnBlur,
                     composerCollapseOnScroll: DEFAULT_UNIFIED_SETTINGS.composerCollapseOnScroll,
                   })
                 }
@@ -2459,34 +2440,13 @@ export function GeneralSettingsPanel() {
             ) : null
           }
           control={
-            <Select
-              multiple
-              value={composerCollapseTriggers}
-              onValueChange={(next) =>
-                updateSettings({
-                  composerCollapseOnBlur: next.includes("blur"),
-                  composerCollapseOnScroll: next.includes("scroll"),
-                })
+            <Switch
+              checked={settings.composerCollapseOnScroll}
+              onCheckedChange={(checked) =>
+                updateSettings({ composerCollapseOnScroll: Boolean(checked) })
               }
-            >
-              <SelectTrigger size="sm" className="w-full sm:w-40" aria-label="Collapse composer">
-                <SelectValue>
-                  {composerCollapseTriggers.length === 0
-                    ? "Never"
-                    : composerCollapseTriggers
-                        .map((trigger) => COMPOSER_COLLAPSE_TRIGGER_LABELS[trigger])
-                        .join(", ")}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectPopup align="end" alignItemWithTrigger={false}>
-                <SelectItem showCheck value="blur">
-                  {COMPOSER_COLLAPSE_TRIGGER_LABELS.blur}
-                </SelectItem>
-                <SelectItem showCheck value="scroll">
-                  {COMPOSER_COLLAPSE_TRIGGER_LABELS.scroll}
-                </SelectItem>
-              </SelectPopup>
-            </Select>
+              aria-label="Collapse composer on scroll"
+            />
           }
         />
 
@@ -2607,55 +2567,24 @@ export function GeneralSettingsPanel() {
 
       <SettingsSection id="projects-and-threads" title="Projects & threads">
         <SettingsRow
-          serverScoped
           {...searchableSetting("new-threads")}
-          description="Pick the default workspace mode for newly created draft threads."
-          resetAction={
-            settings.defaultThreadEnvMode !== DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode ||
-            settings.newWorktreesStartFromOrigin !==
-              DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin ? (
-              <SettingResetButton
-                label="new threads"
-                onClick={() =>
-                  updateSettings({
-                    defaultThreadEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode,
-                    newWorktreesStartFromOrigin:
-                      DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin,
-                  })
-                }
-              />
-            ) : null
-          }
+          description="Choose the default model and workspace for all projects or a specific project."
           control={
-            <Select
-              value={settings.defaultThreadEnvMode}
-              onValueChange={(value) => {
-                if (value === "local" || value === "worktree") {
-                  updateSettings({ defaultThreadEnvMode: value });
-                }
-              }}
+            <Button
+              render={
+                <Link to="/settings/projects" search={{ project: undefined, machine: undefined }} />
+              }
+              size="sm"
+              variant="outline"
             >
-              <SelectTrigger size="sm" className="w-full sm:w-44" aria-label="Default thread mode">
-                <SelectValue>
-                  {settings.defaultThreadEnvMode === "worktree" ? "New worktree" : "Local"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectPopup align="end" alignItemWithTrigger={false}>
-                <SelectItem hideIndicator value="local">
-                  Local
-                </SelectItem>
-                <SelectItem hideIndicator value="worktree">
-                  New worktree
-                </SelectItem>
-              </SelectPopup>
-            </Select>
+              Project settings
+            </Button>
           }
         />
 
         <SettingsRow
           serverScoped
-          className="bg-muted/20 sm:pl-9"
-          title={searchableSetting("start-from-origin").title}
+          {...searchableSetting("start-from-origin")}
           description="Creates the worktree from the latest matching branch on origin instead of your local branch."
           resetAction={
             settings.newWorktreesStartFromOrigin !==

@@ -4,6 +4,34 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Upstream sync, September 7
+
+- Merged 169 missing upstream commits through `8588d7f63`, including pooled subscription limits,
+  account load balancing, cross-platform window capture, sidebar drag transitions, searchable
+  project scopes, provider fixes, and composer scroll/layout fixes.
+- Used upstream's Usage page and pooled Limits view as requested. Provider account badges retain
+  configured accents; the fork's hourly breakdown still includes all 24 hours in chronological
+  order. The old separate account-limit panel no longer replaces the upstream Limits tab.
+- Used upstream's scroll-driven resting composer, multiline detection, and control relocation.
+  The fork keeps a one-line minimum editor, tighter padding, a 40px expansion reservation, and
+  an inline stash chip whose small menu does not expand the prompt. Attached banners use the
+  fork's seam-covering glass rules.
+- Audited overlapping fork changes after resolving conflicts. Restored file/video attachment
+  uploads and retry guards, project-slot menu behavior, device-local inbox order, and section-sign
+  shortcut recording around the new upstream paths. Preserved collapsible screenshots, inline
+  turn plans, root-aware file panels, branch drift tracking, and default-off privacy/startup gates.
+- Preserved all installed fork migration IDs through 49. Incoming branch-PR and active-order
+  migrations run as 50 and 51. An upgrade regression test starts at 49 and checks that existing
+  thread timestamps and multiple workspace roots survive.
+- Kept the fork's Never default and open-PR protection for inactivity settlement. PR-bearing
+  threads wait for a successful lookup; threads without a branch or saved PR can still settle
+  before network work. Slow post-turn PR refresh runs separately from checkpoint processing.
+- Backup: `backup/pre-upstream-sync-20260907` at `9ae821264`.
+  No app rebuild, reinstall, restart, live-data writes, or push was performed.
+- Validation: 1,307 focused tests across 47 files pass. Web, server, desktop, contracts, shared,
+  and client-runtime native TypeScript checks pass; mobile passes `tsc`. Targeted lint has
+  warnings but no errors. No browser or computer-use verification was performed.
+
 ## Upstream sync and collapsible chat images, September 5
 
 - Merged all 350 missing commits from `upstream/main` through `ab67795dd`. The sync includes
@@ -610,31 +638,16 @@ fork-specific behavior so future upstream syncs are easier to review.
 
 ## Provider account limits
 
-- The Usage page now shows provider-reported subscription windows above the historical token/cost
-  charts, and the sidebar Usage hover card shows the same limits in compact form. Refreshing Usage
-  refreshes both the transcript analytics and the limits snapshot.
-- Limits are keyed by `(environment, provider instance)`, not only by provider kind. Separate Claude
-  instances (for example, personal and work profiles using different `CLAUDE_CONFIG_DIR` values)
-  retain separate 5-hour/weekly readings and are labeled with their configured display names.
-- Claude limits are collected from the live SDK usage response and streamed rate-limit events. Claude
-  has no trustworthy transcript fallback, so a newly configured instance remains empty until a
-  session reports its limits; snapshots are persisted locally across server restarts.
-- Current Claude `rate_limit_event` payloads are read from `rate_limit_info.unifiedWindows`, with the
-  older single-window payload retained as a fallback. Streamed utilization fractions are converted
-  from `0..1` to percentages before they update the matching provider instance, and an event without
-  utilization no longer replaces a valid reading with `0%`.
-- Codex limits use live app-server notifications and may be recovered from transcripts only when a
-  sessions directory has one unambiguous configured owner. Shared shadow-home transcripts are
-  skipped rather than attributed to the wrong account.
-- The account-limit contract is versioned and accepts legacy single-provider snapshots, migrating
-  them safely while evicting a stale migrated row when a live event identifies another instance.
-- Source: `packages/contracts/src/accountLimits.ts`,
-  `apps/server/src/usage/AccountLimitsService.ts`,
+- The fork's account-limit service and versioned snapshots remain available for compatibility.
+  They key readings by environment and provider instance, preserve Claude account isolation,
+  normalize streamed usage windows, and avoid attributing ambiguous Codex transcripts.
+- The September 7 sync adopts upstream's pooled Usage → Limits UI and provider probes. It
+  deduplicates accounts across environments and hubs and keeps native provider account badges
+  and configured accents. Do not restore the old panel over that tab in future merges.
+- Sources: `apps/server/src/usage/AccountLimitsService.ts`,
   `apps/server/src/usage/accountLimitsNormalize.ts`,
-  `apps/server/src/usage/accountLimitsTranscripts.ts`,
-  `apps/web/src/state/accountLimits.ts`, `apps/web/src/components/usage/AccountLimits.tsx`.
-- Validation: focused account-limit normalization/service/client tests, package typechecks, lint,
-  and a successful desktop build/package/install.
+  `apps/web/src/components/usage/UsageLimits.tsx`,
+  `apps/web/src/components/usage/UsageLimitsPooled.tsx`.
 
 ## Recent file and panel freshness fixes
 
@@ -723,17 +736,15 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
 
 ## Composer density and the stash badge
 
-- The stash badge sits outside the collapsing prompt area. That container clips its overflow, so the
-  badge lost its top half as soon as the composer shrank; it now perches on the composer's shoulder
-  in both states, and its menu anchors to the whole composer.
-- Scrolling the timeline back down expands the composer wherever the viewport is, rather than only at
-  the live edge. `PageDown`, `End`, and `ArrowDown` do the same.
-- The empty prompt reserves 3rem instead of 4.375rem, the composer's inner padding is a step tighter,
-  and the timeline's trailing spacer is 4px instead of 12px, which closes the gap between the last
-  message and the controls.
-- Source: `apps/web/src/components/chat/ChatComposer.tsx`,
+- The editor starts at one line and grows with its text. The compact composer uses a single prompt
+  row, and the expanded view keeps tighter padding than upstream.
+- Upstream's scroll-driven resting layout owns collapse and expansion. Losing focus alone does
+  not collapse the prompt, and multiline drafts remain readable.
+- Stashes use an inline chip in the footer or relocated controls. The chip anchors a small floating
+  menu; opening it does not expand the prompt.
+- Sources: `apps/web/src/components/chat/ChatComposer.tsx`,
   `apps/web/src/components/ComposerPromptEditor.tsx`,
-  `apps/web/src/components/chat/MessagesTimeline.tsx`, `apps/web/src/components/ChatView.tsx`.
+  `apps/web/src/components/composerFooterLayout.ts`.
 
 ## Resizable columns stretch their panes
 
@@ -816,19 +827,15 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
   `apps/server/src/keybindings.ts`, `apps/web/src/projectSlotStore.ts`,
   `apps/web/src/components/Sidebar.tsx`.
 
-## Usage split and coloured by account
+## Usage account identity and colours
 
-- A usage source now carries the provider instance it was configured from, so the client can
-  attribute transcripts to the same account the provider settings and the limits view name.
-- The model breakdown is keyed by account as well as by model: two Claude subscriptions running the
-  same model are two lines of spend, and one merged row could not say which was doing the spending.
-  The account is only named on a row when its provider has more than one.
-- Limit meters and account captions take the accent colour set on the provider instance, in both the
-  sidebar hover card and the usage page, falling back to the provider's own colour when an instance
-  carries none.
-- Source: `packages/contracts/src/usage.ts`, `apps/server/src/usage/UsageService.ts`,
-  `packages/shared/src/usageMerge.ts`, `apps/web/src/state/accountLimits.ts`,
-  `apps/web/src/components/usage/AccountLimits.tsx`,
+- Usage sources keep the configured provider instance so transcript attribution remains distinct
+  for separate accounts. The September 7 sync deliberately adopts upstream's historical chart
+  presentation and pooled limits UI instead of the fork's separate account spend cards.
+- Native account badges in pooled limits reuse configured provider accents. The fork's
+  past-24-hours breakdown keeps every hour in chronological order.
+- Sources: `packages/contracts/src/usage.ts`, `apps/server/src/usage/UsageService.ts`,
+  `packages/shared/src/usageMerge.ts`, `apps/web/src/components/usage/UsageLimitsPooled.tsx`,
   `apps/web/src/components/usage/UsagePage.tsx`.
 
 ## Deleting from the file tree

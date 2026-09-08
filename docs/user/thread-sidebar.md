@@ -22,19 +22,41 @@ environment holds a different value, **Settings > General** shows a warning that
 **Apply to all** to write your current values to every connected environment. The same applies to
 the new-thread workspace mode and the source control writing style.
 
-Pin a thread from its menu to keep it above your active work. Drag pinned threads
-to reorder them on web and desktop, or use **Move up** and **Move down** on mobile.
-The order syncs across devices.
+Pin a thread from its menu to keep it above your active work.
 
 Right-click a pull request link in a thread and choose **Link to thread** to show that pull request
 in the sidebar. With the finished-pull-request policy selected, that linked request can settle the
 thread. Right-click the same link and choose **Unlink from thread** to remove it.
 
-## Settle finished work
+On web and desktop, drag a thread between sections to change its state. Drag a thread up into
+the pinned section to pin it at the spot you drop it; drag a pinned thread down into the active
+list to unpin it. Dragging a thread onto the **Settled** header settles it, and dragging a settled
+thread into the active list un-settles it. A snoozed thread can be dragged out of the snoozed
+shelf, which wakes it, but threads cannot be dragged into the shelf because snoozing needs a wake
+time. Dragging a pinned thread out of the pinned section does not ask for unpin confirmation.
+Pinned and active boundary labels appear only while dragging, without moving the rows. The
+other rows slide aside to show where the thread will land. When you cross into another section,
+the dragged thread shows the action the drop performs, with its icon: **Pin**, **Unpin**,
+**Settle**, **Un-settle**, or **Wake**. Its status and hover actions hide during the drag. A pinned
+thread keeps its pin only while it stays in the pinned section; once it leaves, the badge takes
+over. Reordering within the same section shows no badge. When there are no pins, drag to the top
+edge to pin a thread. Section labels stay readable for the whole drag, and the section the
+thread is over takes the accent color. Section labels also
+identify empty sections and a collapsed settled shelf.
 
-Threads in the inbox below the pinned section can be dragged into any order too. That arrangement
-is kept on the device you set it on rather than shared, and a thread the arrangement has not seen
-before still arrives at the top rather than below it.
+Drag within the pinned section to change its synced order. On web and desktop, dragging
+within the active section preserves this fork's device-local inbox arrangement. New threads
+keep their default position above arranged work. On mobile, **Move up** and **Move down**
+write server-synced positions; those do not replace a device-local web or desktop arrangement.
+
+On web and desktop, the list also animates section changes made with thread actions such as
+**Pin**, **Settle**, and **Snooze**. These transitions respect your system's reduced-motion
+preference. While dragging, rows follow the insertion gap without replaying a second transition
+after the drop.
+
+Pinning and snoozing preserve active positions. The settled shelf uses settlement time.
+Cross-section dragging and synced ordering require server support; update an older server
+if those actions are unavailable.
 
 ## Colors
 
@@ -54,6 +76,11 @@ A thread whose pull request merges or closes stays where it is under the default
 If reordering is unavailable for one environment, update the T3 Code server running in that
 environment. Older servers can still pin and unpin threads, but do not understand synced ordering;
 their pinned threads keep the default newest-first order below the ones you have arranged.
+Choose **Settle thread** from its menu to move finished work out of the active list
+without deleting the conversation. **Un-settle thread** restores it to active work
+and prevents automatic settlement until new activity resumes the usual rules.
+Manually settling an idle thread dismisses unanswered async questions without
+sending an answer or restarting the agent.
 
 By default, environments settle inactive threads after three days and settle
 threads whose pull request merged. A closed pull request can also settle an idle
@@ -70,8 +97,13 @@ in the warning. Changing a rule does not reopen already settled threads.
 
 ## Link a pull request
 
+The server finds the PR for each unsettled thread's saved branch, even when your
+apps are closed. Settled threads keep their saved links. Update the server if
+automatic branch links do not appear.
+
 On web and desktop, right-click a pull request link in a thread and choose
-**Link to thread**. Use **Unlink from thread** on the same link to remove it.
+**Link to thread** to select a different PR. Use **Unlink from thread** on the
+same link to return to the branch PR, if one exists.
 The linked pull request participates in automatic settlement.
 
 ## Find and reference work

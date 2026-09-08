@@ -1,6 +1,17 @@
-import type { UsageProviderKind } from "@t3tools/contracts";
-import { CheckIcon, RefreshCwIcon, XIcon } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { RefreshIcon } from "~/components/ui/refresh-icon";
+import { useAtomValue } from "@effect/atom-react";
+import {
+  USAGE_CONTRACT_VERSION,
+  type EnvironmentId,
+  type UsageProviderKind,
+} from "@t3tools/contracts";
+import {
+  CircleAlertIcon,
+  ChevronDownIcon,
+  CircleDashedIcon,
+  SlidersHorizontalIcon,
+} from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 
 import {
   isCompatibleUsageContractVersion,
@@ -10,11 +21,8 @@ import {
 
 import { isElectron } from "../../env";
 import { cn } from "../../lib/utils";
-import { useAccountLimits } from "../../state/accountLimits";
-import { usePrimaryEnvironmentId } from "../../state/environments";
-import { useAtomValue } from "@effect/atom-react";
-import { primaryServerProvidersAtom, serverEnvironment } from "../../state/server";
-import { deriveProviderInstanceEntries } from "../../providerInstances";
+import { environmentPresentations } from "../../state/presentation";
+import { serverEnvironment } from "../../state/server";
 import { useUsage, type EnvironmentUsageStatus } from "../../state/usage";
 import { useAtomCommand } from "../../state/use-atom-command";
 import {
@@ -42,7 +50,6 @@ import { ScrollArea } from "../ui/scroll-area";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SidebarInset } from "../ui/sidebar";
 import { Skeleton } from "../ui/skeleton";
-import { AccountLimitsSection } from "./AccountLimits";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import {
   WorkspaceBreadcrumb,
@@ -79,18 +86,21 @@ const WINDOW_OPTIONS = [
   { days: 90, label: "90 days" },
 ] as const;
 
-/** The account's own mark from provider settings; nothing at all when it carries none. */
-function AccountDot({ color }: { color: string | undefined }) {
-  if (!color) return null;
-  return (
-    <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-  );
+function isUsageWindowDays(value: number): value is UsagePagePreferences["windowDays"] {
+  return WINDOW_OPTIONS.some((option) => option.days === value);
+}
+
+function zeroHour(hourStart: string): HourlyTotals {
+  return {
+    day: "",
+    hourStart,
+    costUsd: 0,
+    totalTokens: 0,
+    byProvider: new Map<UsageProviderKind, { costUsd: number; totalTokens: number }>(),
+  };
 }
 
 export function UsagePage() {
-  const [selectedEnvironmentIds, setSelectedEnvironmentIds] =
-    useState<ReadonlySet<EnvironmentId> | null>(null);
-  const presentations = useAtomValue(environmentPresentations.presentationsAtom);
   const [preferences, setPreferences] = useState(readUsagePagePreferences);
   const [windowSelection, setWindowSelection] = useState(() => ({
     days: preferences.windowDays,
@@ -105,53 +115,18 @@ export function UsagePage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const refreshingRef = useRef(false);
   const [breakdown, setBreakdown] = useState<"model" | "time">("model");
-  // Accounts are marked in provider settings; usage reuses that mark rather than inventing a
-  // second colour scheme for the same two subscriptions.
-  const serverProviders = useAtomValue(primaryServerProvidersAtom);
-  const accentByInstanceId = useMemo(() => {
-    const colors = new Map<string, string>();
-    for (const entry of deriveProviderInstanceEntries(serverProviders ?? [])) {
-      if (entry.accentColor) colors.set(entry.instanceId, entry.accentColor);
-    }
-    return colors;
-  }, [serverProviders]);
+  const [selectedEnvironmentIds, setSelectedEnvironmentIds] =
+    useState<ReadonlySet<EnvironmentId> | null>(null);
   const { days: windowDays, window } = windowSelection;
   const isPast24Hours = windowDays === 1;
-  const {
-    merged,
-    environments,
-    selectedEnvironments,
-    isPending,
-    isPartial,
-    refresh: refreshUsage,
-  } = useUsage(window, selectedEnvironmentIds);
-  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const { merged, environments, selectedEnvironments, isPending, isPartial, refresh } = useUsage(
+    window,
+    selectedEnvironmentIds,
+  );
+  const presentations = useAtomValue(environmentPresentations.presentationsAtom);
   const refreshProviders = useAtomCommand(serverEnvironment.refreshProviders, {
     reportFailure: false,
   });
-  // Only worth naming the account on a model row when that provider has more than one.
-  const namedAccountProviders = useMemo(() => {
-    const counts = new Map<UsageProviderKind, Set<string>>();
-    for (const source of merged.sources) {
-      const ids = counts.get(source.provider) ?? new Set<string>();
-      ids.add(source.sourceId);
-      counts.set(source.provider, ids);
-    }
-    return new Set(
-      [...counts.entries()].filter(([, ids]) => ids.size > 1).map(([provider]) => provider),
-    );
-  }, [merged.sources]);
-
-  const { refresh: refreshLimits } = useAccountLimits();
-  // One refresh button, two caches: the transcript scan and the limits
-  // snapshot both re-read, or the Limits strip lags the rest of the page.
-  const refresh = useCallback(
-    async (input?: UsageSummaryInput) => {
-      await refreshUsage(input);
-      refreshLimits();
-    },
-    [refreshUsage, refreshLimits],
-  );
 
   const days = useMemo(
     () => enumerateDays(window.sinceDay, window.untilDay),
@@ -164,6 +139,15 @@ export function UsagePage() {
         : enumerateHourStarts(window.sinceTime, window.untilTime),
     [window.sinceTime, window.untilTime],
   );
+  // The hourly window is small enough to render every period: the table then
+  // reads chronologically like the chart, instead of jumping between the hours
+  // that happened to have activity. Daily windows can run 90 periods, so those
+  // stay newest-first with the interesting end on top.
+  const breakdownPeriods = useMemo<readonly (DailyTotals | HourlyTotals)[]>(() => {
+    if (!isPast24Hours) return merged.daily.toReversed();
+    const byHour = new Map(merged.hourly.map((entry) => [entry.hourStart, entry]));
+    return hours.map((hourStart) => byHour.get(hourStart) ?? zeroHour(hourStart));
+  }, [isPast24Hours, merged.daily, merged.hourly, hours]);
   const breakdownModels = useMemo(
     () =>
       breakdown === "model" && metric === "tokens"
@@ -175,15 +159,7 @@ export function UsagePage() {
   );
   const activeProviders = useMemo(() => providersWithUsage(merged.providers), [merged.providers]);
   const timeValueColumnWidth = `${60 / (activeProviders.length + 2)}%`;
-  // The hourly window is small enough to render every period: the table then
-  // reads chronologically like the chart, instead of jumping between the hours
-  // that happened to have activity. Daily windows can run 90 periods, so those
-  // stay newest-first with the interesting end on top.
-  const breakdownPeriods = useMemo<readonly (DailyTotals | HourlyTotals)[]>(() => {
-    if (!isPast24Hours) return merged.daily.toReversed();
-    const byHour = new Map(merged.hourly.map((entry) => [entry.hourStart, entry]));
-    return hours.map((hourStart) => byHour.get(hourStart) ?? zeroHour(hourStart));
-  }, [isPast24Hours, merged.daily, merged.hourly, hours]);
+
   const selectWindow = (days: number) => {
     if (!isUsageWindowDays(days)) return;
     const nextPreferences = { metric, windowDays: days };
@@ -379,11 +355,16 @@ export function UsagePage() {
 
         <ScrollArea className="min-h-0 flex-1">
           <WorkspacePageContainer width="wide">
-            <AccountLimitsSection />
-            {isPending ? (
-              <>
-                <UsageSkeleton />
-              </>
+            {selectedEnvironments.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {environments.length === 0
+                  ? `Connect an environment to see ${showingLimits ? "limits" : "usage"}.`
+                  : `Select an environment to see ${showingLimits ? "limits" : "usage"}.`}
+              </p>
+            ) : showingLimits ? (
+              <UsageLimitsSection selectedEnvironmentIds={selectedEnvironmentIds} />
+            ) : isPending ? (
+              <UsageSkeleton />
             ) : (
               <>
                 <section className="grid gap-6 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
@@ -401,7 +382,7 @@ export function UsagePage() {
                       </span>
                     </div>
 
-                    {PROVIDER_ORDER.map((provider) => {
+                    {activeProviders.map((provider) => {
                       const totals = merged.providers.find((entry) => entry.provider === provider);
                       const share =
                         metric === "cost" ? (totals?.costShare ?? 0) : (totals?.tokenShare ?? 0);
@@ -444,45 +425,6 @@ export function UsagePage() {
                         </div>
                       );
                     })}
-                    {merged.sources.filter((source) => source.provider === "claude").length > 1 ? (
-                      <div className="flex flex-col gap-2 border-t border-border pt-3">
-                        <span className="text-xs tracking-wide text-muted-foreground uppercase">
-                          Claude accounts
-                        </span>
-                        {merged.sources
-                          .filter((source) => source.provider === "claude")
-                          .map((source) => (
-                            <div
-                              key={`${source.label}:${source.sourceId}`}
-                              className="flex flex-col gap-1"
-                            >
-                              <div className="flex items-baseline justify-between gap-2">
-                                <span className="flex min-w-0 items-center gap-2 text-sm text-foreground">
-                                  <ProviderMark provider="claude" className="size-3.5" />
-                                  <AccountDot
-                                    color={
-                                      source.instanceId === null
-                                        ? undefined
-                                        : accentByInstanceId.get(source.instanceId)
-                                    }
-                                  />
-                                  <span className="truncate">{source.label}</span>
-                                </span>
-                                <span className="text-sm text-foreground tabular-nums">
-                                  {metric === "cost"
-                                    ? formatUsd(source.costUsd)
-                                    : formatTokens(source.totalTokens)}
-                                </span>
-                              </div>
-                              <span className="text-xs text-muted-foreground">
-                                {metric === "cost"
-                                  ? `${formatPercent(source.costShare)} of total · ${formatTokens(source.totalTokens)} tokens`
-                                  : `${formatPercent(source.totalTokens / Math.max(merged.totalTokens, 1))} of tokens · ${formatUsd(source.costUsd)}`}
-                              </span>
-                            </div>
-                          ))}
-                      </div>
-                    ) : null}
                   </div>
 
                   <div className="flex min-w-0 flex-col gap-3">
@@ -496,7 +438,7 @@ export function UsagePage() {
                       daily={merged.daily}
                       hours={hours}
                       hourly={merged.hourly}
-                      metric={metric === "limits" ? "cost" : metric}
+                      metric={metric}
                       referenceTime={window.untilTime}
                       resolution={isPast24Hours ? "hour" : "day"}
                       timeZone={window.timeZone}
@@ -572,25 +514,13 @@ export function UsagePage() {
                         ) : (
                           breakdownModels.map((model) => (
                             <tr
-                              key={`${model.provider}:${model.sourceId}:${model.model}`}
+                              key={`${model.provider}:${model.model}`}
                               className="border-b border-border/50 transition-colors hover:bg-muted/50"
                             >
                               <td className="py-2 text-foreground">
                                 <span className="flex items-center gap-2">
                                   <ProviderMark provider={model.provider} className="size-3.5" />
                                   {model.model}
-                                  {namedAccountProviders.has(model.provider) ? (
-                                    <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                                      <AccountDot
-                                        color={
-                                          model.instanceId === null
-                                            ? undefined
-                                            : accentByInstanceId.get(model.instanceId)
-                                        }
-                                      />
-                                      <span className="truncate">{model.sourceLabel}</span>
-                                    </span>
-                                  ) : null}
                                 </span>
                               </td>
                               <td className="py-2 text-right text-foreground tabular-nums">
@@ -678,17 +608,6 @@ export function UsagePage() {
       </div>
     </SidebarInset>
   );
-}
-
-/** A zero-filled hourly period so the breakdown lists every hour in the window. */
-function zeroHour(hourStart: string): HourlyTotals {
-  return {
-    day: "",
-    hourStart,
-    costUsd: 0,
-    totalTokens: 0,
-    byProvider: new Map<UsageProviderKind, { costUsd: number; totalTokens: number }>(),
-  };
 }
 
 /** Brand mark for the harness a row belongs to. */
@@ -966,18 +885,4 @@ function UsageSkeleton() {
       </section>
     </>
   );
-}
-import { useRef } from "react";
-import { type EnvironmentId } from "@t3tools/contracts";
-import { RefreshIcon } from "~/components/ui/refresh-icon";
-import { CircleDashedIcon } from "lucide-react";
-import { CircleAlertIcon } from "lucide-react";
-import { ChevronDownIcon } from "lucide-react";
-import { USAGE_CONTRACT_VERSION } from "@t3tools/contracts";
-import { SlidersHorizontalIcon } from "lucide-react";
-import type { UsageSummaryInput } from "@t3tools/contracts";
-import { environmentPresentations } from "../../state/presentation";
-
-function isUsageWindowDays(value: number): value is UsagePagePreferences["windowDays"] {
-  return value === 1 || value === 7 || value === 30 || value === 90;
 }
