@@ -29,7 +29,7 @@ export const ProjectMemorySaveInput = Schema.Struct({
   projectId: ProjectId,
   ...ProjectMemoryFields.fields,
 });
-export class ProjectMemoryError extends Schema.TaggedErrorClass<ProjectMemoryError>()(
+export class ProjectMemoryError extends Schema.TaggedError<ProjectMemoryError>()(
   "ProjectMemoryError",
   {
     message: Schema.String,

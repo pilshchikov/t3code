@@ -20,6 +20,8 @@
 - [Environment themes](./user/environment-theme.md)
 - [SnapShots](./user/snap-shot.md)
 - [Import browser sessions](./user/browser-import.md)
+- [Devices](./user/devices.md)
+- [Usage and limits](./user/usage.md)
 - [Product usage data](./user/telemetry.md)
 - [Remote access](./user/remote-access.md)
 - [Running in the background](./user/background-service.md)
@@ -50,6 +52,12 @@ source alone does not explain. Most code changes do not need an internal documen
 - [T3 Connect](./internals/t3-connect.md)
 - [CI gates](./internals/ci.md)
 - [Account-limit architecture](./internals/account-limits.md)
+- [Assistant citations](./internals/assistant-citations.md)
+- [Mobile navigation](./internals/mobile-navigation.md)
+- [Mobile development lifecycle](./internals/mobile-development.md)
+- [Terminal runtime](./internals/terminal-runtime.md)
+- [Devices](./internals/devices.md)
+- [Voice input](./internals/voice-input.md)
 
 ### Runbooks
 

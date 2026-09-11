@@ -32,6 +32,7 @@ export class ThreadSettlementReactor extends Context.Service<
   }
 >()("t3/orchestration/ThreadSettlementReactor") {}
 
+/** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
   const engine = yield* OrchestrationEngine.OrchestrationEngineService;
   const snapshots = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
@@ -105,15 +106,19 @@ export const make = Effect.gen(function* () {
     const lookupCandidates = (yield* Effect.forEach(
       candidates,
       (thread) =>
-        thread.branch !== null ||
-        thread.linkedPullRequest != null ||
-        thread.branchPullRequest != null
-          ? Effect.succeed(thread)
-          : settleThread(thread, null),
+        thread.pullRequests.some((link) => link.source !== "stack-dismissed")
+          ? settleThread(thread, null)
+          : thread.branch !== null ||
+              thread.linkedPullRequest != null ||
+              thread.branchPullRequest != null
+            ? Effect.succeed(thread)
+            : settleThread(thread, null),
       {
         concurrency: 8,
       },
-    )).filter((thread) => thread !== null);
+    ))
+      .filter((thread) => thread !== null)
+      .filter((thread) => !thread.pullRequests.some((link) => link.source !== "stack-dismissed"));
 
     // Use the same cwd as PR discovery so both paths share GitManager's cache.
     const lookupCwdByThreadId = new Map<string, string>();

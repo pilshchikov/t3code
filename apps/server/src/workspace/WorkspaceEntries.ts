@@ -73,7 +73,7 @@ function withDirectoryAncestors(entries: ReadonlyArray<ProjectEntry>): ProjectEn
   return [...entriesByPath.values()];
 }
 
-export class WorkspaceEntriesWindowsPathUnsupportedError extends Schema.TaggedErrorClass<WorkspaceEntriesWindowsPathUnsupportedError>()(
+export class WorkspaceEntriesWindowsPathUnsupportedError extends Schema.TaggedError<WorkspaceEntriesWindowsPathUnsupportedError>()(
   "WorkspaceEntriesWindowsPathUnsupportedError",
   {
     cwd: Schema.optional(Schema.String),
@@ -87,7 +87,7 @@ export class WorkspaceEntriesWindowsPathUnsupportedError extends Schema.TaggedEr
   }
 }
 
-export class WorkspaceEntriesCurrentProjectRequiredError extends Schema.TaggedErrorClass<WorkspaceEntriesCurrentProjectRequiredError>()(
+export class WorkspaceEntriesCurrentProjectRequiredError extends Schema.TaggedError<WorkspaceEntriesCurrentProjectRequiredError>()(
   "WorkspaceEntriesCurrentProjectRequiredError",
   {
     partialPath: Schema.String,
@@ -98,7 +98,7 @@ export class WorkspaceEntriesCurrentProjectRequiredError extends Schema.TaggedEr
   }
 }
 
-export class WorkspaceEntriesReadDirectoryError extends Schema.TaggedErrorClass<WorkspaceEntriesReadDirectoryError>()(
+export class WorkspaceEntriesReadDirectoryError extends Schema.TaggedError<WorkspaceEntriesReadDirectoryError>()(
   "WorkspaceEntriesReadDirectoryError",
   {
     cwd: Schema.optional(Schema.String),
@@ -120,7 +120,7 @@ export const WorkspaceEntriesBrowseError = Schema.Union([
 ]);
 export type WorkspaceEntriesBrowseError = typeof WorkspaceEntriesBrowseError.Type;
 
-export class WorkspaceEntriesWatchError extends Schema.TaggedErrorClass<WorkspaceEntriesWatchError>()(
+export class WorkspaceEntriesWatchError extends Schema.TaggedError<WorkspaceEntriesWatchError>()(
   "WorkspaceEntriesWatchError",
   {
     cwd: Schema.String,
@@ -194,6 +194,7 @@ const resolveBrowseTarget = Effect.fn("WorkspaceEntries.resolveBrowseTarget")(fu
   return path.resolve(expandHomePathWith(input.cwd, path), input.partialPath);
 });
 
+/** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;

@@ -35,7 +35,7 @@ export const MultiworkListResult = Schema.Struct({
 });
 export type MultiworkListResult = typeof MultiworkListResult.Type;
 
-export class MultiworkError extends Schema.TaggedErrorClass<MultiworkError>()("MultiworkError", {
+export class MultiworkError extends Schema.TaggedError<MultiworkError>()("MultiworkError", {
   operation: Schema.String,
   detail: Schema.String,
   cause: Schema.optional(Schema.Defect()),

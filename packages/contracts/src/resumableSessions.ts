@@ -52,7 +52,7 @@ export const ListResumableSessionsResult = Schema.Struct({
 });
 export type ListResumableSessionsResult = typeof ListResumableSessionsResult.Type;
 
-export class ListResumableSessionsError extends Schema.TaggedErrorClass<ListResumableSessionsError>()(
+export class ListResumableSessionsError extends Schema.TaggedError<ListResumableSessionsError>()(
   "ListResumableSessionsError",
   {
     cwd: Schema.optional(TrimmedNonEmptyString),

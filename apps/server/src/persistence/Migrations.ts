@@ -68,6 +68,7 @@ import Migration0049 from "./Migrations/047_ProjectionProjectIcon.ts";
 import Migration0050 from "./Migrations/048_ProjectionThreadBranchPullRequest.ts";
 import Migration0051 from "./Migrations/049_ProjectionThreadsActiveOrderKey.ts";
 import Migration0052 from "./Migrations/052_ProjectMemories.ts";
+import Migration0053 from "./Migrations/050_ProjectionThreadPullRequests.ts";
 
 // Both fork histories used migration 041 for different additive schema changes.
 // Run both on fresh databases; 043/044 below repair databases created by either
@@ -139,6 +140,7 @@ export const migrationEntries = [
   [50, "ProjectionThreadBranchPullRequest", Migration0050],
   [51, "ProjectionThreadsActiveOrderKey", Migration0051],
   [52, "ProjectMemories", Migration0052],
+  [53, "ProjectionThreadPullRequests", Migration0053],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

@@ -357,6 +357,11 @@ export interface LimitPoolWindow {
   readonly kind: ServerProviderUsageWindow["kind"];
   readonly label: string;
   readonly members: readonly LimitPoolMember[];
+  /** Fixed account positions across rows; a null window leaves a gap. */
+  readonly columns: ReadonlyArray<{
+    readonly account: LimitAccount;
+    readonly window: ServerProviderUsageWindow | null;
+  }>;
   readonly remainingPercent: number;
   readonly usedPercent: number;
   readonly pace: LimitPace | null;
@@ -408,7 +413,8 @@ export function collectLimitPools(
     const sorted = [...members].sort(
       (left, right) =>
         Number(left.redeem === null) - Number(right.redeem === null) ||
-        accountSortName(left).localeCompare(accountSortName(right)),
+        accountSortName(left).localeCompare(accountSortName(right)) ||
+        left.key.localeCompare(right.key),
     );
     return { driver, accounts: sorted, windows: poolWindows(sorted, now) };
   });
@@ -429,6 +435,7 @@ function poolWindows(accounts: readonly LimitAccount[], now: number): readonly L
     }
   }
   const pools = [...byKey.values()].map((members): LimitPoolWindow => {
+    const memberByAccount = new Map(members.map((member) => [member.account.key, member]));
     const first = members[0]!.window;
     const usedPercent = members.reduce((sum, m) => sum + m.window.usedPercent, 0) / members.length;
     // Pace compares spend against the clock, so it is judged only over the
@@ -460,6 +467,9 @@ function poolWindows(accounts: readonly LimitAccount[], now: number): readonly L
       kind: first.kind,
       label: first.label,
       members,
+      columns: accounts.map(
+        (account) => memberByAccount.get(account.key) ?? { account, window: null },
+      ),
       usedPercent: Math.round(usedPercent),
       remainingPercent: Math.round(100 - usedPercent),
       pace: meanElapsed === null ? null : paceOfShares(timedUsed, meanElapsed),

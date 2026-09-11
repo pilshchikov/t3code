@@ -472,19 +472,21 @@ function PoolBar({
     <div className="@container/pool min-w-0">
       <div
         className="grid gap-x-1 gap-y-1"
-        style={{ gridTemplateColumns: `repeat(${pool.members.length}, minmax(0, 1fr))` }}
+        style={{ gridTemplateColumns: `repeat(${pool.columns.length}, minmax(0, 1fr))` }}
       >
-        {pool.members.map(({ account, window }, position) => (
-          <PoolSegment
-            key={account.key}
-            account={account}
-            window={window}
-            reset={restores.get(account.key)}
-            color={account.accentColor ?? color}
-            now={now}
-            index={position + 1}
-          />
-        ))}
+        {pool.columns.map((member, position) =>
+          member.window ? (
+            <PoolSegment
+              key={member.account.key}
+              account={member.account}
+              window={member.window}
+              reset={restores.get(member.account.key)}
+              color={member.account.accentColor ?? color}
+              now={now}
+              index={position + 1}
+            />
+          ) : null,
+        )}
       </div>
     </div>
   );

@@ -124,6 +124,7 @@ export function ComposerBannerStack({ className, items }: ComposerBannerStackPro
           />
         ) : null}
         <div
+          key={frontItem.id}
           className={cn(
             "relative z-10",
             exitingItemId === frontItem.id ? "pointer-events-none" : null,

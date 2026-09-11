@@ -1,3 +1,4 @@
+import { SshDeviceHostConfigs } from "./device.ts";
 import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
 import * as Schema from "effect/Schema";
@@ -32,6 +33,7 @@ import {
   ProviderInstanceId,
   type ProviderDriverKind,
 } from "./providerInstance.ts";
+import { PullRequestMergeMethod } from "./pullRequest.ts";
 
 // ── Client Settings (local-only) ───────────────────────────────
 
@@ -306,7 +308,12 @@ export const LoadBalancingWeights = Schema.Record(
   Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
 );
 
+export const DiffColorScheme = Schema.Literals(["red-green", "blue-orange"]);
+
 export const ClientSettingsSchema = Schema.Struct({
+  diffColorScheme: DiffColorScheme.pipe(
+    Schema.withDecodingDefault(Effect.succeed("red-green" as const)),
+  ),
   loadBalancingEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   loadBalancingWeights: LoadBalancingWeights.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   appearanceContrast: AppearanceContrast.pipe(
@@ -433,6 +440,10 @@ export const ClientSettingsSchema = Schema.Struct({
       ),
       modelOrder: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
     }),
+  ).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  pullRequestMergeMethodOverrides: Schema.Record(
+    TrimmedNonEmptyString,
+    PullRequestMergeMethod,
   ).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   // Legacy plan mode. The composer's Build/Plan toggle was removed from the
   // default UI; this beta flag restores it (plus the /plan and /default slash
@@ -1013,6 +1024,23 @@ export const ServerSettings = Schema.Struct({
   defaultModelSelection: Schema.NullOr(ModelSelection).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
+  /**
+   * Whether agents may drive simulators and emulators. Gates the `device_*`
+   * MCP tools and the preconfigured `agent-device` CLI the same way
+   * `enableAgentBrowserAccess` gates the browser: server-authoritative, applied
+   * when the provider session is prepared. The user's own Device panel is
+   * unaffected.
+   */
+  enableAgentDeviceAccess: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /**
+   * Whether this server may install and run T3's device helper processes.
+   * Kept separate from agent access so enabling the user's Device panel does
+   * not also grant providers control of simulators and emulators.
+   */
+  enableDeviceSupport: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /** Whether the server-local Device panel setup flow has been completed. */
+  deviceOnboardingCompleted: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  deviceHosts: SshDeviceHostConfigs.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   sidebarAutoSettleAfterDays: Schema.NullOr(SidebarAutoSettleAfterDays).pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_AUTO_SETTLE_AFTER_DAYS)),
   ),
@@ -1183,7 +1211,7 @@ export const ServerSettingsOperation = Schema.Literals([
 ]);
 export type ServerSettingsOperation = typeof ServerSettingsOperation.Type;
 
-export class ServerSettingsError extends Schema.TaggedErrorClass<ServerSettingsError>()(
+export class ServerSettingsError extends Schema.TaggedError<ServerSettingsError>()(
   "ServerSettingsError",
   {
     settingsPath: Schema.String,
@@ -1292,6 +1320,10 @@ export const ServerSettingsPatch = Schema.Struct({
     Schema.Record(ProjectId, Schema.NullOr(Schema.Boolean)),
   ),
   defaultModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
+  enableAgentDeviceAccess: Schema.optionalKey(Schema.Boolean),
+  enableDeviceSupport: Schema.optionalKey(Schema.Boolean),
+  deviceOnboardingCompleted: Schema.optionalKey(Schema.Boolean),
+  deviceHosts: Schema.optionalKey(SshDeviceHostConfigs),
   sidebarAutoSettleAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoSettleAfterDays)),
   sidebarAutoSettleMode: Schema.optionalKey(SidebarAutoSettleMode),
   sidebarAutoSettleOnMerge: Schema.optionalKey(Schema.Boolean),
@@ -1355,6 +1387,7 @@ export const ServerSettingsPatch = Schema.Struct({
 export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 
 export const ClientSettingsPatch = Schema.Struct({
+  diffColorScheme: Schema.optionalKey(DiffColorScheme),
   loadBalancingEnabled: Schema.optionalKey(Schema.Boolean),
   loadBalancingWeights: Schema.optionalKey(LoadBalancingWeights),
   appearanceContrast: Schema.optionalKey(AppearanceContrast),
@@ -1406,6 +1439,9 @@ export const ClientSettingsPatch = Schema.Struct({
         ),
       }),
     ),
+  ),
+  pullRequestMergeMethodOverrides: Schema.optionalKey(
+    Schema.Record(TrimmedNonEmptyString, PullRequestMergeMethod),
   ),
   planModeEnabled: Schema.optionalKey(Schema.Boolean),
   showEditorTabs: Schema.optionalKey(Schema.Boolean),

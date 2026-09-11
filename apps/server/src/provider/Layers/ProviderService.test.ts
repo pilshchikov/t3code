@@ -4797,17 +4797,17 @@ boundedListing.layer("ProviderServiceLive session listing", (it) => {
 const decodeBrowserAccessThreadShell = Schema.decodeUnknownEffect(OrchestrationThreadShell);
 
 describe("agent browser access", () => {
-  const revokedThreads: Array<ThreadId> = [];
-  let issuedCapabilities: readonly string[] = [];
   const projectId = ProjectId.make("project-browser-access");
 
   const startSessionWith = (
-    enableAgentBrowserAccess: boolean,
+    access: boolean | { readonly browser: boolean; readonly device: boolean },
     threadId: ThreadId,
     projectOverride?: boolean,
   ) =>
     Effect.gen(function* () {
-      const issued: Array<ThreadId> = [];
+      const enableAgentBrowserAccess = typeof access === "boolean" ? access : access.browser;
+      const enableAgentDeviceAccess = typeof access === "boolean" ? access : access.device;
+      const issued: Array<{ threadId: ThreadId; capabilities: ReadonlyArray<string> }> = [];
       const codex = makeFakeCodexAdapter();
       const providerAdapterLayer = Layer.succeed(
         ProviderAdapterRegistry.ProviderAdapterRegistry,
@@ -4866,11 +4866,12 @@ describe("agent browser access", () => {
       const providerLayer = makeProviderServiceLive({
         issueMcpCredential: (request) =>
           Effect.sync(() => {
-            issued.push(request.threadId);
-            issuedCapabilities = request.capabilities ?? [];
+            issued.push({
+              threadId: request.threadId,
+              capabilities: [...request.capabilities].toSorted(),
+            });
             return undefined;
           }),
-        revokeMcpCredential: (revoked) => Effect.sync(() => void revokedThreads.push(revoked)),
       }).pipe(
         Layer.provide(providerAdapterLayer),
         Layer.provide(directoryLayer),
@@ -4878,6 +4879,7 @@ describe("agent browser access", () => {
         Layer.provide(
           ServerSettings.ServerSettingsService.layerTest({
             enableAgentBrowserAccess,
+            enableAgentDeviceAccess,
             projectAgentBrowserAccessOverrides:
               projectOverride === undefined ? {} : { [projectId]: projectOverride },
           }),
@@ -4905,58 +4907,64 @@ describe("agent browser access", () => {
       return issued;
     });
 
-  // Credential issuance is the observable that matters: it is the only place a
-  // credential is minted, and `/mcp` accepts nothing else, so withholding it is
-  // what actually denies every provider and external MCP client.
-  it.effect("requests only memory access when agent browser access is off", () =>
+  // The capability on the credential is the observable that matters: a session
+  // always gets a credential (the pull request toolkit is never withheld), and
+  // `preview` on it is what actually grants or denies the browser tools.
+  it.effect("issues a credential without preview when agent browser access is off", () =>
     Effect.gen(function* () {
-      const issued = yield* startSessionWith(false, asThreadId("thread-browser-off"));
+      const threadId = asThreadId("thread-browser-off");
 
-      assert.deepEqual(issued, [asThreadId("thread-browser-off")]);
-      assert.deepEqual(issuedCapabilities, ["memory"]);
+      const issued = yield* startSessionWith(false, threadId);
+
+      assert.deepEqual(issued, [{ threadId, capabilities: ["memory", "pull-requests"] }]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("reissues a restricted credential when browser access is off", () =>
-    Effect.gen(function* () {
-      const threadId = asThreadId("thread-browser-revoke");
-      revokedThreads.length = 0;
-
-      yield* startSessionWith(false, threadId);
-
-      // Clearing the in-memory map is not enough: a token issued before the
-      // toggle flipped stays valid against `/mcp` for its whole liveness
-      // window, and later turns refresh it.
-      assert.deepEqual(issuedCapabilities, ["memory"]);
-    }).pipe(Effect.provide(NodeServices.layer)),
-  );
-
-  it.effect("requests an MCP credential when agent browser access is on", () =>
+  it.effect("issues a credential with preview when agent browser access is on", () =>
     Effect.gen(function* () {
       const threadId = asThreadId("thread-browser-on");
 
       const issued = yield* startSessionWith(true, threadId);
 
-      assert.deepEqual(issued, [threadId]);
-      assert.deepEqual(issuedCapabilities, ["preview", "memory"]);
+      assert.deepEqual(issued, [
+        { threadId, capabilities: ["device", "memory", "preview", "pull-requests"] },
+      ]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("grants memory without preview when the project disables browser access", () =>
+  it.effect("drops only the preview capability when browser access alone is off", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-browser-off-device-on");
+
+      const issued = yield* startSessionWith({ browser: false, device: true }, threadId);
+
+      assert.deepEqual(issued, [{ threadId, capabilities: ["device", "memory", "pull-requests"] }]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("issues a credential without preview when the project disables browser access", () =>
     Effect.gen(function* () {
       const threadId = asThreadId("thread-project-browser-off");
-      revokedThreads.length = 0;
+      const issued = yield* startSessionWith({ browser: true, device: false }, threadId, false);
+      assert.deepEqual(issued, [{ threadId, capabilities: ["memory", "pull-requests"] }]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("a project browser override leaves device access alone", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-project-browser-off-device-on");
       const issued = yield* startSessionWith(true, threadId, false);
-      assert.deepEqual(issued, [threadId]);
-      assert.deepEqual(issuedCapabilities, ["memory"]);
+      assert.deepEqual(issued, [{ threadId, capabilities: ["device", "memory", "pull-requests"] }]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect("requests an MCP credential when the project overrides browser access to on", () =>
     Effect.gen(function* () {
       const threadId = asThreadId("thread-project-browser-on");
-      const issued = yield* startSessionWith(false, threadId, true);
-      assert.deepEqual(issued, [threadId]);
+      const issued = yield* startSessionWith({ browser: false, device: false }, threadId, true);
+      assert.deepEqual(issued, [
+        { threadId, capabilities: ["memory", "preview", "pull-requests"] },
+      ]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

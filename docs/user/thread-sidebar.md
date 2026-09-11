@@ -27,6 +27,12 @@ Pin a thread from its menu to keep it above your active work.
 Right-click a pull request link in a thread and choose **Link to thread** to show that pull request
 in the sidebar. With the finished-pull-request policy selected, that linked request can settle the
 thread. Right-click the same link and choose **Unlink from thread** to remove it.
+On web and desktop, you can also drag files from your computer onto any thread row:
+the thread opens and the files are attached in its composer, ready for
+your next message. The same per-message file limits apply as when attaching
+files directly; see [Attach files](./composer.md#attach-files).
+
+Pinning does not prevent automatic settlement. Settling a thread removes its pin.
 
 On web and desktop, drag a thread between sections to change its state. Drag a thread up into
 the pinned section to pin it at the spot you drop it; drag a pinned thread down into the active

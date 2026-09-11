@@ -27,7 +27,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
 import { useOpenDirectoryCommandPalette } from "../commandPaletteContext";
-import { useProject, useThread, useThreadShellsForProjectRefs } from "../state/entities";
+import { useProject, useThreadShell, useThreadShellsForProjectRefs } from "../state/entities";
 import { useIsMobile } from "../hooks/useMediaQuery";
 import { projectEnvironment } from "../state/projects";
 import { useAtomCommand } from "../state/use-atom-command";
@@ -579,7 +579,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   const draftThread = useComposerDraftStore((store) =>
     draftId ? store.getDraftSession(draftId) : store.getDraftThreadByRef(threadRef),
   );
-  const serverThread = useThread(threadRef, { waitForShell: draftThread !== null });
+  const serverThread = useThreadShell(threadRef);
   const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
   const activeProjectRef = serverThread
     ? scopeProjectRef(serverThread.environmentId, serverThread.projectId)

@@ -15,7 +15,7 @@ const dependencies = [McpInvocationContext];
 const listTool = Tool.make("project_memory_list", {
   description:
     "List names and short descriptions of memories belonging to this thread's project. Fetch relevant entries with project_memory_read.",
-  parameters: Schema.Struct({}),
+  parameters: Schema.Record(Schema.String, Schema.Never),
   success: Schema.Array(ProjectMemorySummary),
   failure: ProjectMemoryError,
   dependencies,

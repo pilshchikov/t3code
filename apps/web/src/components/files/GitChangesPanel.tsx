@@ -631,7 +631,7 @@ export default function GitChangesPanel({
             {effectiveConflictModelSelection && modelInstanceEntries.length > 0 ? (
               <div className="flex min-w-0 items-center gap-2">
                 <ProviderModelPicker
-                  compact
+                  size="sm"
                   activeInstanceId={effectiveConflictModelSelection.instanceId}
                   model={effectiveConflictModelSelection.model}
                   lockedProvider={null}

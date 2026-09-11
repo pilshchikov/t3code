@@ -32,6 +32,8 @@ export interface ProviderTotals {
 }
 
 export interface ModelTotals {
+  /** Records with counted tokens but unknown cost, not zero cost. */
+  readonly unpricedRecords: number;
   readonly model: string;
   readonly provider: UsageProviderKind;
   /** The account whose transcripts these tokens came from; one row per model per account. */
@@ -54,6 +56,14 @@ export interface UsageSourceTotals {
   readonly totalTokens: number;
   readonly records: number;
   readonly costShare: number;
+}
+
+/**
+ * A model whose every record lacked rates has an unknown cost, not a zero one.
+ * Clients must not present its `costUsd` as a real dollar figure.
+ */
+export function isModelCostUnknown(model: ModelTotals): boolean {
+  return model.records > 0 && model.unpricedRecords >= model.records;
 }
 
 export interface DailyTotals {
@@ -281,6 +291,7 @@ export function mergeUsage(
   const modelAccumulator = new Map<
     string,
     {
+      unpricedRecords: number;
       model: string;
       provider: UsageProviderKind;
       sourceId: string;
@@ -409,10 +420,12 @@ export function mergeUsage(
         costUsd: 0,
         totalTokens: 0,
         records: 0,
+        unpricedRecords: 0,
       };
       model.costUsd += bucket.costUsd;
       model.totalTokens += tokens;
       model.records += bucket.records;
+      model.unpricedRecords += bucket.unpricedRecords;
       modelAccumulator.set(modelKey, model);
 
       const day = dailyAccumulator.get(bucket.day) ?? {
@@ -482,6 +495,7 @@ export function mergeUsage(
       costUsd: totals.costUsd,
       totalTokens: totals.totalTokens,
       records: totals.records,
+      unpricedRecords: totals.unpricedRecords,
       costShare: costUsd === 0 ? 0 : totals.costUsd / costUsd,
     }))
     .sort((a, b) => b.costUsd - a.costUsd || b.totalTokens - a.totalTokens);

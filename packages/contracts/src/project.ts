@@ -116,7 +116,7 @@ function decodedProjectErrorMessage(props: object): string | undefined {
   return typeof props.message === "string" ? props.message : undefined;
 }
 
-export class ProjectSearchEntriesError extends Schema.TaggedErrorClass<ProjectSearchEntriesError>()(
+export class ProjectSearchEntriesError extends Schema.TaggedError<ProjectSearchEntriesError>()(
   "ProjectSearchEntriesError",
   {
     cwd: Schema.optional(TrimmedNonEmptyString),
@@ -149,7 +149,7 @@ export class ProjectSearchEntriesError extends Schema.TaggedErrorClass<ProjectSe
   }
 }
 
-export class ProjectSearchContentsError extends Schema.TaggedErrorClass<ProjectSearchContentsError>()(
+export class ProjectSearchContentsError extends Schema.TaggedError<ProjectSearchContentsError>()(
   "ProjectSearchContentsError",
   {
     cwd: Schema.optional(TrimmedNonEmptyString),
@@ -223,7 +223,7 @@ export const ProjectSearchCodeResult = Schema.Struct({
 });
 export type ProjectSearchCodeResult = typeof ProjectSearchCodeResult.Type;
 
-export class ProjectSearchCodeError extends Schema.TaggedErrorClass<ProjectSearchCodeError>()(
+export class ProjectSearchCodeError extends Schema.TaggedError<ProjectSearchCodeError>()(
   "ProjectSearchCodeError",
   {
     message: TrimmedNonEmptyString,
@@ -231,7 +231,7 @@ export class ProjectSearchCodeError extends Schema.TaggedErrorClass<ProjectSearc
   },
 ) {}
 
-export class ProjectListEntriesError extends Schema.TaggedErrorClass<ProjectListEntriesError>()(
+export class ProjectListEntriesError extends Schema.TaggedError<ProjectListEntriesError>()(
   "ProjectListEntriesError",
   {
     cwd: Schema.optional(TrimmedNonEmptyString),
@@ -312,7 +312,7 @@ type ProjectFileFailureContext = {
   readonly cause?: unknown;
 };
 
-export class ProjectReadFileError extends Schema.TaggedErrorClass<ProjectReadFileError>()(
+export class ProjectReadFileError extends Schema.TaggedError<ProjectReadFileError>()(
   "ProjectReadFileError",
   {
     cwd: Schema.optional(TrimmedNonEmptyString),
@@ -349,7 +349,7 @@ export const ProjectWriteFileResult = Schema.Struct({
 });
 export type ProjectWriteFileResult = typeof ProjectWriteFileResult.Type;
 
-export class ProjectWriteFileError extends Schema.TaggedErrorClass<ProjectWriteFileError>()(
+export class ProjectWriteFileError extends Schema.TaggedError<ProjectWriteFileError>()(
   "ProjectWriteFileError",
   {
     cwd: Schema.optional(TrimmedNonEmptyString),
@@ -387,7 +387,7 @@ export const ProjectDeleteEntryResult = Schema.Struct({
 });
 export type ProjectDeleteEntryResult = typeof ProjectDeleteEntryResult.Type;
 
-export class ProjectDeleteEntryError extends Schema.TaggedErrorClass<ProjectDeleteEntryError>()(
+export class ProjectDeleteEntryError extends Schema.TaggedError<ProjectDeleteEntryError>()(
   "ProjectDeleteEntryError",
   {
     cwd: Schema.optional(TrimmedNonEmptyString),

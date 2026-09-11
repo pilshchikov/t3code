@@ -4,6 +4,28 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Upstream sync, September 10
+
+- Merged 117 upstream commits through `57aee3e19f`. The pre-merge fork checkpoint is
+  `7690b027b3`, also retained as `backup/pre-upstream-20260910`.
+- Kept project memory, multiwork provisioning and selectors, compact mobile/composer layouts,
+  directory chips, collapsible chat images, account colors and stable account ordering,
+  per-account usage, Git history, privacy defaults, and opt-in automatic settlement.
+- Integrated upstream device and pull-request MCP tools alongside memory. Memory list parameters
+  use an object-only schema compatible with the updated Effect MCP server. Provider credentials
+  retain thread/project isolation and explicit capability checks.
+- Registered upstream's multi-PR migration as 53, after this fork's memory migration 52.
+  Upgrade tests verify memory contents survive and legacy PR links are backfilled.
+  Sources: `apps/server/src/persistence/Migrations.ts` and migration tests.
+- Multi-PR settlement uses upstream link snapshots with the fork's settlement modes. Usage pools
+  retain stable account order even when reset times differ; upstream missing-window columns and
+  unknown-cost reporting remain available. Sources: `ThreadSettlementReactor.ts`,
+  `ThreadSettlementPolicy.ts`, `packages/shared/src/usageLimits.ts`, and `usageMerge.ts`.
+- Right-click still closes panel tabs. Shift-right-click opens upstream's extended menu.
+  Compact icon tabs and Git history remain available alongside device tabs and PR stacks.
+- Validation uses scoped typechecks and focused tests only. No browser verification, live-data
+  writes, app reinstall, or restart is part of this merge.
+
 ## Multi-directory composer chips, September 9
 
 - Multi-directory projects use one horizontally scrollable row of colored directory chips in

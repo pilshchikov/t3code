@@ -7,6 +7,13 @@ Open **Settings** and select **Appearance**.
 The accent is the color of primary buttons, the focus ring, and the send action. Select one of the
 swatches beside **Accent colour**, or **Custom** to pick any color. Select **Reset** to hand the
 accent back to whichever theme is active.
+On Android 12 or newer, choose the **Material You** theme in Appearance to use colors from
+your wallpaper. Selecting another theme replaces those colors. Like other themes, Material You
+can be selected separately for light and dark appearances.
+Android also offers **Material You Layout**, which changes shapes and spacing independently
+of the selected theme.
+
+## Motion
 
 A color you pick keeps its hue but is adjusted to the lightness the interface expects of an accent,
 separately for light and dark, so a very pale or very dark choice still reads as a button rather
