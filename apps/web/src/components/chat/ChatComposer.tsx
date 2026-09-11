@@ -5167,7 +5167,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   type="button"
                   data-chat-composer-transition-prompt="true"
                   className={cn(
-                    "min-w-0 flex-1 truncate bg-transparent p-0 text-left text-[14px] focus:outline-none",
+                    "min-h-8 min-w-0 flex-1 truncate bg-transparent p-0 text-left text-base focus:outline-none",
                     (activePendingProgress ? activePendingProgress.customAnswer : prompt.trim())
                       ? "text-foreground"
                       : "text-placeholder",
@@ -5183,9 +5183,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       : activePendingProgress.customAnswer ||
                         "Type your own answer, or leave this blank to use the selected option"
                     : prompt.trim() ||
-                      (showProviderUnavailable
-                        ? "Enable a provider in Settings"
-                        : "Ask anything...")}
+                      (showProviderUnavailable ? "Enable a provider in Settings" : "")}
                 </button>
                 {collapsedComposerImagePreviews}
                 <button
@@ -5704,7 +5702,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                               ? "Enable a provider in Settings to send a message"
                               : phase === "disconnected"
                                 ? DISCONNECTED_COMPOSER_PLACEHOLDER
-                                : "Ask anything, @tag files/folders, $use skills, or / for commands"
+                                : isMobileViewport
+                                  ? ""
+                                  : "Ask anything, @tag files/folders, $use skills, or / for commands"
                   }
                   disabled={
                     isConnecting ||

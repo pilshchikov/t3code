@@ -1274,6 +1274,29 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     );
   }
 
+  /* A phone uses one frame for the prompt and controls, without the desktop inset. */
+  @media (max-width: 39.999rem) {
+    .chat-composer-glass-shell {
+      border: 1px solid var(--chat-composer-outline);
+      border-radius: 20px;
+      background: var(--chat-composer-glass-surface);
+    }
+
+    .chat-composer-glass-shell::before,
+    .chat-composer-glass-shell .chat-composer-glass-host::after,
+    .chat-composer-glass-shell [data-chat-composer-main-surface="true"]::after,
+    .chat-composer-glass-shell .chat-composer-context-strip::before {
+      display: none;
+    }
+
+    .chat-composer-glass-shell .chat-composer-context-strip {
+      width: 100%;
+      max-width: 100%;
+      margin-top: 0;
+      padding: 0 0.5rem 0.375rem;
+    }
+  }
+
   .chat-composer-context-strip {
     position: relative;
     isolation: isolate;

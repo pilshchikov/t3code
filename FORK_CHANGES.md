@@ -6,6 +6,10 @@ fork-specific behavior so future upstream syncs are easier to review.
 
 ## Automatic worktree base and project notes, September 11
 
+- Mobile web uses one continuous composer frame with full-width controls, removing the inset
+  lower outline and overlap. Ordinary placeholders are hidden in collapsed and expanded phone
+  layouts; the collapsed input retains its tap target. Desktop drawer styling is unchanged.
+
 - New-worktree sends no longer stop with "Select a base branch" when the refs query is still
   loading. The composer keeps an explicit branch choice, otherwise uses the current checkout and
   finally `HEAD`; the agent can start and read project context without an extra blocking prompt.
