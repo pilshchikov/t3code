@@ -54,6 +54,25 @@ it.effect("stores only a token hash, resolves the bearer token, and revokes by t
   }),
 );
 
+it.effect("replaces preview credentials with memory-only access", () =>
+  Effect.gen(function* () {
+    const registry = yield* makeRegistry(() => 1_000);
+    const threadId = ThreadId.make("memory-only-thread");
+    const providerInstanceId = ProviderInstanceId.make("codex");
+    const before = yield* registry.issue({
+      threadId,
+      providerInstanceId,
+      capabilities: ["preview", "memory"],
+    });
+    const after = yield* registry.issue({ threadId, providerInstanceId, capabilities: ["memory"] });
+    const token = (credential: typeof before) =>
+      credential.config.authorizationHeader.replace(/^Bearer\s+/, "");
+    expect(yield* registry.resolve(token(before))).toBeUndefined();
+    const scope = yield* registry.resolve(token(after));
+    expect([...scope!.capabilities]).toEqual(["memory"]);
+  }),
+);
+
 it.effect("builds MCP endpoints from the bound server host", () =>
   Effect.gen(function* () {
     const cases = [

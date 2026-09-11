@@ -390,9 +390,9 @@ const WINDOW_KIND_ORDER: Record<ServerProviderUsageWindow["kind"], number> = {
  * five-hour pool. Pools order by kind, then first appearance.
  *
  * `accounts` is the table order: instances the user can act on (native,
- * named) before hub-only accounts, each group alphabetical. Each window's
- * `members` sort by reset instead, soonest first, so a bar reads left to
- * right as "who refills next" and matches the reset list under it.
+ * named) before hub-only accounts, each group alphabetical. Every window's
+ * `members` keep that same order so accounts never swap places as resets
+ * change. Only the separate reset schedule is chronological.
  */
 export function collectLimitPools(
   accounts: readonly LimitAccount[],
@@ -428,12 +428,7 @@ function poolWindows(accounts: readonly LimitAccount[], now: number): readonly L
       else byKey.set(key, [{ account, window }]);
     }
   }
-  const pools = [...byKey.values()].map((unordered): LimitPoolWindow => {
-    const members = [...unordered].sort(
-      (left, right) =>
-        (resetMillis(left.window) ?? Number.POSITIVE_INFINITY) -
-        (resetMillis(right.window) ?? Number.POSITIVE_INFINITY),
-    );
+  const pools = [...byKey.values()].map((members): LimitPoolWindow => {
     const first = members[0]!.window;
     const usedPercent = members.reduce((sum, m) => sum + m.window.usedPercent, 0) / members.length;
     // Pace compares spend against the clock, so it is judged only over the

@@ -34,6 +34,7 @@ export interface MultiworkServiceShape {
   ) => Effect.Effect<MultiworkCreateResult, MultiworkError>;
   readonly list: (input: {
     readonly baseDirectory: string;
+    readonly cwd?: string | undefined;
   }) => Effect.Effect<MultiworkListResult, MultiworkError>;
 }
 
@@ -144,9 +145,8 @@ export const make = Effect.fn("makeMultiworkService")(function* () {
       const to = path.join(dest, name);
       const exists = yield* fs.exists(from).pipe(Effect.orElseSucceed(() => false));
       if (!exists) continue;
-      yield* fs
-        .remove(to, { recursive: true, force: true })
-        .pipe(Effect.andThen(fs.copy(from, to)), Effect.ignore);
+      if (yield* fs.exists(to).pipe(Effect.orElseSucceed(() => true))) continue;
+      yield* fs.copy(from, to).pipe(Effect.ignore);
     }
   });
 
@@ -159,6 +159,12 @@ export const make = Effect.fn("makeMultiworkService")(function* () {
           detail: "A branch name is required.",
         });
       }
+
+      yield* gitOk("MultiworkService.validateBranch", input.cwd, [
+        "check-ref-format",
+        "--branch",
+        branch,
+      ]);
 
       const topLevel = yield* gitOk("MultiworkService.resolveSource", input.cwd, [
         "rev-parse",
@@ -194,6 +200,30 @@ export const make = Effect.fn("makeMultiworkService")(function* () {
       const safeBranch = branch.replace(/\//g, "-");
       const dest = path.join(baseDir, `${projectName}-${safeBranch}`);
       const reused = yield* fs.exists(dest).pipe(Effect.orElseSucceed(() => false));
+
+      if (reused) {
+        const existingOrigin = yield* gitOk("MultiworkService.verifyReuse", dest, [
+          "remote",
+          "get-url",
+          "origin",
+        ]);
+        if (existingOrigin.stdout.trim() !== origin) {
+          return yield* new MultiworkError({
+            operation: "MultiworkService.verifyReuse",
+            detail: "The existing directory belongs to a different repository.",
+          });
+        }
+        const existingBranch = yield* gitOk("MultiworkService.reuseBranch", dest, [
+          "branch",
+          "--show-current",
+        ]);
+        return {
+          path: dest,
+          branch: existingBranch.stdout.trim() || branch,
+          projectName,
+          reused: true,
+        };
+      }
 
       if (!reused) {
         // Fast path borrows local objects and detaches; fall back to a plain clone if it fails.
@@ -250,13 +280,36 @@ export const make = Effect.fn("makeMultiworkService")(function* () {
     const names = yield* fs
       .readDirectory(baseDir)
       .pipe(Effect.mapError(multiworkError("MultiworkService.list")));
-    const copies: Array<{ path: string; name: string }> = [];
+    const sourceOrigin = input.cwd
+      ? (yield* runGit("MultiworkService.sourceOrigin", input.cwd, [
+          "remote",
+          "get-url",
+          "origin",
+        ])).stdout.trim()
+      : null;
+    const copies: Array<{ path: string; name: string; branch: string }> = [];
     for (const name of names) {
       if (name.startsWith(".")) continue;
       const full = path.join(baseDir, name);
       const stat = yield* fs.stat(full).pipe(Effect.orElseSucceed(() => null));
       if (stat?.type === "Directory") {
-        copies.push({ path: full, name });
+        if (!(yield* fs.exists(path.join(full, ".git")).pipe(Effect.orElseSucceed(() => false))))
+          continue;
+        const origin = yield* runGit("MultiworkService.copyOrigin", full, [
+          "remote",
+          "get-url",
+          "origin",
+        ]);
+        if (
+          origin.exitCode !== 0 ||
+          (sourceOrigin !== null && origin.stdout.trim() !== sourceOrigin)
+        )
+          continue;
+        const branch = yield* runGit("MultiworkService.copyBranch", full, [
+          "branch",
+          "--show-current",
+        ]);
+        copies.push({ path: full, name, branch: branch.stdout.trim() });
       }
     }
     copies.sort((a, b) => a.name.localeCompare(b.name));

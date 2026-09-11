@@ -4,9 +4,10 @@ The **Files** tab in the right panel shows a project's directories. Opening a fi
 directories above it and leaves the rest of the tree as you had it; use the collapse button to shut
 the tree.
 
-## Switching worktrees
+## Switching workspaces
 
-Use the worktree menu above the file tree to browse any live Git worktree for that repository. The
+Use the workspace menu above the file tree to browse a live Git worktree or an existing multiwork
+copy of the same repository. Multiwork copies come from the configured multiwork directory. The
 menu orders worktrees by latest branch commit, newest first, and shows each branch with its absolute
 path. Switching here changes only the Files panel; it does not move the thread or check out another
 branch for the agent.

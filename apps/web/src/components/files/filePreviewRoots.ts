@@ -1,4 +1,4 @@
-import type { ProjectWorkspace, VcsRef } from "@t3tools/contracts";
+import type { MultiworkCopy, ProjectWorkspace, VcsRef } from "@t3tools/contracts";
 
 export interface FileWorktreeOption {
   readonly path: string;
@@ -20,6 +20,7 @@ function comparablePath(path: string): string {
 export function resolveFileWorktreeOptions(
   activeCwd: string,
   refs: ReadonlyArray<Pick<VcsRef, "current" | "lastCommitAt" | "name" | "worktreePath">>,
+  copies: ReadonlyArray<MultiworkCopy> = [],
 ): ReadonlyArray<FileWorktreeOption> {
   const activePath = comparablePath(activeCwd);
   const byPath = new Map<string, FileWorktreeOption>();
@@ -33,6 +34,17 @@ export function resolveFileWorktreeOptions(
       refName: ref.name,
       current: ref.current || key === activePath,
       lastCommitAt: ref.lastCommitAt ?? null,
+    });
+  }
+
+  for (const copy of copies) {
+    const key = comparablePath(copy.path);
+    if (byPath.has(key)) continue;
+    byPath.set(key, {
+      path: copy.path,
+      refName: `Multiwork · ${copy.branch || copy.name}`,
+      current: key === activePath,
+      lastCommitAt: null,
     });
   }
 

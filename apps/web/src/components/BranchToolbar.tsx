@@ -31,6 +31,8 @@ import { useProject, useThread, useThreadShellsForProjectRefs } from "../state/e
 import { useIsMobile } from "../hooks/useMediaQuery";
 import { projectEnvironment } from "../state/projects";
 import { useAtomCommand } from "../state/use-atom-command";
+import { useEnvironmentQuery } from "../state/query";
+import { multiworkEnvironment } from "../state/multiwork";
 import {
   PROJECT_WORKSPACE_COLORS,
   resolveWorkspaceColor,
@@ -67,6 +69,7 @@ import {
   MenuTrigger,
 } from "./ui/menu";
 import { Separator } from "./ui/separator";
+import { Popover, PopoverPopup, PopoverTitle, PopoverTrigger } from "./ui/popover";
 import {
   Dialog,
   DialogDescription,
@@ -168,6 +171,11 @@ function AgentGuidanceButton(props: { workspace: ProjectWorkspace; onClick: () =
 }
 
 interface MobileRunContextSelectorProps {
+  multiworkTarget?: {
+    environmentId: EnvironmentId;
+    cwd: string;
+    onSelect: (copy: import("@t3tools/contracts").MultiworkCopy) => void;
+  };
   autoEnvironmentLabel?: string | undefined;
   onAutoEnvironment?: (() => void) | undefined;
   envLocked: boolean;
@@ -185,6 +193,7 @@ interface MobileRunContextSelectorProps {
 }
 
 const MobileRunContextSelector = memo(function MobileRunContextSelector({
+  multiworkTarget,
   autoEnvironmentLabel,
   onAutoEnvironment,
   envLocked,
@@ -200,6 +209,11 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
   previousWorktreeLabel,
   onUsePreviousWorktree,
 }: MobileRunContextSelectorProps) {
+  const copies = useEnvironmentQuery(
+    multiworkTarget && !envModeLocked
+      ? multiworkEnvironment.copies({ environmentId, input: { cwd: multiworkTarget.cwd } })
+      : null,
+  );
   const activeEnvironment = useMemo(
     () => availableEnvironments?.find((env) => env.environmentId === environmentId) ?? null,
     [availableEnvironments, environmentId],
@@ -324,6 +338,11 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
             value={effectiveEnvMode}
             onValueChange={(value, eventDetails) => {
               if (!isExplicitWorkspaceModeSelectionReason(eventDetails.reason)) return;
+              if (value.startsWith("copy:")) {
+                const copy = copies.data?.copies.find((item) => `copy:${item.path}` === value);
+                if (copy) multiworkTarget?.onSelect(copy);
+                return;
+              }
               if (value === "previous-worktree") {
                 onUsePreviousWorktree();
                 return;
@@ -349,6 +368,14 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
                 <span className="min-w-0 truncate">{resolveEnvModeLabel("worktree")}</span>
               </span>
             </MenuRadioItem>
+            <MenuRadioItem disabled={envModeLocked} value="multiwork">
+              New multiwork copy
+            </MenuRadioItem>
+            {copies.data?.copies.map((copy) => (
+              <MenuRadioItem key={copy.path} value={`copy:${copy.path}`} disabled={envModeLocked}>
+                <span className="max-w-64 truncate">Multiwork · {copy.branch || copy.name}</span>
+              </MenuRadioItem>
+            ))}
             {previousWorktreeLabel ? (
               <MenuRadioItem disabled={envModeLocked} value="previous-worktree">
                 <span className="flex min-w-0 items-center gap-1.5">
@@ -579,6 +606,21 @@ export const BranchToolbar = memo(function BranchToolbar({
   // of this project — the "keep going where I just was" follow-up flow. Only
   // drafts can hop; started server threads have their workspace pinned.
   const canUsePreviousWorktree = draftThread !== null && serverThread === null && !envModeLocked;
+  const multiworkTarget =
+    canUsePreviousWorktree && activeProject && activeProjectRef
+      ? {
+          environmentId,
+          cwd: activeProject.workspaceRoot,
+          onSelect: (copy: import("@t3tools/contracts").MultiworkCopy) =>
+            setDraftThreadContext(draftId ?? threadRef, {
+              branch: copy.branch || null,
+              worktreePath: copy.path,
+              envMode: "multiwork",
+              environmentSelection: "manual",
+              projectRef: activeProjectRef,
+            }),
+        }
+      : undefined;
   const projectRefsForWorktreeLookup = useMemo(
     () => (canUsePreviousWorktree && activeProjectRef ? [activeProjectRef] : []),
     [canUsePreviousWorktree, activeProjectRef],
@@ -630,7 +672,9 @@ export const BranchToolbar = memo(function BranchToolbar({
     [activeProject?.workspaceRoot, activeProject?.workspaceRoots],
   );
   const canCollapseContextStrip = !isMobile && showGitControls && workspaceRoots.length > 1;
-  const isContextStripCollapsed = canCollapseContextStrip && contextStripCollapsed;
+  const isContextStripCollapsed =
+    (isMobile && showGitControls && workspaceRoots.length > 1) ||
+    (canCollapseContextStrip && contextStripCollapsed);
   const openDirectoryPicker = useOpenDirectoryCommandPalette();
   const reportWorkspaceRootFailure = useCallback(
     (result: Awaited<ReturnType<typeof updateProject>>) => {
@@ -734,10 +778,13 @@ export const BranchToolbar = memo(function BranchToolbar({
   );
 
   const expandContextStrip = useCallback(() => {
+    if (isMobile) return;
     onContextStripCollapsedChange(false);
-  }, [onContextStripCollapsedChange]);
+  }, [isMobile, onContextStripCollapsedChange]);
 
-  const compactContextStrip = isContextStripCollapsed ? (
+  const useDirectoryChips = showGitControls && workspaceRoots.length > 1;
+  const showCompactStrip = isContextStripCollapsed || useDirectoryChips;
+  const compactContextStrip = showCompactStrip ? (
     <div
       className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 overflow-x-auto overflow-y-hidden py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       onClick={(event) => {
@@ -745,7 +792,7 @@ export const BranchToolbar = memo(function BranchToolbar({
         if (target instanceof Element && target.closest("button,[role='button']")) {
           return;
         }
-        expandContextStrip();
+        if (!useDirectoryChips) expandContextStrip();
       }}
     >
       {addWorkspaceRootButton}
@@ -760,8 +807,8 @@ export const BranchToolbar = memo(function BranchToolbar({
       ) : null}
       {workspaceRoots.map((root, rootIndex) => {
         const isPrimary = rootIndex === 0;
-        return (
-          <div key={root.path} className="flex min-w-0 shrink-0 items-center gap-0.5">
+        const controls = (
+          <div className="flex min-w-0 flex-wrap items-center gap-1">
             <WorkspaceBadge
               workspace={root}
               index={rootIndex}
@@ -782,6 +829,7 @@ export const BranchToolbar = memo(function BranchToolbar({
                 ? {
                     previousWorktreeLabel,
                     onUsePreviousWorktree,
+                    ...(multiworkTarget ? { multiworkTarget } : {}),
                   }
                 : {})}
             />
@@ -815,24 +863,65 @@ export const BranchToolbar = memo(function BranchToolbar({
             />
           </div>
         );
+        return useDirectoryChips ? (
+          <Popover key={root.path}>
+            <PopoverTrigger
+              data-composer-context-control="true"
+              className={workspaceBadgeClassName(
+                resolveWorkspaceColor(root, rootIndex),
+                "flex h-7 max-w-44 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              )}
+              aria-label={`Directory controls for ${workspaceDisplayName(root, rootIndex)}`}
+              title={root.path}
+            >
+              <FolderIcon className="size-3 shrink-0 opacity-70" />
+              <span className="truncate">{workspaceDisplayName(root, rootIndex)}</span>
+              <ChevronDownIcon className="size-3 shrink-0 opacity-60" />
+            </PopoverTrigger>
+            <PopoverPopup
+              {...composerFloatingLayerProps}
+              side="top"
+              align="start"
+              className="w-80 max-w-[calc(100vw-2rem)]"
+              viewportClassName="space-y-3 p-3"
+            >
+              <div className="space-y-1">
+                <PopoverTitle className="text-xs">
+                  {workspaceDisplayName(root, rootIndex)}
+                  {isPrimary ? (
+                    <span className="ms-2 font-normal text-muted-foreground">Primary</span>
+                  ) : null}
+                </PopoverTitle>
+                <p className="break-all font-mono text-[10px] text-muted-foreground">{root.path}</p>
+              </div>
+              {controls}
+            </PopoverPopup>
+          </Popover>
+        ) : (
+          <div key={root.path} className="shrink-0">
+            {controls}
+          </div>
+        );
       })}
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              className="ms-auto shrink-0"
-              aria-label="Expand project context"
-              onClick={expandContextStrip}
-            />
-          }
-        >
-          <ChevronDownIcon className="size-3" />
-        </TooltipTrigger>
-        <TooltipPopup side="top">Expand project context</TooltipPopup>
-      </Tooltip>
+      {!useDirectoryChips ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="ms-auto shrink-0 max-md:hidden"
+                aria-label="Expand project context"
+                onClick={expandContextStrip}
+              />
+            }
+          >
+            <ChevronDownIcon className="size-3" />
+          </TooltipTrigger>
+          <TooltipPopup side="top">Expand project context</TooltipPopup>
+        </Tooltip>
+      ) : null}
     </div>
   ) : null;
 
@@ -863,8 +952,8 @@ export const BranchToolbar = memo(function BranchToolbar({
   return (
     <div
       ref={setStripElement}
-      data-compact={!isContextStripCollapsed && labelsOverflow ? "" : undefined}
-      data-collapsed={isContextStripCollapsed ? "true" : undefined}
+      data-compact={!showCompactStrip && labelsOverflow ? "" : undefined}
+      data-collapsed={showCompactStrip ? "true" : undefined}
       className="chat-composer-context-strip group/composer-context -mt-4 mx-auto flex w-[calc(100%-2.75rem)] max-w-[calc(48rem-2.75rem)] items-center gap-2 overflow-x-clip overflow-y-visible ps-1 pe-2 pt-5 pb-1"
     >
       {composerControlsHostRef ? (
@@ -875,10 +964,11 @@ export const BranchToolbar = memo(function BranchToolbar({
         />
       ) : null}
       {compactContextStrip}
-      {!isContextStripCollapsed && isMobile && showGitControls ? (
+      {!showCompactStrip && isMobile && showGitControls ? (
         <div className="flex min-w-0 flex-1 items-center gap-1">
           {addWorkspaceRootButton}
           <MobileRunContextSelector
+            {...(multiworkTarget ? { multiworkTarget } : {})}
             autoEnvironmentLabel={autoEnvironmentLabel}
             onAutoEnvironment={onAutoEnvironment}
             envLocked={envLocked}
@@ -895,7 +985,7 @@ export const BranchToolbar = memo(function BranchToolbar({
             onUsePreviousWorktree={onUsePreviousWorktree}
           />
         </div>
-      ) : !isContextStripCollapsed ? (
+      ) : !showCompactStrip ? (
         <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
           <div className="flex min-w-0 max-w-full items-center gap-1">
             {showGitControls ? addWorkspaceRootButton : null}
@@ -924,6 +1014,7 @@ export const BranchToolbar = memo(function BranchToolbar({
             {showGitControls ? (
               <BranchToolbarEnvModeSelector
                 envLocked={envModeLocked}
+                {...(multiworkTarget ? { multiworkTarget } : {})}
                 effectiveEnvMode={effectiveEnvMode}
                 activeWorktreePath={activeWorktreePath}
                 onEnvModeChange={onEnvModeChange}
@@ -953,7 +1044,7 @@ export const BranchToolbar = memo(function BranchToolbar({
         </div>
       ) : null}
 
-      {!isContextStripCollapsed && showGitControls ? (
+      {!showCompactStrip && showGitControls ? (
         <div className="flex min-w-0 flex-1 flex-col items-end gap-0.5 md:ml-auto md:flex-none">
           <div className="flex min-w-0 max-w-full items-center gap-1">
             {workspaceRoots[0] ? (
@@ -1007,7 +1098,7 @@ export const BranchToolbar = memo(function BranchToolbar({
           ))}
         </div>
       ) : null}
-      {!isContextStripCollapsed ? collapseContextStripButton : null}
+      {!showCompactStrip ? collapseContextStripButton : null}
       <Dialog
         open={guidanceWorkspace !== null}
         onOpenChange={(open) => {

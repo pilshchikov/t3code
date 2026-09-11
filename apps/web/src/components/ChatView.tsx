@@ -6748,13 +6748,18 @@ export default function ChatView(props: ChatViewProps) {
     }
     const threadIdForSend = activeThread.id;
     const isFirstMessage = !isServerThread || activeThread.messages.length === 0;
-    const needsNewWorktree = sendEnvMode === "worktree" && !activeThread.worktreePath;
-    const baseBranchForWorktree = needsNewWorktree ? activeThreadBranch : null;
+    const needsNewWorktree =
+      (sendEnvMode === "worktree" || sendEnvMode === "multiwork") && !activeThread.worktreePath;
+    const baseBranchForWorktree = needsNewWorktree
+      ? sendEnvMode === "multiwork"
+        ? "HEAD"
+        : activeThreadBranch
+      : null;
 
     // In worktree mode, require an explicit base branch so we don't silently
     // fall back to local execution when branch selection is missing.
     const shouldCreateWorktree = needsNewWorktree;
-    if (shouldCreateWorktree && !activeThreadBranch) {
+    if (shouldCreateWorktree && sendEnvMode === "worktree" && !activeThreadBranch) {
       setThreadError(threadIdForSend, "Select a base branch before sending in New worktree mode.");
       return;
     }
@@ -7047,7 +7052,20 @@ export default function ChatView(props: ChatViewProps) {
                     prepareWorktree: {
                       projectCwd: activeProject.workspaceRoot,
                       baseBranch: baseBranchForWorktree,
-                      branch: buildTemporaryWorktreeBranchName(randomHex),
+                      mode:
+                        sendEnvMode === "multiwork"
+                          ? ("multiwork" as const)
+                          : ("worktree" as const),
+                      branch:
+                        sendEnvMode === "multiwork"
+                          ? `spilshchikov-${
+                              title
+                                .toLowerCase()
+                                .replace(/[^a-z0-9]+/g, "-")
+                                .replace(/^-|-$/g, "")
+                                .slice(0, 40) || "task"
+                            }-${randomHex(4)}`
+                          : buildTemporaryWorktreeBranchName(randomHex),
                       ...(startFromOrigin ? { startFromOrigin: true } : {}),
                     },
                     runSetupScript: true,
@@ -7881,7 +7899,9 @@ export default function ChatView(props: ChatViewProps) {
             envMode: mode,
             newWorktreesStartFromOrigin: primaryServerSettings.newWorktreesStartFromOrigin,
           }),
-          ...(mode === "worktree" && draftThread?.worktreePath ? { worktreePath: null } : {}),
+          ...((mode === "worktree" || mode === "multiwork") && draftThread?.worktreePath
+            ? { worktreePath: null }
+            : {}),
         });
       }
       scheduleComposerFocus();

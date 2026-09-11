@@ -1,5 +1,8 @@
 import { FolderGit2Icon, FolderGitIcon, FolderIcon, FoldersIcon, HistoryIcon } from "lucide-react";
 import { memo, useMemo } from "react";
+import type { EnvironmentId, MultiworkCopy } from "@t3tools/contracts";
+import { multiworkEnvironment } from "../state/multiwork";
+import { useEnvironmentQuery } from "../state/query";
 
 import { cn } from "../lib/utils";
 
@@ -24,6 +27,11 @@ import {
 const PREVIOUS_WORKTREE_SELECT_VALUE = "previous-worktree";
 
 interface BranchToolbarEnvModeSelectorProps {
+  multiworkTarget?: {
+    environmentId: EnvironmentId;
+    cwd: string;
+    onSelect: (copy: MultiworkCopy) => void;
+  };
   envLocked: boolean;
   effectiveEnvMode: EnvMode;
   activeWorktreePath: string | null;
@@ -41,7 +49,16 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
   onEnvModeChange,
   previousWorktreeLabel,
   onUsePreviousWorktree,
+  multiworkTarget,
 }: BranchToolbarEnvModeSelectorProps) {
+  const copies = useEnvironmentQuery(
+    multiworkTarget && !envLocked
+      ? multiworkEnvironment.copies({
+          environmentId: multiworkTarget.environmentId,
+          input: { cwd: multiworkTarget.cwd },
+        })
+      : null,
+  );
   const showPreviousWorktree = Boolean(previousWorktreeLabel && onUsePreviousWorktree);
   const envModeItems = useMemo(
     () => [
@@ -51,8 +68,12 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
         ? [{ value: PREVIOUS_WORKTREE_SELECT_VALUE, label: previousWorktreeLabel }]
         : []),
       { value: "multiwork", label: resolveEnvModeLabel("multiwork") },
+      ...(copies.data?.copies ?? []).map((copy) => ({
+        value: `copy:${copy.path}`,
+        label: copy.branch || copy.name,
+      })),
     ],
-    [activeWorktreePath, previousWorktreeLabel, showPreviousWorktree],
+    [activeWorktreePath, previousWorktreeLabel, showPreviousWorktree, copies.data],
   );
 
   if (envLocked) {
@@ -82,9 +103,21 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
   return (
     <Select
       modal={false}
-      value={effectiveEnvMode}
+      onOpenChange={(open) => {
+        if (open) copies.refresh();
+      }}
+      value={
+        copies.data?.copies.some((copy) => copy.path === activeWorktreePath)
+          ? `copy:${activeWorktreePath}`
+          : effectiveEnvMode
+      }
       onValueChange={(value: string | null, eventDetails) => {
         if (!isExplicitWorkspaceModeSelectionReason(eventDetails.reason)) return;
+        if (value?.startsWith("copy:")) {
+          const copy = copies.data?.copies.find((item) => `copy:${item.path}` === value);
+          if (copy) multiworkTarget?.onSelect(copy);
+          return;
+        }
         if (value === PREVIOUS_WORKTREE_SELECT_VALUE) {
           onUsePreviousWorktree?.();
           return;
@@ -159,6 +192,19 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
             </span>
           </SelectItem>
         </SelectGroup>
+        {multiworkTarget && (
+          <SelectGroup>
+            <SelectGroupLabel>Existing multiwork copies</SelectGroupLabel>
+            {copies.error && <p className="px-2 text-xs text-destructive">{copies.error}</p>}
+            {copies.data?.copies.map((copy) => (
+              <SelectItem key={copy.path} value={`copy:${copy.path}`}>
+                <span className="block max-w-64 truncate" title={copy.path}>
+                  {copy.branch || copy.name}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        )}
       </SelectPopup>
     </Select>
   );

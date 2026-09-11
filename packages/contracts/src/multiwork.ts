@@ -25,6 +25,7 @@ export type MultiworkCreateResult = typeof MultiworkCreateResult.Type;
 export const MultiworkCopy = Schema.Struct({
   path: TrimmedNonEmptyString,
   name: TrimmedNonEmptyString,
+  branch: Schema.optional(Schema.String),
 });
 export type MultiworkCopy = typeof MultiworkCopy.Type;
 

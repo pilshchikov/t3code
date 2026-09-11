@@ -3,6 +3,7 @@ import {
   CommandId,
   EventId,
   type ModelSelection,
+  type MessageId,
   type OrchestrationEvent,
   ProviderDriverKind,
   type ProjectId,
@@ -43,6 +44,9 @@ import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { ProviderRegistry } from "../../provider/Services/ProviderRegistry.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
+import * as ProjectMemory from "../../project/ProjectMemory.ts";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { readMcpProviderSession } from "../../mcp/McpProviderSession.ts";
 import {
   ProviderCommandReactor,
   type ProviderCommandReactorShape,
@@ -317,6 +321,7 @@ function buildGeneratedWorktreeBranchName(raw: string): string {
 }
 
 const make = Effect.gen(function* () {
+  const memorySql = yield* Effect.serviceOption(SqlClient.SqlClient);
   const crypto = yield* Crypto.Crypto;
   const orchestrationEngine = yield* OrchestrationEngineService;
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
@@ -838,6 +843,7 @@ const make = Effect.gen(function* () {
   });
 
   const buildSendTurnRequestForThread = Effect.fnUntraced(function* (input: {
+    readonly messageId: MessageId;
     readonly threadId: ThreadId;
     readonly messageText: string;
     readonly attachments?: ReadonlyArray<ChatAttachment>;
@@ -860,10 +866,18 @@ const make = Effect.gen(function* () {
       threadModelSelections.set(input.threadId, input.modelSelection);
     }
     const normalizedInput = toNonEmptyProviderInput(input.messageText);
+    const memoryContext =
+      project && Option.isSome(memorySql) && readMcpProviderSession(input.threadId)
+        ? yield* ProjectMemory.initialContext(project.id, input.threadId, input.messageId).pipe(
+            Effect.provideService(SqlClient.SqlClient, memorySql.value),
+          )
+        : "";
     const projectWorkspaceRoots = project?.workspaceRoots?.length
-      ? project.workspaceRoots
+      ? project.workspaceRoots.map((root, index) =>
+          index === 0 && thread.worktreePath ? { ...root, path: thread.worktreePath } : root,
+        )
       : project
-        ? [{ path: project.workspaceRoot }]
+        ? [{ path: thread.worktreePath ?? project.workspaceRoot }]
         : [];
     const workspaceContext =
       projectWorkspaceRoots.length > 1
@@ -920,7 +934,7 @@ const make = Effect.gen(function* () {
     return {
       threadId: input.threadId,
       ...(normalizedInput
-        ? { input: `${workspaceContext}${privateAgentGuidance}${normalizedInput}` }
+        ? { input: `${workspaceContext}${privateAgentGuidance}${memoryContext}${normalizedInput}` }
         : {}),
       ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
       ...(modelForTurn !== undefined ? { modelSelection: modelForTurn } : {}),
@@ -1454,6 +1468,7 @@ const make = Effect.gen(function* () {
       );
     }
     const sendTurnRequest = yield* buildSendTurnRequestForThread({
+      messageId: message.id,
       threadId: event.payload.threadId,
       messageText: message.text,
       ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),

@@ -378,9 +378,41 @@ describe("pools", () => {
         remaining: remainingPercent(window),
       })),
     ).toEqual([
-      { name: "Work", color: "#a855f7", remaining: 75 },
       { name: "Personal", color: "#22c55e", remaining: 0 },
+      { name: "Work", color: "#a855f7", remaining: 75 },
     ]);
+    const accounts = collectLimitAccounts(input);
+    for (const refreshed of [false, true]) {
+      const [updated] = collectLimitPools(
+        [...accounts].reverse().map((account, index) => ({
+          ...account,
+          limits: {
+            ...account.limits,
+            windows: ["session", "weekly", "monthly"].map((kind, windowIndex) => ({
+              ...window,
+              id: kind,
+              kind: kind as "session" | "weekly" | "monthly",
+              usedPercent: refreshed ? 0 : 100,
+              resetsAt:
+                (index + windowIndex + Number(refreshed)) % 2 === 0
+                  ? "2026-09-03T13:00:00.000Z"
+                  : "2026-09-03T14:00:00.000Z",
+            })),
+          },
+        })),
+        now,
+      );
+      for (const pooledWindow of updated!.windows) {
+        expect(pooledWindow.members.map(({ account }) => account.displayName)).toEqual([
+          "Personal",
+          "Work",
+        ]);
+        expect(pooledWindow.resets.map(({ at }) => at)).toEqual([
+          Date.parse("2026-09-03T13:00:00.000Z"),
+          Date.parse("2026-09-03T14:00:00.000Z"),
+        ]);
+      }
+    }
   });
 
   it("merges one account reported natively on two environments and by a hub into one entry", () => {
@@ -829,7 +861,7 @@ describe("pools", () => {
       ["weekly", 1],
       ["monthly", 1],
     ]);
-    // Segments read left to right as "who refills next", matching the reset list.
+    // Segments keep the account table's order.
     expect(session?.members.map((member) => member.account.key)).toEqual(["hub:a", "hub:b"]);
     expect(pools[0]?.accounts.map((account) => account.key)).toEqual(["hub:a", "hub:b"]);
   });

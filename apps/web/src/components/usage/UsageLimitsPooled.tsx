@@ -491,9 +491,8 @@ function PoolBar({
 }
 
 /**
- * Big pooled number and the segment bar. The bar is sorted by reset, so who
- * refills next is its left edge; the exact time and share restored live in
- * each segment's popover rather than a list restating the bar.
+ * Big pooled number and the segment bar. Accounts keep the same position
+ * across windows; each segment's popover shows its reset time and share restored.
  */
 function PoolWindowCard({
   pool,

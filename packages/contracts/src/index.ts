@@ -22,6 +22,7 @@ export * from "./server.ts";
 export * from "./settings.ts";
 export * from "./git.ts";
 export * from "./multiwork.ts";
+export * from "./projectMemory.ts";
 export * from "./vcs.ts";
 export * from "./sourceControl.ts";
 export * from "./pullRequest.ts";

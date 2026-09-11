@@ -17,7 +17,23 @@ Shared actions apply to inheriting projects; editing a project's actions creates
 Reset that list to use shared actions again. Existing project actions are preserved.
 
 Project names, icons, removal, and importing actions from a checkout remain project-specific.
-When there are several checkouts, the checkout picker selects which actions and grouping to edit.
+When there are several checkouts, the checkout picker selects which actions, grouping, and project
+memories to edit.
+
+## Project memory
+
+Select a project in Settings → Projects and open Project memory. Add an entry with a short name,
+a description of when to use it, and its content. Edit reads the full entry; Delete asks for
+confirmation. You can also ask an agent to remember a fact for the project.
+
+New threads receive a short memory index on their first message. Agents read relevant entries
+through T3 Code's MCP tools rather than loading every memory into every prompt. Updates are
+available through those tools immediately, but the initial index is not repeated in an existing
+conversation. Memories may become stale, so verify details before using them for consequential work.
+
+Memories stay in the hosting T3 Code database and are shared by the project's threads, including
+threads using worktrees or multiwork copies. A separately registered project or another environment
+has its own memories. Do not store passwords, API keys, or other secrets.
 
 ## Project icons
 

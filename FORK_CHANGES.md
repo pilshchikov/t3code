@@ -4,8 +4,48 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Multi-directory composer chips, September 9
+
+- Multi-directory projects use one horizontally scrollable row of colored directory chips in
+  `apps/web/src/components/BranchToolbar.tsx`, in both expanded and collapsed composer layouts.
+  Each chip opens its directory's path, color, workspace mode, branch, and agent guidance controls.
+  Directory ordering and primary-directory permissions remain unchanged. Single-directory layout
+  is unchanged. This applies to web, desktop, and mobile web, not the native mobile client.
+- Validation: 76 toolbar logic tests and the web typecheck pass. Targeted lint reports existing
+  toolbar warnings. Browser verification awaits permission. No reinstall performed for this change.
+
+## Project memory and multiwork selectors, September 8
+
+- Restored multiwork first-send provisioning after the upstream merge disconnected the UI mode
+  from the clone service. Draft workspace selectors and the Files workspace selector list existing
+  copies filtered by repository origin. File browsing does not change the agent's checkout.
+- Reusing a multiwork leaves its branch, dirty files, unpushed commits, and local guidance alone.
+  New copies preserve remote-tracked guidance and restore only missing context files. These rules
+  follow the owner's multiwork skill. Sources: `MultiworkService.ts`, `ws.ts`, `ChatView.tsx`,
+  `BranchToolbar.tsx`, `BranchToolbarEnvModeSelector.tsx`, and `files/filePreviewRoots.ts`.
+- Project memories live in the T3 database under migration 52, not in checkout files. The first
+  non-compaction user message gets a short manual and names/descriptions. Later messages do not
+  repeat the index; MCP lists summaries, reads full entries on demand, and saves short entries.
+  Tokens grant access only to their thread's project; memory access does not grant browser access.
+- Web/desktop and mobile web Project Settings can add, read, edit, and delete memories. Separate
+  project records on other environments retain separate memories. Native mobile receives the same
+  server-side agent context and MCP tools; its settings UI is unchanged.
+  Sources: `project/ProjectMemory.ts`, `mcp/toolkits/memory.ts`, `ProjectMemorySettings.tsx`,
+  `packages/contracts/src/projectMemory.ts`, and `ProviderCommandReactor.ts`.
+- Validation: memory persistence/isolation, first-message indexing with queued prompts, MCP
+  capability separation, safe clone reuse, Files options, editor failure/confirmation behavior,
+  and multiwork bootstrap have focused regression tests. No live-data writes or reinstall.
+
 ## Upstream sync, September 7
 
+- Mobile web hides the ordinary prompt placeholder, preserving approval and question guidance.
+  Multiple workspace roots use the horizontally scrollable compact context strip on mobile,
+  retaining directory, branch, mode, and guidance controls without stacked rows.
+  Sources: `ChatComposer.tsx` and `BranchToolbar.tsx`.
+- Pooled limit bars keep alphabetical account order across all windows, with Personal before
+  Work, rather than sorting segments by reset time. The reset schedule stays chronological.
+  Shared web/desktop/mobile logic: `packages/shared/src/usageLimits.ts`; regression coverage in
+  `usageLimits.test.ts` checks different window reset orders and refreshed balances.
 - Merged 169 missing upstream commits through `8588d7f63`, including pooled subscription limits,
   account load balancing, cross-platform window capture, sidebar drag transitions, searchable
   project scopes, provider fixes, and composer scroll/layout fixes.
@@ -462,11 +502,9 @@ fork-specific behavior so future upstream syncs are easier to review.
   - `ThreadEnvMode`/`EnvMode`/`DraftThreadEnvMode`/`SidebarNewThreadEnvMode` gained a `"multiwork"`
     value; the env-mode logic treats multiwork like worktree (an isolated workspace that needs a
     base) via a shared `isIsolatedEnvMode` helper.
-  - The first-turn flow reuses the worktree machinery: the thread's `worktreePath`/`branch` fields
-    hold the copy and its branch, so the file tree/editor, VCS status, and the **first-turn AI
-    branch rename** (which renames the temporary branch into an AI-named one) all work unchanged —
-    i.e. the system "decides" the branch from your request, exactly as worktree mode does. Continuing
-    an existing thread reuses its copy rather than cloning again.
+  - The thread's `worktreePath`/`branch` fields hold the copy and its branch, so the file tree/editor
+    and VCS status follow it. New multiwork branches use `spilshchikov-<task>-<unique suffix>`;
+    existing copies retain their current branch. Continuing a thread reuses its copy.
   - The turn-start bootstrap's `prepareWorktree` gained a `mode: "worktree" | "multiwork"`; when it
     is `"multiwork"` the server provisions via `MultiworkService.create` (clone + branch) instead of
     `git worktree add`, reading the base directory from the `multiworkBaseDirectory` setting.
@@ -487,11 +525,10 @@ fork-specific behavior so future upstream syncs are easier to review.
     `checkout -B <branch>` — continuing an existing remote branch or branching off the default
     branch — and restore git-ignored project context (`.claude`, `CLAUDE.md`, `AGENTS.md`). It is
     additive and git-only; the shared `VcsDriver` contract and `jj` are untouched.
-  - The Sidebar project context menu gains "New multiwork copy…", opening a dialog that derives a
-    `spilshchikov-<task>` branch from a task name, creates the copy, registers it as a project (via
-    the existing `project.create` command), and lists existing copies under the base directory for
-    one-click re-adding. The slug is derived client-side (deterministic) rather than via the system
-    text-generation model, which only exposes purpose-built commit/PR helpers today.
+  - The current UI creates and reuses copies through the thread Workspace selector. The Files
+    workspace selector also lists matching copies for browsing. This replaces the older sidebar
+    copy dialog after the upstream sync; opening a copy as a separate project remains possible
+    through the normal directory picker.
   - Source: `packages/contracts/src/multiwork.ts`, `packages/contracts/src/settings.ts`,
     `packages/contracts/src/rpc.ts`, `packages/contracts/src/ipc.ts`,
     `apps/server/src/multiwork/MultiworkService.ts`, `apps/server/src/server.ts`,

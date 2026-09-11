@@ -96,6 +96,7 @@ import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
 import { vcsEnvironment } from "~/state/vcs";
+import { multiworkEnvironment } from "~/state/multiwork";
 
 import FileBrowserPanel from "./FileBrowserPanel";
 import FileStructurePanel from "./FileStructurePanel";
@@ -1051,6 +1052,12 @@ function FileWorktreeToolbar(props: {
   activeCwd: string;
   onSelect: (path: string) => void;
 }) {
+  const copiesQuery = useEnvironmentQuery(
+    multiworkEnvironment.copies({
+      environmentId: props.environmentId,
+      input: { cwd: props.activeCwd },
+    }),
+  );
   const refsQuery = useEnvironmentQuery(
     vcsEnvironment.listRefs({
       environmentId: props.environmentId,
@@ -1063,8 +1070,13 @@ function FileWorktreeToolbar(props: {
     }),
   );
   const options = useMemo(
-    () => resolveFileWorktreeOptions(props.activeCwd, refsQuery.data?.refs ?? []),
-    [props.activeCwd, refsQuery.data?.refs],
+    () =>
+      resolveFileWorktreeOptions(
+        props.activeCwd,
+        refsQuery.data?.refs ?? [],
+        copiesQuery.data?.copies ?? [],
+      ),
+    [props.activeCwd, refsQuery.data?.refs, copiesQuery.data?.copies],
   );
   const activeOption = options.find((option) => option.current) ?? options[0]!;
 
@@ -1077,7 +1089,10 @@ function FileWorktreeToolbar(props: {
     >
       <Menu
         onOpenChange={(open) => {
-          if (open) refsQuery.refresh();
+          if (open) {
+            refsQuery.refresh();
+            copiesQuery.refresh();
+          }
         }}
       >
         <MenuTrigger className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded px-2 text-left text-xs text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
@@ -1087,7 +1102,7 @@ function FileWorktreeToolbar(props: {
         </MenuTrigger>
         <MenuPopup align="start" className="w-80">
           <MenuGroup>
-            <MenuGroupLabel>File tree worktree</MenuGroupLabel>
+            <MenuGroupLabel>File tree workspace</MenuGroupLabel>
             <MenuRadioGroup
               value={activeOption.path}
               onValueChange={(nextPath) => {

@@ -128,6 +128,8 @@ import * as GitWorkflowService from "./git/GitWorkflowService.ts";
 import * as ReviewService from "./review/ReviewService.ts";
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
 import * as MultiworkService from "./multiwork/MultiworkService.ts";
+import * as ProjectMemory from "./project/ProjectMemory.ts";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { ResumableSessionDiscovery } from "./sessions/ResumableSessionDiscovery.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import * as RemoteOpenTargets from "./environment/RemoteOpenTargets.ts";
@@ -484,6 +486,7 @@ const makeWsRpcLayer = (
   WsRpcGroup.toLayer(
     Effect.gen(function* () {
       const currentSessionId = currentSession.sessionId;
+      const memorySql = yield* SqlClient.SqlClient;
       const crypto = yield* Crypto.Crypto;
       const projectionSnapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
       const orchestrationEngine = yield* OrchestrationEngine.OrchestrationEngineService;
@@ -1128,7 +1131,23 @@ const makeWsRpcLayer = (
               createdThread = true;
             }
 
-            if (bootstrap?.prepareWorktree) {
+            if (bootstrap?.prepareWorktree?.mode === "multiwork") {
+              const settings = yield* serverSettings.getSettings;
+              const copy = yield* multiwork.create({
+                cwd: bootstrap.prepareWorktree.projectCwd,
+                branch: bootstrap.prepareWorktree.branch ?? `spilshchikov-${command.threadId}`,
+                baseDirectory: settings.multiworkBaseDirectory,
+              });
+              targetWorktreePath = copy.path;
+              yield* dispatchFromClient({
+                type: "thread.meta.update",
+                commandId: yield* serverCommandId("bootstrap-multiwork-meta-update"),
+                threadId: command.threadId,
+                branch: copy.branch,
+                worktreePath: copy.path,
+              });
+              yield* refreshGitStatus(copy.path);
+            } else if (bootstrap?.prepareWorktree) {
               let worktreeBaseRef = bootstrap.prepareWorktree.baseBranch;
               // "Start from origin" is a stored default; repos without the
               // requested remote branch fall back to the local base branch.
@@ -2711,6 +2730,20 @@ const makeWsRpcLayer = (
               .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
             { "rpc.aggregate": "vcs" },
           ),
+        [WS_METHODS.projectMemoryList]: (input) =>
+          ProjectMemory.list(input.projectId).pipe(
+            Effect.provideService(SqlClient.SqlClient, memorySql),
+          ),
+        [WS_METHODS.projectMemoryRead]: (input) =>
+          ProjectMemory.read(input.projectId, input.name).pipe(
+            Effect.provideService(SqlClient.SqlClient, memorySql),
+          ),
+        [WS_METHODS.projectMemorySave]: (input) =>
+          ProjectMemory.save(input).pipe(Effect.provideService(SqlClient.SqlClient, memorySql)),
+        [WS_METHODS.projectMemoryRemove]: (input) =>
+          ProjectMemory.remove(input.projectId, input.name).pipe(
+            Effect.provideService(SqlClient.SqlClient, memorySql),
+          ),
         [WS_METHODS.multiworkCreate]: (input) =>
           observeRpcEffect(
             WS_METHODS.multiworkCreate,
@@ -2723,13 +2756,13 @@ const makeWsRpcLayer = (
             ),
             { "rpc.aggregate": "multiwork" },
           ),
-        [WS_METHODS.multiworkList]: () =>
+        [WS_METHODS.multiworkList]: (input) =>
           observeRpcEffect(
             WS_METHODS.multiworkList,
             serverSettings.getSettings.pipe(
               Effect.map((settings) => settings.multiworkBaseDirectory),
               Effect.orElseSucceed(() => ""),
-              Effect.flatMap((baseDirectory) => multiwork.list({ baseDirectory })),
+              Effect.flatMap((baseDirectory) => multiwork.list({ baseDirectory, ...input })),
             ),
             { "rpc.aggregate": "multiwork" },
           ),
@@ -3069,6 +3102,7 @@ const makeWsRpcLayer = (
 
 export const websocketRpcRouteLayer = Layer.unwrap(
   Effect.gen(function* () {
+    const memorySql = yield* SqlClient.SqlClient;
     const previewAutomationBroker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
     const baseServerSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
     const config = yield* ServerConfig.ServerConfig;
@@ -3130,6 +3164,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
               clientAnalyticsProps,
               previewAutomationBroker,
             ).pipe(
+              Layer.provide(Layer.succeed(SqlClient.SqlClient, memorySql)),
               Layer.provideMerge(RpcSerialization.layerJson),
               Layer.provide(AgentSessionScanner.layer),
               Layer.provide(ProviderMaintenanceRunner.layer),

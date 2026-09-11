@@ -1,4 +1,5 @@
 import { FolderPlusIcon } from "lucide-react";
+import { ProjectMemorySettings } from "./ProjectMemorySettings";
 import { useAtomValue } from "@effect/atom-react";
 import {
   isAtomCommandInterrupted,
@@ -1600,6 +1601,11 @@ function ProjectDetail({
           ) : null}
         </SettingsSection>
 
+        <ProjectMemorySettings
+          key={`${selectedCheckout.environmentId}:${selectedCheckout.id}`}
+          environmentId={selectedCheckout.environmentId}
+          projectId={selectedCheckout.id}
+        />
         <SettingsSection title="Danger">
           <SettingsRow
             title={

@@ -1,4 +1,12 @@
 import * as Schema from "effect/Schema";
+import {
+  ProjectMemory,
+  ProjectMemorySummary,
+  ProjectMemoryError,
+  ProjectMemoryKey,
+  ProjectMemoryListInput,
+  ProjectMemorySaveInput,
+} from "./projectMemory.ts";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
@@ -339,6 +347,10 @@ export const WS_METHODS = {
   // Multiwork methods
   multiworkCreate: "multiwork.create",
   multiworkList: "multiwork.list",
+  projectMemoryList: "projectMemory.list",
+  projectMemoryRead: "projectMemory.read",
+  projectMemorySave: "projectMemory.save",
+  projectMemoryRemove: "projectMemory.remove",
 
   // Review methods
   reviewGetDiffPreview: "review.getDiffPreview",
@@ -1104,9 +1116,30 @@ export const WsMultiworkCreateRpc = Rpc.make(WS_METHODS.multiworkCreate, {
 });
 
 export const WsMultiworkListRpc = Rpc.make(WS_METHODS.multiworkList, {
-  payload: Schema.Struct({}),
+  payload: Schema.Struct({ cwd: Schema.optional(Schema.String) }),
   success: MultiworkListResult,
   error: Schema.Union([MultiworkError, EnvironmentAuthorizationError]),
+});
+
+const memoryRpcError = Schema.Union([ProjectMemoryError, EnvironmentAuthorizationError]);
+const WsProjectMemoryListRpc = Rpc.make(WS_METHODS.projectMemoryList, {
+  payload: ProjectMemoryListInput,
+  success: Schema.Array(ProjectMemorySummary),
+  error: memoryRpcError,
+});
+const WsProjectMemoryReadRpc = Rpc.make(WS_METHODS.projectMemoryRead, {
+  payload: ProjectMemoryKey,
+  success: ProjectMemory,
+  error: memoryRpcError,
+});
+const WsProjectMemorySaveRpc = Rpc.make(WS_METHODS.projectMemorySave, {
+  payload: ProjectMemorySaveInput,
+  success: ProjectMemory,
+  error: memoryRpcError,
+});
+const WsProjectMemoryRemoveRpc = Rpc.make(WS_METHODS.projectMemoryRemove, {
+  payload: ProjectMemoryKey,
+  error: memoryRpcError,
 });
 
 /**
@@ -1462,6 +1495,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsVcsInitRpc,
   WsMultiworkCreateRpc,
   WsMultiworkListRpc,
+  WsProjectMemoryListRpc,
+  WsProjectMemoryReadRpc,
+  WsProjectMemorySaveRpc,
+  WsProjectMemoryRemoveRpc,
   WsReviewGetDiffPreviewRpc,
   WsReviewGetDiffFileContentsRpc,
   WsTerminalOpenRpc,

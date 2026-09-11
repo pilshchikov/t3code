@@ -35,6 +35,22 @@ describe("resolveFilePreviewRoots", () => {
 });
 
 describe("resolveFileWorktreeOptions", () => {
+  it("includes existing multiwork copies without changing the active checkout", () => {
+    const options = resolveFileWorktreeOptions(
+      "/repo",
+      [],
+      [
+        { path: "/copies/task", name: "repo-task", branch: "task" },
+        { path: "/copies/task/", name: "duplicate" },
+      ],
+    );
+    expect(options).toHaveLength(2);
+    expect(options.find((option) => option.path === "/copies/task")).toMatchObject({
+      refName: "Multiwork · task",
+      current: false,
+    });
+    expect(options.find((option) => option.current)?.path).toBe("/repo");
+  });
   it("lists live worktrees by newest commit", () => {
     expect(
       resolveFileWorktreeOptions("/worktrees/project/task-b", [

@@ -6,6 +6,13 @@ include a skill when the task needs more context.
 Messages can contain up to 120,000 characters. Longer drafts stay in the composer
 so you can shorten them or split them into several messages.
 
+## Multiwork copies
+
+Choose Multiwork copy in a new thread's Workspace selector to work in an independent clone.
+The copy starts from the remote's master branch, or main when master is absent. It does not
+inherit edits from the source checkout. Choose an existing multiwork from the same selector to
+continue its current branch without resetting it. The Files panel can browse these copies too.
+
 ## Attach files
 
 Attach up to eight files per message. Images can be up to 10 MB; other files can

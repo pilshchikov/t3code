@@ -4798,6 +4798,7 @@ const decodeBrowserAccessThreadShell = Schema.decodeUnknownEffect(OrchestrationT
 
 describe("agent browser access", () => {
   const revokedThreads: Array<ThreadId> = [];
+  let issuedCapabilities: readonly string[] = [];
   const projectId = ProjectId.make("project-browser-access");
 
   const startSessionWith = (
@@ -4866,6 +4867,7 @@ describe("agent browser access", () => {
         issueMcpCredential: (request) =>
           Effect.sync(() => {
             issued.push(request.threadId);
+            issuedCapabilities = request.capabilities ?? [];
             return undefined;
           }),
         revokeMcpCredential: (revoked) => Effect.sync(() => void revokedThreads.push(revoked)),
@@ -4906,15 +4908,16 @@ describe("agent browser access", () => {
   // Credential issuance is the observable that matters: it is the only place a
   // credential is minted, and `/mcp` accepts nothing else, so withholding it is
   // what actually denies every provider and external MCP client.
-  it.effect("requests no MCP credential when agent browser access is off", () =>
+  it.effect("requests only memory access when agent browser access is off", () =>
     Effect.gen(function* () {
       const issued = yield* startSessionWith(false, asThreadId("thread-browser-off"));
 
-      assert.deepEqual(issued, []);
+      assert.deepEqual(issued, [asThreadId("thread-browser-off")]);
+      assert.deepEqual(issuedCapabilities, ["memory"]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("revokes an already-issued credential when access is off", () =>
+  it.effect("reissues a restricted credential when browser access is off", () =>
     Effect.gen(function* () {
       const threadId = asThreadId("thread-browser-revoke");
       revokedThreads.length = 0;
@@ -4924,7 +4927,7 @@ describe("agent browser access", () => {
       // Clearing the in-memory map is not enough: a token issued before the
       // toggle flipped stays valid against `/mcp` for its whole liveness
       // window, and later turns refresh it.
-      assert.deepEqual(revokedThreads, [threadId]);
+      assert.deepEqual(issuedCapabilities, ["memory"]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
@@ -4935,16 +4938,17 @@ describe("agent browser access", () => {
       const issued = yield* startSessionWith(true, threadId);
 
       assert.deepEqual(issued, [threadId]);
+      assert.deepEqual(issuedCapabilities, ["preview", "memory"]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("withholds and revokes MCP credentials when the project disables browser access", () =>
+  it.effect("grants memory without preview when the project disables browser access", () =>
     Effect.gen(function* () {
       const threadId = asThreadId("thread-project-browser-off");
       revokedThreads.length = 0;
       const issued = yield* startSessionWith(true, threadId, false);
-      assert.deepEqual(issued, []);
-      assert.deepEqual(revokedThreads, [threadId]);
+      assert.deepEqual(issued, [threadId]);
+      assert.deepEqual(issuedCapabilities, ["memory"]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 

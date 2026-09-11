@@ -500,6 +500,7 @@ const buildAppUnderTest = (options?: {
   onPairingChangesSubscribed?: Effect.Effect<void>;
   config?: Partial<ServerConfig.ServerConfig["Service"]>;
   layers?: {
+    multiwork?: Partial<MultiworkService.MultiworkService["Service"]>;
     keybindings?: Partial<Keybindings.Keybindings["Service"]>;
     environmentTheme?: Partial<EnvironmentTheme.EnvironmentThemeService["Service"]>;
     providerRegistry?: Partial<ProviderRegistry.ProviderRegistry["Service"]>;
@@ -711,7 +712,9 @@ const buildAppUnderTest = (options?: {
     const vcsProvisioningLayer = VcsProvisioningService.layer.pipe(
       Layer.provide(vcsDriverRegistryLayer),
     );
-    const multiworkLayer = MultiworkService.layer.pipe(Layer.provideMerge(gitVcsDriverLayer));
+    const multiworkLayer = options?.layers?.multiwork
+      ? Layer.mock(MultiworkService.MultiworkService)(options.layers.multiwork)
+      : MultiworkService.layer.pipe(Layer.provideMerge(gitVcsDriverLayer));
     const reviewLayer = options?.layers?.reviewService
       ? Layer.mock(ReviewService.ReviewService)({
           ...options.layers.reviewService,
@@ -10443,6 +10446,84 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.deepEqual(
         dispatchedCommands.map((command) => command.type),
         ["thread.archive", "thread.session.stop"],
+      );
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("bootstraps a multiwork copy without provisioning a linked worktree", () =>
+    Effect.gen(function* () {
+      const commands: OrchestrationCommand[] = [];
+      const create = vi.fn((_: MultiworkService.MultiworkCreateServiceInput) =>
+        Effect.succeed({
+          path: "/tmp/multiwork-copy",
+          branch: "spilshchikov-task",
+          projectName: "project",
+          reused: false,
+        }),
+      );
+      const createWorktree = vi.fn(() => Effect.die("Multiwork must not create a linked worktree"));
+      yield* buildAppUnderTest({
+        layers: {
+          multiwork: { create },
+          gitVcsDriver: { createWorktree },
+          orchestrationEngine: {
+            dispatch: (command) =>
+              Effect.sync(() => {
+                commands.push(command);
+                return { sequence: commands.length };
+              }),
+            readEvents: () => Stream.empty,
+          },
+        },
+      });
+      const createdAt = "2026-01-01T00:00:00.000Z";
+      const url = yield* getWsServerUrl("/ws");
+      yield* Effect.scoped(
+        withWsRpcClient(url, (client) =>
+          client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
+            type: "thread.turn.start",
+            commandId: CommandId.make("multiwork-bootstrap"),
+            threadId: ThreadId.make("multiwork-thread"),
+            message: {
+              messageId: MessageId.make("multiwork-message"),
+              role: "user",
+              text: "hello",
+              attachments: [],
+            },
+            modelSelection: defaultModelSelection,
+            runtimeMode: "full-access",
+            interactionMode: "default",
+            createdAt,
+            bootstrap: {
+              createThread: {
+                projectId: defaultProjectId,
+                title: "Multiwork",
+                modelSelection: defaultModelSelection,
+                runtimeMode: "full-access",
+                interactionMode: "default",
+                branch: null,
+                worktreePath: null,
+                createdAt,
+              },
+              prepareWorktree: {
+                projectCwd: "/tmp/project",
+                baseBranch: "HEAD",
+                branch: "spilshchikov-task",
+                mode: "multiwork",
+              },
+            },
+          }),
+        ),
+      );
+      assert.equal(create.mock.calls.length, 1);
+      assert.equal(createWorktree.mock.calls.length, 0);
+      assert.deepEqual(
+        commands.map((command) => command.type),
+        ["thread.create", "thread.meta.update", "thread.turn.start"],
+      );
+      assert.equal(
+        commands[1]?.type === "thread.meta.update" ? commands[1].worktreePath : null,
+        "/tmp/multiwork-copy",
       );
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );

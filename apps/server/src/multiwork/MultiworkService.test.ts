@@ -87,6 +87,8 @@ it.layer(TestLayer)("MultiworkService", (it) => {
         const { src } = yield* setUpSource();
         const baseDirectory = yield* makeTmpDir("multiwork-base-");
 
+        yield* writeTextFile(src, "README.md", "Unsaved source edits\n");
+
         const result = yield* service.create({
           cwd: src,
           branch: "spilshchikov-test-task",
@@ -108,6 +110,10 @@ it.layer(TestLayer)("MultiworkService", (it) => {
         );
         // Tracked content came across.
         assert.equal(yield* git(result.path, ["show", "HEAD:README.md"]), "# source");
+        assert.equal(
+          yield* fileSystem.readFileString(path.join(src, "README.md")),
+          "Unsaved source edits\n",
+        );
         // Git-ignored project context was restored.
         assert.isTrue(yield* fileSystem.exists(path.join(result.path, "CLAUDE.md")));
         assert.isTrue(yield* fileSystem.exists(path.join(result.path, ".claude/settings.json")));
@@ -156,6 +162,15 @@ it.layer(TestLayer)("MultiworkService", (it) => {
         });
         assert.equal(first.reused, false);
 
+        yield* git(first.path, ["config", "user.email", "test@test.com"]);
+        yield* git(first.path, ["config", "user.name", "Test"]);
+        yield* writeTextFile(first.path, "local.txt", "local commit");
+        yield* git(first.path, ["add", "local.txt"]);
+        yield* git(first.path, ["commit", "-m", "unpushed progress"]);
+        const localHead = yield* git(first.path, ["rev-parse", "HEAD"]);
+        yield* writeTextFile(first.path, "README.md", "dirty work");
+        yield* writeTextFile(first.path, "CLAUDE.md", "copy-specific instructions");
+
         const second = yield* service.create({
           cwd: src,
           branch: "spilshchikov-reuse",
@@ -163,6 +178,16 @@ it.layer(TestLayer)("MultiworkService", (it) => {
         });
         assert.equal(second.reused, true);
         assert.equal(second.path, first.path);
+        assert.equal(yield* git(second.path, ["rev-parse", "HEAD"]), localHead);
+        const fs = yield* FileSystem.FileSystem;
+        assert.equal(yield* fs.readFileString(`${second.path}/README.md`), "dirty work");
+        assert.equal(
+          yield* fs.readFileString(`${second.path}/CLAUDE.md`),
+          "copy-specific instructions",
+        );
+        const unrelated = yield* setUpSource();
+        assert.equal((yield* service.list({ baseDirectory, cwd: unrelated.src })).copies.length, 0);
+        assert.equal((yield* service.list({ baseDirectory, cwd: src })).copies.length, 1);
 
         const listed = yield* service.list({ baseDirectory });
         assert.equal(listed.baseDirectory, baseDirectory);
