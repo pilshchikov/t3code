@@ -63,6 +63,40 @@ describe("project memory", () => {
     }).pipe(Effect.provide(SqlitePersistenceMemory)),
   );
 
+  it.effect("makes a saved note available to another thread in the same project", () =>
+    Effect.gen(function* () {
+      yield* setup;
+      const sql = yield* SqlClient.SqlClient;
+      const firstThread = ThreadId.make("memory-thread-one");
+      const secondThread = ThreadId.make("memory-thread-two");
+      for (const threadId of [firstThread, secondThread]) {
+        yield* sql`INSERT INTO projection_thread_messages (message_id, thread_id, role, text, is_streaming, created_at, updated_at) VALUES (${`${threadId}-message`}, ${threadId}, 'user', 'hello', 0, '2026-09-08', '2026-09-08')`;
+      }
+      yield* Memory.save({
+        projectId,
+        name: "deployment",
+        description: "Read before deployment",
+        content: "Deploy through the private release workflow.",
+      });
+      assert.include(
+        yield* Memory.initialContext(
+          projectId,
+          firstThread,
+          MessageId.make(`${firstThread}-message`),
+        ),
+        '"deployment"',
+      );
+      assert.include(
+        yield* Memory.initialContext(
+          projectId,
+          secondThread,
+          MessageId.make(`${secondThread}-message`),
+        ),
+        '"deployment"',
+      );
+    }).pipe(Effect.provide(SqlitePersistenceMemory)),
+  );
+
   it.effect("rejects missing and deleted projects and unknown threads", () =>
     Effect.gen(function* () {
       yield* setup;

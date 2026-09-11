@@ -356,6 +356,7 @@ import { NoActiveThreadState } from "./NoActiveThreadState";
 import { WorkspacePageHeader } from "./WorkspacePageHeader";
 import {
   type EnvironmentOption,
+  resolveBranchToolbarValue,
   resolveCurrentCheckoutWorkspaceMetadata,
   resolveEffectiveEnvMode,
   resolveLocalCheckoutBranchMismatch,
@@ -7087,19 +7088,24 @@ export default function ChatView(props: ChatViewProps) {
     const isFirstMessage = !isServerThread || activeThread.messages.length === 0;
     const needsNewWorktree =
       (sendEnvMode === "worktree" || sendEnvMode === "multiwork") && !activeThread.worktreePath;
+    // Worktree setup is transport-level plumbing, not a reason to block the
+    // user's request. The toolbar normally supplies this value, but a draft
+    // can be sent before its refs query finishes. In that case use the current
+    // checkout and let Git resolve HEAD rather than asking the user to pick a
+    // branch before the agent can even read the project context.
+    const automaticWorktreeBaseBranch = resolveBranchToolbarValue({
+      envMode: sendEnvMode,
+      activeWorktreePath,
+      activeThreadBranch,
+      currentGitBranch: gitStatusQuery.data?.refName ?? null,
+    });
     const baseBranchForWorktree = needsNewWorktree
       ? sendEnvMode === "multiwork"
         ? "HEAD"
-        : activeThreadBranch
+        : (automaticWorktreeBaseBranch ?? "HEAD")
       : null;
 
-    // In worktree mode, require an explicit base branch so we don't silently
-    // fall back to local execution when branch selection is missing.
     const shouldCreateWorktree = needsNewWorktree;
-    if (shouldCreateWorktree && sendEnvMode === "worktree" && !activeThreadBranch) {
-      setThreadError(threadIdForSend, "Select a base branch before sending in New worktree mode.");
-      return;
-    }
 
     const composerImagesSnapshot = [...composerImages];
     const composerFilesSnapshot = [...composerFiles];

@@ -4,6 +4,17 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Automatic worktree base and project notes, September 11
+
+- New-worktree sends no longer stop with "Select a base branch" when the refs query is still
+  loading. The composer keeps an explicit branch choice, otherwise uses the current checkout and
+  finally `HEAD`; the agent can start and read project context without an extra blocking prompt.
+  Source: `apps/web/src/components/ChatView.tsx` and `BranchToolbar.logic.ts`.
+- Project memories are named as project notes in the agent instructions and settings. They remain
+  stored by `project_id`, are available to every thread in that project, and retain on-demand MCP
+  reads so full note content is not copied into every prompt. Cross-thread persistence has a
+  regression test.
+
 ## Upstream sync, September 10
 
 - Merged 117 upstream commits through `57aee3e19f`. The pre-merge fork checkpoint is

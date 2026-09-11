@@ -34,7 +34,7 @@ const readTool = Tool.make("project_memory_read", {
   .annotate(Tool.Destructive, false);
 const saveTool = Tool.make("project_memory_save", {
   description:
-    "Create or update a project memory when the user asks you to remember something. Read existing content before updating. Use a short name and a description explaining when to read it. Do not store secrets.",
+    "Create or update a shared project note when the user asks you to remember something. Notes are available to every thread in the project. Read existing content before updating. Use a short name and a description explaining when to read it. Do not store secrets.",
   parameters: ProjectMemoryFields,
   success: ProjectMemorySummary,
   failure: ProjectMemoryError,

@@ -27,10 +27,10 @@ export function ProjectMemorySettings({
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   return (
     <section className="space-y-3 rounded-lg border border-border p-4">
-      <h3 className="text-sm font-medium">Project memory</h3>
+      <h3 className="text-sm font-medium">Project notes and memory</h3>
       <p className="text-xs text-muted-foreground">
-        Shared across this project's threads and workspace copies. Agents receive names and
-        descriptions on the first message and read full entries only when needed. Do not store
+        Shared across every thread in this project and its workspace copies. Agents receive names
+        and descriptions on the first message and read full entries only when needed. Do not store
         secrets.
       </p>
       {(query.error || error) && (
