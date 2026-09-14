@@ -16,6 +16,8 @@ import * as NodeOS from "node:os";
 
 import {
   ClaudeSettings,
+  CodexSettings,
+  type ProviderInstanceConfig,
   USAGE_CONTRACT_VERSION,
   type ServerSettings as ServerSettingsValue,
   type UsageProviderKind,
@@ -45,6 +47,7 @@ import { expandHomePath } from "../pathExpansion.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { resolveClaudeConfigDir, resolveClaudeHomePath } from "../provider/Drivers/ClaudeHome.ts";
 import { resolveCodexHomeLayout } from "../provider/Drivers/CodexHomeLayout.ts";
+import { mergeProviderInstanceEnvironment } from "../provider/ProviderInstanceEnvironment.ts";
 import { UsageAggregator } from "./usageAggregation.ts";
 import { createOverrideRateTable, parseRateTable, type RateTable } from "./usagePricing.ts";
 import {
@@ -79,6 +82,9 @@ const MAX_HOURLY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /** Longest window the UI offers, plus slack. Older entries are pruned. */
 const CACHE_RETENTION_DAYS = 90;
+
+const decodeCodexSettings = Schema.decodeOption(CodexSettings);
+const decodeClaudeSettings = Schema.decodeOption(ClaudeSettings);
 
 /** On-disk shape of the rate snapshot. */
 const RatesCacheFile = Schema.Struct({
@@ -221,20 +227,6 @@ export const make = Effect.gen(function* () {
     Effect.withSpan("UsageService.refreshRates"),
   );
 
-  /**
-   * Claude's config dir is the home itself when overridden, but a default
-   * install nests transcripts under `~/.claude/projects`. Probe both.
-   */
-  const resolveClaudeTranscriptDir = (homePath: string, configDir?: string) =>
-    Effect.gen(function* () {
-      if (configDir !== undefined) return path.join(configDir, "projects");
-      const nested = path.join(homePath, ".claude", "projects");
-      const nestedExists = yield* fileSystem
-        .exists(nested)
-        .pipe(Effect.catchCause(() => Effect.succeed(false)));
-      return nestedExists ? nested : path.join(homePath, "projects");
-    });
-
   // A settings failure must not silently discard custom rates or transcript homes.
   const readSettings = settingsService.getSettings.pipe(
     Effect.catchCause(
@@ -250,73 +242,98 @@ export const make = Effect.gen(function* () {
   const resolveTranscriptDirs = Effect.fn("UsageService.resolveTranscriptDirs")(function* (
     settings: ServerSettingsValue,
   ) {
-    const configuredClaudeSources = Object.entries(settings.providerInstances).flatMap(
-      ([instanceId, instance]) => {
-        if (instance.driver !== "claudeAgent" || instance.config === undefined) return [];
-        const config = Option.getOrUndefined(
-          Schema.decodeUnknownOption(ClaudeSettings)(instance.config),
-        );
-        if (config === undefined) return [];
-        const hint = `${instanceId} ${config.configDir} ${config.homePath}`.toLowerCase();
+    const dirs: Array<{
+      provider: UsageProviderKind;
+      dir: string;
+      label: string;
+      instanceId: string;
+      fileName?: string;
+    }> = [];
+    const seen = new Set<string>();
+    for (const driver of ["claudeAgent", "codex", "grok"] as const) {
+      // Disabled accounts still have history. Explicit default slots replace
+      // the legacy settings, just as they do in the provider registry.
+      const instances: Array<
+        Pick<ProviderInstanceConfig, "config" | "environment" | "displayName"> & {
+          instanceId: string;
+        }
+      > = Object.entries(settings.providerInstances)
+        .filter(([, instance]) => instance.driver === driver)
+        .map(([instanceId, instance]) => ({ ...instance, instanceId }));
+      if (!Object.hasOwn(settings.providerInstances, driver)) {
+        instances.push({ config: settings.providers[driver], instanceId: driver });
+      }
+      for (const instance of instances) {
+        const environment = mergeProviderInstanceEnvironment(instance.environment, hostEnvironment);
+        const provider = driver === "claudeAgent" ? "claude" : driver;
+        let home: string;
+        if (driver === "codex") {
+          const decoded = decodeCodexSettings(instance.config ?? {});
+          if (Option.isNone(decoded)) continue;
+          const config = decoded.value;
+          const environmentHome = environment.CODEX_HOME?.trim();
+          const layout = yield* resolveCodexHomeLayout(
+            !config.homePath.trim() && !config.shadowHomePath.trim() && environmentHome
+              ? { ...config, homePath: environmentHome }
+              : config,
+          );
+          home = layout.sharedHomePath;
+        } else if (driver === "claudeAgent") {
+          const decoded = decodeClaudeSettings(instance.config ?? {});
+          if (Option.isNone(decoded)) continue;
+          const configDir = yield* resolveClaudeConfigDir(decoded.value);
+          const processHome = yield* resolveClaudeHomePath(decoded.value);
+          home =
+            configDir ??
+            (environment.CLAUDE_CONFIG_DIR?.trim()
+              ? expandHomePath(environment.CLAUDE_CONFIG_DIR.trim())
+              : path.join(processHome, ".claude"));
+          if (
+            !configDir &&
+            !environment.CLAUDE_CONFIG_DIR?.trim() &&
+            decoded.value.homePath.trim() &&
+            !(yield* fileSystem
+              .exists(path.join(home, "projects"))
+              .pipe(Effect.orElseSucceed(() => false))) &&
+            (yield* fileSystem
+              .exists(path.join(processHome, "projects"))
+              .pipe(Effect.orElseSucceed(() => false)))
+          )
+            home = processHome;
+        } else {
+          home = expandHomePath(
+            environment.GROK_HOME?.trim() || path.join(NodeOS.homedir(), ".grok"),
+          );
+        }
+        const directory = path.resolve(home, provider === "claude" ? "projects" : "sessions");
+        // Account aliases and Codex auth overlays can share the same history.
+        const dir = yield* fileSystem
+          .realPath(directory)
+          .pipe(Effect.orElseSucceed(() => directory));
+        const key = `${provider}\0${dir}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
         const label =
           instance.displayName ??
-          (hint.includes("work")
-            ? "Claude Work"
-            : hint.includes("personal")
+          (driver === "claudeAgent"
+            ? instance.instanceId === driver
               ? "Claude Personal"
-              : `Claude ${instanceId}`);
-        return [{ config, label, instanceId }];
-      },
-    );
-    const claudeSources = [
-      // The unconfigured default answers to the driver's own instance id, which is what an
-      // instance-keyed snapshot means when it carries no id of its own.
-      {
-        config: settings.providers.claudeAgent,
-        label: "Claude Personal",
-        instanceId: "claudeAgent",
-      },
-      ...configuredClaudeSources,
-    ];
-    const claudeDirs = yield* Effect.forEach(claudeSources, (source) =>
-      Effect.gen(function* () {
-        const claudeHome = yield* resolveClaudeHomePath(source.config);
-        const configDir = yield* resolveClaudeConfigDir(source.config);
-        const claudeDir = yield* resolveClaudeTranscriptDir(claudeHome, configDir);
-        return {
-          provider: "claude" as const,
-          dir: claudeDir,
-          label: source.label,
-          instanceId: source.instanceId,
-          fileName: undefined,
-        };
-      }),
-    );
-    const codexLayout = yield* resolveCodexHomeLayout(settings.providers.codex);
-    // Grok Settings only expose the binary path; home is `$GROK_HOME` or `~/.grok`.
-    // Empty/whitespace GROK_HOME must fall back: coalescing alone would scan cwd.
-    const grokHomeEnv = hostEnvironment["GROK_HOME"]?.trim() ?? "";
-    const grokHome =
-      grokHomeEnv.length > 0
-        ? path.resolve(expandHomePath(grokHomeEnv))
-        : path.join(NodeOS.homedir(), ".grok");
-
-    return [
-      ...new Map(claudeDirs.map((source) => [source.dir, source])).values(),
-      {
-        provider: "codex" as const,
-        dir: path.join(codexLayout.sharedHomePath, "sessions"),
-        label: "Codex",
-        instanceId: "codex",
-      },
-      {
-        provider: "grok" as const,
-        dir: path.join(grokHome, "sessions"),
-        label: "Grok",
-        instanceId: "grok",
-        fileName: "updates.jsonl",
-      },
-    ];
+              : `Claude ${instance.instanceId}`
+            : instance.instanceId === driver
+              ? driver === "codex"
+                ? "Codex"
+                : "Grok"
+              : `${driver} ${instance.instanceId}`);
+        dirs.push({
+          provider,
+          dir,
+          label,
+          instanceId: instance.instanceId,
+          ...(provider === "grok" ? { fileName: "updates.jsonl" } : {}),
+        });
+      }
+    }
+    return dirs;
   });
 
   /**

@@ -1,6 +1,6 @@
 import type { EnvironmentId, ProjectEntry } from "@t3tools/contracts";
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
-import { ChevronsDownUpIcon, RotateCw, Trash2Icon, XIcon } from "lucide-react";
+import { ChevronsDownUpIcon, Trash2Icon, XIcon } from "lucide-react";
 import {
   useCallback,
   useDeferredValue,

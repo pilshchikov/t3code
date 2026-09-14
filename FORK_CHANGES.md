@@ -4,6 +4,32 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Upstream sync, September 13
+
+- Merged 102 upstream commits through `c07575f573`. The fork checkpoint is `495b2e6c7a`,
+  retained as `backup/pre-upstream-sync-20260913`.
+- Kept compact desktop and mobile-web composers, the pen placeholder, opaque notices,
+  directory chips, collapsible images, account colors and ordering, usage trends, project notes,
+  agent workspace and PR tools, Git history, privacy defaults, and opt-in thread settlement.
+- Upstream project-scoped settings now include the fork's settlement mode. Browser and device
+  overrides use upstream resolution while MCP credentials retain memory and workspace access.
+  Project action imports retain their configured working directory.
+- Registered upstream message context as migration 55, after fork usage history at 54.
+  Upgrade tests cover existing project notes and usage observations as well as an already-present
+  context column. Sources: `apps/server/src/persistence/Migrations.ts` and migration tests.
+- Retained the fork file browser and multiwork roots in `components/files/FileBrowserPanel.tsx`
+  and `FilePreviewPanel.tsx`. Integrated upstream attachment, audio, and table previews. File
+  watches register before the initial ready event and include nested directories.
+- Combined upstream rename and staged-deletion previews with bounded overview patches and lazy
+  per-file loading in `apps/server/src/vcs/GitVcsDriverCore.ts`. Upstream context chips and
+  streaming rendering coexist with the fork's one-line editor minimum and work-log folding.
+- Usage scanning includes upstream account-home discovery and deduplication while retaining
+  per-account labels and the fork's separate Claude process-home and config-directory settings.
+  Large Codex sub-agent totals still include provider-reported cumulative cached input. This
+  upstream revision does not establish a fix for those totals.
+- Validation uses focused regression tests and scoped typechecks. No browser checks, live-data
+  writes, app reinstall, restart, or push are part of this merge.
+
 ## Usage limit trends, September 13
 
 - Usage → Limits → Trends shows separate, consistently ordered account charts with configured
