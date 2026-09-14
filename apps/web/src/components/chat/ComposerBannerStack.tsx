@@ -44,6 +44,7 @@ export interface ComposerBannerStackItem {
   readonly icon: ReactNode;
   readonly title: ReactNode;
   readonly description?: ReactNode;
+  readonly compact?: boolean;
   readonly actions?: ReactNode;
   readonly className?: string;
   readonly actionClassName?: string;
@@ -204,6 +205,8 @@ function ComposerBannerStackAlert({
         attached
           ? "chat-composer-drawer-surface chat-composer-drawer-attached px-3 pt-2 pb-[calc(var(--chat-composer-attachment-overlap)_+_0.375rem)] text-xs sm:px-4"
           : "alert-glass rounded-[22px]",
+        "chat-composer-banner-alert",
+        item.compact && "chat-composer-banner-compact",
         item.className,
       )}
       data-variant={item.variant}

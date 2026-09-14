@@ -947,9 +947,12 @@ const make = Effect.gen(function* () {
     const normalizedInput = toNonEmptyProviderInput(input.messageText);
     const memoryContext =
       project && Option.isSome(memorySql) && readMcpProviderSession(input.threadId)
-        ? yield* ProjectMemory.initialContext(project.id, input.threadId, input.messageId).pipe(
-            Effect.provideService(SqlClient.SqlClient, memorySql.value),
-          )
+        ? yield* ProjectMemory.initialContext(
+            project.id,
+            input.threadId,
+            input.messageId,
+            readMcpProviderSession(input.threadId)?.capabilities.has("workspace") ?? false,
+          ).pipe(Effect.provideService(SqlClient.SqlClient, memorySql.value))
         : "";
     const projectWorkspaceRoots = project?.workspaceRoots?.length
       ? project.workspaceRoots.map((root, index) =>

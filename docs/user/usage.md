@@ -40,8 +40,8 @@ the dialog.
 **Usage → Limits** pools every subscription account it can see per provider, so with several Codex
 or Claude accounts across your environments and hubs you read one number per window rather than a
 list. Each window card shows how much of the pool is left and a bar with one segment per account,
-kept in the same column across windows. Accounts are ordered by their 5-hour reset, soonest
-first, or by the first available window when no account reports a 5-hour limit. A gap means the
+kept in the same column across windows. Named accounts keep alphabetical order instead of
+moving when usage or reset times change. A gap means the
 account does not report that window. When the provider reports reset times, the card also says
 when the next reset lands and how much it hands back. The hatched
 part of a segment is what that reset restores. Tap a segment or account row for the account's plan,
@@ -53,6 +53,24 @@ The same account signed in on more than one environment, or reported by a hub as
 Filter with the environment dropdown to see what a single machine has.
 
 If a window looks stale, refresh Limits to re-check every provider and hub.
+
+### View limit history
+
+On desktop or mobile web, open **Usage → Limits → Trends**. Choose 24 hours, 7 days,
+30 days, or 90 days to see remaining quota for each account and limit window. Personal and
+work accounts stay separate and keep their configured colors. Expand **Measurements** for
+timestamps and values.
+
+The server samples the latest provider and hub readings at startup and every five minutes,
+even with the Usage page closed. It uses the existing provider health checks; disabling or
+pausing those checks also pauses fresh measurements. Cached readings keep their original
+timestamp. Charts break across missing readings and resets instead of connecting them as
+continuous consumption. Longer ranges show the last reading in each larger time bucket.
+
+History is saved on the environment, survives app restarts, and expires after 90 days.
+It starts when this version runs; past subscription limits cannot be reconstructed from
+token logs. **Refresh history** reloads saved measurements, while the page's refresh button
+requests fresh limits from providers. Allow up to five minutes for a new reading to be saved.
 
 Pick `/usage-limits` from the composer's command menu, or send it as a message, to check the
 current model's limits without leaving the conversation. The result opens above the composer and

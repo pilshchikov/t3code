@@ -134,6 +134,7 @@ export function listThreadPullRequests(
     chains: chains.map((chain) => ({
       kind: chain.kind,
       numbers: chain.layers.map((layer) => layer.number),
+      urls: chain.layers.map((layer) => layer.url),
     })),
   };
 }

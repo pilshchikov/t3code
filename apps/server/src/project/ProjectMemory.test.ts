@@ -32,6 +32,26 @@ describe("project memory", () => {
         "project_memory_read",
       );
       assert.equal(yield* Memory.initialContext(projectId, threadId, MessageId.make("second")), "");
+      assert.include(
+        yield* Memory.initialContext(projectId, threadId, MessageId.make("first"), true),
+        "thread_workspace_create",
+      );
+      assert.include(
+        yield* Memory.initialContext(projectId, threadId, MessageId.make("first"), true),
+        "unlink_pull_request",
+      );
+      assert.notInclude(
+        yield* Memory.initialContext(projectId, threadId, MessageId.make("first")),
+        "thread_workspace_create",
+      );
+      assert.equal(
+        yield* Memory.initialContext(projectId, threadId, MessageId.make("second"), true),
+        "",
+      );
+      assert.equal(
+        yield* Memory.initialContext(projectId, threadId, MessageId.make("compact"), true),
+        "",
+      );
       assert.equal(
         yield* Memory.initialContext(projectId, threadId, MessageId.make("compact")),
         "",

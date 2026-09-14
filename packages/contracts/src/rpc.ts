@@ -274,6 +274,7 @@ import {
   ResourceTelemetrySnapshot,
 } from "./resourceTelemetry.ts";
 import { AccountLimitsSummary } from "./accountLimits.ts";
+import { UsageLimitHistory, UsageLimitHistoryInput } from "./usageLimitHistory.ts";
 import { UsageLimitSourceError } from "./providerUsageLimits.ts";
 import { UsagePricing, UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings.ts";
@@ -429,6 +430,7 @@ export const WS_METHODS = {
   serverGetBackgroundPolicy: "server.getBackgroundPolicy",
   serverGetUsageSummary: "server.getUsageSummary",
   serverGetAccountLimits: "server.getAccountLimits",
+  serverGetUsageLimitHistory: "server.getUsageLimitHistory",
   serverRefreshUsageRates: "server.refreshUsageRates",
 
   // Cloud environment methods
@@ -676,6 +678,12 @@ export const WsServerGetAccountLimitsRpc = Rpc.make(WS_METHODS.serverGetAccountL
   payload: Schema.Struct({}),
   success: AccountLimitsSummary,
   error: EnvironmentAuthorizationError,
+});
+
+const WsServerGetUsageLimitHistoryRpc = Rpc.make(WS_METHODS.serverGetUsageLimitHistory, {
+  payload: UsageLimitHistoryInput,
+  success: UsageLimitHistory,
+  error: Schema.Union([EnvironmentAuthorizationError, UsageReadError]),
 });
 
 /** Refetches the model rate table ahead of its daily TTL. */
@@ -1515,6 +1523,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerRetryResourceTelemetryRpc,
   WsServerGetUsageSummaryRpc,
   WsServerGetAccountLimitsRpc,
+  WsServerGetUsageLimitHistoryRpc,
   WsServerRefreshUsageRatesRpc,
   WsServerSignalProcessRpc,
   WsServerReportClientActivityRpc,

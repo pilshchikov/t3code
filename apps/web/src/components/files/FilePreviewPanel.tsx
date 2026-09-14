@@ -1142,6 +1142,8 @@ function MultiRootFileBrowser(props: {
   workspaceMutationId: string | null;
   onOpenFile: (path: string, workspaceRoot: string) => void;
 }) {
+  const rootDisplayName = (root: ProjectWorkspace, index: number) =>
+    index === 0 ? props.projectName : root.label?.trim() || workspaceDirectoryName(root.path);
   const [collapsedRoots, setCollapsedRoots] = useState<ReadonlySet<string>>(() => new Set());
   const [rootWeights, setRootWeights] = useState<Record<string, number>>({});
   const sectionElements = useRef(new Map<string, HTMLElement>());
@@ -1244,9 +1246,7 @@ function MultiRootFileBrowser(props: {
                 />
                 <span className={cn("size-2 shrink-0 rounded-full", colorOption.dotClassName)} />
                 <div className="min-w-0">
-                  <div className="truncate text-xs font-medium">
-                    {workspaceDirectoryName(root.path)}
-                  </div>
+                  <div className="truncate text-xs font-medium">{rootDisplayName(root, index)}</div>
                   <code className="block truncate text-[10px] text-muted-foreground">
                     {root.path}
                   </code>
@@ -1258,7 +1258,7 @@ function MultiRootFileBrowser(props: {
                     key={`${props.environmentId}:${root.path}`}
                     environmentId={props.environmentId}
                     cwd={root.path}
-                    projectName={workspaceDirectoryName(root.path) || props.projectName}
+                    projectName={rootDisplayName(root, index)}
                     selectedPath={null}
                     selectedPathRevealId={props.revealRequestId}
                     onOpenFile={(path) => props.onOpenFile(path, root.path)}
@@ -1271,7 +1271,7 @@ function MultiRootFileBrowser(props: {
               <div
                 role="separator"
                 aria-orientation="horizontal"
-                aria-label={`Resize ${workspaceDirectoryName(root.path)} and ${workspaceDirectoryName(nextRoot.path)}`}
+                aria-label={`Resize ${rootDisplayName(root, index)} and ${rootDisplayName(nextRoot, index + 1)}`}
                 className="group -my-1 flex h-3 shrink-0 touch-none cursor-row-resize items-center justify-center"
                 onPointerDown={(event) => startResize(event, root.path, nextRoot.path)}
                 onPointerMove={resize}

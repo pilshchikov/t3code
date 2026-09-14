@@ -8,7 +8,7 @@ import {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 
-export type McpCapability = "preview" | "memory" | "device" | "pull-requests";
+export type McpCapability = "preview" | "memory" | "workspace" | "device" | "pull-requests";
 
 export interface McpInvocationScope {
   readonly environmentId: EnvironmentId;

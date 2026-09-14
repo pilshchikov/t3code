@@ -184,6 +184,50 @@ const makeHarness = Effect.fn("makePullRequestsToolkitHarness")(function* (
 });
 
 describe("pull request toolkit handlers", () => {
+  it.effect(
+    "keeps same-number PRs in different repositories distinct when linking and unlinking",
+    () =>
+      Effect.gen(function* () {
+        const harness = yield* makeHarness({
+          thread: makeThread([
+            makeLink(5),
+            makeLink(5, {
+              repository: "team/services",
+              url: "https://github.com/team/services/pull/5",
+            }),
+          ]),
+        });
+        const listed = yield* harness.call("list_thread_pull_requests", {});
+        expect(listed.chains.flatMap((chain) => chain.urls)).toEqual([
+          "https://github.com/t3tools/t3code/pull/5",
+          "https://github.com/team/services/pull/5",
+        ]);
+        expect(listed.pullRequests.map((pr) => [pr.repository, pr.number])).toEqual([
+          ["t3tools/t3code", 5],
+          ["team/services", 5],
+        ]);
+        yield* harness.call("link_pull_request", { url: "https://github.com/team/mobile/pull/5" });
+        yield* harness.call("unlink_pull_request", {
+          url: "https://github.com/team/services/pull/5",
+        });
+        expect(yield* Ref.get(harness.commands)).toMatchObject([
+          {
+            type: "thread.pull-request.link",
+            threadId: THREAD_ID,
+            host: "github.com",
+            repository: "team/mobile",
+            number: 5,
+          },
+          {
+            type: "thread.pull-request.unlink",
+            threadId: THREAD_ID,
+            host: "github.com",
+            repository: "team/services",
+            number: 5,
+          },
+        ]);
+      }),
+  );
   it.effect("refuses a credential without the pull-requests capability", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness();
@@ -376,8 +420,12 @@ describe("pull request toolkit handlers", () => {
         stack: null,
       });
       expect(result.chains).toEqual([
-        { kind: "derived", numbers: [1, 2, 3] },
-        { kind: "derived", numbers: [10] },
+        {
+          kind: "derived",
+          numbers: [1, 2, 3],
+          urls: [1, 2, 3].map((n) => `https://github.com/t3tools/t3code/pull/${n}`),
+        },
+        { kind: "derived", numbers: [10], urls: ["https://github.com/t3tools/t3code/pull/10"] },
       ]);
     }),
   );
@@ -406,7 +454,13 @@ describe("listThreadPullRequests", () => {
       [2, { kind: "native", position: 2, size: 2 }],
       [1, { kind: "native", position: 1, size: 2 }],
     ]);
-    expect(result.chains).toEqual([{ kind: "native", numbers: [1, 2] }]);
+    expect(result.chains).toEqual([
+      {
+        kind: "native",
+        numbers: [1, 2],
+        urls: [1, 2].map((n) => `https://github.com/t3tools/t3code/pull/${n}`),
+      },
+    ]);
   });
 });
 

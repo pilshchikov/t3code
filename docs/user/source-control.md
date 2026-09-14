@@ -3,6 +3,35 @@
 T3 Code integrates with GitHub, GitLab, Bitbucket, and Azure DevOps to clone and publish
 repositories, create pull requests, and review changes.
 
+## Let the agent manage a thread's checkout
+
+Ask the agent to work on a new branch, use a worktree, or use an independent multiwork copy.
+The agent can inspect available branches and copies, create a checkout, and select it for the
+current thread. New threads receive brief guidance to prefer a fresh task branch and worktree
+for implementation, while respecting your project notes and explicit choices.
+
+The Files panel and branch selector follow the agent's selection. During the current turn the
+agent must use the returned directory explicitly; its next turn starts there automatically.
+Uncommitted files stay in their original checkout. Existing terminal tabs keep their directories.
+You can still change the selection yourself.
+
+Agents can also attach and detach PRs explicitly using the built-in T3 Code tools. A thread can
+track several PRs across different project directories. Full PR URLs identify the repository,
+so PR #5 in one repository remains separate from PR #5 in another. Detaching a link only removes
+its association with this thread; it does not close the PR on GitHub or another host.
+
+## Automatic worktree cleanup
+
+T3 Code removes managed Git worktree directories after their threads have been settled for
+seven days with no newer activity. It checks when the server starts and then hourly. Ignored
+build files in eligible worktrees are removed too. Branches and conversation history remain;
+resuming the thread recreates its checkout from the saved branch.
+
+Cleanup skips worktrees with uncommitted changes, active shared threads, running agents or
+terminal commands, and Git locks. Idle sessions and terminal tabs in an eligible worktree are
+closed. Configured project directories, worktrees outside T3's managed directory, and independent
+multiwork clones are retained.
+
 ## Connect an account
 
 Install Git and configure authentication on the machine running your T3 Code server. For a remote

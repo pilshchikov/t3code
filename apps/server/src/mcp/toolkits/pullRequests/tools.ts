@@ -180,13 +180,15 @@ export const ListThreadPullRequestsResult = Schema.Struct({
       kind: Schema.Literals(["native", "derived"]),
       /** Bottom to top. */
       numbers: Schema.Array(Schema.Int),
+      /** Full identities in the same order; numbers alone are ambiguous across repositories. */
+      urls: Schema.Array(Schema.String),
     }),
   ),
 });
 export type ListThreadPullRequestsResult = typeof ListThreadPullRequestsResult.Type;
 
 const LinkPullRequestTool = Tool.make("link_pull_request", {
-  description: `${REGISTER_EVERY_PR} Links a pull request to this thread so T3 Code tracks it, shows its status beside the thread, and settles the thread when it merges. Pass the URL, or repository plus number. Linking an already-linked pull request succeeds with alreadyLinked=true.`,
+  description: `${REGISTER_EVERY_PR} A thread can track multiple PRs from different directories and repositories. Pass the full URL from gh in the relevant checkout (or gh --repo owner/repo), so the repository and host are unambiguous. Alternatively pass repository, number, and host. T3 Code tracks linked PR status beside the thread. Linking an already-linked pull request succeeds with alreadyLinked=true.`,
   parameters: PullRequestTargetInput,
   success: LinkPullRequestResult,
   failure: PullRequestToolError,
@@ -200,7 +202,7 @@ const LinkPullRequestTool = Tool.make("link_pull_request", {
 
 const UnlinkPullRequestTool = Tool.make("unlink_pull_request", {
   description:
-    "Remove a pull request link from this thread, for example after closing a pull request you opened by mistake. Pass the URL, or repository plus number. Unlinking a pull request that is not linked succeeds with wasLinked=false.",
+    "Detach a mistaken, superseded, or no-longer-relevant PR association from this thread without closing or modifying the remote PR or removing other links. Prefer the full URL, especially for multi-directory projects; alternatively pass repository, number, and host. Unlinking a pull request that is not linked succeeds with wasLinked=false.",
   parameters: PullRequestTargetInput,
   success: UnlinkPullRequestResult,
   failure: PullRequestToolError,

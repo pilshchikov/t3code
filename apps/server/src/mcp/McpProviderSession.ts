@@ -9,6 +9,8 @@ export interface McpProviderSessionConfig {
   readonly authorizationHeader: string;
   /** Capabilities the credential grants ("preview", "device"). */
   readonly capabilities: ReadonlySet<string>;
+  /** Explicit MCP selection during a running turn; subprocess cwd is unchanged. */
+  readonly workspaceOverride?: { readonly cwd: string; readonly turnId: string };
   /**
    * Set when the session may drive devices. Adapters spread this into the
    * provider subprocess environment so the `agent-device` CLI is on PATH and
@@ -42,6 +44,19 @@ export function setMcpProviderSession(config: McpProviderSessionConfig): void {
 
 export function readMcpProviderSession(threadId: ThreadId): McpProviderSessionConfig | undefined {
   return sessionsByThread.get(threadId);
+}
+
+export function setMcpWorkspaceOverride(threadId: ThreadId, cwd: string, turnId: string): void {
+  const session = sessionsByThread.get(threadId);
+  if (session) sessionsByThread.set(threadId, { ...session, workspaceOverride: { cwd, turnId } });
+}
+
+export function readMcpWorkspaceOverride(
+  threadId: ThreadId,
+  turnId: string | undefined,
+): string | undefined {
+  const selection = sessionsByThread.get(threadId)?.workspaceOverride;
+  return selection?.turnId === turnId ? selection?.cwd : undefined;
 }
 
 export function clearMcpProviderSession(threadId: ThreadId): void {

@@ -6124,6 +6124,7 @@ export default function ChatView(props: ChatViewProps) {
       variant: "info",
       icon: <Minimize2Icon />,
       title: "Resume with less context",
+      compact: true,
       description: `${formatContextWindowTokens(activeContextWindow.usedTokens)} tokens from earlier`,
       actions: compactDisabledReason ? (
         <Tooltip>

@@ -36,6 +36,7 @@ import {
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { UsageLimitsPooled } from "./UsageLimitsPooled";
+import { UsageLimitTrends } from "./UsageLimitTrends";
 import { PROVIDER_PRESENTATION } from "./usageProviders";
 
 const PACE: Record<LimitPace, { readonly label: string; readonly icon: typeof GaugeIcon }> = {
@@ -327,9 +328,41 @@ export function UsageLimitsSection({
   const presentations = useAtomValue(environmentPresentations.presentationsAtom);
   // Anchored once per mount on purpose: countdowns must not tick (see above).
   const [now] = useState(() => Date.now());
+  const [view, setView] = useState<"current" | "trends">("current");
   const selected =
     selectedEnvironmentIds === null
       ? presentations
       : new Map([...presentations].filter(([id]) => selectedEnvironmentIds.has(id)));
-  return <UsageLimitsPooled presentations={selected} now={now} />;
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex gap-2" aria-label="Limits view">
+        <Button
+          size="sm"
+          variant={view === "current" ? "secondary" : "ghost"}
+          aria-pressed={view === "current"}
+          onClick={() => setView("current")}
+        >
+          Current limits
+        </Button>
+        <Button
+          size="sm"
+          variant={view === "trends" ? "secondary" : "ghost"}
+          aria-pressed={view === "trends"}
+          onClick={() => setView("trends")}
+        >
+          Trends
+        </Button>
+      </div>
+      {view === "current" ? (
+        <UsageLimitsPooled presentations={selected} now={now} />
+      ) : (
+        <UsageLimitTrends
+          environments={[...selected].map(([environmentId, presentation]) => ({
+            environmentId,
+            label: presentation.entry.target.label,
+          }))}
+        />
+      )}
+    </div>
+  );
 }

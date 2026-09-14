@@ -877,6 +877,17 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
+      if (
+        command.expectedWorktreePath !== undefined &&
+        (thread.worktreePath !== command.expectedWorktreePath ||
+          (command.expectedBranch !== undefined && thread.branch !== command.expectedBranch))
+      ) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail:
+            "Thread checkout changed while preparing the selection. Inspect again before selecting it; the prepared checkout was kept.",
+        });
+      }
       // Old clients only see the derived single link. Unlink that request through
       // the same command path as modern clients, including stack dismissal, while
       // retaining other links they cannot see. Historical metadata events still replay unchanged.

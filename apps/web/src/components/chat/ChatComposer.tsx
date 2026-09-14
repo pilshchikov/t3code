@@ -5183,7 +5183,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       : activePendingProgress.customAnswer ||
                         "Type your own answer, or leave this blank to use the selected option"
                     : prompt.trim() ||
-                      (showProviderUnavailable ? "Enable a provider in Settings" : "")}
+                      (showProviderUnavailable ? (
+                        "Enable a provider in Settings"
+                      ) : (
+                        <PenLineIcon
+                          aria-hidden="true"
+                          className="inline-block size-4 align-middle"
+                        />
+                      ))}
                 </button>
                 {collapsedComposerImagePreviews}
                 <button
@@ -5673,7 +5680,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       "max-h-8 min-h-8 overflow-hidden whitespace-pre! leading-8",
                   )}
                   placeholderClassName={cn(
-                    !isComposerApprovalState && !activePendingProgress && "max-sm:hidden",
                     isComposerResting &&
                       "flex items-center overflow-hidden whitespace-nowrap leading-8",
                   )}
@@ -5687,24 +5693,28 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   onCitationSubmitAndSend={submitCitationAndSend}
                   onPaste={onComposerPaste}
                   placeholder={
-                    isComposerApprovalState
-                      ? (activePendingApproval?.detail ??
-                        "Resolve this approval request to continue")
-                      : activePendingProgress
-                        ? isChoiceOnlyPendingQuestion
-                          ? "Choose an option above"
-                          : "Type your own answer, or leave this blank to use the selected option"
-                        : showPlanFollowUpPrompt && activeProposedPlan
-                          ? "Add feedback to refine the plan, or leave this blank to implement it"
-                          : projectSelectionRequired
-                            ? "Choose a project above to start a thread"
-                            : showProviderUnavailable
-                              ? "Enable a provider in Settings to send a message"
-                              : phase === "disconnected"
-                                ? DISCONNECTED_COMPOSER_PLACEHOLDER
-                                : isMobileViewport
-                                  ? ""
-                                  : "Ask anything, @tag files/folders, $use skills, or / for commands"
+                    isComposerApprovalState ? (
+                      (activePendingApproval?.detail ?? "Resolve this approval request to continue")
+                    ) : activePendingProgress ? (
+                      isChoiceOnlyPendingQuestion ? (
+                        "Choose an option above"
+                      ) : (
+                        "Type your own answer, or leave this blank to use the selected option"
+                      )
+                    ) : showPlanFollowUpPrompt && activeProposedPlan ? (
+                      "Add feedback to refine the plan, or leave this blank to implement it"
+                    ) : projectSelectionRequired ? (
+                      "Choose a project above to start a thread"
+                    ) : showProviderUnavailable ? (
+                      "Enable a provider in Settings to send a message"
+                    ) : phase === "disconnected" ? (
+                      DISCONNECTED_COMPOSER_PLACEHOLDER
+                    ) : (
+                      <PenLineIcon
+                        aria-hidden="true"
+                        className="inline-block size-4 align-middle"
+                      />
+                    )
                   }
                   disabled={
                     isConnecting ||

@@ -16,6 +16,8 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstab
 
 import packageJson from "../../package.json" with { type: "json" };
 import { MemoryToolkit, MemoryHandlersLive } from "./toolkits/memory.ts";
+import { WorkspaceToolkit, WorkspaceHandlersLive } from "./toolkits/workspace.ts";
+import * as CheckpointStore from "../checkpointing/CheckpointStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as DeviceService from "../device/DeviceService.ts";
 import * as McpInvocationContext from "./McpInvocationContext.ts";
@@ -632,6 +634,10 @@ const McpTransportLive = McpServer.layerHttp({
 export const layer = Layer.mergeAll(
   PreviewToolkitRegistrationLive,
   McpServer.toolkit(MemoryToolkit).pipe(Layer.provide(MemoryHandlersLive)),
+  McpServer.toolkit(WorkspaceToolkit).pipe(
+    Layer.provide(WorkspaceHandlersLive),
+    Layer.provide(CheckpointStore.layer),
+  ),
   PullRequestsToolkitRegistrationLive,
   DeviceToolkitRegistrationLive,
 ).pipe(Layer.provideMerge(McpTransportLive));

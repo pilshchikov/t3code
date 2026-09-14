@@ -4,6 +4,70 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Usage limit trends, September 13
+
+- Usage → Limits → Trends shows separate, consistently ordered account charts with configured
+  accents on desktop and mobile web. It supports 24h/7d/30d/90d ranges, measurement tables,
+  multi-environment reads, and explicit gaps at resets or missing measurements.
+- A server collector samples the existing provider and hub readings at startup and every five
+  minutes. It keeps observation timestamps, skips failed probes, and stores bounded five-minute
+  buckets in SQLite migration 54 (`usage_limit_history`). Rows expire after 90 days. Read-only
+  authenticated RPC queries downsample long ranges and cap responses at 20,000 points.
+- Sources: `usage/UsageLimitHistory.ts`, `usage/UsageLimitHistoryCollector.ts`,
+  `components/usage/UsageLimitTrends.tsx`, and `packages/contracts/src/usageLimitHistory.ts`.
+  Focused tests cover persistence, retention, sampling, identity, chart gaps, and account order.
+  Native mobile has the shared RPC available but no trends screen yet.
+
+## Minimal composer placeholder, September 13
+
+- The web/desktop composer and mobile web layouts use a small pen icon instead of normal
+  empty-input instructions, including the collapsed mobile row. Approval, project selection,
+  connection, and question guidance remain available. The icon does not intercept editor clicks.
+- Source: `apps/web/src/components/chat/ChatComposer.tsx`. Validation: web typecheck and focused
+  composer editor tests.
+
+## Settled worktree retention, September 13
+
+- The server checks at startup and hourly for T3-managed Git worktrees whose owning threads
+  have been settled without newer activity for at least seven days. It checks visible and
+  archived threads, configured project directories, provider sessions, and terminal activity.
+  Shared active checkouts, dirty or locked worktrees, standalone clones, and external paths
+  are retained. Idle sessions and terminal tabs in an eligible checkout are closed.
+- Cleanup uses `git worktree remove` without force, retaining branch refs, checkpoints, and
+  conversation records. Existing resume behavior recreates the checkout from its saved branch.
+  Multiwork clone cleanup is excluded. Sources: `orchestration/SettledWorktreeCleanup.ts` and
+  its focused Git integration tests.
+
+## Agent workspace selection, September 13
+
+- Agent guidance names the existing PR link/list/unlink tools, including explicit detachment and
+  multiple repositories per thread. Full URLs identify each repository in multi-directory
+  projects; stack listings include ordered URLs as well as numbers. Regression coverage
+  distinguishes identical PR numbers in different repositories.
+- Internal MCP exposes `thread_workspace_inspect`, `thread_workspace_create`, and
+  `thread_workspace_select`, scoped to the authenticated thread and its project. Agents can
+  create worktrees or multiwork copies, select existing checkouts, or return to the project
+  root through normal thread metadata events. No force checkout or removal tools are exposed.
+- The first substantive message includes brief workspace guidance when these tools are available.
+  It favors task worktrees for implementation while respecting project notes, existing task
+  checkouts, and explicit user choices. Agents must use the returned cwd during the current turn;
+  the provider restarts in the selected directory on its next turn. Mid-turn selections also
+  redirect checkpoint capture and status refresh, with a baseline prepared before editing.
+- Sources: `apps/server/src/mcp/toolkits/workspace.ts`, `McpProviderSession.ts`,
+  `project/ThreadWorkspaceInstructions.ts`, `project/ProjectMemory.ts`, and the provider/checkpoint
+  reactors. Server-side behavior applies across web, desktop, mobile, and remote connections.
+
+## Composer notices, September 12
+
+- The Files tree names its primary root after the project, rather than its generated checkout
+  directory. Additional roots use configured labels when present; actual checkout paths remain
+  visible beneath the names. Source: `apps/web/src/components/files/FilePreviewPanel.tsx`.
+
+- Composer banners use opaque backgrounds so chat text cannot show through. The resume
+  compaction reminder puts its title and token count inline, wrapping on narrow screens while
+  keeping actions visible. Applies to web and desktop, including mobile web.
+  Sources: `ComposerBannerStack.tsx`, `ChatView.tsx`, and `apps/web/src/index.css`.
+
 ## Automatic worktree base and project notes, September 11
 
 - Mobile web uses one continuous composer frame with full-width controls, removing the inset

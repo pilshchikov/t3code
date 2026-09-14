@@ -1026,6 +1026,35 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     }
   }
 
+  /* Notices sit over chat content, so their text needs an opaque backing even
+     when glass is enabled or the stack expands above the attached drawer. */
+  .chat-composer-banner-alert.chat-composer-drawer-surface::before {
+    background:
+      linear-gradient(var(--chat-composer-attached-tint), var(--chat-composer-attached-tint)),
+      var(--chat-composer-attached-surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .chat-composer-banner-alert.alert-glass {
+    background: var(--chat-composer-glass-surface, var(--card));
+  }
+
+  .chat-composer-banner-compact {
+    & > div > .flex-col {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: baseline;
+      column-gap: 0.5rem;
+    }
+
+    & [data-slot="alert-title"],
+    & [data-slot="alert-description"] {
+      font-size: 0.75rem;
+      line-height: 1.25rem;
+    }
+  }
+
   .chat-composer-drawer-slot + .chat-composer-drawer-slot::before,
   .chat-composer-drawer-slot
     + :has(:is(.chat-composer-top-drawer, [data-composer-banner-surface="attached"]))

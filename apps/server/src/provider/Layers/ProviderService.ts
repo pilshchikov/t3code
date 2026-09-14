@@ -898,7 +898,11 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   const agentAccessCapabilities = Effect.fn("ProviderService.agentAccessCapabilities")(function* (
     threadId: ThreadId,
   ) {
-    const capabilities = new Set<McpInvocationContext.McpCapability>(["pull-requests", "memory"]);
+    const capabilities = new Set<McpInvocationContext.McpCapability>([
+      "pull-requests",
+      "memory",
+      "workspace",
+    ]);
     if (yield* agentBrowserAccessEnabled(threadId)) capabilities.add("preview");
     if (yield* agentDeviceAccessEnabled) capabilities.add("device");
     return capabilities;

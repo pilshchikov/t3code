@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { workspaceInstructions } from "./ThreadWorkspaceInstructions.ts";
 
 const isMemoryError = Schema.is(ProjectMemoryError);
 const fail = (error: unknown) =>
@@ -21,6 +22,7 @@ export const initialContext = Effect.fn("ProjectMemory.initialContext")(function
   projectId: ProjectId,
   threadId: ThreadId,
   messageId: MessageId,
+  includeWorkspaceTools = false,
 ) {
   const sql = yield* SqlClient.SqlClient;
   const first = yield* sql<{
@@ -31,7 +33,10 @@ export const initialContext = Effect.fn("ProjectMemory.initialContext")(function
         OR COALESCE(json_array_length(attachments_json), 0) > 0)
     ORDER BY created_at, rowid LIMIT 1`;
   if (first[0]?.messageId !== messageId) return "";
-  return memoryInstructions(yield* list(projectId));
+  return (
+    memoryInstructions(yield* list(projectId)) +
+    (includeWorkspaceTools ? workspaceInstructions : "")
+  );
 }, Effect.mapError(fail));
 
 export const projectForThread = Effect.fn("ProjectMemory.projectForThread")(function* (

@@ -179,6 +179,7 @@ import * as ResourceAttribution from "./resourceTelemetry/ResourceAttribution.ts
 import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import * as UsageService from "./usage/UsageService.ts";
 import * as AccountLimitsService from "./usage/AccountLimitsService.ts";
+import * as UsageLimitHistory from "./usage/UsageLimitHistory.ts";
 import * as AnalyticsService from "./telemetry/AnalyticsService.ts";
 import * as Data from "effect/Data";
 
@@ -1045,7 +1046,7 @@ const buildAppUnderTest = (options?: {
     const appLayer = servedRoutesLayer.pipe(
       Layer.provide(resourceTelemetryLayer),
       Layer.provide(UsageService.layerTest),
-      Layer.provide(AccountLimitsService.layerTest),
+      Layer.provide(Layer.mergeAll(AccountLimitsService.layerTest, UsageLimitHistory.layer)),
       Layer.provide(
         Layer.mock(AnalyticsService.AnalyticsService)({
           record: () => Effect.void,
@@ -4917,6 +4918,26 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.isUndefined(response.shellRevealInFileManager);
       assert.isUndefined(response.shellRevealInFileManagerKind);
       assert.equal(response.threadResumeCompletionMarker, true);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("serves usage limit history over authenticated websocket RPC", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest();
+      const { cookie } = yield* bootstrapBrowserSession();
+      const wsUrl = appendSessionCookieToWsUrl(
+        yield* getWsServerUrl("/ws", { authenticated: false }),
+        cookie?.split(";")[0] ?? "",
+      );
+      const response = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.serverGetUsageLimitHistory]({ days: 7 }),
+        ),
+      );
+      assert.deepEqual(response.points, []);
+      assert.equal(response.resolutionMinutes, 30);
+      assert.equal(response.truncated, false);
+      assert.equal(Date.parse(response.readAt) - Date.parse(response.since), 7 * 24 * 60 * 60_000);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 

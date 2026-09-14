@@ -15,6 +15,7 @@ import {
   CheckpointRef,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   EventId,
+  EnvironmentId,
   MessageId,
   ProjectId,
   ThreadId,
@@ -40,6 +41,11 @@ import * as VcsProcess from "../../vcs/VcsProcess.ts";
 import { VcsStatusBroadcaster } from "../../vcs/VcsStatusBroadcaster.ts";
 import * as RepositoryIdentityResolver from "../../project/RepositoryIdentityResolver.ts";
 import { CheckpointReactorLive } from "./CheckpointReactor.ts";
+import {
+  setMcpProviderSession,
+  setMcpWorkspaceOverride,
+  clearMcpProviderSession,
+} from "../../mcp/McpProviderSession.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
@@ -856,6 +862,45 @@ describe("CheckpointReactor", () => {
     await harness.drain();
 
     expect(gitStatusRefreshCalls).toEqual([harness.cwd]);
+  });
+
+  it("captures and refreshes the agent-selected checkout instead of the original process cwd", async () => {
+    const gitStatusRefreshCalls: string[] = [];
+    const harness = await createHarness({
+      seedFilesystemCheckpoints: false,
+      gitStatusRefreshCalls,
+    });
+    const selectedCwd = createGitRepository();
+    tempDirs.push(selectedCwd);
+    const threadId = ThreadId.make("thread-1");
+    const turnId = asTurnId("turn-mcp-checkout");
+    setMcpProviderSession({
+      environmentId: EnvironmentId.make("test"),
+      threadId,
+      providerSessionId: "test",
+      providerInstanceId: ProviderInstanceId.make("codex"),
+      endpoint: "http://test",
+      authorizationHeader: "test",
+      capabilities: new Set(["workspace"]),
+    });
+    setMcpWorkspaceOverride(threadId, selectedCwd, turnId);
+    try {
+      harness.provider.emit({
+        type: "turn.completed",
+        eventId: EventId.make("evt-mcp-checkout"),
+        provider: ProviderDriverKind.make("codex"),
+        createdAt: "2026-01-01T00:00:00.000Z",
+        threadId,
+        turnId,
+        payload: { state: "completed" },
+      });
+      await harness.drain();
+      expect(gitStatusRefreshCalls).toEqual([selectedCwd]);
+      expect(gitRefExists(selectedCwd, checkpointRefForThreadTurn(threadId, 1))).toBe(true);
+      expect(gitRefExists(harness.cwd, checkpointRefForThreadTurn(threadId, 1))).toBe(false);
+    } finally {
+      clearMcpProviderSession(threadId);
+    }
   });
 
   it("invalidates pull requests at turn end when the thread branch is checked out", async () => {

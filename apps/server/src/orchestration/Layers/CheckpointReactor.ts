@@ -38,6 +38,7 @@ import type { OrchestrationDispatchError } from "../Errors.ts";
 import { VcsStatusBroadcaster } from "../../vcs/VcsStatusBroadcaster.ts";
 import * as WorkspaceEntries from "../../workspace/WorkspaceEntries.ts";
 import * as PullRequestService from "../../pullRequest/PullRequestService.ts";
+import { readMcpWorkspaceOverride } from "../../mcp/McpProviderSession.ts";
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
@@ -190,6 +191,7 @@ const make = Effect.gen(function* () {
     readonly thread: { readonly projectId: ProjectId; readonly worktreePath: string | null };
     readonly projects: ReadonlyArray<{ readonly id: ProjectId; readonly workspaceRoot: string }>;
     readonly preferSessionRuntime: boolean;
+    readonly turnId?: string;
   }): Effect.fn.Return<string | undefined, CheckpointStoreError> {
     const fromSession = yield* resolveSessionRuntimeForThread(input.threadId);
     const fromThread = resolveThreadWorkspaceCwd({
@@ -197,16 +199,18 @@ const make = Effect.gen(function* () {
       projects: input.projects,
     });
 
-    const cwd = input.preferSessionRuntime
-      ? (Option.match(fromSession, {
-          onNone: () => undefined,
-          onSome: (runtime) => runtime.cwd,
-        }) ?? fromThread)
-      : (fromThread ??
-        Option.match(fromSession, {
-          onNone: () => undefined,
-          onSome: (runtime) => runtime.cwd,
-        }));
+    const cwd =
+      readMcpWorkspaceOverride(input.threadId, input.turnId) ??
+      (input.preferSessionRuntime
+        ? (Option.match(fromSession, {
+            onNone: () => undefined,
+            onSome: (runtime) => runtime.cwd,
+          }) ?? fromThread)
+        : (fromThread ??
+          Option.match(fromSession, {
+            onNone: () => undefined,
+            onSome: (runtime) => runtime.cwd,
+          })));
 
     if (!cwd) {
       return undefined;
@@ -392,6 +396,7 @@ const make = Effect.gen(function* () {
         thread,
         projects,
         preferSessionRuntime: true,
+        turnId,
       });
       if (!checkpointCwd) {
         return;
@@ -484,7 +489,8 @@ const make = Effect.gen(function* () {
       return;
     }
 
-    const local = yield* vcsStatusBroadcaster.refreshLocalStatus(sessionRuntime.value.cwd).pipe(
+    const cwd = readMcpWorkspaceOverride(event.threadId, event.turnId) ?? sessionRuntime.value.cwd;
+    const local = yield* vcsStatusBroadcaster.refreshLocalStatus(cwd).pipe(
       Effect.catch((error) =>
         Effect.logWarning("failed to refresh local git status after turn completion", {
           threadId: event.threadId,
@@ -497,7 +503,7 @@ const make = Effect.gen(function* () {
     if (local !== null) {
       yield* followWorktreeBranchDrift({
         threadId: event.threadId,
-        cwd: sessionRuntime.value.cwd,
+        cwd,
         local,
       });
     }
