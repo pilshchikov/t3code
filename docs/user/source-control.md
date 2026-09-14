@@ -232,7 +232,7 @@ GitLab calls these merge requests.
 GitHub, GitLab, and Azure DevOps support auto-merge while checks are outstanding. GitHub also
 supports approving waiting fork workflows and opening a revert pull request for a merged change.
 
-GitHub routing is off by default. In Settings → Connections (Environments on mobile), choose
+GitHub sharing is off by default. In Settings → Connections → GitHub sharing (Environments on mobile), choose
 **Read PRs** or **Read and act** for each environment you trust to share GitHub access.
 Enable both the original environment and the environment answering its requests on this client.
 **Read and act** can use broader GitHub permissions than the original environment's credential;
@@ -272,11 +272,17 @@ Use **Link this PR** in a branch-detected badge's tooltip to keep it with the th
 on the Pull Requests page, **Link to thread** lets you search for an active thread. The review header
 also lists the threads that link to it, including archived threads, so you can return to their context.
 
-Thread badges show a stack's layer count or the current review number with a count of additional
-links. On mobile, the Git overview lists linked reviews and their stacks; tap a review to open it.
+Thread badges show a stack's layer count or the total linked PR count. Click a badge with multiple
+PRs to open their overview in the right panel. Single-PR badges open the review directly.
+On native mobile, the Git overview lists linked reviews and their stacks; tap a review to open it.
 Linking and unlinking are available in the web and desktop clients.
 
-The **Linked pull requests** panel lists every review and groups stacks. Unlink a review from its
+The **Linked pull requests** panel groups reviews by repository and preserves stack order. Its
+summary counts open, merged, closed, and unknown PRs, plus PRs with failing checks, conflicts, or
+requested changes. Each row shows its source and target branches. Branch totals count a branch
+separately in each repository. The overview also works in the mobile web panel.
+
+Unlink a review from its
 row menu. An unlinked stack layer stays out of later syncs. Open linked reviews refresh on the server;
 closed reviews refresh periodically so reopening one on the host is detected. Merged reviews refresh
 when requested. With **Auto-settle merged threads** enabled, a thread can settle after every linked

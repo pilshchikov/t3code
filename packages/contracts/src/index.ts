@@ -47,3 +47,4 @@ export * from "./usage.ts";
 export * from "./accountLimits.ts";
 export * from "./usageLimitHistory.ts";
 export * from "./rpc.ts";
+export * from "./worktreeSetup.ts";

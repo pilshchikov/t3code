@@ -4,6 +4,31 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Upstream sync and thread PR overview, September 14
+
+- Merged 26 upstream commits through `01e05c1526`. The previous fork revision is retained as
+  `backup/pre-upstream-sync-20260914` at `db9373c735`.
+- Adopted upstream worktree setup progress and cancellation, response streaming settings,
+  optional local desktop environment, and release archive runtime management. Upstream removed
+  its compact sidebar experiment; the fork's thread ordering, accents, project shortcuts, and
+  drag styling remain. Compact composers and the pen placeholder are unchanged.
+- Multiwork setup reports clone preparation or reuse through the new progress stream. Cancelling
+  setup closes its setup terminal but never sends a multiwork clone to Git worktree removal.
+  Sources: `apps/server/src/ws.ts` and the bootstrap tests in `server.test.ts`.
+- The existing right-panel Pull requests tab now groups all attached PRs by host and repository,
+  preserves stack relationships, shows source and target branches, and summarizes open, merged,
+  closed, unknown, and attention-needed PRs. Branch totals count names separately per repository.
+  Unknown snapshots are not counted as open; overlapping failure signals count once per PR.
+- Clicking a multi-PR badge opens the overview directly. Single PRs still open their detail view.
+  Rows wrap in narrow panels and expose their action menu on touch screens. Unlinking uses the
+  full repository identity, so identical PR numbers in different repositories remain separate.
+  Sources: `components/pullRequest/ThreadPullRequestsPanel.tsx`, `threadPullRequestsOverview.ts`,
+  and `components/ThreadStatusIndicators.tsx`. Applies to desktop, web, and mobile web; native
+  mobile keeps upstream's existing PR interface and shares the unchanged attachment API.
+- Validation covers five attached PRs across repositories, stacks, status aggregation, account
+  ordering, project notes, MCP PR/workspace tools, setup progress, and scoped typechecks.
+  This update does not reinstall or restart the running app.
+
 ## Upstream sync, September 13
 
 - Merged 102 upstream commits through `c07575f573`. The fork checkpoint is `495b2e6c7a`,

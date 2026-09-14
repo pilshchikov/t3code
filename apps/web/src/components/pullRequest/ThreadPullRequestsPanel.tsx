@@ -1,8 +1,5 @@
 import type { ScopedThreadRef, ThreadPullRequestLink } from "@t3tools/contracts";
-import {
-  resolveThreadPullRequestChains,
-  visibleThreadPullRequests,
-} from "@t3tools/shared/threadPullRequests";
+import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 import {
   GitPullRequestArrow,
   LayersIcon,
@@ -25,7 +22,8 @@ import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { ScrollArea } from "../ui/scroll-area";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { openLinkPullRequestDialog } from "./LinkPullRequestDialog";
-import { pullRequestListLines, type PullRequestListLine } from "./pullRequestListLines";
+import { type PullRequestListLine } from "./pullRequestListLines";
+import { threadPullRequestsOverview } from "./threadPullRequestsOverview";
 import {
   PullRequestActorAvatar,
   PullRequestDiffStat,
@@ -76,7 +74,7 @@ function LinkRow({
   const snapshot = link.snapshot;
   return (
     <div
-      className="group/pr-row flex items-center gap-2 rounded-md py-1 pr-1 hover:bg-accent/60"
+      className="group/pr-row flex items-start gap-2 rounded-md py-2 pr-1 hover:bg-accent/60"
       // Each layer steps in under the one it targets. The step is capped: beyond a few layers
       // the indent only says "still in the stack", which the connector line already does, and
       // a sixteen-layer stack would otherwise stair-step off the right edge.
@@ -96,7 +94,7 @@ function LinkRow({
         onClick={(event) => openPrLink(event, link.url, threadRef)}
         className="min-w-0 flex-1"
       >
-        <span className="flex min-w-0 items-center gap-1.5">
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
           <Tooltip>
             <TooltipTrigger
               render={
@@ -109,7 +107,7 @@ function LinkRow({
               {SOURCE_LABELS[link.source]} · {formatRelativeTimeLabel(link.linkedAt)}
             </TooltipPopup>
           </Tooltip>
-          <span className="min-w-0 flex-1 truncate text-sm">
+          <span className="min-w-0 basis-40 flex-1 break-words text-sm">
             {snapshot?.title ?? link.repository}
           </span>
           {/* Match the full PR list: review verdict, checks, then diff counts.
@@ -136,7 +134,7 @@ function LinkRow({
             />
           </span>
         </span>
-        <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
           {stack ? (
             <Tooltip>
               <TooltipTrigger
@@ -164,7 +162,7 @@ function LinkRow({
               <span className="max-w-28 truncate">{snapshot.author.login}</span>
             </span>
           ) : null}
-          <span className="truncate font-mono">
+          <span className="min-w-0 break-all font-mono">
             {snapshot !== null
               ? `${snapshot.headBranch} → ${snapshot.baseBranch}`
               : `${link.host}/${link.repository}`}
@@ -180,9 +178,9 @@ function LinkRow({
             <Button
               variant="ghost"
               size="icon-xs"
-              aria-label={`Actions for #${link.number}`}
+              aria-label={`Actions for ${link.repository} #${link.number}`}
               className={cn(
-                "opacity-0 group-hover/pr-row:opacity-100 data-[popup-open]:opacity-100",
+                "opacity-100 [@media(hover:hover)]:opacity-0 group-hover/pr-row:opacity-100 group-focus-within/pr-row:opacity-100 data-[popup-open]:opacity-100",
               )}
             >
               <MoreHorizontalIcon className="size-3.5" />
@@ -219,7 +217,7 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
   const openLinkDialog = useCallback(() => openLinkPullRequestDialog(threadRef), [threadRef]);
   const unlink = useAtomCommand(threadEnvironment.unlinkPullRequest, { reportFailure: true });
   const links = useMemo(() => visibleThreadPullRequests(thread?.pullRequests ?? []), [thread]);
-  const lines = useMemo(() => pullRequestListLines(resolveThreadPullRequestChains(links)), [links]);
+  const overview = useMemo(() => threadPullRequestsOverview(links), [links]);
   const handleUnlink = useCallback(
     (link: ThreadPullRequestLink) => {
       void unlink({
@@ -233,10 +231,6 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
       });
     },
     [threadRef, unlink],
-  );
-  const openCount = useMemo(
-    () => links.filter((link) => link.snapshot === null || link.snapshot.state === "open").length,
-    [links],
   );
   const lastSynced = useMemo(() => {
     let latest: string | null = null;
@@ -266,27 +260,72 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      <header className="flex flex-col gap-2 border-b border-border/60 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-medium">{overview.totals.linked} linked pull requests</h2>
+          <Button size="xs" variant="ghost" onClick={openLinkDialog}>
+            <PlusIcon className="size-3.5" />
+            Link
+          </Button>
+        </div>
+        <Tooltip>
+          <TooltipTrigger render={<p className="text-xs text-muted-foreground" />}>
+            {overview.groups.length} {overview.groups.length === 1 ? "repository" : "repositories"}{" "}
+            · {overview.totals.branches} known branches
+          </TooltipTrigger>
+          <TooltipPopup>
+            Source and target branches, counted separately for each repository
+          </TooltipPopup>
+        </Tooltip>
+        <div
+          className="flex flex-wrap gap-x-3 gap-y-1 text-xs"
+          aria-label="Linked pull request status totals"
+        >
+          <span>{overview.totals.open} open</span>
+          <span>{overview.totals.merged} merged</span>
+          <span>{overview.totals.closed} closed</span>
+          {overview.totals.unknown > 0 ? (
+            <span className="text-muted-foreground">{overview.totals.unknown} awaiting status</span>
+          ) : null}
+          {overview.totals.attention > 0 ? (
+            <span className="text-destructive">{overview.totals.attention} need attention</span>
+          ) : null}
+        </div>
+      </header>
       <ScrollArea className="min-h-0 flex-1">
-        <div className="flex flex-col p-1.5">
-          {lines.map((line) => (
-            <LinkRow
-              key={`${line.link.host}/${line.link.repository}#${line.link.number}`}
-              line={line}
-              threadRef={threadRef}
-              onUnlink={handleUnlink}
-            />
+        <div className="flex flex-col gap-4 p-1.5">
+          {overview.groups.map((group) => (
+            <section
+              key={group.key}
+              aria-label={`${group.host}/${group.repository}`}
+              className="min-w-0"
+            >
+              <div className="px-2 py-2">
+                <h3 className="break-all text-xs font-medium">
+                  {group.host}/{group.repository}
+                </h3>
+                <p className="text-[11px] text-muted-foreground">
+                  {group.links.length} PRs · {group.branches.length} known branches
+                </p>
+              </div>
+              {group.lines.map((line) => (
+                <LinkRow
+                  key={`${line.link.host}/${line.link.repository}#${line.link.number}`}
+                  line={line}
+                  threadRef={threadRef}
+                  onUnlink={handleUnlink}
+                />
+              ))}
+            </section>
           ))}
         </div>
       </ScrollArea>
       <footer className="flex items-center justify-between border-t border-border/60 px-2 py-1.5 text-[.7rem] text-muted-foreground">
         <span>
-          {openCount} open · {links.length} linked
-          {lastSynced ? ` · synced ${formatRelativeTimeLabel(lastSynced)}` : ""}
+          {lastSynced
+            ? `Latest sync ${formatRelativeTimeLabel(lastSynced)}`
+            : "Awaiting host status"}
         </span>
-        <Button size="xs" variant="ghost" onClick={openLinkDialog}>
-          <PlusIcon className="size-3.5" />
-          Link
-        </Button>
       </footer>
     </div>
   );
