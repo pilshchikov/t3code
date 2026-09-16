@@ -6,10 +6,10 @@ fork-specific behavior so future upstream syncs are easier to review.
 
 ## Upstream sync and queued follow-ups, September 16
 
-- Merged 98 upstream commits through `f4ef5155fb`, including client-side follow-up queues,
+- Merged 99 upstream commits through `052c7ae53e`, including client-side follow-up queues,
   Queue/Steer selection and send-shortcut controls, background worktree setup, project cloning,
   custom snoozes, native provider slash commands, project monograms, PR presentation updates,
-  worktree checkout performance, and desktop/mobile reliability fixes.
+  provider thinking traces, worktree checkout performance, and desktop/mobile reliability fixes.
 - Preserved the fork's compact desktop and mobile-web composer, multi-directory chips, multiwork,
   project notes and agent workspace tools, multiple-PR overview, collapsible images, file/tree
   caches, stable colored usage accounts, limit-history polling, and macOS shortcut safeguards.
