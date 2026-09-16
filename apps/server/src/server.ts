@@ -146,6 +146,7 @@ import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
 import * as UsageLimitHistory from "./usage/UsageLimitHistory.ts";
 import * as UsageLimitHistoryCollector from "./usage/UsageLimitHistoryCollector.ts";
+import * as ActiveProviderLimitPolling from "./usage/ActiveProviderLimitPolling.ts";
 import * as UsageService from "./usage/UsageService.ts";
 import * as AccountLimitsService from "./usage/AccountLimitsService.ts";
 import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
@@ -492,6 +493,7 @@ const AntigravityInstallationRefreshLive = Layer.effectDiscard(
 );
 
 const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
+  Layer.provideMerge(ActiveProviderLimitPolling.layer),
   Layer.provideMerge(UsageLimitHistoryCollector.layer),
   Layer.provideMerge(UsageLimitHistory.layer),
   Layer.provideMerge(AntigravityInstallationRefreshLive),

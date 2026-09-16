@@ -35,8 +35,8 @@ describe("UsageLimitHistory", () => {
           point("2026-09-13T11:00:00.000Z", 80),
           point("2026-09-13T11:00:00.000Z", 20, "work"),
         ]);
-        yield* history.record([point("2026-09-13T11:04:00.000Z", 75)]);
-        yield* history.record([point("2026-09-13T11:01:00.000Z", 79)]);
+        yield* history.record([point("2026-09-13T11:00:20.000Z", 75)]);
+        yield* history.record([point("2026-09-13T11:00:10.000Z", 79)]);
         const result = yield* history.read({ days: 1 });
         expect(result.points).toHaveLength(2);
         expect(result.points.find((p) => p.accountId === "personal")?.remainingPercent).toBe(75);

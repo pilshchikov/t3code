@@ -6,6 +6,7 @@ import type {
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import { UsageLimitSources } from "./UsageLimitSources.ts";
 import { UsageLimitHistory } from "./UsageLimitHistory.ts";
@@ -73,6 +74,12 @@ export const layer = Layer.effectDiscard(
     const history = yield* UsageLimitHistory;
     const providers = yield* ProviderRegistry;
     const sources = yield* UsageLimitSources;
+    yield* providers.streamChanges.pipe(
+      Stream.runForEach((snapshots) =>
+        history.record(providerHistoryPoints(snapshots)).pipe(Effect.ignoreCause({ log: true })),
+      ),
+      Effect.forkScoped,
+    );
     yield* Effect.gen(function* () {
       const providerSnapshot = yield* providers.getProviders;
       const sourceSnapshot = yield* sources.current;

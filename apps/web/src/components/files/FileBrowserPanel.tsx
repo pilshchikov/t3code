@@ -23,12 +23,38 @@ import { cn, isMacPlatform } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
 import { projectEnvironment } from "~/state/projects";
 import { useAtomCommand } from "~/state/use-atom-command";
+import { useProjectPathSearch } from "~/state/queries";
 import { resolvePathLinkTarget } from "~/terminal-links";
 
 import { NativeProjectFileTree } from "./NativeProjectFileTree";
 import { useProjectEntriesQuery } from "./projectFilesQueryState";
+import { mergeDirectoryListings } from "./directoryListings";
+
+function ExpandedDirectory(props: {
+  environmentId: EnvironmentId;
+  cwd: string;
+  path: string;
+  refreshId: number;
+  active: boolean;
+  workspaceMutationId: string | null;
+  onEntries: (path: string, entries: readonly ProjectEntry[]) => void;
+}) {
+  const query = useProjectEntriesQuery(props.environmentId, props.cwd, props.path, props.active);
+  useEffect(() => {
+    if (query.data) props.onEntries(props.path, query.data.entries);
+    else if (query.error) props.onEntries(props.path, []);
+  }, [props.onEntries, props.path, query.data, query.error]);
+  useWorkspaceMutationRefresh({
+    enabled: props.active,
+    mutationId: `${props.refreshId}:${props.workspaceMutationId ?? ""}`,
+    resourceKey: props.path,
+    refresh: query.refresh,
+  });
+  return null;
+}
 
 interface FileBrowserPanelProps {
+  active?: boolean;
   environmentId: EnvironmentId;
   cwd: string;
   projectName: string;
@@ -125,6 +151,7 @@ function uniqueProjectEntries(entries: ReadonlyArray<ProjectEntry>): ProjectEntr
 }
 
 export default function FileBrowserPanel({
+  active = true,
   environmentId,
   cwd,
   projectName,
@@ -136,20 +163,60 @@ export default function FileBrowserPanel({
 }: FileBrowserPanelProps) {
   const { resolvedTheme } = useTheme();
   const composerRef = useComposerHandleContext();
-  const entriesQuery = useProjectEntriesQuery(environmentId, cwd);
+  const entriesQuery = useProjectEntriesQuery(environmentId, cwd, "", active);
+  const [expandedDirectories, setExpandedDirectories] = useState<readonly string[]>([]);
+  const [directoryListings, setDirectoryListings] = useState<
+    ReadonlyMap<string, readonly ProjectEntry[]>
+  >(() => new Map());
+  const [refreshId, setRefreshId] = useState(0);
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const search = useProjectPathSearch(
+    { environmentId, cwd, query: deferredQuery, kind: "file" },
+    200,
+  );
+  const onExpandedDirectoriesChange = useCallback((paths: readonly string[]) => {
+    setExpandedDirectories((current) =>
+      current.length === paths.length && current.every((path, i) => path === paths[i])
+        ? current
+        : paths,
+    );
+    setDirectoryListings((current) => {
+      if ([...current.keys()].every((path) => paths.includes(path))) return current;
+      return new Map([...current].filter(([path]) => paths.includes(path)));
+    });
+  }, []);
+  const onDirectoryEntries = useCallback((path: string, entries: readonly ProjectEntry[]) => {
+    setDirectoryListings((current) =>
+      current.get(path) === entries ? current : new Map(current).set(path, entries),
+    );
+  }, []);
   const deleteEntry = useAtomCommand(projectEnvironment.deleteEntry, { reportFailure: false });
   const readFileOnce = useAtomCommand(projectEnvironment.readFileOnce, { reportFailure: false });
   const writeFile = useAtomCommand(projectEnvironment.writeFile, { reportFailure: false });
   const entries = useMemo(
-    () => uniqueProjectEntries(entriesQuery.data?.entries ?? []),
-    [entriesQuery.data?.entries],
+    () =>
+      uniqueProjectEntries(
+        deferredQuery.trim()
+          ? search.entries
+          : mergeDirectoryListings(
+              entriesQuery.data?.entries ?? [],
+              directoryListings,
+              expandedDirectories,
+            ),
+      ),
+    [
+      deferredQuery,
+      search.entries,
+      entriesQuery.data?.entries,
+      directoryListings,
+      expandedDirectories,
+    ],
   );
   const filePaths = useMemo(
     () => new Set(entries.filter((entry) => entry.kind === "file").map((entry) => entry.path)),
     [entries],
   );
-  const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query);
   const [selectedPaths, setSelectedPaths] = useState<ReadonlyArray<string>>([]);
   const [collapseRequestId, setCollapseRequestId] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -377,10 +444,12 @@ export default function FileBrowserPanel({
     [composerRef, cwd, deletePaths, filePaths],
   );
   const handleRefresh = useCallback(() => {
+    setRefreshId((value) => value + 1);
     entriesQuery.refresh();
     onRefreshSelectedFile?.();
   }, [entriesQuery, onRefreshSelectedFile]);
   useWorkspaceMutationRefresh({
+    enabled: active,
     mutationId: workspaceMutationId,
     refresh: entriesQuery.refresh,
     resourceKey: `files:${environmentId}:${cwd}`,
@@ -436,6 +505,19 @@ export default function FileBrowserPanel({
       className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background outline-none"
       data-file-browser-panel={`${environmentId}:${cwd}`}
     >
+      {!deferredQuery.trim() &&
+        expandedDirectories.map((path) => (
+          <ExpandedDirectory
+            key={`${environmentId}:${cwd}:${path}`}
+            environmentId={environmentId}
+            active={active}
+            cwd={cwd}
+            path={path}
+            onEntries={onDirectoryEntries}
+            refreshId={refreshId}
+            workspaceMutationId={workspaceMutationId}
+          />
+        ))}
       <div className="surface-subheader shrink-0 gap-1 px-2" data-surface-subheader>
         <RefreshFilesButton isPending={entriesQuery.isPending} onRefresh={handleRefresh} />
         <CollapseDirectoriesButton onCollapse={() => setCollapseRequestId((value) => value + 1)} />
@@ -493,6 +575,10 @@ export default function FileBrowserPanel({
         <div className="p-4 text-xs leading-relaxed text-destructive">{entriesQuery.error}</div>
       ) : entriesQuery.data === null ? (
         <div className="p-4 text-xs text-muted-foreground">Loading files…</div>
+      ) : deferredQuery.trim() && search.isPending ? (
+        <div className="p-4 text-xs text-muted-foreground">Searching files…</div>
+      ) : deferredQuery.trim() && search.error ? (
+        <div className="p-4 text-xs text-destructive">{search.error}</div>
       ) : entries.length === 0 ? (
         <div className="p-4 text-xs text-muted-foreground">No files found in this directory.</div>
       ) : (
@@ -508,6 +594,7 @@ export default function FileBrowserPanel({
           onDeleteSelected={deleteSelectedFiles}
           onContextMenu={(path, position) => void showEntryContextMenu(path, position)}
           collapseRequestId={collapseRequestId}
+          onExpandedDirectoriesChange={onExpandedDirectoriesChange}
         />
       )}
     </div>

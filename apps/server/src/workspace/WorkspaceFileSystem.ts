@@ -301,6 +301,17 @@ export const make = Effect.gen(function* () {
             });
           }
 
+          const revision = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`;
+          if (input.metadataOnly) {
+            return {
+              relativePath: target.relativePath,
+              contents: "",
+              byteLength: stat.size,
+              truncated: stat.size > PROJECT_READ_FILE_MAX_BYTES,
+              revision,
+              metadataOnly: true,
+            };
+          }
           const bytesToRead = Math.min(stat.size, PROJECT_READ_FILE_MAX_BYTES);
           const buffer = Buffer.alloc(bytesToRead);
           const { bytesRead } = yield* Effect.tryPromise({
@@ -327,6 +338,7 @@ export const make = Effect.gen(function* () {
           return {
             relativePath: target.relativePath,
             contents: new TextDecoder("utf-8").decode(fileBytes),
+            revision,
             byteLength: stat.size,
             truncated: stat.size > PROJECT_READ_FILE_MAX_BYTES,
           };
@@ -358,7 +370,7 @@ export const make = Effect.gen(function* () {
         // Reuse the read path's canonical containment checks before opening a host watcher.
         // The initial event is emitted only after the watcher exists, closing the read/watch race
         // without polling or repeatedly transferring the whole file.
-        yield* readFile(input);
+        yield* readFile({ ...input, metadataOnly: true });
         const watchedDirectory = path.dirname(target.absolutePath);
         const watchedFile = path.basename(target.absolutePath);
         const watchedPath = path.resolve(target.absolutePath);

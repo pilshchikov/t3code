@@ -215,13 +215,43 @@ export const make = Effect.gen(function* () {
     Stream.unwrap(
       Effect.gen(function* () {
         const normalizedCwd = yield* normalizeWorkspaceRoot(input.cwd);
+        const watchedDirectory = input.directoryPath
+          ? (yield* workspacePaths
+              .resolveRelativePathWithinRoot({
+                workspaceRoot: normalizedCwd,
+                relativePath: input.directoryPath,
+              })
+              .pipe(
+                Effect.mapError(
+                  (cause) => new WorkspaceEntriesWatchError({ cwd: normalizedCwd, cause }),
+                ),
+              )).absolutePath
+          : normalizedCwd;
+        // A tree watches only the levels it displays. Legacy clients without a
+        // directoryPath retain their recursive subscription.
+        yield* Effect.tryPromise({
+          try: async () => {
+            const root = await NodeFSP.realpath(normalizedCwd);
+            const directory = await NodeFSP.realpath(watchedDirectory);
+            const relative = path.relative(root, directory);
+            if (
+              relative === ".." ||
+              relative.startsWith(`..${path.sep}`) ||
+              path.isAbsolute(relative) ||
+              relative.split(path.sep).includes(".git")
+            ) {
+              throw new Error("Directory must be inside the workspace and outside .git.");
+            }
+          },
+          catch: (cause) => new WorkspaceEntriesWatchError({ cwd: normalizedCwd, cause }),
+        });
         const pullChanges = yield* Stream.toPull(
-          fileSystem.watch(normalizedCwd, { recursive: true }),
+          fileSystem.watch(watchedDirectory, { recursive: input.directoryPath === undefined }),
         );
         const changes = Stream.fromPull(Effect.succeed(pullChanges)).pipe(
           Stream.filter((event) => {
             const eventPath = path
-              .relative(normalizedCwd, path.resolve(normalizedCwd, event.path))
+              .relative(normalizedCwd, path.resolve(watchedDirectory, event.path))
               .replaceAll("\\", "/");
             return eventPath !== ".git" && !eventPath.startsWith(".git/");
           }),

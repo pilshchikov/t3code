@@ -75,8 +75,8 @@ export function createProjectEnvironmentAtoms<R, E>(
     listEntries: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:projects:list-entries",
       tag: WS_METHODS.projectsListEntries,
-      retainPreviousData: false,
-      idleTtlMs: 0,
+      retainPreviousData: true,
+      idleTtlMs: 60_000,
     }),
     watchEntries: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:projects:watch-entries",
@@ -87,7 +87,9 @@ export function createProjectEnvironmentAtoms<R, E>(
     readFile: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:projects:read-file",
       tag: WS_METHODS.projectsReadFile,
-      retainPreviousData: false,
+      retainPreviousData: true,
+      // Open tabs explicitly validate disk identity; age alone must not reread/repaint them.
+      staleTimeMs: Infinity,
       idleTtlMs: 0,
     }),
     watchFile: createEnvironmentRpcSubscriptionAtomFamily(runtime, {

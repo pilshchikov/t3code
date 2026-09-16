@@ -5,7 +5,6 @@ import type {
   EditorId,
   EnvironmentId,
   ProjectCodeSearchMatch,
-  ProjectEntry,
   ProjectWorkspace,
   ResolvedKeybindingsConfig,
   ScopedThreadRef,
@@ -33,8 +32,6 @@ import {
   Table2,
   WrapTextIcon,
   Eye,
-  FileText,
-  Folder,
   FolderGit2,
   FolderTree,
   Globe2,
@@ -44,7 +41,7 @@ import {
   X,
 } from "lucide-react";
 import * as Schema from "effect/Schema";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { isBrowserPreviewFile, openFileInPreview } from "~/browser/openFileInPreview";
 import { useAssetUrlRefresh, useAssetUrlState } from "~/assets/assetUrls";
@@ -131,12 +128,8 @@ import {
 } from "./filePreviewRoots";
 import { DiffCommentAnnotation } from "../diffs/DiffCommentAnnotation";
 import { projectFileCacheKey, projectFileEditorCacheKey } from "./fileContentRevision";
-import {
-  directChildProjectEntries,
-  fileBreadcrumbs,
-  firstFileInDirectory,
-  workspaceDocumentDirectory,
-} from "./filePath";
+import { workspaceDocumentDirectory } from "./filePath";
+import { FileBreadcrumbs } from "./FileBreadcrumbs";
 import { isMarkdownPreviewFile, setMarkdownTaskChecked } from "./filePreviewMode";
 import {
   getOptimisticProjectFileQueryData,
@@ -147,6 +140,7 @@ import {
 import { SymbolNavigationDialog } from "./SymbolNavigationDialog";
 
 interface FilePreviewPanelProps {
+  active?: boolean;
   environmentId: EnvironmentId;
   primaryCwd: string;
   cwd: string;
@@ -160,7 +154,7 @@ interface FilePreviewPanelProps {
   revealLine: number | null;
   revealRequestId: number;
   onOpenFile: (relativePath: string, workspaceRoot?: string) => void;
-  onPendingChange: (relativePath: string, pending: boolean) => void;
+  onPendingChange: (relativePath: string, pending: boolean, workspaceRoot?: string) => void;
   selectedFilePending: boolean;
   workspaceMutationId: string | null;
   workspaceRoots?: ReadonlyArray<ProjectWorkspace> | undefined;
@@ -168,7 +162,6 @@ interface FilePreviewPanelProps {
 
 const RENDER_MARKDOWN_STORAGE_KEY = "t3code.renderMarkdown";
 const RENDER_BROWSER_FILE_STORAGE_KEY = "t3code.renderBrowserFile";
-const MAX_BREADCRUMB_CHILDREN = 80;
 const FILE_LINK_REVEAL_ATTRIBUTE = "data-file-link-reveal";
 const FILE_LINK_REVEAL_UNSAFE_CSS = `
   ${DIFF_SURFACE_THEME_UNSAFE_CSS}
@@ -662,7 +655,7 @@ interface FileSelectionOverride {
   range: SelectedLineRange | null;
 }
 
-function EditableFileSurface({
+const EditableFileSurface = memo(function EditableFileSurface({
   environmentId,
   cwd,
   relativePath,
@@ -746,7 +739,7 @@ function EditableFileSurface({
 
   useEffect(() => {
     const handleHistoryShortcut = (event: KeyboardEvent) => {
-      if (!editorFocusedRef.current) return;
+      if (!editorFocusedRef.current || !surfaceRef.current?.getClientRects().length) return;
       const action = resolveFileEditorHistoryAction(event);
       if (!action) return;
       event.preventDefault();
@@ -958,9 +951,9 @@ function EditableFileSurface({
       </div>
     </EditProvider>
   );
-}
+});
 
-function RenderedMarkdownSurface({
+const RenderedMarkdownSurface = memo(function RenderedMarkdownSurface({
   environmentId,
   cwd,
   relativePath,
@@ -1008,7 +1001,7 @@ function RenderedMarkdownSurface({
       />
     </ScrollArea>
   );
-}
+});
 
 function extractNavigationSymbol(tokenText: string): string | null {
   const trimmed = tokenText.trim();
@@ -1016,12 +1009,6 @@ function extractNavigationSymbol(tokenText: string): string | null {
   if (exact) return exact[0];
   const identifiers = trimmed.match(/[\p{L}_$][\p{L}\p{N}_$]*/gu);
   return identifiers?.length === 1 ? identifiers[0]! : null;
-}
-
-function projectEntryName(entry: ProjectEntry): string {
-  const trimmedPath = entry.path.replace(/\/+$/, "");
-  const lastSeparatorIndex = trimmedPath.lastIndexOf("/");
-  return lastSeparatorIndex === -1 ? trimmedPath : trimmedPath.slice(lastSeparatorIndex + 1);
 }
 
 function renderedToggleLabel(mode: "markdown" | "html" | "table", rendered: boolean): string {
@@ -1124,6 +1111,7 @@ function FileWorktreeToolbar(props: {
 }
 
 function MultiRootFileBrowser(props: {
+  active: boolean;
   environmentId: EnvironmentId;
   roots: ReadonlyArray<ProjectWorkspace>;
   projectName: string;
@@ -1245,6 +1233,7 @@ function MultiRootFileBrowser(props: {
                 <div className="min-h-0 flex-1 border-t border-border/60">
                   <FileBrowserPanel
                     key={`${props.environmentId}:${root.path}`}
+                    active={props.active}
                     environmentId={props.environmentId}
                     cwd={root.path}
                     projectName={rootDisplayName(root, index)}
@@ -1278,6 +1267,7 @@ function MultiRootFileBrowser(props: {
 }
 
 export default function FilePreviewPanel({
+  active = true,
   environmentId,
   primaryCwd,
   cwd,
@@ -1291,7 +1281,7 @@ export default function FilePreviewPanel({
   revealLine,
   revealRequestId,
   onOpenFile,
-  onPendingChange,
+  onPendingChange: onWorkspacePendingChange,
   selectedFilePending,
   workspaceMutationId,
   workspaceRoots,
@@ -1305,10 +1295,16 @@ export default function FilePreviewPanel({
     setSelectedRootCwd(cwd);
   }, [cwd]);
   const activeCwd = selectedRootCwd;
+  const onPendingChange = useCallback(
+    (path: string, pending: boolean) => onWorkspacePendingChange(path, pending, activeCwd),
+    [onWorkspacePendingChange, activeCwd],
+  );
   const selectFileTreeWorktree = useCallback(
     (nextCwd: string) => {
-      setSelectedRootCwd(nextCwd);
+      // Opening another worktree creates a distinct tab; don't retarget the
+      // cached editor that still belongs to the original workspace.
       if (relativePath !== null) onOpenFile(relativePath, nextCwd);
+      else setSelectedRootCwd(nextCwd);
     },
     [onOpenFile, relativePath],
   );
@@ -1339,11 +1335,12 @@ export default function FilePreviewPanel({
     environmentId,
     activeCwd,
     relativePath,
-    !isImage,
+    attachment === undefined && !isMedia && !isPdf,
     true,
     selectedFilePending,
+    active,
   );
-  const projectEntriesQuery = useProjectEntriesQuery(environmentId, activeCwd);
+  const projectEntriesQuery = useProjectEntriesQuery(environmentId, activeCwd, "", active);
   const projectEntries = projectEntriesQuery.data?.entries ?? [];
   useWorkspaceMutationRefresh({
     mutationId: workspaceMutationId,
@@ -1390,7 +1387,6 @@ export default function FilePreviewPanel({
   const [handledReveal, setHandledReveal] = useState<{ path: string; requestId: number } | null>(
     null,
   );
-  const breadcrumbRef = useRef<HTMLDivElement>(null);
   const previewRootRef = useRef<HTMLDivElement>(null);
   const symbolNavigationRequestRef = useRef(0);
   const isMarkdown = relativePath ? isMarkdownPreviewFile(relativePath) : false;
@@ -1434,10 +1430,6 @@ export default function FilePreviewPanel({
   const canOpenInBrowser =
     relativePath !== null && isPreviewSupportedInRuntime() && isBrowserPreviewFile(relativePath);
   const absolutePath = relativePath ? resolvePathLinkTarget(relativePath, activeCwd) : null;
-  const breadcrumbs = useMemo(
-    () => (relativePath ? fileBreadcrumbs(projectName, relativePath) : []),
-    [projectName, relativePath],
-  );
   const onFilePostRender = useFileLineReveal(
     relativePath,
     effectiveRevealLine,
@@ -1457,6 +1449,7 @@ export default function FilePreviewPanel({
   );
   useWorkspaceMutationRefresh({
     enabled:
+      active &&
       attachment === undefined &&
       relativePath !== null &&
       !isMedia &&
@@ -1468,21 +1461,28 @@ export default function FilePreviewPanel({
   });
 
   useEffect(() => {
-    if (!relativePath) return;
+    if (!active || !relativePath) return;
     const store = useEditorNavigationStore.getState();
     store.recordRecentFile(environmentId, activeCwd, relativePath);
     store.recordActiveLocation(environmentId, activeCwd, { path: relativePath });
-  }, [activeCwd, environmentId, relativePath]);
+  }, [active, activeCwd, environmentId, relativePath]);
 
   const pendingNavigationPath =
     navigationRequest?.workspaceKey === workspaceKey ? navigationRequest.path : null;
   const pendingNavigationRequestId =
     navigationRequest?.workspaceKey === workspaceKey ? navigationRequest.requestId : null;
   useEffect(() => {
-    if (pendingNavigationPath && pendingNavigationPath !== relativePath) {
+    if (active && pendingNavigationPath && pendingNavigationPath !== relativePath) {
       onOpenFile(pendingNavigationPath, activeCwd);
     }
-  }, [activeCwd, onOpenFile, pendingNavigationPath, pendingNavigationRequestId, relativePath]);
+  }, [
+    active,
+    activeCwd,
+    onOpenFile,
+    pendingNavigationPath,
+    pendingNavigationRequestId,
+    relativePath,
+  ]);
 
   const goBack = useCallback(() => {
     useEditorNavigationStore.getState().goBack(environmentId, activeCwd);
@@ -1570,13 +1570,6 @@ export default function FilePreviewPanel({
     },
     [activeCwd, environmentId, openNavigationTarget, relativePath, searchCode],
   );
-
-  useEffect(() => {
-    const currentCrumb = breadcrumbRef.current?.querySelector<HTMLElement>(
-      "[data-current-file-crumb='true']",
-    );
-    currentCrumb?.scrollIntoView({ block: "nearest", inline: "end" });
-  }, [relativePath]);
 
   const handleOpenInBrowser = useCallback(() => {
     if (!absolutePath || !environmentHttpBaseUrl) return;
@@ -1758,15 +1751,17 @@ export default function FilePreviewPanel({
       ref={previewRootRef}
       className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
     >
-      <EditorNavigationDialog
-        environmentId={environmentId}
-        cwd={activeCwd}
-        projectName={projectName}
-        entries={projectEntries}
-        onOpenFile={(path) => onOpenFile(path, activeCwd)}
-        onToggleExplorer={toggleExplorer}
-        onRefreshFiles={projectEntriesQuery.refresh}
-      />
+      {active && (
+        <EditorNavigationDialog
+          environmentId={environmentId}
+          cwd={activeCwd}
+          projectName={projectName}
+          entries={projectEntries}
+          onOpenFile={(path) => onOpenFile(path, activeCwd)}
+          onToggleExplorer={toggleExplorer}
+          onRefreshFiles={projectEntriesQuery.refresh}
+        />
+      )}
       <SymbolNavigationDialog
         open={symbolChoices !== null}
         symbol={symbolChoices?.symbol ?? ""}
@@ -1816,77 +1811,14 @@ export default function FilePreviewPanel({
               <TooltipPopup>Forward</TooltipPopup>
             </Tooltip>
           </div>
-          <ScrollArea
-            ref={breadcrumbRef}
-            hideScrollbars
-            scrollFade
-            className="min-w-0 flex-1 rounded-none"
-            data-file-breadcrumbs
-          >
-            <div className="flex h-full w-max min-w-full items-center text-xs">
-              {breadcrumbs.map((crumb, index) => (
-                <div
-                  key={crumb.path || "project"}
-                  className="flex min-w-0 shrink-0 items-center"
-                  data-current-file-crumb={crumb.kind === "file"}
-                >
-                  {index > 0 ? (
-                    <ChevronRight className="mx-1 size-3.5 shrink-0 text-muted-foreground/60" />
-                  ) : null}
-                  {crumb.kind === "file" ? (
-                    <button
-                      type="button"
-                      className="max-w-40 truncate rounded px-1 py-0.5 text-left font-medium text-foreground hover:bg-accent"
-                      onClick={() => onOpenFile(crumb.path, activeCwd)}
-                    >
-                      {crumb.label}
-                    </button>
-                  ) : (
-                    <Menu>
-                      <MenuTrigger
-                        render={
-                          <button
-                            type="button"
-                            className="max-w-40 truncate rounded px-1 py-0.5 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
-                          />
-                        }
-                      >
-                        {crumb.label}
-                      </MenuTrigger>
-                      <MenuPopup align="start" className="w-72">
-                        {directChildProjectEntries(projectEntries, crumb.path)
-                          .slice(0, MAX_BREADCRUMB_CHILDREN)
-                          .map((entry) => (
-                            <MenuItem
-                              key={entry.path}
-                              onClick={() => {
-                                const target =
-                                  entry.kind === "file"
-                                    ? entry.path
-                                    : firstFileInDirectory(projectEntries, entry.path);
-                                if (target) onOpenFile(target, activeCwd);
-                              }}
-                            >
-                              {entry.kind === "directory" ? (
-                                <Folder className="size-4" />
-                              ) : (
-                                <FileText className="size-4" />
-                              )}
-                              <span className="min-w-0 flex-1 truncate">
-                                {projectEntryName(entry)}
-                              </span>
-                            </MenuItem>
-                          ))}
-                        {directChildProjectEntries(projectEntries, crumb.path).length === 0 ? (
-                          <MenuItem disabled>No children</MenuItem>
-                        ) : null}
-                      </MenuPopup>
-                    </Menu>
-                  )}
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
+          <FileBreadcrumbs
+            environmentId={environmentId}
+            cwd={activeCwd}
+            relativePath={relativePath}
+            projectName={projectName}
+            onOpenFile={(path) => onOpenFile(path, activeCwd)}
+            workspaceMutationId={active ? workspaceMutationId : null}
+          />
           {absolutePath &&
           (environmentId === primaryEnvironmentId || remoteOpenState.mode !== "local-exec") ? (
             <OpenInPicker
@@ -2008,6 +1940,7 @@ export default function FilePreviewPanel({
                 ) : (
                   <FileBrowserPanel
                     key={`${environmentId}:${activeCwd}`}
+                    active={active}
                     environmentId={environmentId}
                     cwd={activeCwd}
                     projectName={projectName}
@@ -2031,6 +1964,7 @@ export default function FilePreviewPanel({
               onSelect={selectFileTreeWorktree}
             />
             <MultiRootFileBrowser
+              active={active}
               environmentId={environmentId}
               roots={roots}
               projectName={projectName}

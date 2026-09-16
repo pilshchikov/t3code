@@ -173,6 +173,7 @@ export function NativeProjectFileTree(props: {
   onDeleteSelected: () => void | Promise<void>;
   onContextMenu: (path: string, position: { x: number; y: number }) => void;
   collapseRequestId: number;
+  onExpandedDirectoriesChange?: (paths: readonly string[]) => void;
 }) {
   const nodes = useMemo(() => buildProjectTree(props.entries), [props.entries]);
   const filteredNodes = useMemo(() => filterTree(nodes, props.query), [nodes, props.query]);
@@ -187,6 +188,16 @@ export function NativeProjectFileTree(props: {
     () => visibleRows.flatMap(({ node }) => (node.kind === "file" ? [node.path] : [])),
     [visibleRows],
   );
+  const visibleExpandedDirectories = useMemo(
+    () =>
+      visibleRows.flatMap(({ node }) =>
+        node.kind === "directory" && expanded.has(node.path) ? [node.path] : [],
+      ),
+    [expanded, visibleRows],
+  );
+  useEffect(() => {
+    props.onExpandedDirectoriesChange?.(visibleExpandedDirectories);
+  }, [props.onExpandedDirectoriesChange, visibleExpandedDirectories]);
   const selectedPathSet = useMemo(() => new Set(props.selectedPaths), [props.selectedPaths]);
   const selectionAnchorRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);

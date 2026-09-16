@@ -102,6 +102,30 @@ it.layer(TestLayer, { excludeTestServices: true })("WorkspaceEntries", (it) => {
   });
 
   describe("watch", () => {
+    it.effect("uses a non-recursive watcher for an expanded directory", () =>
+      Effect.gen(function* () {
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const cwd = yield* makeTempDir({ prefix: "t3code-shallow-watch-" });
+        yield* writeTextFile(cwd, "src/nested/old.ts", "old");
+        const spy = vi.spyOn(fs, "watch");
+        const ready = yield* Deferred.make<void>();
+        const fiber = yield* workspaceEntries.watch({ cwd, directoryPath: "src" }).pipe(
+          Stream.tap((event) =>
+            event.revision === 0 ? Deferred.succeed(ready, undefined) : Effect.void,
+          ),
+          Stream.take(2),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        yield* Deferred.await(ready);
+        expect(spy).toHaveBeenCalledWith(path.join(cwd, "src"), { recursive: false });
+        yield* writeTextFile(cwd, "src/new.ts", "new");
+        const events = yield* Fiber.join(fiber).pipe(Effect.timeout(Duration.seconds(5)));
+        expect(Array.from(events)).toEqual([{ revision: 0 }, { revision: 1 }]);
+      }),
+    );
     it.effect("invalidates the workspace when a nested file changes", () =>
       Effect.gen(function* () {
         const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;

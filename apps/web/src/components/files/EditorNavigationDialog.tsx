@@ -137,25 +137,17 @@ function MatchedText({ text, query }: { text: string; query: string }) {
 
 function recentFileItems(
   recentFiles: ReadonlyArray<RecentEditorFile>,
-  entries: ReadonlyArray<ProjectEntry>,
+  _entries: ReadonlyArray<ProjectEntry>,
 ): SearchResultItem[] {
-  const filePaths = new Set(
-    entries.filter((entry) => entry.kind === "file").map((entry) => entry.path),
-  );
-  return recentFiles.flatMap((entry) =>
-    filePaths.has(entry.path)
-      ? [
-          {
-            id: `recent:${entry.path}`,
-            section: "Recent" as const,
-            kind: "file" as const,
-            path: entry.path,
-            title: fileName(entry.path),
-            detail: entry.path,
-          },
-        ]
-      : [],
-  );
+  // A shallow listing cannot prove a recent file in a collapsed directory is gone.
+  return recentFiles.map((entry) => ({
+    id: `recent:${entry.path}`,
+    section: "Recent" as const,
+    kind: "file" as const,
+    path: entry.path,
+    title: fileName(entry.path),
+    detail: entry.path,
+  }));
 }
 
 /**

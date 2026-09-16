@@ -11,7 +11,7 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { SqlClient } from "effect/unstable/sql";
 
-const SAMPLE_MS = 5 * 60_000;
+const SAMPLE_MS = 30_000;
 const RETENTION_MS = 90 * 24 * 60 * 60_000;
 
 export class UsageLimitHistory extends Context.Service<
@@ -69,7 +69,7 @@ export const layer = Layer.effect(
     const read = Effect.fn("UsageLimitHistory.read")(function* ({ days }: UsageLimitHistoryInput) {
       const now = yield* DateTime.now;
       const sinceMs = DateTime.toEpochMillis(now) - days * 24 * 60 * 60_000;
-      const resolutionMinutes = days === 1 ? 5 : days === 7 ? 30 : days === 30 ? 120 : 360;
+      const resolutionMinutes = days === 1 ? 0.5 : days === 7 ? 30 : days === 30 ? 120 : 360;
       const resolutionMs = resolutionMinutes * 60_000;
       const rows =
         yield* sql`SELECT account_id AS "accountId", label, color, window_id AS "windowId",

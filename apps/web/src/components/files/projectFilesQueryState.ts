@@ -1,4 +1,4 @@
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import { useAtomValue } from "@effect/atom-react";
 import type {
   EnvironmentId,
   ProjectEntriesChangedEvent,
@@ -13,7 +13,7 @@ import {
 import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { projectEnvironment } from "~/state/projects";
@@ -41,11 +41,7 @@ interface ProjectQueryState<A> {
   readonly refresh: () => void;
 }
 
-function getProjectEntriesQueryAtom(
-  environmentId: EnvironmentId,
-  cwd: string,
-  directoryPath?: string,
-) {
+function getProjectEntriesQueryAtom(environmentId: EnvironmentId, cwd: string, directoryPath = "") {
   return projectEnvironment.listEntries({
     environmentId,
     input: { cwd, ...(directoryPath !== undefined ? { directoryPath } : {}) },
@@ -143,46 +139,62 @@ function errorMessage<A>(result: AsyncResult.AsyncResult<A, unknown>): string | 
 export function useProjectEntriesQuery(
   environmentId: EnvironmentId,
   cwd: string,
-  directoryPath?: string,
+  directoryPath = "",
+  active = true,
 ): ProjectQueryState<ProjectListEntriesResult> {
   const atom = getProjectEntriesQueryAtom(environmentId, cwd, directoryPath);
   const result = useAtomValue(atom);
-  const refreshAtom = useAtomRefresh(atom);
-  useProjectEntriesWatchRefresh(environmentId, cwd, refreshAtom);
-  const targetKey = `${environmentId}\u0000${cwd}`;
-  const [freshTargetKey, setFreshTargetKey] = useState<string | null>(null);
-  const freshTargetRef = useRef<string | null>(null);
-  const freshRefreshInFlightRef = useRef(false);
-
+  const refreshing = useRef({ running: false, again: false, generation: 0 });
   useEffect(() => {
-    if (freshTargetRef.current === targetKey) return;
-    freshTargetRef.current = targetKey;
-    freshRefreshInFlightRef.current = true;
-    let active = true;
-    setFreshTargetKey(null);
-    void executeAtomQuery(appAtomRegistry, atom, {
-      reportDefect: false,
-      reportFailure: false,
-      refresh: true,
-    }).then(() => {
-      if (active) setFreshTargetKey(targetKey);
-      freshRefreshInFlightRef.current = false;
-    });
+    const state = refreshing.current;
     return () => {
-      active = false;
+      state.generation++;
+      state.running = false;
+      state.again = false;
     };
-  }, [atom, targetKey]);
-
+  }, [atom, active]);
   const refresh = useCallback(() => {
-    if (freshRefreshInFlightRef.current) return;
-    refreshAtom();
-  }, [refreshAtom]);
-  const awaitingFreshListing = freshTargetKey !== targetKey;
+    const state = refreshing.current;
+    if (!active || state.running) return;
+    state.running = true;
+    const generation = state.generation;
+    void (async () => {
+      try {
+        do {
+          state.again = false;
+          await executeAtomQuery(appAtomRegistry, atom, {
+            reportDefect: false,
+            reportFailure: false,
+            refresh: true,
+          });
+        } while (state.again && state.generation === generation);
+      } finally {
+        if (state.generation === generation) state.running = false;
+      }
+    })();
+  }, [active, atom]);
+  const onDirectoryChange = useCallback(() => {
+    if (refreshing.current.running) refreshing.current.again = true;
+    else refresh();
+  }, [refresh]);
+  useProjectEntriesWatchRefresh(
+    active ? environmentId : null,
+    active ? cwd : null,
+    onDirectoryChange,
+    directoryPath,
+  );
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+  useEffect(() => {
+    if (!active || typeof window === "undefined") return;
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [active, refresh]);
   return {
-    data:
-      awaitingFreshListing || result.waiting ? null : Option.getOrNull(AsyncResult.value(result)),
-    error: awaitingFreshListing || result.waiting ? null : errorMessage(result),
-    isPending: awaitingFreshListing || result.waiting,
+    data: Option.getOrNull(AsyncResult.value(result)),
+    error: errorMessage(result),
+    isPending: result.waiting,
     refresh,
   };
 }
@@ -191,17 +203,18 @@ export function useProjectEntriesWatchRefresh(
   environmentId: EnvironmentId | null,
   cwd: string | null,
   refresh: () => void,
+  directoryPath = "",
 ): void {
   const watchAtom = (
     environmentId !== null && cwd !== null
-      ? projectEnvironment.watchEntries({ environmentId, input: { cwd } })
+      ? projectEnvironment.watchEntries({ environmentId, input: { cwd, directoryPath } })
       : EMPTY_PROJECT_ENTRIES_WATCH_ATOM
   ) as Atom.Atom<AsyncResult.AsyncResult<ProjectEntriesChangedEvent, unknown>>;
   const watchResult = useAtomValue(watchAtom);
   const watchRevision = AsyncResult.isSuccess(watchResult) ? watchResult.value.revision : null;
 
   useEffect(() => {
-    if (watchRevision === null || watchRevision === 0) return;
+    if (watchRevision === null) return;
     refresh();
   }, [refresh, watchRevision]);
 }
@@ -248,17 +261,17 @@ export function useProjectFileQuery(
   enabled = true,
   watch = false,
   preserveOptimistic = false,
+  active = true,
 ): ProjectQueryState<ProjectReadFileResult> {
   const isMedia =
     relativePath !== null &&
     (isWorkspaceImagePreviewPath(relativePath) || isWorkspaceVideoPreviewPath(relativePath));
   const atom =
-    enabled && !isMedia
+    enabled && !isMedia && relativePath !== null
       ? getProjectFileQueryAtom(environmentId, cwd, relativePath)
       : EMPTY_PROJECT_FILE_QUERY_ATOM;
   const result = useAtomValue(atom);
-  const refreshAtom = useAtomRefresh(atom);
-  const shouldWatch = enabled && watch && relativePath !== null;
+  const shouldWatch = enabled && watch && active && relativePath !== null && !isMedia;
   const watchAtom = shouldWatch
     ? projectEnvironment.watchFile({
         environmentId,
@@ -268,58 +281,82 @@ export function useProjectFileQuery(
   const watchResult = useAtomValue(watchAtom);
   const watchRevision = AsyncResult.isSuccess(watchResult) ? watchResult.value.revision : null;
   const targetKey = shouldWatch ? `${environmentId}\u0000${cwd}\u0000${relativePath}` : null;
-  const [freshTargetKey, setFreshTargetKey] = useState<string | null>(null);
-
-  // A file preview must never paint a cached snapshot on open. Force a real
-  // server read, keep the old value hidden until it settles, then let the
-  // scoped watcher refresh subsequent external edits while this preview is
-  // mounted. Closing or switching the visible surface unmounts/unsubscribes it.
+  const checkState = useRef({ generation: 0, running: false, again: false });
   useEffect(() => {
-    if (targetKey === null) {
-      setFreshTargetKey(null);
+    const state = checkState.current;
+    return () => {
+      state.generation++;
+      state.running = false;
+      state.again = false;
+    };
+  }, [atom, targetKey, preserveOptimistic]);
+  const refresh = useCallback(() => {
+    if (!enabled || isMedia || relativePath === null || !active || preserveOptimistic) return;
+    const state = checkState.current;
+    if (state.running) {
+      state.again = true;
       return;
     }
-    let active = true;
-    if (!preserveOptimistic && relativePath !== null) {
-      clearProjectFileQueryData(environmentId, cwd, relativePath);
-    }
-    void executeAtomQuery(appAtomRegistry, atom, {
-      reportDefect: false,
-      reportFailure: false,
-      refresh: true,
-    }).then(() => {
-      if (active) setFreshTargetKey(targetKey);
+    const generation = state.generation;
+    state.running = true;
+    const metadataAtom = projectEnvironment.readFile({
+      environmentId,
+      input: { cwd, relativePath, metadataOnly: true },
     });
-    return () => {
-      active = false;
-    };
-  }, [atom, cwd, environmentId, preserveOptimistic, relativePath, targetKey]);
-
+    void (async () => {
+      try {
+        do {
+          state.again = false;
+          // Finish an initial read before checking, avoiding two full reads on first open.
+          await executeAtomQuery(appAtomRegistry, atom, {
+            reportDefect: false,
+            reportFailure: false,
+          });
+          if (state.generation !== generation) return;
+          const metadata = await executeAtomQuery(appAtomRegistry, metadataAtom, {
+            reportDefect: false,
+            reportFailure: false,
+            refresh: true,
+          });
+          if (state.generation !== generation) return;
+          const currentResult = appAtomRegistry.get(atom);
+          const current = Option.getOrNull(AsyncResult.value(currentResult));
+          if (
+            currentResult._tag === "Failure" ||
+            metadata._tag !== "Success" ||
+            !current?.revision ||
+            metadata.value.revision !== current.revision
+          ) {
+            clearProjectFileQueryData(environmentId, cwd, relativePath);
+            await executeAtomQuery(appAtomRegistry, atom, {
+              reportDefect: false,
+              reportFailure: false,
+              refresh: true,
+            });
+          }
+        } while (state.again && state.generation === generation);
+      } finally {
+        if (state.generation === generation) state.running = false;
+      }
+    })();
+  }, [active, atom, cwd, enabled, environmentId, isMedia, preserveOptimistic, relativePath]);
   useEffect(() => {
-    if (watchRevision === null || watchRevision === 0) return;
-    if (!preserveOptimistic && relativePath !== null) {
-      clearProjectFileQueryData(environmentId, cwd, relativePath);
-    }
-    refreshAtom();
-  }, [cwd, environmentId, preserveOptimistic, refreshAtom, relativePath, watchRevision]);
-  const refresh = useCallback(() => {
-    if (!preserveOptimistic && relativePath !== null) {
-      clearProjectFileQueryData(environmentId, cwd, relativePath);
-    }
-    refreshAtom();
-  }, [cwd, environmentId, preserveOptimistic, refreshAtom, relativePath]);
+    if (shouldWatch) refresh();
+  }, [refresh, shouldWatch, watchRevision]);
+  useEffect(() => {
+    if (targetKey === null || typeof window === "undefined") return;
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [refresh, targetKey]);
   const data = Option.getOrNull(AsyncResult.value(result));
   const optimisticResult = useAtomValue(
     optimisticFileAtom(environmentId, cwd, relativePath ?? EMPTY_PROJECT_FILE_PATH),
   );
   const optimisticFile = relativePath === null ? null : optimisticResult;
-  const awaitingFreshRead = targetKey !== null && freshTargetKey !== targetKey;
-  const hideSettlingDiskRead = result.waiting && !preserveOptimistic;
-
   return {
-    data: awaitingFreshRead || hideSettlingDiskRead ? null : (optimisticFile?.data ?? data),
-    error: awaitingFreshRead || hideSettlingDiskRead ? null : errorMessage(result),
-    isPending: awaitingFreshRead || hideSettlingDiskRead || result.waiting,
+    data: optimisticFile?.data ?? (result._tag === "Failure" ? null : data),
+    error: errorMessage(result),
+    isPending: result.waiting,
     refresh,
   };
 }

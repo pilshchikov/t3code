@@ -254,7 +254,14 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
         displayName,
         accentColor,
         enabled,
-        snapshot,
+        snapshot: {
+          ...snapshot,
+          // Explicit refreshes (including active-work limit checks) must not
+          // republish five-minute-old usage with a new measurement timestamp.
+          refresh: Cache.invalidate(capabilitiesProbeCache, capabilitiesCacheKey).pipe(
+            Effect.andThen(snapshot.refresh),
+          ),
+        },
         snapshotForCwd,
         adapter,
         textGeneration,

@@ -8,6 +8,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import { UsageLimitSources } from "./UsageLimitSources.ts";
@@ -69,7 +70,10 @@ describe("usage history collection", () => {
         yield* Layer.build(
           layer.pipe(
             Layer.provide(
-              Layer.mock(ProviderRegistry)({ getProviders: Effect.succeed([provider]) }),
+              Layer.mock(ProviderRegistry)({
+                getProviders: Effect.succeed([provider]),
+                streamChanges: Stream.never,
+              }),
             ),
             Layer.provide(Layer.mock(UsageLimitSources)({ current: Effect.succeed([]) })),
             Layer.provide(

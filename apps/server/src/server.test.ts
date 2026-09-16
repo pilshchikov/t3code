@@ -6884,6 +6884,11 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         withWsRpcClient(wsUrl, (client) =>
           Effect.all({
             listing: client[WS_METHODS.projectsListEntries]({ cwd: workspaceDir }),
+            metadata: client[WS_METHODS.projectsReadFile]({
+              cwd: workspaceDir,
+              relativePath: "src/index.ts",
+              metadataOnly: true,
+            }),
             file: client[WS_METHODS.projectsReadFile]({
               cwd: workspaceDir,
               relativePath: "src/index.ts",
@@ -6893,7 +6898,12 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       );
 
       assert.isTrue(response.listing.entries.some((entry) => entry.path === "src/index.ts"));
+      assert.isString(response.file.revision);
+      assert.equal(response.metadata.revision, response.file.revision);
+      assert.equal(response.metadata.contents, "");
+      assert.isTrue(response.metadata.metadataOnly);
       assert.deepEqual(response.file, {
+        revision: response.file.revision,
         relativePath: "src/index.ts",
         contents: "export const answer = 42;\n",
         byteLength: 26,

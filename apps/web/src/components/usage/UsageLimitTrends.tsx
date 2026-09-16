@@ -12,7 +12,7 @@ import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { serverEnvironment } from "../../state/server";
 import { Button } from "../ui/button";
 import { RedactedSensitiveText } from "../settings/RedactedSensitiveText";
-import { historyAccounts, historySegments } from "./usageLimitHistoryModel";
+import { historyAccounts, historyProviderGroups, historySegments } from "./usageLimitHistoryModel";
 
 function TrendChart({
   points,
@@ -26,7 +26,7 @@ function TrendChart({
   const start = Date.parse(history.since);
   const end = Date.parse(history.readAt);
   const x = (point: UsageLimitHistoryPoint) =>
-    35 + ((Date.parse(point.measuredAt) - start) / (end - start)) * 525;
+    35 + ((Date.parse(point.measuredAt) - start) / Math.max(1, end - start)) * 525;
   const y = (point: UsageLimitHistoryPoint) => 12 + (100 - point.remainingPercent) * 1.1;
   const latest = points.at(-1)!;
   return (
@@ -63,6 +63,14 @@ function TrendChart({
             />
           </g>
         ))}
+        <polyline
+          points={points.map((p) => `${x(p)},${y(p)}`).join(" ")}
+          fill="none"
+          stroke={color}
+          strokeWidth="2"
+          strokeDasharray="4 4"
+          opacity="0.5"
+        />
         {historySegments(points, history.resolutionMinutes).map((segment, index) => (
           <g key={index}>
             <polyline
@@ -70,6 +78,8 @@ function TrendChart({
               fill="none"
               stroke={color}
               strokeWidth="2"
+              strokeLinejoin="round"
+              strokeLinecap="round"
             />
             {segment.map((p) => (
               <circle
@@ -157,10 +167,11 @@ function EnvironmentTrends({
   useEffect(() => {
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") appAtomRegistry.refresh(query);
-    }, 60_000);
+    }, 30_000);
     return () => clearInterval(timer);
   }, [query]);
   const accounts = useMemo(() => historyAccounts(history?.points ?? []), [history]);
+  const groups = useMemo(() => historyProviderGroups(history?.points ?? []), [history]);
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -193,42 +204,47 @@ function EnvironmentTrends({
           Showing the latest 20,000 points. Choose a shorter period for more detail.
         </p>
       ) : null}
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
-        {history
-          ? accounts.map(([id, account]) => (
-              <article key={id} className="min-w-0 rounded-xl border border-border bg-card p-4">
-                <h4 className="mb-4 flex items-center gap-2 text-sm font-medium">
-                  <span
-                    className="size-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: account.color ?? "var(--primary)" }}
-                  />
-                  {account.label.includes("@") ? (
-                    <RedactedSensitiveText
-                      value={account.label}
-                      ariaLabel="Toggle account label visibility"
-                      revealTooltip="Click to reveal account"
-                      hideTooltip="Click to hide account"
-                    />
-                  ) : (
-                    account.label
-                  )}
-                </h4>
-                <div className="flex flex-col gap-5">
-                  {[...account.windows]
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([windowId, points]) => (
-                      <TrendChart
-                        key={windowId}
-                        points={points}
-                        history={history}
-                        color={account.color ?? "var(--primary)"}
+      {groups.map((group) => (
+        <section key={group.label} className="flex flex-col gap-3">
+          <h4 className="border-b border-border pb-2 text-sm font-semibold">{group.label}</h4>
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+            {history
+              ? group.accounts.map(([id, account]) => (
+                  <article key={id} className="min-w-0 rounded-xl border border-border bg-card p-4">
+                    <h4 className="mb-4 flex items-center gap-2 text-sm font-medium">
+                      <span
+                        className="size-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: account.color ?? "var(--primary)" }}
                       />
-                    ))}
-                </div>
-              </article>
-            ))
-          : null}
-      </div>
+                      {account.label.includes("@") ? (
+                        <RedactedSensitiveText
+                          value={account.label}
+                          ariaLabel="Toggle account label visibility"
+                          revealTooltip="Click to reveal account"
+                          hideTooltip="Click to hide account"
+                        />
+                      ) : (
+                        account.label
+                      )}
+                    </h4>
+                    <div className="flex flex-col gap-5">
+                      {[...account.windows]
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([windowId, points]) => (
+                          <TrendChart
+                            key={windowId}
+                            points={points}
+                            history={history}
+                            color={account.color ?? "var(--primary)"}
+                          />
+                        ))}
+                    </div>
+                  </article>
+                ))
+              : null}
+          </div>
+        </section>
+      ))}
     </section>
   );
 }
@@ -255,9 +271,10 @@ export function UsageLimitTrends({
         ))}
       </div>
       <p className="text-xs text-muted-foreground">
-        Remaining quota, not token counts. Fresh provider checks are stored in five-minute buckets
-        for 90 days while the server runs. Longer ranges are downsampled. Breaks mark resets or
-        missing measurements; history cannot be backfilled.
+        Remaining quota, not token counts. Active providers are checked at work start, about every
+        30 seconds, and when their last working thread finishes. Measurements are stored for 90 days
+        in 30-second buckets; longer ranges are downsampled. Lines connect measurements, including
+        resets. Dashed lines span missing measurements; history cannot be backfilled.
       </p>
       {environments.map((environment) => (
         <EnvironmentTrends key={environment.environmentId} {...environment} days={days} />

@@ -1,22 +1,18 @@
 import type { UsageLimitHistoryPoint } from "@t3tools/contracts";
 
-/** Never draw through a reset or a period without measurements. */
+/** Solid lines connect measured values, including resets. Gaps get dashed bridges. */
 export function historySegments(
   points: readonly UsageLimitHistoryPoint[],
   resolutionMinutes: number,
 ) {
   const segments: UsageLimitHistoryPoint[][] = [];
-  for (const point of points) {
+  for (const point of [...points].sort(
+    (a, b) => Date.parse(a.measuredAt) - Date.parse(b.measuredAt),
+  )) {
     const segment = segments.at(-1);
     const previous = segment?.at(-1);
     const gap = previous ? Date.parse(point.measuredAt) - Date.parse(previous.measuredAt) : 0;
-    if (
-      !segment ||
-      !previous ||
-      gap > Math.max(15, resolutionMinutes * 2) * 60_000 ||
-      point.remainingPercent > previous.remainingPercent ||
-      point.resetsAt !== previous.resetsAt
-    ) {
+    if (!segment || !previous || gap > Math.max(15, resolutionMinutes * 2) * 60_000) {
       segments.push([point]);
     } else segment.push(point);
   }
@@ -43,4 +39,35 @@ export function historyAccounts(points: readonly UsageLimitHistoryPoint[]) {
   return [...accounts].sort(
     ([aId, a], [bId, b]) => a.label.localeCompare(b.label) || aId.localeCompare(bId),
   );
+}
+
+export function historyProviderGroups(points: readonly UsageLimitHistoryPoint[]) {
+  const groups = new Map<string, { label: string; accounts: ReturnType<typeof historyAccounts> }>();
+  for (const account of historyAccounts(points)) {
+    let driver = "other";
+    try {
+      const identity: unknown = JSON.parse(account[0]);
+      if (Array.isArray(identity)) {
+        const candidate =
+          identity[0] === "provider" ? identity[1] : identity[0] === "source" ? identity[2] : null;
+        if (typeof candidate === "string") driver = candidate;
+      }
+    } catch {
+      /* Historical/custom ids remain visible in Other providers. */
+    }
+    const label =
+      (
+        {
+          claudeAgent: "Claude",
+          claude: "Claude",
+          codex: "Codex",
+          grok: "Grok",
+          other: "Other providers",
+        } as Record<string, string>
+      )[driver] ?? driver;
+    const group = groups.get(label) ?? { label, accounts: [] };
+    group.accounts.push(account);
+    groups.set(label, group);
+  }
+  return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label));
 }

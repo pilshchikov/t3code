@@ -4,6 +4,34 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Active-provider limit trends, September 14
+
+- Trend charts connect measurements (including quota resets), using dashed bridges across gaps,
+  and group account cards under provider headings without merging Personal and Work histories.
+- A server-owned scheduler requests fresh provider limits at the first active thread, about every
+  30 seconds while busy, and when the last thread finishes. Concurrent threads share the account's
+  polling clock and in-flight request; a finish during a probe queues one final check. Startup
+  subscriptions are acquired before session seeding to avoid missing short turns.
+- Provider snapshot updates are recorded immediately, with 30-second history buckets and a
+  30-second 24-hour view. Idle collection and 90-day retention remain. Explicit Claude refreshes
+  bypass its capability cache, and cached usage keeps its original measurement timestamp.
+
+## File preview and directory cache, September 14
+
+- Open text-file tabs retain their editor/Markdown surfaces while inactive or while the right
+  panel is closed. Files tabs also retain expanded folders and scroll state. Closing a file tab
+  releases its query snapshot; media/live pages stop when hidden. Closed panels are inert and
+  relinquish native titlebar drag regions.
+- Activation, window focus, watcher startup and file changes validate an opaque disk revision
+  (device/inode, size, modification and change times). Metadata-only reads do not transfer file
+  contents. Unchanged previews stay intact; changed files refresh in the background. Outstanding
+  checks cannot discard a newer unsaved edit or refresh a retired tab.
+- File trees use cached shallow directory listings with a one-minute idle TTL, refreshed in the
+  background. Only the root and visible expanded directories are listed/watched; collapsed
+  subtrees are not recursively scanned. Breadcrumb menus load individual directories on demand.
+  Explicit file search remains bounded and server-side. Cached descendants cannot recreate a
+  deleted parent, and recent-file navigation does not mistake unlisted subtrees for deleted files.
+
 ## Upstream sync and thread PR overview, September 14
 
 - Merged 26 upstream commits through `01e05c1526`. The previous fork revision is retained as

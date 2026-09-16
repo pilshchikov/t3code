@@ -2,6 +2,7 @@ import type { CodexArtifactTemplate } from "@t3tools/client-runtime/codex-artifa
 import type { ChatFileAttachment } from "@t3tools/contracts";
 import type { ComposerFileAttachment } from "../composerDraftStore";
 import { appAtomRegistry } from "../rpc/atomRegistry";
+import { retainFilePreview } from "./files/filePreviewRetention";
 import { environmentServerConfigsAtom } from "../state/server";
 import { clampFileAttachmentUploadBytes } from "@t3tools/client-runtime/state/attachments";
 import { fileAttachmentCapabilityBlockReason } from "./chat/composerAttachmentFiles";
@@ -3636,14 +3637,6 @@ export default function ChatView(props: ChatViewProps) {
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
   const activeFileWorkspaceRoot = activeFileSurface?.workspaceRoot ?? activeWorkspaceRoot;
-  const selectedFilePending =
-    activeFileSurface !== null && pendingFileSurfaceIds.has(activeFileSurface.id);
-  const handleActiveFilePendingChange = useCallback(
-    (relativePath: string, pending: boolean) => {
-      handleFilePendingChange(relativePath, pending, activeFileWorkspaceRoot);
-    },
-    [activeFileWorkspaceRoot, handleFilePendingChange],
-  );
   // Editor back/forward history. Recording the active file here, rather than at each call site
   // that can open one, means the tree, markdown links, the file picker, and symbol jumps all feed
   // one history. Replaying a back/forward step lands on the entry it just moved to, which
@@ -9084,48 +9077,58 @@ export default function ChatView(props: ChatViewProps) {
           }}
         />
       </Suspense>
-    ) : (renderedRightPanelSurface?.kind === "files" ||
-        renderedRightPanelSurface?.kind === "file") &&
-      activeProject &&
-      activeFileWorkspaceRoot ? (
-      <Suspense fallback={null}>
-        <FilePreviewPanel
-          key={`${activeProject.environmentId}:${activeFileWorkspaceRoot}`}
-          environmentId={activeProject.environmentId}
-          primaryCwd={activeWorkspaceRoot ?? activeFileWorkspaceRoot}
-          cwd={activeFileWorkspaceRoot}
-          projectName={activeProject.title}
-          workspaceRoots={activeProject.workspaceRoots}
-          threadRef={activeThreadRef}
-          composerDraftTarget={composerDraftTarget}
-          keybindings={keybindings}
-          availableEditors={availableEditors}
-          relativePath={
-            renderedRightPanelSurface.kind === "file"
-              ? renderedRightPanelSurface.relativePath
-              : null
-          }
-          {...(renderedRightPanelSurface.kind === "file" && renderedRightPanelSurface.attachment
-            ? { attachment: renderedRightPanelSurface.attachment }
-            : {})}
-          revealLine={
-            renderedRightPanelSurface.kind === "file"
-              ? (renderedRightPanelSurface.revealLine ?? null)
-              : null
-          }
-          revealRequestId={
-            renderedRightPanelSurface.kind === "file"
-              ? renderedRightPanelSurface.revealRequestId
-              : 0
-          }
-          onOpenFile={openFileSurface}
-          onPendingChange={handleActiveFilePendingChange}
-          selectedFilePending={selectedFilePending}
-          workspaceMutationId={workspaceMutationId}
-        />
-      </Suspense>
     ) : null
   ) : null;
+
+  // The open-tab list owns preview lifetimes, not the active tab. Query atoms
+  // have zero idle TTL, so closing a tab releases its disk snapshot as well.
+  const openFilePreviews =
+    activeThreadRef && activeProject && activeWorkspaceRoot
+      ? rightPanelState.surfaces
+          .filter((surface) => surface.kind === "file" || surface.kind === "files")
+          .map((surface) => {
+            const cwd =
+              (surface.kind === "file" ? surface.workspaceRoot : undefined) ?? activeWorkspaceRoot;
+            const active = rightPanelOpen && activeRightPanelSurface?.id === surface.id;
+            if (
+              !active &&
+              surface.kind === "file" &&
+              !retainFilePreview(surface.relativePath, Boolean(surface.attachment))
+            )
+              return null;
+            return (
+              <div
+                key={`${activeThreadKey}:${surface.id}:${cwd}`}
+                className={active ? "flex h-full min-h-0 min-w-0 flex-1 flex-col" : "hidden"}
+              >
+                <Suspense fallback={null}>
+                  <FilePreviewPanel
+                    active={active}
+                    environmentId={activeProject.environmentId}
+                    primaryCwd={activeWorkspaceRoot}
+                    cwd={cwd}
+                    projectName={activeProject.title}
+                    workspaceRoots={activeProject.workspaceRoots}
+                    threadRef={activeThreadRef}
+                    composerDraftTarget={composerDraftTarget}
+                    keybindings={keybindings}
+                    availableEditors={availableEditors}
+                    relativePath={surface.kind === "file" ? surface.relativePath : null}
+                    {...(surface.kind === "file" && surface.attachment
+                      ? { attachment: surface.attachment }
+                      : {})}
+                    revealLine={surface.kind === "file" ? (surface.revealLine ?? null) : null}
+                    revealRequestId={surface.kind === "file" ? surface.revealRequestId : 0}
+                    onOpenFile={openFileSurface}
+                    onPendingChange={handleFilePendingChange}
+                    selectedFilePending={pendingFileSurfaceIds.has(surface.id)}
+                    workspaceMutationId={workspaceMutationId}
+                  />
+                </Suspense>
+              </div>
+            );
+          })
+      : null;
 
   const workspaceFileDropHandlers = makeWorkspaceFileDropHandlers({
     setDragActive: setIsWorkspaceFileDragActive,
@@ -9680,14 +9683,15 @@ export default function ChatView(props: ChatViewProps) {
         ))}
       </div>
 
-      {rightPanelPresent && !shouldUseRightPanelSheet && activeThreadRef ? (
+      {!shouldUseRightPanelSheet && activeThreadRef ? (
         <RightPanelTabs
+          open={rightPanelOpen}
           mode="inline"
           showTabs={settings.showEditorTabs}
           maximized={rightPanelMaximized}
           surfaces={renderedRightPanelSurfaces}
           environmentId={activeThreadRef.environmentId}
-          activeSurfaceId={renderedRightPanelSurface?.id ?? null}
+          activeSurfaceId={renderedRightPanelSurface?.id ?? activeRightPanelSurface?.id ?? null}
           pendingSurfaceIds={pendingFileSurfaceIds}
           previewSessions={activePreviewState.sessions}
           desktopByTabId={activePreviewState.desktopByTabId}
@@ -9725,9 +9729,10 @@ export default function ChatView(props: ChatViewProps) {
           liveAgentCount={agentPanelModel.liveCount}
         >
           {rightPanelContent}
+          {openFilePreviews}
         </RightPanelTabs>
       ) : null}
-      {rightPanelPresent && shouldUseRightPanelSheet && activeThreadRef ? (
+      {shouldUseRightPanelSheet && activeThreadRef ? (
         <RightPanelSheet
           animationDurationMs={panelAnimationsActive ? panelAnimationDurationMs : 0}
           open={rightPanelOpen}
@@ -9735,6 +9740,7 @@ export default function ChatView(props: ChatViewProps) {
           onClose={closePreviewPanel}
         >
           <RightPanelTabs
+            open={rightPanelOpen}
             mode="sheet"
             showTabs={settings.showEditorTabs}
             // Same effective inset as the closed-state titlebar controls
@@ -9748,7 +9754,7 @@ export default function ChatView(props: ChatViewProps) {
             }
             surfaces={renderedRightPanelSurfaces}
             environmentId={activeThreadRef.environmentId}
-            activeSurfaceId={renderedRightPanelSurface?.id ?? null}
+            activeSurfaceId={renderedRightPanelSurface?.id ?? activeRightPanelSurface?.id ?? null}
             pendingSurfaceIds={pendingFileSurfaceIds}
             previewSessions={activePreviewState.sessions}
             desktopByTabId={activePreviewState.desktopByTabId}
@@ -9786,6 +9792,7 @@ export default function ChatView(props: ChatViewProps) {
             liveAgentCount={agentPanelModel.liveCount}
           >
             {rightPanelContent}
+            {openFilePreviews}
           </RightPanelTabs>
         </RightPanelSheet>
       ) : null}
