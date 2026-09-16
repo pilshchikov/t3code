@@ -62,14 +62,22 @@ has its own memories. Do not store passwords, API keys, or other secrets.
 
 ## Project icons
 
-Select the project and open Project to choose an icon, emoji, or image. The choice applies to
+Select the project and open Project to choose an icon, emoji, monogram, or image. The choice applies to
 every checkout in the project group and appears on connected clients. Choose **Automatic** to let
 T3 Code detect an icon again.
 
-# Customize a project color
+Choose **Monogram** in the icon picker to set one or two letters or numbers and a color.
+
+When no image is found, web and desktop show a two-character monogram with a color
+from the icon palette, derived from the saved project name. For example, `Nebula` becomes `NA`,
+`Silver Orchard` becomes `SO`, and `M7 Forge` becomes `M7`.
+
+## Keep the default branch current
 
 In Source Control, enable **Automatically pull** to keep the default-branch checkout up to date
 with its configured upstream. Choose an environment to set the default or a project to override it.
+
+## Customize a project color
 
 A project can carry a color that marks its threads in the sidebar.
 

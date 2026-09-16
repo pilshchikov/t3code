@@ -45,6 +45,10 @@ const ITEMS: ReadonlyArray<SettingsSearchItem> = [
 ];
 
 describe("searchSettings", () => {
+  it.each(["send shortcut", "multiline", "new line"])("finds Send shortcut for %s", (query) => {
+    expect(searchSettings(query).map((item) => item.id)).toContain("send-shortcut");
+  });
+
   it("matches titles, sections, and remembered setting details", () => {
     expect(searchSettings("word", ITEMS).map((item) => item.id)).toEqual(["word-wrap"]);
     expect(searchSettings("network", ITEMS).map((item) => item.id)).toEqual(["network-access"]);
@@ -168,7 +172,6 @@ describe("searchSettings", () => {
       "wsl-backend",
       "auto-settle-inactive-threads",
       "auto-settle-merged-threads",
-      "auto-settle-change-request-threads",
       "days-before-auto-settle",
     ]);
     expect(available.map((item) => item.id).filter((id) => gatedIds.has(id))).toEqual([]);
@@ -209,7 +212,6 @@ describe("searchSettings", () => {
     expect(searchSettings("auto-settle", available).map((item) => item.id)).toEqual([
       "auto-settle-inactive-threads",
       "auto-settle-merged-threads",
-      "auto-settle-change-request-threads",
       "days-before-auto-settle",
     ]);
   });

@@ -90,7 +90,9 @@ const make = Effect.gen(function* () {
   const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
   const vcsStatusBroadcaster = yield* VcsStatusBroadcaster;
   const pullRequests = yield* PullRequestService.PullRequestService;
-  const pullRequestRefreshWorker = yield* makeDrainableWorker(() => pullRequests.refreshAfterTurn);
+  const pullRequestRefreshWorker = yield* makeDrainableWorker((projectId: ProjectId) =>
+    pullRequests.refreshAfterTurn(projectId),
+  );
   const startedTurns = new Map<ThreadId, TurnId>();
   const pending = new Set<ThreadId>();
 
@@ -604,8 +606,12 @@ const make = Effect.gen(function* () {
     >,
   ) {
     if (event.type === "thread.message-sent") {
+      // A bootstrap message lands before the worktree exists; its baseline
+      // would snapshot the project checkout. The turn-start event that
+      // follows captures it against the right cwd.
       if (
         event.metadata.historyImport === true ||
+        event.metadata.deferredTurn === true ||
         event.payload.role !== "user" ||
         event.payload.streaming ||
         event.payload.turnId !== null
@@ -856,7 +862,7 @@ const make = Effect.gen(function* () {
           (startedTurnId === undefined && !thread.session?.activeTurnId))
       ) {
         pending.delete(event.threadId);
-        yield* pullRequestRefreshWorker.enqueue(undefined);
+        yield* pullRequestRefreshWorker.enqueue(thread.projectId);
       }
       if (
         event.type === "turn.aborted" &&

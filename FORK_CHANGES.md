@@ -4,6 +4,22 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Upstream sync and queued follow-ups, September 16
+
+- Merged 98 upstream commits through `f4ef5155fb`, including client-side follow-up queues,
+  Queue/Steer selection and send-shortcut controls, background worktree setup, project cloning,
+  custom snoozes, native provider slash commands, project monograms, PR presentation updates,
+  worktree checkout performance, and desktop/mobile reliability fixes.
+- Preserved the fork's compact desktop and mobile-web composer, multi-directory chips, multiwork,
+  project notes and agent workspace tools, multiple-PR overview, collapsible images, file/tree
+  caches, stable colored usage accounts, limit-history polling, and macOS shortcut safeguards.
+- Existing fork migration numbers remain stable. Upstream's thread-title-state migration is 56;
+  tests use the fork's remapped migration boundaries so existing databases are never silently
+  reinterpreted. OpenCode keeps fork skill content while applying upstream's bounded CLI output.
+- Focused typechecks and regression tests cover queue/steer, keybindings, worktree setup,
+  multiwork, project notes, settled-worktree cleanup, multiple PRs, file caches, usage history,
+  migrations, and OpenCode inventory. This sync does not push, rebuild, reinstall, or restart.
+
 ## Active-provider limit trends, September 14
 
 - Trend charts connect measurements (including quota resets), using dashed bridges across gaps,

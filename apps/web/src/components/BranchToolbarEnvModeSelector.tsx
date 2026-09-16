@@ -13,7 +13,7 @@ import {
   resolveLockedWorkspaceLabel,
   type EnvMode,
 } from "./BranchToolbar.logic";
-import { composerFloatingLayerProps } from "./chat/composerEventScope";
+import { useComposerMenuProps } from "./chat/composerEventScope";
 import {
   Select,
   SelectGroup,
@@ -59,6 +59,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
         })
       : null,
   );
+  const composerFloatingLayerProps = useComposerMenuProps();
   const showPreviousWorktree = Boolean(previousWorktreeLabel && onUsePreviousWorktree);
   const envModeItems = useMemo(
     () => [
@@ -131,6 +132,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
         size="xs"
         className={cn("min-w-0 shrink font-medium", compact && "max-w-28")}
         aria-label="Workspace"
+        data-composer-shortcut="composer.workspace"
         data-composer-context-control
       >
         {effectiveEnvMode === "worktree" ? (

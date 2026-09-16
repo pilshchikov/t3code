@@ -15,6 +15,7 @@ import {
 import { isMacPlatform } from "./lib/utils";
 
 export interface ShortcutEventLike {
+  getModifierState?: (key: "AltGraph") => boolean;
   type?: string;
   code?: string;
   key: string;
@@ -137,6 +138,12 @@ function matchesShortcut(
   shortcut: KeybindingShortcut,
   platform = navigator.platform,
 ): boolean {
+  if (
+    !isMacPlatform(platform) &&
+    event.getModifierState?.("AltGraph") &&
+    !/^[a-z0-9]$/i.test(event.key)
+  )
+    return false;
   // On some macOS keyboard layouts the dedicated section-sign key arrives with Option asserted.
   // Settings intentionally records that physical key as plain `§`, so runtime matching must make
   // the same normalization or the composer wins before the configured command can run.

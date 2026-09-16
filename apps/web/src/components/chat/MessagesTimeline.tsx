@@ -1,4 +1,5 @@
 import { CollapsibleChatImage } from "./CollapsibleChatImage";
+import { ArrowUpIcon, ClockIcon } from "lucide-react";
 import { ReadOnlySourcePreview } from "../files/AttachmentFilePreview";
 import { useRightPanelStore } from "~/rightPanelStore";
 import {
@@ -45,6 +46,8 @@ import {
 
 const EMPTY_AGENT_PANEL_MODEL = emptyAgentPanelModel();
 const NOOP_OPEN_AGENTS = () => {};
+const EMPTY_QUEUED_MESSAGES: ReadonlyArray<QueuedComposerMessage> = [];
+const NOOP_QUEUED_MESSAGE_ACTION = (_id: string) => {};
 const NOOP_USE_ARTIFACT_TEMPLATE = () => {};
 const NOOP_OPEN_ATTACHMENT = (_attachment: ChatFileAttachment) => {};
 import { resolveChatListAnchoredEndSpace } from "@t3tools/shared/chatList";
@@ -109,7 +112,6 @@ import {
   CircleAlertIcon,
   DownloadIcon,
   EyeIcon,
-  GitPullRequestIcon,
   GlobeIcon,
   HammerIcon,
   MessageCircleIcon,
@@ -131,6 +133,7 @@ import type {
   KnownComposerContextRecord,
 } from "@t3tools/contracts";
 import { Button } from "../ui/button";
+import type { QueuedComposerMessage } from "../../queuedMessageStore";
 import { useAssetUrlRefresh, useAssetUrls, useAssetUrlState } from "../../assets/assetUrls";
 import { MediaVideoPlayer } from "../media/MediaVideoPlayer";
 import { getVirtualizedScrollFadeClassName } from "../ui/scroll-area";
@@ -179,6 +182,7 @@ import {
   toolGroupAction,
   workEntryDisplayLabel,
   workEntryIsVisibleInGroup,
+  worktreeSetupAgentStarted,
   type StableMessagesTimelineRowsState,
   type MessagesTimelineRow,
   TIMELINE_MINIMAP_MIN_ITEMS,
@@ -186,6 +190,8 @@ import {
   type WorkGroupScrollAnchor,
 } from "./MessagesTimeline.logic";
 import { TerminalContextInlineChip } from "./TerminalContextInlineChip";
+import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import { Spinner } from "../ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { WorktreeSetupCard } from "./WorktreeSetupCard";
 import {
@@ -241,6 +247,7 @@ import {
   formatReviewCommentFence,
   type ReviewCommentContext,
 } from "../../reviewCommentContext";
+import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 
 // ---------------------------------------------------------------------------
 // Context — shared state consumed by every row component via Context.
@@ -279,14 +286,25 @@ interface TimelineRowSharedState {
   onCancelWorktreeSetup: (() => void) | null;
   onWorktreeSetupWorkLocally: (() => void) | null;
   onOpenWorktreeSetupTerminal: ((terminalId: string) => void) | null;
+  onSteerQueuedMessage: (id: string) => void;
+  steerQueuedMessageShortcutLabel: string | null;
+  onRemoveQueuedMessage: (id: string) => void;
 }
 
 interface TimelineRowActivityState {
   isWorking: boolean;
+  isPreparingWorktree: boolean;
+  isCompacting: boolean;
   isRevertingCheckpoint: boolean;
   latestTurnId: TurnId | null;
   /** Current plan step label for the working row, when the turn has a plan. */
   workingStepLabel: string | null;
+  /**
+   * A worktree setup whose script is still running after the agent took
+   * over. The working header shows it as a chip with a popover; the stage
+   * list itself has already left the timeline.
+   */
+  backgroundWorktreeSetup: WorktreeSetupSnapshot | null;
 }
 
 const TimelineRowCtx = createContext<TimelineRowSharedState>(null!);
@@ -377,6 +395,8 @@ interface MessagesTimelineProps {
   activeTurnStartedAt: string | null;
   /** Live bootstrap progress for this thread, or null when none is tracked. */
   worktreeSetup?: WorktreeSetupSnapshot | null;
+  isPreparingWorktree?: boolean;
+  isCompacting?: boolean;
   onCancelWorktreeSetup?: () => void;
   onWorktreeSetupWorkLocally?: () => void;
   onOpenWorktreeSetupTerminal?: (terminalId: string) => void;
@@ -430,6 +450,11 @@ interface MessagesTimelineProps {
   topFadeEnabled?: boolean;
   /** Non-null when older turns exist beyond the loaded window. */
   loadEarlier?: CitationHistoryPage | null;
+  /** Messages sent during the running turn. They render as ghost bubbles after the live rows. */
+  queuedMessages?: ReadonlyArray<QueuedComposerMessage>;
+  onSteerQueuedMessage?: (id: string) => void;
+  steerQueuedMessageShortcutLabel?: string | null;
+  onRemoveQueuedMessage?: (id: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -446,6 +471,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   onCancelWorktreeSetup,
   onWorktreeSetupWorkLocally,
   onOpenWorktreeSetupTerminal,
+  isPreparingWorktree = false,
+  isCompacting = false,
 
   activeTurnStartedAt,
   agentPanelModel,
@@ -484,6 +511,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   hideEmptyPlaceholder = false,
   topFadeEnabled = false,
   loadEarlier = null,
+  queuedMessages = EMPTY_QUEUED_MESSAGES,
+  onSteerQueuedMessage = NOOP_QUEUED_MESSAGE_ACTION,
+  steerQueuedMessageShortcutLabel = null,
+  onRemoveQueuedMessage = NOOP_QUEUED_MESSAGE_ACTION,
 }: MessagesTimelineProps) {
   const [expandedTurnIds, setExpandedTurnIds] = useState<ReadonlySet<TurnId>>(new Set());
   const [expandedWorkGroupIds, setExpandedWorkGroupIds] = useState<ReadonlySet<string>>(new Set());
@@ -714,6 +745,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         supportsConversationRollback,
         liveAgentTaskIds,
         worktreeSetup,
+        queuedMessages,
       },
       previous?.threadKey === listIdentityKey && previous.workspaceRoot === workspaceRoot
         ? previous.projection
@@ -736,6 +768,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     supportsConversationRollback,
     liveAgentTaskIds,
     worktreeSetup,
+    queuedMessages,
   ]);
   const rows = useStableRows(rawRows, listIdentityKey);
   const minimapItems = useMemo(() => deriveTimelineMinimapItems(rows), [rows]);
@@ -939,6 +972,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       onCancelWorktreeSetup: onCancelWorktreeSetup ?? null,
       onWorktreeSetupWorkLocally: onWorktreeSetupWorkLocally ?? null,
       onOpenWorktreeSetupTerminal: onOpenWorktreeSetupTerminal ?? null,
+      onSteerQueuedMessage,
+      steerQueuedMessageShortcutLabel,
+      onRemoveQueuedMessage,
     }),
     [
       readyCitationRequest,
@@ -969,16 +1005,37 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       onCancelWorktreeSetup,
       onWorktreeSetupWorkLocally,
       onOpenWorktreeSetupTerminal,
+      onSteerQueuedMessage,
+      steerQueuedMessageShortcutLabel,
+      onRemoveQueuedMessage,
     ],
   );
+  const backgroundWorktreeSetup =
+    worktreeSetup !== null &&
+    worktreeSetup.phase === "running" &&
+    worktreeSetupAgentStarted(worktreeSetup) &&
+    latestTurn?.startedAt != null
+      ? worktreeSetup
+      : null;
   const activityState = useMemo<TimelineRowActivityState>(
     () => ({
       isWorking,
+      isPreparingWorktree,
+      isCompacting,
       isRevertingCheckpoint,
       latestTurnId: latestTurn?.turnId ?? null,
       workingStepLabel,
+      backgroundWorktreeSetup,
     }),
-    [isRevertingCheckpoint, isWorking, latestTurn?.turnId, workingStepLabel],
+    [
+      backgroundWorktreeSetup,
+      isCompacting,
+      isRevertingCheckpoint,
+      isWorking,
+      isPreparingWorktree,
+      latestTurn?.turnId,
+      workingStepLabel,
+    ],
   );
 
   // Stable renderItem — no closure deps. Row components read shared state
@@ -1462,6 +1519,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       {row.kind === "working" ? <WorkingTimelineRow row={row} /> : null}
       {row.kind === "thinking" ? <ThinkingTimelineRow /> : null}
       {row.kind === "worktree-setup" ? <WorktreeSetupTimelineRow row={row} /> : null}
+      {row.kind === "queued-message" ? <QueuedMessageTimelineRow row={row} /> : null}
     </div>
   );
 });
@@ -1481,10 +1539,115 @@ function WorktreeSetupTimelineRow({
   return (
     <WorktreeSetupCard
       snapshot={row.snapshot}
-      onCancel={ctx.onCancelWorktreeSetup}
-      onWorkLocally={row.snapshot.phase === "running" ? ctx.onWorktreeSetupWorkLocally : null}
+      embedded={row.embedded}
+      onCancel={row.embedded ? null : ctx.onCancelWorktreeSetup}
+      onWorkLocally={
+        !row.embedded && row.snapshot.phase === "running" ? ctx.onWorktreeSetupWorkLocally : null
+      }
       onOpenTerminal={onOpenTerminal}
     />
+  );
+}
+
+/** A message waiting for the running turn: a dashed user bubble with icon actions inside it. */
+function QueuedMessageTimelineRow({
+  row,
+}: {
+  row: Extract<TimelineRow, { kind: "queued-message" }>;
+}) {
+  const ctx = use(TimelineRowCtx);
+  const { queuedMessage } = row;
+  const attachmentCount = queuedMessage.images.length + queuedMessage.files.length;
+  const contextCount =
+    queuedMessage.terminalContexts.length +
+    queuedMessage.previewAnnotations.length +
+    queuedMessage.reviewComments.length;
+  const text = queuedMessage.prompt.trim();
+  const statusLabel = queuedMessage.holdUntilUserAction
+    ? "Waits for Send now"
+    : row.isNext
+      ? "Sends after the next tool call or when the turn ends"
+      : "Sends after the messages above it";
+  return (
+    <div className="flex flex-col items-end" data-queued-message-id={queuedMessage.id}>
+      <div className="max-w-[80%] rounded-2xl border border-dashed border-border p-3 text-message-foreground/80">
+        {text.length > 0 ? (
+          <div className="whitespace-pre-wrap break-words text-sm">{text}</div>
+        ) : null}
+        {attachmentCount > 0 || contextCount > 0 ? (
+          <div className={cn("text-secondary-label text-xs", text.length > 0 && "mt-1.5")}>
+            {[
+              attachmentCount > 0
+                ? `${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"}`
+                : null,
+              contextCount > 0
+                ? `${contextCount} context item${contextCount === 1 ? "" : "s"}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(", ")}
+          </div>
+        ) : null}
+        <div
+          className="mt-2 flex items-center gap-4 text-secondary-label text-xs"
+          data-scroll-anchor-ignore
+        >
+          <Tooltip>
+            <TooltipTrigger
+              render={<span className="inline-flex h-6 items-center gap-1" />}
+              aria-label={`Queued. ${statusLabel}.`}
+            >
+              <ClockIcon className="size-3.5" aria-hidden />
+              Queued
+            </TooltipTrigger>
+            <TooltipPopup side="bottom">{statusLabel}</TooltipPopup>
+          </Tooltip>
+          <div className="ml-auto flex items-center gap-0.5">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    size="icon-micro"
+                    variant="ghost-muted"
+                    className="size-6"
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={() => ctx.onSteerQueuedMessage(queuedMessage.id)}
+                    aria-label="Send now"
+                  />
+                }
+              >
+                <ArrowUpIcon className="size-3.5" aria-hidden />
+              </TooltipTrigger>
+              <TooltipPopup side="bottom">
+                Send now
+                {row.isNext && ctx.steerQueuedMessageShortcutLabel
+                  ? ` (${ctx.steerQueuedMessageShortcutLabel})`
+                  : null}
+              </TooltipPopup>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    size="icon-micro"
+                    variant="ghost-muted"
+                    className="size-6"
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={() => ctx.onRemoveQueuedMessage(queuedMessage.id)}
+                    aria-label="Cancel and return to the composer"
+                  />
+                }
+              >
+                <XIcon className="size-3.5" aria-hidden />
+              </TooltipTrigger>
+              <TooltipPopup side="bottom">Cancel and return to the composer</TooltipPopup>
+            </Tooltip>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1539,6 +1702,10 @@ function UserVideoAttachment({ file }: { readonly file: ChatFileAttachment }) {
       }
       label={file.name}
       preload="visible"
+      onOpen={() => {
+        const preview = buildAttachmentVideoPreview(ctx.activeThreadEnvironmentId, file);
+        if (preview) ctx.onImageExpand(preview);
+      }}
       className="block aspect-[4/3] w-full"
       videoClassName="aspect-auto size-full rounded-lg border border-border/80"
       stateClassName="aspect-auto min-h-full rounded-lg border border-border/80 bg-black text-white"
@@ -1927,12 +2094,49 @@ function RevertUserMessageButton({
   );
 }
 
+/**
+ * Hover-revealed wall-clock time with a full-date tooltip — the same metadata
+ * presentation as message rows, for work entries and turn folds. The parent
+ * carries `group/timeline-row`; hover or focus on an existing control reveals
+ * the time without adding a tab stop. Hidden timestamps stay outside the row
+ * layout. Visibility changes immediately so leaving flow cannot overlap text
+ * during a fade-out. Render it as the row's rightmost flex child so the
+ * revealed time lands at the right edge, clear of disclosure controls.
+ */
+function TimelineRowTimestamp({
+  createdAt,
+  timestampFormat,
+  className,
+}: {
+  createdAt: string;
+  timestampFormat: TimestampFormat;
+  className?: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span
+            className={cn(
+              "pointer-events-none absolute me-1 shrink-0 whitespace-nowrap rounded-md text-muted-foreground text-xs tabular-nums opacity-0 group-hover/timeline-row:pointer-events-auto group-hover/timeline-row:static group-hover/timeline-row:opacity-100 group-focus-within/timeline-row:pointer-events-auto group-focus-within/timeline-row:static group-focus-within/timeline-row:opacity-100",
+              className,
+            )}
+          />
+        }
+      >
+        {formatDayAwareTimestamp(createdAt, timestampFormat)}
+      </TooltipTrigger>
+      <TooltipPopup>{formatChatTimestampTooltip(createdAt, timestampFormat)}</TooltipPopup>
+    </Tooltip>
+  );
+}
+
 function TurnFoldTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "turn-fold" }> }) {
   const ctx = use(TimelineRowCtx);
   const Icon = row.expanded ? ChevronDownIcon : ChevronRightIcon;
 
   return (
-    <div className="chat-system-text border-b border-border/60 pb-2 pt-1">
+    <div className="chat-system-text group/timeline-row relative flex items-center gap-1 border-b border-border/60 pb-2 pe-0.5 pt-1">
       <button
         type="button"
         aria-expanded={row.expanded}
@@ -1943,6 +2147,11 @@ function TurnFoldTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "turn-
         <span>{row.label}</span>
         <Icon className="size-3.5" />
       </button>
+      <TimelineRowTimestamp
+        createdAt={row.createdAt}
+        timestampFormat={ctx.timestampFormat}
+        className="ms-auto"
+      />
     </div>
   );
 }
@@ -2211,28 +2420,105 @@ const TurnPlanTimelineRow = memo(function TurnPlanTimelineRow({
 });
 
 function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "working" }> }) {
-  const { workingStepLabel } = use(TimelineRowActivityCtx);
+  const { isCompacting, isPreparingWorktree, backgroundWorktreeSetup, workingStepLabel } =
+    use(TimelineRowActivityCtx);
+  // One span for every label so the setup-to-working handoff swaps text in
+  // place instead of remounting the row.
+  const shimmer = isPreparingWorktree || isCompacting;
+  const label = isPreparingWorktree ? (
+    "Setting up worktree…"
+  ) : isCompacting ? (
+    <CompactingLabel />
+  ) : row.createdAt ? (
+    <>
+      Working for <WorkingTimer createdAt={row.createdAt} />
+    </>
+  ) : (
+    "Working..."
+  );
   return (
-    <div className="chat-system-text">
-      <div className="border-b border-border/60 pb-2 pt-1">
-        <div className="px-1 text-sm leading-relaxed text-muted-foreground tabular-nums">
-          {row.createdAt ? (
-            <>
-              Working for <WorkingTimer createdAt={row.createdAt} />
-            </>
-          ) : (
-            "Working..."
-          )}
-          {workingStepLabel ? (
-            <span className="ml-2 text-muted-foreground/55">· {workingStepLabel}</span>
-          ) : null}
-        </div>
+    <div className="border-b border-border/60 pb-2 pt-1">
+      <div className="flex h-6 min-w-0 items-baseline gap-2 px-1 text-sm leading-relaxed text-muted-foreground tabular-nums">
+        <span
+          ref={shimmer ? observeVisibleAnimation : undefined}
+          className="relative shrink-0 overflow-hidden whitespace-nowrap"
+        >
+          {label}
+          {shimmer ? <ActivityShimmerOverlay>{label}</ActivityShimmerOverlay> : null}
+        </span>
+        {backgroundWorktreeSetup ? (
+          <BackgroundWorktreeSetupChip snapshot={backgroundWorktreeSetup} />
+        ) : null}
+        {workingStepLabel ? (
+          <span className="min-w-0 truncate text-muted-foreground/55">· {workingStepLabel}</span>
+        ) : null}
       </div>
-      {row.showThinking ? (
-        <div className="mt-1">
-          <ThinkingActivityRow />
-        </div>
-      ) : null}
+    </div>
+  );
+}
+
+function ActivityShimmerOverlay({ children }: { children: ReactNode }) {
+  return (
+    <span
+      aria-hidden
+      className="live-activity-focus pointer-events-none absolute inset-y-0 select-none"
+    >
+      <span className="live-activity-focus-counter block">
+        <span className="live-activity-focus-aligned block text-foreground">{children}</span>
+      </span>
+    </span>
+  );
+}
+
+/**
+ * Trailing chip in the working header while a setup script still runs after
+ * the agent started. Opens the stage list and live output in a popover; the
+ * chip leaves with the script, so nothing lingers in the timeline.
+ */
+function BackgroundWorktreeSetupChip({ snapshot }: { snapshot: WorktreeSetupSnapshot }) {
+  const ctx = use(TimelineRowCtx);
+  const terminalId = snapshot.setupScript?.terminalId ?? null;
+  const openTerminal = ctx.onOpenWorktreeSetupTerminal;
+  const onOpenTerminal = useMemo(
+    () => (openTerminal && terminalId ? () => openTerminal(terminalId) : null),
+    [openTerminal, terminalId],
+  );
+  const scriptName = snapshot.setupScript?.name ?? "Setup script";
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="chip"
+            className="ml-auto inline-flex h-5 min-w-0 shrink-0 items-center gap-1 rounded-full border border-border/70 px-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            aria-label={`${scriptName} is still running. Show setup progress.`}
+          />
+        }
+      >
+        <Spinner className="size-3 shrink-0" />
+        <span className="truncate">{scriptName}</span>
+      </PopoverTrigger>
+      <PopoverPopup side="bottom" align="end" className="w-[32rem] max-w-[calc(100vw-2rem)] p-3">
+        <WorktreeSetupCard
+          snapshot={snapshot}
+          embedded
+          onCancel={null}
+          onWorkLocally={null}
+          onOpenTerminal={onOpenTerminal}
+        />
+      </PopoverPopup>
+    </Popover>
+  );
+}
+
+function ThinkingTimelineRow() {
+  const { isCompacting, isPreparingWorktree } = use(TimelineRowActivityCtx);
+  // Reserve the activity row during setup so the handoff keeps the same height.
+  return (
+    <div className="min-h-7">
+      {isPreparingWorktree || isCompacting ? null : (
+        <LiveActivityRow label="Thinking" iconName="brain" active shimmer />
+      )}
     </div>
   );
 }
@@ -2524,18 +2810,6 @@ function LiveActivityRow({
   );
 }
 
-function ThinkingActivityRow() {
-  return <LiveActivityRow label="Thinking" iconName="brain" />;
-}
-
-function ThinkingTimelineRow() {
-  return (
-    <div className="min-h-7">
-      <ThinkingActivityRow />
-    </div>
-  );
-}
-
 function LiveActivityContent({
   label,
   iconName,
@@ -2711,7 +2985,8 @@ function WorkGroupToggleTimelineRow({
   return (
     <button
       type="button"
-      className="chat-system-text flex min-h-6 w-full cursor-pointer items-center gap-1.5 rounded-md px-0.5 py-0.5 text-left text-[12px] leading-5 transition-colors duration-150 hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+      className="chat-system-text group/tool-group group/timeline-row relative flex min-h-6 w-full cursor-pointer items-center gap-1.5 rounded-md px-0.5 py-0.5 text-left text-[12px] leading-5 transition-colors duration-150 hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+      aria-label={row.hasFailure ? `${row.summary}, tool call failed` : undefined}
       aria-expanded={row.expanded}
       onClick={() => ctx.onToggleWorkGroup(row.groupId, row.id)}
     >
@@ -2724,14 +2999,15 @@ function WorkGroupToggleTimelineRow({
         />
       </span>
       {row.expanded ? (
-        <span className="font-medium text-foreground">
+        <span className="min-w-0 flex-1 truncate font-medium text-foreground">
           Show fewer {row.onlyToolEntries ? "tool calls" : "log entries"}
         </span>
       ) : (
-        <span className="font-medium text-foreground">
+        <span className="min-w-0 flex-1 truncate font-medium text-foreground">
           +{row.hiddenCount} previous {labelNoun}
         </span>
       )}
+      <TimelineRowTimestamp createdAt={row.createdAt} timestampFormat={ctx.timestampFormat} />
     </button>
   );
 }
@@ -3229,7 +3505,7 @@ const userMessageContextPresentationRegistry = createContextPresentationRegistry
               <UserMessageContextChip
                 icon={
                   isPullRequest ? (
-                    <GitPullRequestIcon
+                    <PullRequestGlyph.pullRequest
                       className={cn(
                         COMPOSER_INLINE_CHIP_ICON_CLASS_NAME,
                         CONTEXT_INLINE_CHIP_ICON_TONE_CLASS_NAMES["pull-request"],
@@ -3780,7 +4056,7 @@ function ToolActivityImageIcon(props: {
 function WorkEntryIcon({ name, className }: { name: WorkEntryIconName; className: string }) {
   switch (name) {
     case "pull-request":
-      return <GitPullRequestIcon className={className} aria-hidden />;
+      return <PullRequestGlyph.pullRequest className={className} aria-hidden />;
     case "bot":
       return <BotIcon className={className} aria-hidden />;
     case "brain":
@@ -4200,7 +4476,7 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
   onToggleEntry?: ((collapsed: boolean) => void) | undefined;
 }) {
   const { workEntry, workspaceRoot, isExpandedToolGroupEntry, displayLabel } = props;
-  const { threadRef, onImageExpand } = use(TimelineRowCtx);
+  const { threadRef, onImageExpand, timestampFormat } = use(TimelineRowCtx);
   const groupView = use(WorkGroupViewCtx);
   const [expanded, setExpanded] = useState(
     () => groupView?.state.expandedEntries.has(workEntry.id) ?? false,
@@ -4302,7 +4578,7 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
   return (
     <div
       className={cn(
-        "flex flex-col rounded-md px-0.5 transition-colors",
+        "group/timeline-row relative flex flex-col rounded-md px-0.5 transition-colors",
         isExpandedToolGroupEntry ? "py-0" : "py-0.5",
         expanded && "mb-1",
         canExpand &&
@@ -4372,6 +4648,7 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
               )}
             />
           </span>
+          <TimelineRowTimestamp createdAt={workEntry.createdAt} timestampFormat={timestampFormat} />
         </div>
       </div>
       {expanded && viewedImage && threadRef ? (

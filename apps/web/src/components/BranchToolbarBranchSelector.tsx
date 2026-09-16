@@ -23,6 +23,7 @@ import {
   useDeferredValue,
   useEffect,
   useId,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useOptimistic,
@@ -30,6 +31,7 @@ import {
   useState,
   useTransition,
   type MouseEvent as ReactMouseEvent,
+  type Ref,
 } from "react";
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
@@ -48,7 +50,7 @@ import { vcsEnvironment } from "../state/vcs";
 import { cn } from "../lib/utils";
 import { parsePullRequestReference } from "../pullRequestReference";
 import { getSourceControlPresentation } from "../sourceControlPresentation";
-import { composerFloatingLayerProps } from "./chat/composerEventScope";
+import { useComposerMenuProps } from "./chat/composerEventScope";
 import {
   deriveLocalBranchNameFromRemoteRef,
   resolveBranchTriggerLabel,
@@ -82,7 +84,12 @@ import {
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
+export interface BranchToolbarBranchSelectorHandle {
+  open: () => void;
+}
+
 interface BranchToolbarBranchSelectorProps {
+  ref?: Ref<BranchToolbarBranchSelectorHandle>;
   className?: string;
   compact?: boolean;
   environmentId: EnvironmentId;
@@ -106,6 +113,7 @@ function toBranchActionErrorMessage(error: unknown): string {
 }
 
 export function BranchToolbarBranchSelector({
+  ref,
   className,
   compact = false,
   environmentId,
@@ -122,6 +130,7 @@ export function BranchToolbarBranchSelector({
   onComposerFocusRequest,
   workspaceRootOverride,
 }: BranchToolbarBranchSelectorProps) {
+  const composerFloatingLayerProps = useComposerMenuProps();
   const startFromOriginSwitchId = useId();
   const stopThreadSession = useAtomCommand(threadEnvironment.stopSession, "thread session stop");
   const updateThreadMetadata = useAtomCommand(
@@ -671,6 +680,17 @@ export function BranchToolbarBranchSelector({
       setBranchQuery("");
     }
   }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      open: () => {
+        if (isInitialBranchesLoadPending || isBranchActionPending) return;
+        handleOpenChange(true);
+      },
+    }),
+    [handleOpenChange, isBranchActionPending, isInitialBranchesLoadPending],
+  );
 
   const [showTopBranchScrollFade, setShowTopBranchScrollFade] = useState(false);
   const [showBottomBranchScrollFade, setShowBottomBranchScrollFade] = useState(false);

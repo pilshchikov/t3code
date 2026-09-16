@@ -227,18 +227,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "auto-settle-inactive-threads",
     title: "Auto-settle inactive threads",
     to: "/settings/general",
-    requiresThreadAutoSettlement: true,
-  },
-  {
-    id: "auto-settle-merged-threads",
-    title: "Auto-settle finished threads",
-    to: "/settings/general",
     searchTerms: ["sidebar inactivity days no activity automatically"],
     requiresThreadAutoSettlement: true,
     scope: "project-defaults",
   },
   {
-    id: "auto-settle-change-request-threads",
+    id: "auto-settle-merged-threads",
     title: "Auto-settle merged threads",
     to: "/settings/general",
     searchTerms: ["pull request merge closed automatically sidebar"],
@@ -314,6 +308,18 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Collapse composer on scroll",
     to: "/settings/general",
     searchTerms: ["composer rest resting scroll wheel conversation timeline shrink minimize"],
+  },
+  {
+    id: "send-shortcut",
+    title: "Send shortcut",
+    to: "/settings/general",
+    searchTerms: ["enter return command ctrl multiline prompt new line composer"],
+  },
+  {
+    id: "follow-up-behavior",
+    title: "Follow-up behavior",
+    to: "/settings/general",
+    searchTerms: ["queue steer running turn send default behavior composer"],
   },
   {
     id: "provider-update-checks",

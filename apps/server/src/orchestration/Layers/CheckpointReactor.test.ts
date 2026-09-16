@@ -342,9 +342,10 @@ describe("CheckpointReactor", () => {
       prefix: "t3-checkpoint-reactor-test-",
     });
     const pullRequestRefreshes: number[] = [];
-    const refreshAfterTurn = Effect.sync(() => void pullRequestRefreshes.push(1)).pipe(
-      Effect.andThen(options?.pullRequestRefresh ?? Effect.void),
-    );
+    const refreshAfterTurn = (_projectId: ProjectId) =>
+      Effect.sync(() => void pullRequestRefreshes.push(1)).pipe(
+        Effect.andThen(options?.pullRequestRefresh ?? Effect.void),
+      );
     const vcsStatusBroadcasterLayer = Layer.succeed(VcsStatusBroadcaster, {
       getStatus: () => Effect.die("getStatus should not be called in this test"),
       refreshLocalStatus: (cwd: string) =>
