@@ -4,6 +4,46 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Upstream sync, September 17
+
+- Merged 35 upstream commits through `6d1d549441`. The previous fork revision is retained as
+  `backup/pre-upstream-sync-20260917` at `eaa02c1238`. Upstream added no migrations.
+- The composer now uses upstream's Tiptap editor, with rich text on by default and a switch in
+  Settings → General. The pen placeholder and one-line minimum height moved into
+  `ComposerPromptEditorTiptap.tsx`, whose placeholder accepts an icon again.
+- Review diffs use upstream's contract. `files` holds complete numstat counts, untracked files
+  included, and a `file` request returns one file's patch with its rename source. The fork keeps
+  two optional inputs for its overview request: `sourceKind` returns one source and
+  `includePatch: false` skips patch bodies. The fork's `path` input, `patchOmitted` flag, and
+  24-file untracked cap are gone. Sources: `packages/contracts/src/review.ts`,
+  `apps/server/src/vcs/GitVcsDriverCore.ts`.
+- `DiffPanel.tsx` keeps the fork's left file tree, one-file view, and directory picker. With the
+  tree hidden, files load progressively through upstream's `useReviewFilePatches` instead of one
+  patch capped at 120 KB. The header's file-tree toggle now drives that tree, and the separate
+  reopen button is gone. The toggle previously controlled upstream's removed right-side tree.
+- Approval prompts take upstream's layout. That restores provider-specific options, labels,
+  warnings, and MCP app access details, which an earlier merge had replaced with four fixed
+  buttons.
+- Upstream's tooltips on the composer environment and workspace controls (#11787) are not
+  merged. The fork's compact toolbar, multiwork selector, tasks drawer, and stash menu are unchanged.
+- The timeline combines upstream's grouped thought and tool activity and remembered reading
+  positions with the fork's work-log folding, first and terminal assistant messages, and inline
+  turn plans. Settlement reacts to PR link, sync, and session-end events, still only when the
+  fork's opt-in settlement mode is enabled.
+- Adopted as upstream: the diff panel opens on the working tree, and diff files start collapsed
+  when no preference is saved. Also adopted: checkpoint fsync, sparse-checkout, and placeholder
+  fixes, the theme picker shortcuts `mod+alt+a` and `mod+alt+shift+a`, searchable keybindings,
+  folder drops as path chips, and OpenCode Go, Cursor, and Grok limits.
+- `docs/user/appearance.md` is upstream's page plus the fork's accent color and glass opacity
+  sections. The previous merge had mixed Android text into the accent section.
+- Validation: typecheck passes for every package. Web (5,288 tests), desktop, contracts,
+  client-runtime, shared, and mobile review and thread tests pass. The full server suite has 32
+  failures in 12 files, and every one also fails on `backup/pre-upstream-sync-20260917`:
+  Antigravity provider timeouts, Codex and npm maintenance detection, Claude home terminal
+  defaults, the multiwork bootstrap tests, and the SSH helper test. `vp check` still reports 15
+  lint errors that predate this merge, all in fork files: native `title` tooltips and a
+  restricted `GitMergeIcon` import.
+
 ## Upstream sync and queued follow-ups, September 16
 
 - Merged 99 upstream commits through `052c7ae53e`, including client-side follow-up queues,

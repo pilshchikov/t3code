@@ -10,30 +10,27 @@ export const ReviewDiffPreviewInput = Schema.Struct({
   cwd: TrimmedNonEmptyString,
   baseRef: Schema.optional(TrimmedNonEmptyString),
   ignoreWhitespace: Schema.optionalKey(Schema.Boolean),
-  /** Request only the source currently visible in the review panel. */
+  /** Compute only this source. A `file` request uses its own `sourceKind`. */
   sourceKind: Schema.optionalKey(ReviewDiffPreviewSourceKind),
-  /** Restrict the patch to one file while keeping the same comparison semantics. */
-  path: Schema.optionalKey(TrimmedNonEmptyString),
-  /**
-   * Skip the patch bodies and answer with the file list alone. The review panel asks for the
-   * overview this way so a large working tree costs one `--numstat` instead of a capped megabyte
-   * of patch text that then has to be parsed to find out which files changed.
-   */
+  /** Return file statistics without patch bodies. Ignored for a `file` request. */
   includePatch: Schema.optionalKey(Schema.Boolean),
+  file: Schema.optionalKey(
+    Schema.Struct({
+      path: Schema.NonEmptyString,
+      previousPath: Schema.NullOr(Schema.NonEmptyString),
+      sourceKind: ReviewDiffPreviewSourceKind,
+    }),
+  ),
 });
 export type ReviewDiffPreviewInput = typeof ReviewDiffPreviewInput.Type;
 
-/** One changed file in a source, listed whether or not the patch bodies were requested. */
-export const ReviewDiffPreviewFile = Schema.Struct({
-  path: TrimmedNonEmptyString,
-  /** Set only for a rename, to the path the file had on the base side. */
-  origPath: Schema.NullOr(TrimmedNonEmptyString),
-  /** Null when the count is not cheaply knowable, as for an untracked file. */
-  additions: Schema.NullOr(Schema.Number),
-  deletions: Schema.NullOr(Schema.Number),
-  binary: Schema.Boolean,
+export const ReviewDiffFileStat = Schema.Struct({
+  path: Schema.String,
+  previousPath: Schema.NullOr(Schema.String),
+  additions: Schema.Number,
+  deletions: Schema.Number,
 });
-export type ReviewDiffPreviewFile = typeof ReviewDiffPreviewFile.Type;
+export type ReviewDiffFileStat = typeof ReviewDiffFileStat.Type;
 
 export const ReviewDiffPreviewSource = Schema.Struct({
   id: TrimmedNonEmptyString,
@@ -44,10 +41,8 @@ export const ReviewDiffPreviewSource = Schema.Struct({
   diff: Schema.String,
   diffHash: TrimmedNonEmptyString,
   truncated: Schema.Boolean,
-  /** Complete and never truncated, so the file tree does not depend on the patch. */
-  files: Schema.Array(ReviewDiffPreviewFile),
-  /** True when the patch bodies were skipped; `diff` is empty and carries no meaning. */
-  patchOmitted: Schema.Boolean,
+  /** Complete statistics, independent of patch limits. Absent on older servers. */
+  files: Schema.optionalKey(Schema.Array(ReviewDiffFileStat)),
 });
 export type ReviewDiffPreviewSource = typeof ReviewDiffPreviewSource.Type;
 

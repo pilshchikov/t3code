@@ -169,6 +169,7 @@ import * as VcsDriver from "./vcs/VcsDriver.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as VcsDriverRegistry from "./vcs/VcsDriverRegistry.ts";
 import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
+import * as GitHubCli from "./sourceControl/GitHubCli.ts";
 import * as VcsProcess from "./vcs/VcsProcess.ts";
 import * as GitWorkflowService from "./git/GitWorkflowService.ts";
 import * as MultiworkService from "./multiwork/MultiworkService.ts";
@@ -1224,7 +1225,7 @@ const buildAppUnderTest = (options?: {
         Layer.provideMerge(ServerSecretStore.layer),
         Layer.provide(workspaceAndProjectServicesLayer),
         Layer.provideMerge(FetchHttpClient.layer),
-        Layer.provide(VcsProcess.layer),
+        Layer.provide(GitHubCli.layer.pipe(Layer.provideMerge(VcsProcess.layer))),
       )
       .pipe(Layer.provide(layerConfig));
 
@@ -7896,8 +7897,6 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
                     diff: "dirty-diff",
                     diffHash: "hash-dirty",
                     truncated: false,
-                    files: [],
-                    patchOmitted: false,
                   },
                   {
                     id: "branch-range",
@@ -7908,8 +7907,6 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
                     diff: "base-diff",
                     diffHash: "hash-base",
                     truncated: false,
-                    files: [],
-                    patchOmitted: false,
                   },
                 ],
               }),
@@ -11814,9 +11811,22 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
   );
 
   it.effect.each([
-    { caseName: "async setup scripts let the turn start before the script exits", async: true },
-    { caseName: "sync setup scripts hold the turn until the script exits", async: false },
-  ])("$caseName", ({ async }) =>
+    {
+      caseName: "async setup scripts let the turn start before the script exits",
+      async: true,
+      cancel: false,
+    },
+    {
+      caseName: "sync setup scripts hold the turn until the script exits",
+      async: false,
+      cancel: false,
+    },
+    {
+      caseName: "cancelling worktree setup publishes its outcome and cleans up the thread",
+      async: false,
+      cancel: true,
+    },
+  ])("$caseName", ({ async, cancel }) =>
     Effect.gen(function* () {
       const dispatchedCommands: Array<OrchestrationCommand> = [];
       const scriptExit = yield* Deferred.make<void>();
@@ -11949,6 +11959,26 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       );
       assert.equal(stageStatus(running, "agent"), "pending");
       assert.isFalse(turnStarted());
+
+      if (cancel) {
+        const cancelled = yield* Effect.scoped(
+          withWsRpcClient(wsUrl, (client) => client[WS_METHODS.worktreeSetupCancel]({ threadId })),
+        );
+        assert.isTrue(cancelled.cancelled);
+        assertTrue(dispatchedCommands.some((command) => command.type === "thread.delete"));
+        const outcome = dispatchedCommands.findLast(
+          (command) =>
+            command.type === "thread.activity.append" && command.activity.kind === "worktree-setup",
+        );
+        assertTrue(outcome?.type === "thread.activity.append");
+        assert.propertyVal(outcome.activity.payload, "phase", "cancelled");
+        const result = yield* Fiber.join(dispatchFiber).pipe(Effect.result);
+        assertTrue(result._tag === "Failure");
+        assert.propertyVal(result.failure, "message", "Worktree setup cancelled.");
+        assert.propertyVal(result.failure, "bootstrapThreadDisposition", "deleted");
+        assert.isFalse(turnStarted());
+        return;
+      }
 
       // The client that sent the message goes away mid-setup (a reload or a
       // dropped socket). The bootstrap belongs to the server, not the
