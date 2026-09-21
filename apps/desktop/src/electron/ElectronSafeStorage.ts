@@ -73,7 +73,7 @@ export const make = Effect.gen(function* () {
   // for the Safe Storage Keychain secret again. Keep OS-keychain storage off unless the process
   // explicitly opts in. Consumers already handle unavailable encryption by keeping credentials in
   // memory only.
-  const keychainSecretStorageEnabled = yield* Config.boolean(
+  const keychainSecretStorageEnabled = yield* Config.Boolean(
     "T3CODE_ENABLE_SAFE_STORAGE_KEYCHAIN",
   ).pipe(
     Config.withDefault(false),

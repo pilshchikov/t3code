@@ -16,10 +16,10 @@ import {
 
 it.layer(NodeServices.layer)("ClaudeHome", (it) => {
   describe("Claude home resolution", () => {
-    it.effect("uses the process home when no Claude home override is configured", () =>
+    it.effect("treats empty, ~/.claude, and the expanded default as the same Claude home", () =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
-        const resolved = path.resolve(NodeOS.homedir());
+        const resolved = path.resolve(path.join(NodeOS.homedir(), ".claude"));
 
         const config = { configDir: "", homePath: "" };
         expect(yield* resolveClaudeHomePath(config)).toBe(resolved);
@@ -48,7 +48,7 @@ it.layer(NodeServices.layer)("ClaudeHome", (it) => {
       Effect.gen(function* () {
         const path = yield* Path.Path;
         const config = { configDir: "~/.claude-personal", homePath: "" };
-        const resolvedHome = path.resolve(NodeOS.homedir());
+        const resolvedHome = path.resolve(NodeOS.homedir(), ".claude");
         const resolvedConfigDir = path.resolve(NodeOS.homedir(), ".claude-personal");
         const environment = yield* makeClaudeEnvironment(config, { PATH: "/usr/bin" });
 
@@ -99,7 +99,7 @@ it.layer(NodeServices.layer)("ClaudeHome", (it) => {
     it.effect("keeps continuation compatible across instances with the same Claude HOME", () =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
-        const resolved = path.resolve(NodeOS.homedir());
+        const resolved = path.resolve(NodeOS.homedir(), ".claude");
 
         expect(yield* makeClaudeContinuationGroupKey({ configDir: "", homePath: "" })).toBe(
           `claude:home:${resolved}`,

@@ -32,6 +32,7 @@ interface BranchToolbarEnvModeSelectorProps {
     cwd: string;
     onSelect: (copy: MultiworkCopy) => void;
   };
+  forceNewWorktree?: boolean;
   envLocked: boolean;
   effectiveEnvMode: EnvMode;
   activeWorktreePath: string | null;
@@ -42,6 +43,7 @@ interface BranchToolbarEnvModeSelectorProps {
 }
 
 export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSelector({
+  forceNewWorktree = false,
   envLocked,
   effectiveEnvMode,
   activeWorktreePath,
@@ -77,7 +79,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
     [activeWorktreePath, previousWorktreeLabel, showPreviousWorktree, copies.data],
   );
 
-  if (envLocked) {
+  if (envLocked || forceNewWorktree) {
     return (
       <span
         className={cn(

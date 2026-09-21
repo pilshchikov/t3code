@@ -58,6 +58,7 @@ interface FileBrowserPanelProps {
   environmentId: EnvironmentId;
   cwd: string;
   projectName: string;
+  /** Entry currently open in the surface; revealed and selected in the tree. A directory is expanded. */
   selectedPath: string | null;
   selectedPathRevealId: number;
   onOpenFile: (relativePath: string) => void;
@@ -395,6 +396,7 @@ export default function FileBrowserPanel({
         ],
         position,
       );
+      if (clicked === null) return;
       if (clicked === "copy-mention") {
         try {
           await writeTextToClipboard(mention);

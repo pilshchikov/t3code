@@ -62,7 +62,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
   const serverSettings = yield* Effect.serviceOption(ServerSettingsService);
   const enableBackgroundRefresh =
     input.enableBackgroundRefresh ??
-    (yield* Config.boolean("T3CODE_ENABLE_PROVIDER_AUTO_REFRESH").pipe(
+    (yield* Config.Boolean("T3CODE_ENABLE_PROVIDER_AUTO_REFRESH").pipe(
       Config.withDefault(false),
       Effect.orElseSucceed(() => false),
     ));

@@ -73,12 +73,14 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+shift+c", command: "thread.copyReference", when: "!terminalFocus" },
   { key: "mod+shift+s", command: "thread.settle", when: "!terminalFocus" },
   { key: "mod+shift+p", command: "thread.pin", when: "!terminalFocus" },
+  { key: "mod+z", command: "thread.undo", when: "!terminalFocus && !editableFocus" },
   // Numbered slots recall a project into the sidebar's scope. Upstream spends mod+1..9 on jumping
   // to the Nth thread in the list; this fork spends them on projects, which is the switch that is
   // worth a chord. thread.jump.* stays a command, so anyone who wants it back can bind it.
   ...PROJECT_JUMP_KEYBINDING_COMMANDS.map((command, index) => ({
     key: `mod+${index + 1}`,
     command,
+    when: "isDesktop",
   })),
   // Control rather than mod, so filling a slot cannot be confused with using one.
   ...PROJECT_ASSIGN_KEYBINDING_COMMANDS.map((command, index) => ({
@@ -88,7 +90,7 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   ...MODEL_PICKER_JUMP_KEYBINDING_COMMANDS.map((command, index) => ({
     key: `mod+${index + 1}`,
     command,
-    when: "modelPickerOpen",
+    when: "modelPickerOpen && isDesktop",
   })),
   // Surface toggles. These come last so they win over the jump bindings above for any overlapping
   // key (the resolver is last-match-wins). The file structure moved off mod+1 when the project

@@ -46,10 +46,10 @@ const compactEnv = (input: Record<string, Option.Option<string>>): NodeJS.Proces
   );
 
 const CommandLookupEnvConfig = Config.all({
-  PATH: Config.string("PATH").pipe(Config.option),
-  Path: Config.string("Path").pipe(Config.option),
-  path: Config.string("path").pipe(Config.option),
-  PATHEXT: Config.string("PATHEXT").pipe(Config.option),
+  PATH: Config.String("PATH").pipe(Config.option),
+  Path: Config.String("Path").pipe(Config.option),
+  path: Config.String("path").pipe(Config.option),
+  PATHEXT: Config.String("PATHEXT").pipe(Config.option),
 }).pipe(Config.map(compactEnv));
 
 const readCommandLookupEnv = CommandLookupEnvConfig.pipe(Effect.orElseSucceed(() => ({})));
@@ -673,7 +673,7 @@ export const resolveLatestProviderVersion = Effect.fn("resolveLatestProviderVers
     return cached.version;
   }
 
-  const versionChecksEnabled = yield* Config.boolean("T3CODE_ENABLE_PROVIDER_VERSION_CHECKS").pipe(
+  const versionChecksEnabled = yield* Config.Boolean("T3CODE_ENABLE_PROVIDER_VERSION_CHECKS").pipe(
     Config.withDefault(false),
     Effect.orElseSucceed(() => false),
   );

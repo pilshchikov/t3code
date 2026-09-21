@@ -4,6 +4,7 @@ import { memo } from "react";
 import { formatDuration } from "../../session-logic";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
+import { ComposerBanner } from "./ComposerBanner";
 
 export interface ComposerTasksProgress {
   readonly step: string;
@@ -54,6 +55,42 @@ function TaskSegments({
   );
 }
 
+function TaskSummary({
+  expanded,
+  progress,
+  steps,
+}: {
+  readonly expanded: boolean;
+  readonly progress: ComposerTasksProgress;
+  readonly steps: readonly ComposerTaskStep[];
+}) {
+  return (
+    <>
+      <ComposerBanner.Icon>
+        <ListTodoIcon />
+      </ComposerBanner.Icon>
+      <ComposerBanner.Content>
+        <span className="shrink-0 text-muted-foreground">Tasks</span>
+        <span
+          className="min-w-0 flex-1 truncate text-left font-medium text-foreground/80"
+          data-composer-task-current="true"
+        >
+          {progress.step}
+        </span>
+      </ComposerBanner.Content>
+      <ComposerBanner.Actions>
+        <ComposerBanner.Count
+          className={progress.completedSteps >= progress.totalSteps ? "text-success" : undefined}
+          data-composer-task-progress="true"
+        >
+          {progress.completedSteps}/{progress.totalSteps}
+        </ComposerBanner.Count>
+        <TaskSegments className="hidden w-20 @min-[560px]:flex" steps={steps} />
+        <ComposerBanner.ToggleIcon expanded={expanded} />
+      </ComposerBanner.Actions>
+    </>
+  );
+}
 export const ComposerTasksBadge = memo(function ComposerTasksBadge({
   expanded,
   hasTrailingShoulder = false,

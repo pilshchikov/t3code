@@ -385,7 +385,7 @@ export const make = Effect.gen(function* () {
     // opts in. Upstream added this hosted manifest after that policy existed,
     // so it must use the same gate rather than treating the UI default as
     // permission to contact raw.githubusercontent.com.
-    const remoteRefreshEnabled = yield* Config.boolean(
+    const remoteRefreshEnabled = yield* Config.Boolean(
       "T3CODE_ENABLE_PROVIDER_VERSION_CHECKS",
     ).pipe(
       Config.withDefault(false),

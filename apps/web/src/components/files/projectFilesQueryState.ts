@@ -1,19 +1,21 @@
 import { useAtomValue } from "@effect/atom-react";
-import type {
-  EnvironmentId,
-  ProjectEntriesChangedEvent,
-  ProjectFileChangedEvent,
-  ProjectListEntriesResult,
-  ProjectReadFileResult,
-} from "@t3tools/contracts";
+import type { ProjectEntriesChangedEvent, ProjectFileChangedEvent } from "@t3tools/contracts";
 import {
+  type EnvironmentId,
+  type ProjectListEntriesResult,
+  ProjectReadFileError,
+  type ProjectReadFileResult,
+} from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { AsyncResult, Atom } from "effect/unstable/reactivity";
+import { useCallback, useEffect, useRef } from "react";
+import {
+  isWorkspaceAudioPreviewPath,
   isWorkspaceImagePreviewPath,
   isWorkspaceVideoPreviewPath,
 } from "@t3tools/shared/filePreview";
-import * as Cause from "effect/Cause";
-import * as Option from "effect/Option";
-import { AsyncResult, Atom } from "effect/unstable/reactivity";
-import { useCallback, useEffect, useRef } from "react";
 
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { projectEnvironment } from "~/state/projects";
@@ -39,6 +41,10 @@ interface ProjectQueryState<A> {
   readonly error: string | null;
   readonly isPending: boolean;
   readonly refresh: () => void;
+}
+
+interface ProjectFileQueryState extends ProjectQueryState<ProjectReadFileResult> {
+  readonly isNotFile: boolean;
 }
 
 function getProjectEntriesQueryAtom(environmentId: EnvironmentId, cwd: string, directoryPath = "") {
@@ -130,11 +136,16 @@ export function clearProjectFileQueryData(
   appAtomRegistry.set(optimisticFileAtom(environmentId, cwd, relativePath), null);
 }
 
-function errorMessage<A>(result: AsyncResult.AsyncResult<A, unknown>): string | null {
-  if (result._tag !== "Failure") return null;
-  const cause = Cause.squash(result.cause);
+function failureCause<A>(result: AsyncResult.AsyncResult<A, unknown>): unknown {
+  return result._tag === "Failure" ? Cause.squash(result.cause) : null;
+}
+
+function errorMessage(cause: unknown): string | null {
+  if (cause === null) return null;
   return cause instanceof Error ? cause.message : "Workspace query failed.";
 }
+
+const isProjectReadFileError = Schema.is(ProjectReadFileError);
 
 export function useProjectEntriesQuery(
   environmentId: EnvironmentId,
@@ -193,7 +204,7 @@ export function useProjectEntriesQuery(
   }, [active, refresh]);
   return {
     data: Option.getOrNull(AsyncResult.value(result)),
-    error: errorMessage(result),
+    error: errorMessage(failureCause(result)),
     isPending: result.waiting,
     refresh,
   };
@@ -262,13 +273,20 @@ export function useProjectFileQuery(
   watch = false,
   preserveOptimistic = false,
   active = true,
-): ProjectQueryState<ProjectReadFileResult> {
+): ProjectFileQueryState {
   const isMedia =
     relativePath !== null &&
-    (isWorkspaceImagePreviewPath(relativePath) || isWorkspaceVideoPreviewPath(relativePath));
+    (isWorkspaceImagePreviewPath(relativePath) ||
+      isWorkspaceVideoPreviewPath(relativePath) ||
+      isWorkspaceAudioPreviewPath(relativePath));
   const atom =
-    enabled && !isMedia && relativePath !== null
-      ? getProjectFileQueryAtom(environmentId, cwd, relativePath)
+    enabled && relativePath !== null
+      ? isMedia
+        ? projectEnvironment.readFile({
+            environmentId,
+            input: { cwd, relativePath, metadataOnly: true },
+          })
+        : getProjectFileQueryAtom(environmentId, cwd, relativePath)
       : EMPTY_PROJECT_FILE_QUERY_ATOM;
   const result = useAtomValue(atom);
   const shouldWatch = enabled && watch && active && relativePath !== null && !isMedia;
@@ -353,9 +371,11 @@ export function useProjectFileQuery(
     optimisticFileAtom(environmentId, cwd, relativePath ?? EMPTY_PROJECT_FILE_PATH),
   );
   const optimisticFile = relativePath === null ? null : optimisticResult;
+  const cause = failureCause(result);
   return {
     data: optimisticFile?.data ?? (result._tag === "Failure" ? null : data),
     error: errorMessage(result),
+    isNotFile: isProjectReadFileError(cause) && cause.failure === "path_not_file",
     isPending: result.waiting,
     refresh,
   };

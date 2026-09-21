@@ -7,6 +7,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   buildDocJson,
   collapsedToFlat,
+  ComposerCodeExtension,
   ComposerTaskItemExtension,
   flatToCollapsed,
   flatToMarkdown,
@@ -38,7 +39,9 @@ const schema = getSchemaByResolvedExtensions(
       dropcursor: false,
       gapcursor: false,
       trailingNode: false,
+      code: false,
     }),
+    ComposerCodeExtension,
     stubAtom("composer-mention", { path: { default: "" }, source: { default: "" } }),
     stubAtom("composer-skill", {
       skillName: { default: "" },
@@ -64,6 +67,8 @@ const schema = getSchemaByResolvedExtensions(
 function roundTrip(value: string) {
   const json = buildDocJson(value, (name) => ({ label: name, description: null }));
   const doc = ProseMirrorNode.fromJSON(schema, json);
+  // `insertContent` validates every node against the schema; `fromJSON` does not.
+  doc.check();
   return serializeEditorDoc(doc);
 }
 
@@ -118,6 +123,16 @@ function roundTripPlain(value: string) {
 }
 
 describe("composer rich text document model", () => {
+  it.each(["€", "£", "¥", "₹", "₩", "₿", "𑿝"])(
+    "canonicalizes %s skill aliases while preserving amounts",
+    (prefix) => {
+      const value = `Use ${prefix}my-skill for ${prefix}20 please`;
+      const expected = `Use $my-skill for ${prefix}20 please`;
+      expect(roundTrip(value).value).toBe(expected);
+      expect(roundTripPlain(value).value).toBe(expected);
+    },
+  );
+
   it.each([
     "",
     "\n\n",
@@ -125,6 +140,10 @@ describe("composer rich text document model", () => {
     "hello **bold** world",
     "a *italic* word and `code` here",
     "struck ~~out~~ now",
+    "**`x`**",
+    "*`x`*",
+    "~~`x`~~",
+    "**a `code` c**",
     "***bold italic*** keeps nesting",
     "line one\nline two",
     "trailing newline\n",

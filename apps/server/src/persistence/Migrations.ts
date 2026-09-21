@@ -72,6 +72,7 @@ import Migration0053 from "./Migrations/050_ProjectionThreadPullRequests.ts";
 import Migration0054 from "./Migrations/054_UsageLimitHistory.ts";
 import Migration0055 from "./Migrations/051_ProjectionThreadMessageContext.ts";
 import Migration0056 from "./Migrations/052_ProjectionThreadTitleState.ts";
+import Migration0057 from "./Migrations/053_PullRequestFilesViewed.ts";
 
 // Both fork histories used migration 041 for different additive schema changes.
 // Run both on fresh databases; 043/044 below repair databases created by either
@@ -147,6 +148,7 @@ export const migrationEntries = [
   [54, "UsageLimitHistory", Migration0054],
   [55, "ProjectionThreadMessageContext", Migration0055],
   [56, "ProjectionThreadTitleState", Migration0056],
+  [57, "PullRequestFilesViewed", Migration0057],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

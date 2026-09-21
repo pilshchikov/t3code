@@ -13,13 +13,11 @@ import {
   CheckIcon,
   ChevronDownIcon,
   ChevronUpIcon,
-  CloudIcon,
   FolderGit2Icon,
   FolderGitIcon,
   FolderIcon,
   HistoryIcon,
   NotebookPenIcon,
-  MonitorIcon,
   PlusIcon,
   ScaleIcon,
 } from "lucide-react";
@@ -95,6 +93,7 @@ import {
 import { Textarea } from "./ui/textarea";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
+import { MiddleTruncate } from "./ui/middle-truncate";
 import { useComposerMenuProps } from "./chat/composerEventScope";
 
 export interface BranchToolbarHandle {
@@ -103,6 +102,7 @@ export interface BranchToolbarHandle {
 }
 
 interface BranchToolbarProps {
+  forceNewWorktree?: boolean;
   ref?: Ref<BranchToolbarHandle>;
   environmentId: EnvironmentId;
   threadId: ThreadId;
@@ -195,6 +195,7 @@ interface MobileRunContextSelectorProps {
     cwd: string;
     onSelect: (copy: import("@t3tools/contracts").MultiworkCopy) => void;
   };
+  forceNewWorktree: boolean;
   autoEnvironmentLabel?: string | undefined;
   onAutoEnvironment?: (() => void) | undefined;
   envLocked: boolean;
@@ -213,6 +214,7 @@ interface MobileRunContextSelectorProps {
 
 const MobileRunContextSelector = memo(function MobileRunContextSelector({
   multiworkTarget,
+  forceNewWorktree,
   autoEnvironmentLabel,
   onAutoEnvironment,
   envLocked,
@@ -327,6 +329,7 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
                   <MenuRadioItem
                     value="auto"
                     disabled={envLocked}
+                    closeOnClick
                     onClick={() => {
                       if (autoEnvironmentLabel) onAutoEnvironment?.();
                     }}
@@ -344,6 +347,7 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
                     key={env.environmentId}
                     disabled={envLocked}
                     value={env.environmentId}
+                    closeOnClick
                   >
                     <span className="flex min-w-0 items-center gap-1.5">
                       <EnvironmentMachineIcon kind={env.machine} className="size-3" />
@@ -374,19 +378,17 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
               onEnvModeChange(value as EnvMode);
             }}
           >
-            <MenuRadioItem disabled={envModeLocked} value="local">
+            <MenuRadioItem disabled={envModeLocked || forceNewWorktree} value="local" closeOnClick>
               <span className="flex min-w-0 items-center gap-1.5">
                 {activeWorktreePath ? (
                   <FolderGitIcon className="size-3" />
                 ) : (
                   <FolderIcon className="size-3" />
                 )}
-                <span className="min-w-0 truncate">
-                  {resolveCurrentWorkspaceLabel(activeWorktreePath)}
-                </span>
+                <MiddleTruncate value={resolveCurrentWorkspaceLabel(activeWorktreePath)} />
               </span>
             </MenuRadioItem>
-            <MenuRadioItem disabled={envModeLocked} value="worktree">
+            <MenuRadioItem disabled={envModeLocked} value="worktree" closeOnClick>
               <span className="flex min-w-0 items-center gap-1.5">
                 <FolderGit2Icon className="size-3" />
                 <span className="min-w-0 truncate">{resolveEnvModeLabel("worktree")}</span>
@@ -401,10 +403,10 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
               </MenuRadioItem>
             ))}
             {previousWorktreeLabel ? (
-              <MenuRadioItem disabled={envModeLocked} value="previous-worktree">
+              <MenuRadioItem disabled={envModeLocked} value="previous-worktree" closeOnClick>
                 <span className="flex min-w-0 items-center gap-1.5">
                   <HistoryIcon className="size-3" />
-                  <span className="min-w-0 truncate">{previousWorktreeLabel}</span>
+                  <MiddleTruncate value={previousWorktreeLabel} />
                 </span>
               </MenuRadioItem>
             ) : null}
@@ -574,6 +576,7 @@ function useLabelsOverflow(element: HTMLDivElement | null): boolean {
 }
 
 export const BranchToolbar = memo(function BranchToolbar({
+  forceNewWorktree = false,
   ref,
   environmentId,
   threadId,
@@ -617,9 +620,11 @@ export const BranchToolbar = memo(function BranchToolbar({
   const isMobile = useIsMobile();
   const updateProject = useAtomCommand(projectEnvironment.update, { reportFailure: false });
   const hasActiveThread = serverThread !== null || draftThread !== null;
-  const activeWorktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
+  const activeWorktreePath = forceNewWorktree
+    ? null
+    : (serverThread?.worktreePath ?? draftThread?.worktreePath ?? null);
   const effectiveEnvMode =
-    effectiveEnvModeOverride ??
+    (forceNewWorktree ? "worktree" : effectiveEnvModeOverride) ??
     resolveEffectiveEnvMode({
       activeWorktreePath,
       hasServerThread: serverThread !== null,
@@ -632,7 +637,8 @@ export const BranchToolbar = memo(function BranchToolbar({
   // "Previous worktree" hops a draft into the most recently active worktree
   // of this project — the "keep going where I just was" follow-up flow. Only
   // drafts can hop; started server threads have their workspace pinned.
-  const canUsePreviousWorktree = draftThread !== null && serverThread === null && !envModeLocked;
+  const canUsePreviousWorktree =
+    draftThread !== null && serverThread === null && !envModeLocked && !forceNewWorktree;
   const multiworkTarget =
     canUsePreviousWorktree && activeProject && activeProjectRef
       ? {
@@ -883,6 +889,7 @@ export const BranchToolbar = memo(function BranchToolbar({
             <BranchToolbarBranchSelector
               ref={branchSelectorRef}
               compact
+              forceNewWorktree={isPrimary && forceNewWorktree}
               className="min-w-0 max-w-36"
               environmentId={environmentId}
               threadId={threadId}
@@ -1016,6 +1023,7 @@ export const BranchToolbar = memo(function BranchToolbar({
           {addWorkspaceRootButton}
           <MobileRunContextSelector
             {...(multiworkTarget ? { multiworkTarget } : {})}
+            forceNewWorktree={forceNewWorktree}
             autoEnvironmentLabel={autoEnvironmentLabel}
             onAutoEnvironment={onAutoEnvironment}
             envLocked={envLocked}
@@ -1061,6 +1069,7 @@ export const BranchToolbar = memo(function BranchToolbar({
             {showGitControls ? (
               <BranchToolbarEnvModeSelector
                 envLocked={envModeLocked}
+                forceNewWorktree={forceNewWorktree}
                 {...(multiworkTarget ? { multiworkTarget } : {})}
                 effectiveEnvMode={effectiveEnvMode}
                 activeWorktreePath={activeWorktreePath}
@@ -1103,6 +1112,7 @@ export const BranchToolbar = memo(function BranchToolbar({
             <BranchToolbarBranchSelector
               ref={branchSelectorRef}
               className="min-w-0 flex-1 justify-end"
+              forceNewWorktree={forceNewWorktree}
               environmentId={environmentId}
               threadId={threadId}
               {...(draftId ? { draftId } : {})}

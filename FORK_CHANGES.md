@@ -4,6 +4,25 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Upstream sync, September 21
+
+- Merged 166 upstream commits through `1de563c149`, after saving the fork at
+  `backup/pre-upstream-sync-20260921` (`5db36e9bf7`). This was a source merge only: no app
+  install, restart, or push.
+- Kept the fork's mobile and desktop composer layout, multi-directory and multiwork controls,
+  project-slot shortcuts, multiple-PR panel, file/tree caches, separate Claude accounts,
+  retained usage totals, project memory, agent workspace tools, and settled-worktree cleanup.
+  Upstream's forced-new-worktree flow now disables previous-worktree and multiwork reuse.
+- Adopted upstream's provider tooling, PR viewed-file tracking, text and diff improvements,
+  sidebar undo actions, device-update UI, and Effect dependency update. Fork migration IDs
+  through 56 remain stable; upstream's PR viewed-file migration runs as 57.
+- Reconciled upstream's Claude home semantics with per-account configuration and the fork's
+  transcript-history retention. Media previews check metadata only to recognize directories
+  without transferring image or video bytes.
+- Validation: contracts, shared, client-runtime, server, web, desktop, and mobile typechecks;
+  focused migration, usage, multiwork, project-memory, PR, worktree-cleanup, file-cache,
+  keyboard, and composer tests. Targeted lint completed with warnings only.
+
 ## Mobile web sidebar continuity and navigation
 
 - `ChatView.tsx` always keeps the mobile composer expanded, including existing threads and after

@@ -1335,11 +1335,13 @@ export default function FilePreviewPanel({
     environmentId,
     activeCwd,
     relativePath,
-    attachment === undefined && !isMedia && !isPdf,
+    attachment === undefined && !isPdf,
     true,
     selectedFilePending,
     active,
   );
+  const isDirectory = file.isNotFile && !isHostFile;
+  const previewPath = isDirectory ? null : relativePath;
   const projectEntriesQuery = useProjectEntriesQuery(environmentId, activeCwd, "", active);
   const projectEntries = projectEntriesQuery.data?.entries ?? [];
   useWorkspaceMutationRefresh({
@@ -1391,7 +1393,7 @@ export default function FilePreviewPanel({
   const symbolNavigationRequestRef = useRef(0);
   const isMarkdown = relativePath ? isMarkdownPreviewFile(relativePath) : false;
   const tableDelimiter =
-    relativePath && attachment === undefined ? filePreviewDelimiter({ name: relativePath }) : null;
+    previewPath && attachment === undefined ? filePreviewDelimiter({ name: previewPath }) : null;
   // A reveal still wins over the preference: the line only exists in the source.
   const renderMarkdown =
     isMarkdown &&
@@ -1411,12 +1413,13 @@ export default function FilePreviewPanel({
       : isHtml
         ? ("html" as const)
         : null;
-  const canToggleRendered = attachment === undefined && renderedMode !== null;
+  const canToggleRendered =
+    previewPath !== null && attachment === undefined && renderedMode !== null;
   const updateClientSettings = useUpdateClientSettings();
   // Word wrap only reaches the text bodies. A rendered Markdown document, a table and the
   // browser frame all lay themselves out, so the toggle stays hidden rather than inert.
   const showsRawText =
-    relativePath !== null &&
+    previewPath !== null &&
     file.data !== null &&
     !(isMarkdown && renderMarkdown) &&
     !(tableDelimiter && renderTable) &&
@@ -1452,8 +1455,10 @@ export default function FilePreviewPanel({
       active &&
       attachment === undefined &&
       relativePath !== null &&
-      !isMedia &&
-      !isPdf &&
+      // Media and PDFs never show their contents, so re-reading them on every
+      // workspace mutation is waste. A folder named like one still re-reads, so
+      // it notices when the path becomes a file.
+      (isDirectory || (!isMedia && !isPdf)) &&
       !selectedFilePending,
     mutationId: workspaceMutationId,
     refresh: file.refresh,
@@ -1867,7 +1872,7 @@ export default function FilePreviewPanel({
               <Globe2 className="size-3.5" />
             </FileSurfaceAction>
           ) : null}
-          {!isHostFile ? (
+          {!isHostFile && previewPath !== null ? (
             <FileSurfaceAction
               label={explorerOpen ? "Hide file explorer" : "Show file explorer"}
               pressed={explorerOpen}
@@ -1878,7 +1883,7 @@ export default function FilePreviewPanel({
           ) : null}
         </div>
       ) : null}
-      {relativePath &&
+      {previewPath &&
       attachment === undefined &&
       !isMedia &&
       !renderBrowserFile &&

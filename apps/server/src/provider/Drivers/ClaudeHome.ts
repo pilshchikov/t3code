@@ -10,12 +10,28 @@ import { expandHomePath } from "../../pathExpansion.ts";
 type ClaudeEnvironmentConfig = Pick<ClaudeSettings, "configDir" | "homePath">;
 const quotePath = Schema.encodeSync(Schema.fromJsonString(Schema.String));
 
+/**
+ * Resolve the Claude config directory the CLI would use: the instance's
+ * `homePath` (exported as `CLAUDE_CONFIG_DIR`), then an inherited
+ * `CLAUDE_CONFIG_DIR`, then Claude's default `~/.claude`. Empty must not
+ * fall back to bare `$HOME` — that leftover from the old HOME override
+ * produced a different continuation group than an explicit `~/.claude`.
+ */
 export const resolveClaudeHomePath = Effect.fn("resolveClaudeHomePath")(function* (
   config: ClaudeEnvironmentConfig,
+  environment?: NodeJS.ProcessEnv,
 ): Effect.fn.Return<string, never, Path.Path> {
   const path = yield* Path.Path;
   const homePath = config.homePath.trim();
-  return path.resolve(homePath.length > 0 ? expandHomePath(homePath) : NodeOS.homedir());
+  if (homePath.length > 0) {
+    return path.resolve(expandHomePath(homePath));
+  }
+  // Inherited env vars are not shell-expanded, so a literal `~` stays literal.
+  const inherited = environment?.CLAUDE_CONFIG_DIR?.trim() ?? "";
+  if (inherited.length > 0) {
+    return path.resolve(inherited);
+  }
+  return path.resolve(path.join(NodeOS.homedir(), ".claude"));
 });
 
 export const resolveClaudeConfigDir = Effect.fn("resolveClaudeConfigDir")(function* (
@@ -43,8 +59,11 @@ export const makeClaudeEnvironment = Effect.fn("makeClaudeEnvironment")(function
 });
 
 export const makeClaudeContinuationGroupKey = Effect.fn("makeClaudeContinuationGroupKey")(
-  function* (config: ClaudeEnvironmentConfig): Effect.fn.Return<string, never, Path.Path> {
-    const resolvedHomePath = yield* resolveClaudeHomePath(config);
+  function* (
+    config: ClaudeEnvironmentConfig,
+    environment?: NodeJS.ProcessEnv,
+  ): Effect.fn.Return<string, never, Path.Path> {
+    const resolvedHomePath = yield* resolveClaudeHomePath(config, environment);
     const resolvedConfigDir = yield* resolveClaudeConfigDir(config);
     if (resolvedConfigDir) {
       return `claude:config:${resolvedConfigDir}:home:${resolvedHomePath}`;
@@ -57,8 +76,9 @@ export const makeClaudeCapabilitiesCacheKey = Effect.fn("makeClaudeCapabilitiesC
   function* (
     config: Pick<ClaudeSettings, "binaryPath" | "configDir" | "homePath">,
     cwd?: string,
+    environment?: NodeJS.ProcessEnv,
   ): Effect.fn.Return<string, never, Path.Path> {
-    const resolvedHomePath = yield* resolveClaudeHomePath(config);
+    const resolvedHomePath = yield* resolveClaudeHomePath(config, environment);
     const resolvedConfigDir = yield* resolveClaudeConfigDir(config);
     return resolvedConfigDir
       ? `${config.binaryPath}\0${resolvedHomePath}\0${resolvedConfigDir}\0${cwd ?? ""}`

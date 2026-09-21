@@ -25,7 +25,7 @@ import {
   PullRequestActorAvatar,
   PullRequestConflictGlyph,
   PullRequestDiffStat,
-  PullRequestApprovalGlyph,
+  PullRequestReviewDecisionGlyph,
   PullRequestStateGlyph,
   pullRequestChecksStatePresentation,
 } from "./pullRequestPresentation";
@@ -125,7 +125,7 @@ function LinkRow({
             (snapshot.reviewDecision === "approved" ||
               snapshot.reviewDecision === "changes-requested") ? (
               snapshot.reviewDecision === "approved" ? (
-                <PullRequestApprovalGlyph />
+                <PullRequestReviewDecisionGlyph decision="approved" />
               ) : (
                 <span className="text-amber-600/90 dark:text-amber-400/80">Changes requested</span>
               )
