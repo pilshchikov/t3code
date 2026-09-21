@@ -228,7 +228,7 @@ import {
 } from "./ui/combobox";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
-import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
+import { SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
 import { Popover, PopoverPopup, PopoverTrigger } from "./ui/popover";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import {
@@ -240,6 +240,8 @@ import {
   type DraftSessionState,
 } from "../composerDraftStore";
 import { applySidebarThreadOrder, useSidebarThreadOrderStore } from "../sidebarThreadOrderStore";
+import { useSidebarOrderMigration } from "../hooks/useSidebarOrderMigration";
+import { useSidebarProjectScope } from "../hooks/useSidebarProjectScope";
 import { projectSlotNumber, useProjectSlotStore } from "../projectSlotStore";
 import { Kbd } from "./ui/kbd";
 import {
@@ -2177,6 +2179,7 @@ export default function Sidebar() {
     archiveThread,
     deleteThread,
   } = useThreadActions();
+  useSidebarOrderMigration(reorderActiveThread);
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
@@ -2369,7 +2372,7 @@ export default function Sidebar() {
 
   // Project scope: one menu above the list. Scoping filters the list without
   // making the header width depend on the number or length of project names.
-  const [projectScopeKey, setProjectScopeKey] = useState<string | null>(null);
+  const [projectScopeKey, setProjectScopeKey] = useSidebarProjectScope();
   const projectAccentColorByKey = useAccentColorStore((state) => state.projectColors);
   const projectSlots = useProjectSlotStore((state) => state.slots);
   const projectAssignHintLabel = useMemo(
@@ -2511,8 +2514,6 @@ export default function Sidebar() {
     },
     [isMobile, router, setOpenMobile],
   );
-  // Anchor for the scope popup: the header search field, not its icon trigger.
-  const headerSearchRef = useRef<HTMLDivElement | null>(null);
   // Safari can send a click after Ctrl+click opens settings. Ignore that one
   // selection, then clear the guard when the picker opens again.
   const suppressNextScopeChangeRef = useRef(false);
@@ -2778,9 +2779,10 @@ export default function Sidebar() {
     return routeThread === undefined ? EMPTY_THREADS : [routeThread];
   }, [routeThreadKey, snoozedShelfExpanded, snoozedThreads]);
 
-  // Manual arrangement of the inbox rows. Client-local and purely visual, so it never writes to
-  // the server the way a pin reorder does.
+  // Retain legacy local arrangements until migration to shared order keys finishes.
+  // Older servers still use the local fallback.
   const manualThreadOrder = useSidebarThreadOrderStore((state) => state.order);
+  const migratingThreadOrder = useSidebarThreadOrderStore((state) => state.migrating);
   const setManualThreadOrder = useSidebarThreadOrderStore((state) => state.setOrder);
   const orderedActiveThreads = useMemo(
     () =>
@@ -3573,6 +3575,7 @@ export default function Sidebar() {
   ]);
   const handleThreadDragEnd = useCallback(
     (event: DragEndEvent) => {
+      if (migratingThreadOrder) return;
       const activeKey = String(event.active.id);
       const activeSection = sectionByThreadKey.get(activeKey);
       const target =
@@ -3581,7 +3584,11 @@ export default function Sidebar() {
           : resolveSidebarDropTarget(sidebarListItems, activeKey, String(event.over.id));
       const activeThread = threadByKey.get(activeKey);
       if (activeSection === undefined || target === null || activeThread === undefined) return;
-      if (activeSection === "active" && target.section === "active") {
+      if (
+        activeSection === "active" &&
+        target.section === "active" &&
+        !target.activeOrder.every((key) => activeReorderableThreadKeys.has(key))
+      ) {
         setManualThreadOrder(target.activeOrder);
         return;
       }
@@ -3713,11 +3720,15 @@ export default function Sidebar() {
           )
             return;
         }
+        if (plan.kind === "move-active") {
+          useSidebarThreadOrderStore.getState().finishMigration(new Set(plan.order));
+        }
       })();
     },
     [
       activeKeysById,
       setManualThreadOrder,
+      migratingThreadOrder,
       pinnedKeysById,
       serverConfigs,
       activeKeys,
@@ -4473,7 +4484,6 @@ export default function Sidebar() {
           // header and would otherwise paint across the search row's outline.
           <SidebarGroup className="relative z-[1] p-[var(--sidebar-content-inset)] pt-1">
             <SidebarThreadHeader
-              searchFieldRef={headerSearchRef}
               hasProjects={projectGroups.length > 0}
               projectScope={
                 <Combobox
@@ -4505,8 +4515,10 @@ export default function Sidebar() {
                 >
                   <ComboboxTrigger
                     render={
-                      <SidebarHeaderIconButton
-                        label={
+                      <Button
+                        variant="ghost"
+                        className="h-12 w-full min-w-0 justify-start gap-3 rounded-lg border border-sidebar-border bg-sidebar-control-surface px-3 text-sidebar-foreground sm:h-12 md:h-10 md:gap-2 [&_svg]:size-6 md:[&_svg]:size-5"
+                        aria-label={
                           scopedProjectGroup
                             ? `Filter threads by project: ${scopedProjectGroup.displayName}`
                             : "Filter threads by project"
@@ -4518,20 +4530,19 @@ export default function Sidebar() {
                       // Wrapped so the button's direct-child svg color rule cannot override
                       // a project's own icon color.
                       <span className="flex shrink-0">
-                        <ProjectFavicon project={scopedProjectGroup} className="size-4" />
+                        <ProjectFavicon project={scopedProjectGroup} className="size-6 md:size-5" />
                       </span>
                     ) : (
-                      <FolderIcon className="size-4" />
+                      <FolderIcon className="size-6 md:size-5" />
                     )}
+                    <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
+                      {selectedProjectScopeItem.label}
+                    </span>
+                    <ChevronDownIcon className="size-4! shrink-0 text-sidebar-muted-foreground" />
                   </ComboboxTrigger>
                   <ComboboxPopup
                     align="start"
-                    // Anchored to the search field, not the 28px trigger: the
-                    // popup opens under the field, is at least as wide as it,
-                    // and grows to fit project names up to a cap, past which
-                    // the rows truncate.
-                    anchor={headerSearchRef}
-                    className="max-w-[min(18rem,var(--available-width))] overflow-hidden"
+                    className="w-[var(--anchor-width)] max-w-[var(--available-width)] overflow-hidden"
                   >
                     <ComboboxSearchInput
                       aria-label="Search projects"
@@ -4582,16 +4593,19 @@ export default function Sidebar() {
                             }}
                             hideIndicator
                             value={item}
-                            className="h-8 min-h-8 py-0 font-medium"
+                            className="min-h-12 py-2 font-medium sm:min-h-12 md:min-h-10 [&_svg]:size-6 md:[&_svg]:size-5"
                             contentClassName="flex min-w-0 items-center gap-2"
                             onContextMenu={(event) => {
                               if (project) handleProjectSettings(event, project);
                             }}
                           >
                             {project ? (
-                              <ProjectFavicon project={project} className="size-4 shrink-0" />
+                              <ProjectFavicon
+                                project={project}
+                                className="size-6 shrink-0 md:size-5"
+                              />
                             ) : (
-                              <FolderIcon className="size-4 shrink-0" />
+                              <FolderIcon className="size-6 shrink-0 md:size-5" />
                             )}
                             <span className="min-w-0 flex-1 truncate text-sm">{item.label}</span>
                             {slot === null ? null : (

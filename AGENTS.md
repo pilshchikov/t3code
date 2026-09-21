@@ -91,6 +91,15 @@ The most common defect in this repo is a change that works on the path you teste
 - To reuse web dev auth across worktrees, configure one fixed `T3CODE_DEV_AUTH_TOKEN` in the main checkout's gitignored `.env`. The `t3.json` setup links that file into worktrees. Never commit or publish the token or a startup URL. See [Reusable dev credential](docs/operations/development.md#reusable-dev-credential).
 - Stop what you started, by the PID you tracked. See rule 1.
 
+## Local fork desktop rebuilds
+
+When the owner asks to rebuild, reinstall, or restart the local macOS Alpha app, follow
+[`docs/operations/local-fork-macos-build.md`](docs/operations/local-fork-macos-build.md). A real
+install must come from the packaged arm64 DMG. Never copy `apps/desktop/.electron-runtime`, and do
+not treat `build:desktop` alone as an installable application. Preserve the prior explicit app
+bundle in Trash, quit by bundle identifier, and verify both the installed desktop process and its
+bundled server path after relaunch.
+
 ## Test data
 
 An empty database is a bad test. Seed your worktree's `.t3` with a copy of real data instead of pointing at live state:

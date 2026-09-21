@@ -53,10 +53,13 @@ edge to pin a thread. Section labels stay readable for the whole drag, and the s
 thread is over takes the accent color. Section labels also
 identify empty sections and a collapsed settled shelf.
 
-Drag within the pinned section to change its synced order. On web and desktop, dragging
-within the active section preserves this fork's device-local inbox arrangement. New threads
-keep their default position above arranged work. On mobile, **Move up** and **Move down**
-write server-synced positions; those do not replace a device-local web or desktop arrangement.
+Drag within the pinned or active section to change its order across connected clients.
+New threads appear above arranged work. On the mobile app, **Move up** and **Move down**
+update the same saved order. Older servers keep device-local active arrangements until upgraded.
+
+In a mobile browser, swipe right from near the left edge to open the thread sidebar. Swipe left
+on the sidebar's empty space or headings to close it. The selected project filter is remembered
+on this device when you close the sidebar or reload the page.
 
 On web and desktop, the list also animates section changes made with thread actions such as
 **Pin**, **Settle**, and **Snooze**. These transitions respect your system's reduced-motion

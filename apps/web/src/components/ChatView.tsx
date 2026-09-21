@@ -9992,7 +9992,8 @@ export default function ChatView(props: ChatViewProps) {
                             onUsageLimitsCommand={usageLimitsOffered ? openUsageLimits : undefined}
                             isServerThread={isServerThread}
                             isLocalDraftThread={isLocalDraftThread}
-                            forceExpandedOnMobile={forceExpandedMobileComposer && isDraftHeroState}
+                            // Keep the compact mobile editor ready to type, including after blur/send.
+                            forceExpandedOnMobile
                             projectSelectionRequired={isLocalDraftThread && activeProject === null}
                             phase={phase}
                             isConnecting={isConnecting}

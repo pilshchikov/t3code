@@ -4,6 +4,24 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Mobile web sidebar continuity and navigation
+
+- `ChatView.tsx` always keeps the mobile composer expanded, including existing threads and after
+  focus loss or sending. Its compact expanded layout stays directly editable without an extra tap;
+  desktop scroll-to-collapse behavior is unchanged.
+- The project scope survives drawer unmounts and reloads through `useSidebarProjectScope.ts`.
+  The existing snapshot-readiness guard still prevents clearing an offline project's scope.
+- `SidebarThreadHeader.tsx` and `Sidebar.tsx` put a labeled project picker below search, with
+  48px mobile targets and 24px project icons (40px/20px on desktop).
+- Active-thread dragging now writes server order keys, matching native mobile and other browsers.
+  `useSidebarOrderMigration.ts` migrates legacy local arrangements with a persisted retry plan;
+  existing server arrangements take precedence. Older servers retain local ordering.
+- `AppSidebarLayout.tsx` installs mobile-only edge gestures from `ui/sidebarSwipe.ts`. Vertical
+  scrolling, editing, browser-back edges, dialogs, and horizontally scrolling content are excluded.
+- Validation: focused project-scope remount, swipe, order migration, and sidebar drag tests;
+  web typecheck and targeted formatting/lint. These changes affect mobile web and desktop's shared
+  frontend; native mobile already consumes server order keys.
+
 ## Upstream sync, September 17
 
 - Merged 35 upstream commits through `6d1d549441`. The previous fork revision is retained as

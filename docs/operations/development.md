@@ -140,6 +140,9 @@ vp run dist:desktop:linux
 vp run dist:desktop:win
 ```
 
+For this fork's complete Apple Silicon build, safe replacement of the installed Alpha app, restart,
+verification, and rollback procedure, follow [Build and reinstall the local macOS fork](./local-fork-macos-build.md).
+
 DMGs default to the host architecture. Use `--arch` to choose another target and `--keep-stage`
 to retain packaging files for inspection. Run `vp run dist:desktop:artifact --help` for other
 options.
