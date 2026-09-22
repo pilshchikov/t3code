@@ -4,6 +4,18 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Claude Opus 5.5 in the bundled model manifest
+
+- `claude-opus-5-5` is a current Claude model with a `new` badge, ahead of Claude Opus 5, which
+  stays current rather than moving to legacy. Claude Code 2.1.280 is the minimum version: its
+  baked-in catalog is where the slug, the 1M context window, and fast mode were confirmed.
+- Its profile matches Opus 5 except that reasoning defaults to Medium, which is the model's own
+  default. Thinking cannot be disabled on Opus 5.5, so effort is the only control.
+- `updatedAt` moves forward so a disk cache written by an older manifest is dropped. This fork
+  keeps remote manifest refreshes behind `T3CODE_ENABLE_PROVIDER_VERSION_CHECKS`, so the bundled
+  file is what the app actually reads. Upstream has not added the model yet.
+- Source: `apps/server/src/provider/model-manifest.json`.
+
 ## The desktop composer never rests on a timeline scroll
 
 - Scrolling a conversation no longer shrinks the prompt. The wheel and scroll-key gestures, their
