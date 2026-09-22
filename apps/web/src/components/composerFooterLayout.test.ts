@@ -110,7 +110,6 @@ describe("shouldUseRestingComposerLayout", () => {
     isScrollCollapsed: true,
     hasExpandedChrome: false,
     hasMultilinePrompt: false,
-    timelineOverflows: true,
   };
 
   it("uses the resting layout after a timeline scroll", () => {
@@ -119,10 +118,6 @@ describe("shouldUseRestingComposerLayout", () => {
 
   it("keeps the composer expanded until the timeline is scrolled", () => {
     expect(shouldUseRestingComposerLayout({ ...resting, isScrollCollapsed: false })).toBe(false);
-  });
-
-  it("keeps the composer expanded while the timeline fits above it", () => {
-    expect(shouldUseRestingComposerLayout({ ...resting, timelineOverflows: false })).toBe(false);
   });
 
   it("keeps new-thread composers expanded", () => {

@@ -727,17 +727,18 @@ function ComposerPromptEditorTiptapInner(props: ComposerPromptEditorProps) {
     );
   }, []);
 
+  const ariaPlaceholder = typeof placeholder === "string" ? placeholder : "Message composer";
   const editorAttributes = useMemo(
     () => ({
       class: cn(
-        "composer-tiptap block max-h-50 min-h-17.5 w-full overflow-y-auto whitespace-pre-wrap wrap-break-word bg-transparent leading-relaxed text-foreground focus:outline-none",
+        "composer-tiptap block max-h-50 min-h-[1lh] w-full overflow-y-auto whitespace-pre-wrap wrap-break-word bg-transparent leading-relaxed text-foreground focus:outline-none",
         className,
       ),
       "data-testid": "composer-editor",
       "data-composer-rich-text": richText ? "true" : "false",
-      "aria-placeholder": typeof placeholder === "string" ? placeholder : "",
+      "aria-placeholder": ariaPlaceholder,
     }),
-    [className, placeholder, richText],
+    [ariaPlaceholder, className, richText],
   );
 
   const editor = useEditor(
@@ -804,15 +805,7 @@ function ComposerPromptEditorTiptapInner(props: ComposerPromptEditorProps) {
       ),
       editable: !disabled,
       editorProps: {
-        attributes: {
-          class: cn(
-            "composer-tiptap block max-h-50 min-h-[1lh] w-full overflow-y-auto whitespace-pre-wrap wrap-break-word bg-transparent leading-relaxed text-foreground focus:outline-none",
-            className,
-          ),
-          "data-testid": "composer-editor",
-          "data-composer-rich-text": richText ? "true" : "false",
-          "aria-placeholder": typeof placeholder === "string" ? placeholder : "Message composer",
-        },
+        attributes: editorAttributes,
         handleKeyDown: (view, event) => {
           if (
             isMacPlatform(navigator.platform) &&

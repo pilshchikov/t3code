@@ -29,8 +29,6 @@ export function shouldUseRestingComposerLayout(input: {
   isScrollCollapsed: boolean;
   hasExpandedChrome: boolean;
   hasMultilinePrompt: boolean;
-  /** Whether the timeline has more content than fits above the composer. */
-  timelineOverflows: boolean;
 }): boolean {
   // Multiline drafts stay readable. Resting only clamps a single prompt
   // line and overlays its actions; non-image attachment and context
@@ -46,13 +44,14 @@ export function shouldUseRestingComposerLayout(input: {
   // rests it, so clicking a message, copying output, or selecting text for a
   // citation leaves the composer where it was.
   //
-  // Resting exists to give reading space back to the timeline. A thread that
-  // fits above the composer has nothing to reclaim, so it stays expanded and
-  // never shows the collapsed row that a fresh thread would otherwise open on.
+  // Overflow is checked when accepting the scroll gesture, not here. Using a
+  // live overflow measurement to *leave* resting makes composer height and
+  // timeline viewport size feed back into each other near the fit boundary.
+  // Once a gesture has rested the composer, only an explicit restore should
+  // expand it again.
   return (
     input.isExistingThread &&
     !input.isMobileViewport &&
-    input.timelineOverflows &&
     input.isScrollCollapsed &&
     !input.hasMultilinePrompt &&
     !input.hasExpandedChrome

@@ -4,6 +4,32 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## The desktop composer never rests on a timeline scroll
+
+- Scrolling a conversation no longer shrinks the prompt. The wheel and scroll-key gestures, their
+  eligibility tracking, and `composerScrollGesture.ts` are removed, so nothing can set the
+  desktop resting state. Successive attempts to make the shrink-and-restore tween behave still
+  moved the prompt out from under the caret, and the reclaimed row was not worth it.
+- `composerCollapseOnScroll` stays in the settings schema so stored values decode, but no client
+  reads it and its Settings → General switch is gone. An inherited `true` cannot bring the
+  behavior back.
+- The phone's collapsed composer row is a separate path and still works. `timelineOverflows` is no
+  longer passed to the composer, since only the scroll gesture consumed it.
+- Sources: `apps/web/src/components/chat/ChatComposer.tsx`,
+  `apps/web/src/components/ChatView.tsx`, `apps/web/src/components/settings/SettingsPanels.tsx`,
+  `packages/contracts/src/settings.ts`.
+
+## Composer text stability
+
+- Compact and expanded desktop composer layouts keep the same prompt line height and top inset;
+  only the space beneath the prompt contracts. The prompt follows the surface resize without a
+  second position animation. The Tiptap editor uses the same one-line minimum height and
+  attributes at initialization and on updates.
+- Icon-only placeholders resolve to a stable accessibility label, so unrelated chat activity does
+  not reapply editor attributes and move the prompt text.
+- The height transition no longer observes and retargets itself from body resize events during
+  its tween.
+
 ## Upstream sync, September 21
 
 - Merged 166 upstream commits through `1de563c149`, after saving the fork at
@@ -1051,8 +1077,8 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
   Dropping these bindings makes an empty editor shrink and its placeholder spill over the toolbar.
 - The editor starts at one line and grows with its text. The compact composer uses a single prompt
   row, and the expanded view keeps tighter padding than upstream.
-- Upstream's scroll-driven resting layout owns collapse and expansion. Losing focus alone does
-  not collapse the prompt, and multiline drafts remain readable.
+- Losing focus alone does not collapse the prompt, and multiline drafts remain readable. The
+  scroll-driven resting layout this section described is now removed, as recorded above.
 - Stashes use an inline chip in the footer or relocated controls. The chip anchors a small floating
   menu; opening it does not expand the prompt.
 - Sources: `apps/web/src/components/chat/ChatComposer.tsx`,
