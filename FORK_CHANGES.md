@@ -4,6 +4,18 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Usage limit trends read by day, with a crosshair
+
+- The time axis marks every local midnight with a rule and a date label, so days are
+  distinguishable at a glance. Ranges of a day or two add hour ticks; longer ranges thin the
+  date labels to about eight across the plot.
+- Hovering anywhere in the plot snaps a crosshair to the nearest measurement and shows its exact
+  time and remaining percent. The old native `<title>` on a 1.5px dot was unreachable in practice.
+- The measurements table groups rows under a heading per day and shows the time of day in each
+  row, instead of repeating the full date on every row.
+- Sources: `apps/web/src/components/usage/UsageLimitTrends.tsx`,
+  `apps/web/src/components/usage/usageLimitHistoryAxis.ts`.
+
 ## A fixed, one-line composer on upstream's prompt box
 
 - The prompt starts one line tall (`min-h-[1lh]` instead of upstream's `min-h-19.5`) and grows

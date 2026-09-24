@@ -7,12 +7,20 @@ import type {
 } from "@t3tools/contracts";
 import { AsyncResult } from "effect/unstable/reactivity";
 import * as Option from "effect/Option";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { serverEnvironment } from "../../state/server";
 import { Button } from "../ui/button";
 import { RedactedSensitiveText } from "../settings/RedactedSensitiveText";
 import { historyAccounts, historyProviderGroups, historySegments } from "./usageLimitHistoryModel";
+import { historyAxisTicks, historyPointsByDay, nearestHistoryPoint } from "./usageLimitHistoryAxis";
+
+const PLOT_LEFT = 38;
+const PLOT_RIGHT = 562;
+const PLOT_TOP = 10;
+const PLOT_BOTTOM = 118;
+const AXIS_LABEL_Y = 134;
+const PLOT_HEIGHT = PLOT_BOTTOM - PLOT_TOP;
 
 function TrendChart({
   points,
@@ -25,98 +33,178 @@ function TrendChart({
 }) {
   const start = Date.parse(history.since);
   const end = Date.parse(history.readAt);
-  const x = (point: UsageLimitHistoryPoint) =>
-    35 + ((Date.parse(point.measuredAt) - start) / Math.max(1, end - start)) * 525;
-  const y = (point: UsageLimitHistoryPoint) => 12 + (100 - point.remainingPercent) * 1.1;
+  const span = Math.max(1, end - start);
+  const x = (at: number) => PLOT_LEFT + ((at - start) / span) * (PLOT_RIGHT - PLOT_LEFT);
+  const pointX = (point: UsageLimitHistoryPoint) => x(Date.parse(point.measuredAt));
+  const pointY = (point: UsageLimitHistoryPoint) =>
+    PLOT_TOP + ((100 - point.remainingPercent) / 100) * PLOT_HEIGHT;
   const latest = points.at(-1)!;
+  const ticks = useMemo(() => historyAxisTicks(start, end), [start, end]);
+  const [hovered, setHovered] = useState<UsageLimitHistoryPoint | null>(null);
+  const dayGroups = useMemo(() => historyPointsByDay(points), [points]);
+
+  // The pointer reads a time from its position and the chart answers with the
+  // measurement nearest it, so a 1.5px dot never has to be hit exactly.
+  const trackPointer = (event: ReactPointerEvent<SVGRectElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (bounds.width <= 0) return;
+    const ratio = (event.clientX - bounds.left) / bounds.width;
+    setHovered(nearestHistoryPoint(points, start + ratio * span));
+  };
+
   return (
     <div className="min-w-0">
       <div className="flex items-baseline justify-between gap-2 text-xs">
         <span>{latest.windowLabel}</span>
         <span className="tabular-nums">{latest.remainingPercent.toFixed(1)}% remaining</span>
       </div>
-      <svg
-        viewBox="0 0 570 150"
-        className="mt-2 w-full"
-        role="img"
-        aria-label={`${latest.windowLabel}: remaining quota over time. Latest ${latest.remainingPercent.toFixed(1)} percent.`}
-      >
-        {[0, 50, 100].map((value) => (
-          <g key={value}>
-            <text
-              x="29"
-              y={16 + (100 - value) * 1.1}
-              textAnchor="end"
-              fill="currentColor"
-              fontSize="10"
-              className="text-muted-foreground"
-            >
-              {value}%
-            </text>
-            <line
-              x1="35"
-              x2="560"
-              y1={12 + (100 - value) * 1.1}
-              y2={12 + (100 - value) * 1.1}
-              stroke="currentColor"
-              className="text-border"
-            />
-          </g>
-        ))}
-        <polyline
-          points={points.map((p) => `${x(p)},${y(p)}`).join(" ")}
-          fill="none"
-          stroke={color}
-          strokeWidth="2"
-          strokeDasharray="4 4"
-          opacity="0.5"
-        />
-        {historySegments(points, history.resolutionMinutes).map((segment, index) => (
-          <g key={index}>
-            <polyline
-              points={segment.map((p) => `${x(p)},${y(p)}`).join(" ")}
-              fill="none"
-              stroke={color}
-              strokeWidth="2"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-            {segment.map((p) => (
-              <circle
-                key={p.measuredAt}
-                cx={x(p)}
-                cy={y(p)}
-                r={segment.length === 1 ? 2.5 : 1.5}
-                fill={color}
-              >
-                <title>
-                  {new Date(p.measuredAt).toLocaleString()}: {p.remainingPercent.toFixed(1)}%
-                  remaining
-                </title>
-              </circle>
-            ))}
-          </g>
-        ))}
-        <text x="35" y="145" fill="currentColor" fontSize="10" className="text-muted-foreground">
-          {new Date(start).toLocaleDateString()}
-        </text>
-        <text
-          x="560"
-          y="145"
-          textAnchor="end"
-          fill="currentColor"
-          fontSize="10"
-          className="text-muted-foreground"
+      <div className="relative mt-2">
+        <svg
+          viewBox={`0 0 570 142`}
+          className="w-full"
+          role="img"
+          aria-label={`${latest.windowLabel}: remaining quota over time. Latest ${latest.remainingPercent.toFixed(1)} percent.`}
         >
-          {new Date(end).toLocaleString(undefined, {
-            month: "short",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
+          {[0, 25, 50, 75, 100].map((value) => {
+            const lineY = PLOT_TOP + ((100 - value) / 100) * PLOT_HEIGHT;
+            return (
+              <g key={value}>
+                {value % 50 === 0 ? (
+                  <text
+                    x={PLOT_LEFT - 6}
+                    y={lineY + 3}
+                    textAnchor="end"
+                    fill="currentColor"
+                    fontSize="10"
+                    className="text-muted-foreground"
+                  >
+                    {value}%
+                  </text>
+                ) : null}
+                <line
+                  x1={PLOT_LEFT}
+                  x2={PLOT_RIGHT}
+                  y1={lineY}
+                  y2={lineY}
+                  stroke="currentColor"
+                  strokeWidth={value % 50 === 0 ? 1 : 0.5}
+                  className="text-border"
+                  opacity={value % 50 === 0 ? 0.9 : 0.5}
+                />
+              </g>
+            );
           })}
-        </text>
-      </svg>
-      <p className="text-xs text-muted-foreground">
+          {ticks.map((tick) => (
+            <g key={`${tick.at}:${tick.isDayStart ? "day" : "hour"}`}>
+              <line
+                x1={x(tick.at)}
+                x2={x(tick.at)}
+                y1={PLOT_TOP}
+                y2={PLOT_BOTTOM}
+                stroke="currentColor"
+                strokeWidth={tick.isDayStart ? 1 : 0.5}
+                strokeDasharray={tick.isDayStart ? undefined : "2 3"}
+                className="text-border"
+                opacity={tick.isDayStart ? 0.9 : 0.45}
+              />
+              <text
+                x={x(tick.at)}
+                y={AXIS_LABEL_Y}
+                textAnchor="middle"
+                fill="currentColor"
+                fontSize="10"
+                className="text-muted-foreground"
+                opacity={tick.isDayStart ? 1 : 0.75}
+              >
+                {tick.label}
+              </text>
+            </g>
+          ))}
+          <polyline
+            points={points.map((p) => `${pointX(p)},${pointY(p)}`).join(" ")}
+            fill="none"
+            stroke={color}
+            strokeWidth="2"
+            strokeDasharray="4 4"
+            opacity="0.5"
+          />
+          {historySegments(points, history.resolutionMinutes).map((segment, index) => (
+            <g key={index}>
+              <polyline
+                points={segment.map((p) => `${pointX(p)},${pointY(p)}`).join(" ")}
+                fill="none"
+                stroke={color}
+                strokeWidth="2"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+              {segment.map((p) => (
+                <circle
+                  key={p.measuredAt}
+                  cx={pointX(p)}
+                  cy={pointY(p)}
+                  r={segment.length === 1 ? 2.5 : 1.5}
+                  fill={color}
+                />
+              ))}
+            </g>
+          ))}
+          {hovered ? (
+            <g pointerEvents="none">
+              <line
+                x1={pointX(hovered)}
+                x2={pointX(hovered)}
+                y1={PLOT_TOP}
+                y2={PLOT_BOTTOM}
+                stroke="currentColor"
+                strokeWidth="1"
+                className="text-muted-foreground"
+                opacity="0.7"
+              />
+              <circle
+                cx={pointX(hovered)}
+                cy={pointY(hovered)}
+                r="4"
+                fill={color}
+                stroke="var(--card)"
+                strokeWidth="2"
+              />
+            </g>
+          ) : null}
+          <rect
+            x={PLOT_LEFT}
+            y={PLOT_TOP}
+            width={PLOT_RIGHT - PLOT_LEFT}
+            height={PLOT_HEIGHT}
+            fill="transparent"
+            onPointerMove={trackPointer}
+            onPointerLeave={() => setHovered(null)}
+          />
+        </svg>
+        {hovered ? (
+          <div
+            role="status"
+            className="pointer-events-none absolute top-0 z-10 w-max max-w-56 -translate-x-1/2 rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md"
+            style={{
+              left: `${Math.min(88, Math.max(12, (pointX(hovered) / 570) * 100))}%`,
+            }}
+          >
+            <span className="block tabular-nums">
+              {hovered.remainingPercent.toFixed(1)}% remaining
+            </span>
+            <span className="block text-muted-foreground">
+              {new Date(hovered.measuredAt).toLocaleString(undefined, {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+          </div>
+        ) : null}
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
         Last measured {new Date(latest.measuredAt).toLocaleString()}
       </p>
       <details className="mt-2 text-xs">
@@ -131,20 +219,38 @@ function TrendChart({
                 <th>Remaining</th>
               </tr>
             </thead>
-            <tbody>
-              {points
-                .slice(-100)
-                .reverse()
-                .map((p) => (
+            {historyPointsByDay(points.slice(-100)).map((day) => (
+              <tbody key={day.day}>
+                <tr>
+                  <th
+                    colSpan={2}
+                    className="pt-2 text-left font-medium text-muted-foreground"
+                    scope="colgroup"
+                  >
+                    {day.label}
+                  </th>
+                </tr>
+                {day.points.map((p) => (
                   <tr key={p.measuredAt}>
-                    <td>{new Date(p.measuredAt).toLocaleString()}</td>
+                    <td>
+                      {new Date(p.measuredAt).toLocaleTimeString(undefined, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </td>
                     <td>{p.remainingPercent.toFixed(1)}%</td>
                   </tr>
                 ))}
-            </tbody>
+              </tbody>
+            ))}
           </table>
         </div>
       </details>
+      {dayGroups.length > 1 ? (
+        <p className="sr-only">
+          Covering {dayGroups.length} days, newest {dayGroups[0]?.label}.
+        </p>
+      ) : null}
     </div>
   );
 }
