@@ -135,16 +135,13 @@ describe("LocalApi", () => {
 
     const { createLocalApi } = await import("./localApi");
     const api = createLocalApi();
-    const items = [{ id: "delete", label: "Delete" }] as const;
-
-    await expect(api.contextMenu.show(items)).resolves.toBe("delete");
     requestConfirmDialogMock.mockReturnValue(undefined);
     await expect(api.dialogs.confirm("Install update?")).resolves.toBe(false);
     await expect(api.dialogs.pickFolder({ initialPath: "/tmp" })).resolves.toBe("/tmp/project");
     await expect(api.persistence.getClientSettings()).resolves.toEqual(DEFAULT_CLIENT_SETTINGS);
     await api.persistence.setClientSettings(DEFAULT_CLIENT_SETTINGS);
 
-    expect(showContextMenu).toHaveBeenCalledWith(items, undefined);
+    expect(showContextMenu).not.toHaveBeenCalled();
     expect(pickFolder).toHaveBeenCalledWith({ initialPath: "/tmp" });
     expect(getClientSettings).toHaveBeenCalledTimes(1);
     expect(setClientSettings).toHaveBeenCalledWith(DEFAULT_CLIENT_SETTINGS);

@@ -42,22 +42,17 @@ function createBrowserLocalApi(): LocalApi {
       },
     },
     contextMenu: {
+      // The in-app menu everywhere, desktop included: the native menu is the
+      // operating system's look, not the app's, and it drops the icons and
+      // section headers the items carry.
       show: async <T extends string>(
         items: readonly ContextMenuItem<T>[],
         position?: { x: number; y: number },
-      ): Promise<T | null> => {
-        if (window.desktopBridge) {
-          return window.desktopBridge.showContextMenu(items, position) as Promise<T | null>;
-        }
-        return showContextMenuFallback(items, position);
-      },
-      // A native desktop menu blocks keyboard input and closes on outside
-      // interaction, so nothing to do there; the DOM fallback needs an explicit
-      // dismiss when the state behind it goes away.
+      ): Promise<T | null> => showContextMenuFallback(items, position),
+      // The in-app menu needs an explicit dismiss when the state behind it
+      // goes away.
       close: async () => {
-        if (!window.desktopBridge) {
-          dismissContextMenu();
-        }
+        dismissContextMenu();
       },
     },
     persistence: {

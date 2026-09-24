@@ -73,6 +73,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import { useParams, useRouter } from "@tanstack/react-router";
@@ -261,6 +262,10 @@ const SETTLED_TAIL_PAGE_COUNT = 25;
 // Fresh keys deliberately reset both shelves to collapsed for existing users.
 const SETTLED_SHELF_EXPANDED_KEY = "t3code:sidebar:settled-expanded";
 const SNOOZED_SHELF_EXPANDED_KEY = "t3code:sidebar:snoozed-expanded";
+const PROJECT_PICKER_LIST_HEIGHT_KEY = "t3code:sidebar:project-picker-height";
+const PROJECT_PICKER_LIST_DEFAULT_HEIGHT = 288;
+const PROJECT_PICKER_LIST_MIN_HEIGHT = 120;
+const PROJECT_PICKER_LIST_MAX_HEIGHT = 720;
 
 function compactSidebarTimeLabel(label: string): string {
   if (label === "just now") return "now";
@@ -2758,6 +2763,38 @@ export default function Sidebar() {
     () => setSettledVisibleCount((count) => count + SETTLED_TAIL_PAGE_COUNT),
     [],
   );
+  // The project picker holds every project, so its list keeps the height the
+  // user drags it to rather than one fixed cap.
+  const [projectPickerListHeight, setProjectPickerListHeight] = useLocalStorage(
+    PROJECT_PICKER_LIST_HEIGHT_KEY,
+    PROJECT_PICKER_LIST_DEFAULT_HEIGHT,
+    Schema.Number,
+  );
+  const resizeProjectPickerList = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      const startY = event.clientY;
+      const startHeight = projectPickerListHeight;
+      const handle = event.currentTarget;
+      handle.setPointerCapture(event.pointerId);
+      const onMove = (move: PointerEvent) => {
+        const next = Math.round(startHeight + (move.clientY - startY));
+        setProjectPickerListHeight(
+          Math.min(PROJECT_PICKER_LIST_MAX_HEIGHT, Math.max(PROJECT_PICKER_LIST_MIN_HEIGHT, next)),
+        );
+      };
+      const onUp = () => {
+        handle.removeEventListener("pointermove", onMove);
+        handle.removeEventListener("pointerup", onUp);
+        handle.removeEventListener("pointercancel", onUp);
+      };
+      handle.addEventListener("pointermove", onMove);
+      handle.addEventListener("pointerup", onUp);
+      handle.addEventListener("pointercancel", onUp);
+    },
+    [projectPickerListHeight, setProjectPickerListHeight],
+  );
   const [settledShelfExpanded, setSettledShelfExpanded] = useLocalStorage(
     SETTLED_SHELF_EXPANDED_KEY,
     false,
@@ -4580,7 +4617,10 @@ export default function Sidebar() {
                       }
                     />
                     <ComboboxEmpty>No matching projects.</ComboboxEmpty>
-                    <ComboboxList>
+                    <ComboboxList
+                      style={{ height: `${projectPickerListHeight}px` }}
+                      className="overflow-y-auto"
+                    >
                       {(item: (typeof projectScopeItems)[number]) => {
                         const project = projectGroupByScopeKey.get(item.value) ?? null;
                         const slot = projectSlotNumber(projectSlots, item.value);
@@ -4645,6 +4685,18 @@ export default function Sidebar() {
                         );
                       }}
                     </ComboboxList>
+                    <div
+                      role="separator"
+                      aria-orientation="horizontal"
+                      aria-label="Resize project list"
+                      className="flex h-2 shrink-0 cursor-ns-resize items-center justify-center border-t border-border/60 hover:bg-accent/60"
+                      onPointerDown={resizeProjectPickerList}
+                      onDoubleClick={() =>
+                        setProjectPickerListHeight(PROJECT_PICKER_LIST_DEFAULT_HEIGHT)
+                      }
+                    >
+                      <span aria-hidden className="h-0.5 w-8 rounded-full bg-border" />
+                    </div>
                     {projectAssignHintLabel ? (
                       <p className="border-t px-3 py-2 text-xs text-muted-foreground">
                         Hover a project and press {projectAssignHintLabel} to assign slot 1.

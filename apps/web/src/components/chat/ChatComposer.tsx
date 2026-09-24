@@ -4832,12 +4832,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   );
   const canTrackComposerScrollGesture =
     routeKind === "server" && activeThreadId !== null && !isMobileViewport;
-  const canScrollCollapseComposer =
-    canTrackComposerScrollGesture &&
-    settings.composerCollapseOnScroll &&
-    !hasMultilinePrompt &&
-    !composerHasExpandedChrome &&
-    !showInlineTasksBadge;
+  // The composer keeps one fixed height in this fork: a scroll gesture never
+  // rests it. The prompt already sits at one line, so the shrink only moved
+  // the prompt under the caret. Upstream's gesture code stays in place, always
+  // ineligible, so a sync does not have to reconstruct it.
+  const canScrollCollapseComposer = canTrackComposerScrollGesture && false;
   // Scrolling only has something to collapse while the composer is expanded,
   // focused or not, so the wheel handler keys off the resting state rather
   // than editor focus.

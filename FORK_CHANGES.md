@@ -4,6 +4,30 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## A fixed, one-line composer on upstream's prompt box
+
+- The prompt starts one line tall (`min-h-[1lh]` instead of upstream's `min-h-19.5`) and grows
+  with its text. Upstream's composer is otherwise untouched.
+- A timeline scroll never rests the composer: `canScrollCollapseComposer` is always false, so the
+  height stays put. Upstream's gesture code and the Settings switch stay in place, always
+  ineligible, so the next sync has nothing to reconstruct.
+- Sources: `apps/web/src/components/ComposerPromptEditorTiptap.tsx`,
+  `apps/web/src/components/chat/ChatComposer.tsx`.
+
+## The app's own context menu everywhere
+
+- `localApi.contextMenu.show` always renders the in-app menu, on desktop too. The native Electron
+  menu is the operating system's look and drops the icons and section headers the items carry.
+  `close` dismisses that menu on every surface.
+- Source: `apps/web/src/localApi.ts`.
+
+## The sidebar project picker keeps the height you drag it to
+
+- The project list has a grip along its bottom edge. Dragging resizes it between 120px and 720px,
+  a double click returns it to 288px, and the height is remembered per browser or desktop install
+  under `t3code:sidebar:project-picker-height`.
+- Source: `apps/web/src/components/Sidebar.tsx`.
+
 ## Upstream sync, September 24: the composer returns to upstream
 
 - Merged 111 upstream commits through `f26ee083fe`. The previous fork revision is retained as
