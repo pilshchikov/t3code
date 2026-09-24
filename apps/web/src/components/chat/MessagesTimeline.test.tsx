@@ -421,6 +421,7 @@ describe("MessagesTimeline", () => {
             isExistingThread: true,
             isMobileViewport: false,
             isScrollCollapsed: composer.isComposerScrollCollapsed,
+            timelineOverflows: true,
             hasExpandedChrome: false,
             hasMultilinePrompt: false,
           });
@@ -1319,7 +1320,7 @@ describe("MessagesTimeline", () => {
       />,
     );
 
-    expect(markup).toContain('aria-label="Copy link"');
+    expect(markup).toContain('aria-label="Copy message"');
     expect(markup).toContain('data-user-message-collapsed="true"');
     expect(markup).toContain('data-user-message-footer="true"');
   });

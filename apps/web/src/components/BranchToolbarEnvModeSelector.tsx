@@ -14,6 +14,7 @@ import {
   type EnvMode,
 } from "./BranchToolbar.logic";
 import { useComposerMenuProps } from "./chat/composerEventScope";
+import { PreviousWorktreeItemContent } from "./PreviousWorktreeItemContent";
 import {
   Select,
   SelectGroup,
@@ -39,6 +40,7 @@ interface BranchToolbarEnvModeSelectorProps {
   compact?: boolean;
   onEnvModeChange: (mode: EnvMode) => void;
   previousWorktreeLabel?: string | null;
+  previousWorktreeBranch?: string | null;
   onUsePreviousWorktree?: () => void;
 }
 
@@ -50,6 +52,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
   compact = false,
   onEnvModeChange,
   previousWorktreeLabel,
+  previousWorktreeBranch = null,
   onUsePreviousWorktree,
   multiworkTarget,
 }: BranchToolbarEnvModeSelectorProps) {
@@ -183,10 +186,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
           </SelectItem>
           {showPreviousWorktree && previousWorktreeLabel ? (
             <SelectItem value={PREVIOUS_WORKTREE_SELECT_VALUE}>
-              <span className="inline-flex items-center gap-1.5">
-                <HistoryIcon className="size-3" />
-                {previousWorktreeLabel}
-              </span>
+              <PreviousWorktreeItemContent branch={previousWorktreeBranch} />
             </SelectItem>
           ) : null}
           <SelectItem value="multiwork">

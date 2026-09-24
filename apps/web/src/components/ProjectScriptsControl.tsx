@@ -94,8 +94,6 @@ export default function ProjectScriptsControl({
       ),
     [fileScripts, scripts],
   );
-  const dropdownItemClassName =
-    "data-highlighted:bg-transparent data-highlighted:text-foreground hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground data-highlighted:hover:bg-accent data-highlighted:hover:text-accent-foreground data-highlighted:focus-visible:bg-accent data-highlighted:focus-visible:text-accent-foreground";
 
   const openAddDialog = () => {
     setActionsMenuOpen(false);
@@ -145,7 +143,6 @@ export default function ProjectScriptsControl({
           {importableScripts.map((fileScript) => (
             <MenuItem
               key={`${fileScript.name} ${fileScript.command}`}
-              className={dropdownItemClassName}
               onClick={() => void importFileScript(fileScript)}
             >
               <ScriptIcon icon={fileScript.icon ?? "play"} className="size-4" />
@@ -196,53 +193,51 @@ export default function ProjectScriptsControl({
           <MenuItem
             density={presentation === "menu" ? "touch" : "default"}
             key={script.id}
-            className={`group ${dropdownItemClassName}`}
+            className="group"
             onClick={() => onRunScript(script)}
           >
             <ScriptIcon icon={script.icon} className="size-4" />
-            <MenuItemLabel className="truncate">
+            <MenuItemLabel>
               {script.runOnWorktreeCreate ? `${script.name} (setup)` : script.name}
             </MenuItemLabel>
             <span className="relative ms-auto flex h-6 min-w-6 items-center justify-end">
-              {shortcutLabel && (
-                <MenuShortcut
-                  className={
-                    presentation === "menu"
-                      ? "ms-0 mr-7"
-                      : "ms-0 transition-opacity group-hover:opacity-0 group-focus-visible:opacity-0"
-                  }
-                >
-                  {shortcutLabel}
-                </MenuShortcut>
-              )}
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                className={`absolute right-0 top-1/2 size-6 -translate-y-1/2 ${presentation === "menu" ? "" : "opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto group-focus-visible:opacity-100 group-focus-visible:pointer-events-auto"}`}
-                aria-label={`Edit ${script.name}`}
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  openEditDialog(script);
-                }}
+              {shortcutLabel &&
+                (presentation === "menu" ? (
+                  <MenuShortcut className="ms-0 mr-7">{shortcutLabel}</MenuShortcut>
+                ) : (
+                  // The shortcut yields its slot to the edit button on hover.
+                  <span className="transition-opacity group-hover:opacity-0 group-focus-visible:opacity-0">
+                    <MenuShortcut className="ms-0">{shortcutLabel}</MenuShortcut>
+                  </span>
+                ))}
+              <span
+                className={`absolute right-0 top-1/2 flex -translate-y-1/2 ${presentation === "menu" ? "" : "opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto group-focus-visible:opacity-100 group-focus-visible:pointer-events-auto"}`}
               >
-                <SettingsIcon className="size-3.5" />
-              </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  className="size-6"
+                  aria-label={`Edit ${script.name}`}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    openEditDialog(script);
+                  }}
+                >
+                  <SettingsIcon className="size-3.5" />
+                </Button>
+              </span>
             </span>
           </MenuItem>
         );
       })}
       {importMenuItems}
-      <MenuItem
-        density={presentation === "menu" ? "touch" : "default"}
-        className={dropdownItemClassName}
-        onClick={openAddDialog}
-      >
+      <MenuItem density={presentation === "menu" ? "touch" : "default"} onClick={openAddDialog}>
         <PlusIcon className="size-4" />
         <MenuItemLabel>Add action</MenuItemLabel>
       </MenuItem>
@@ -278,18 +273,14 @@ export default function ProjectScriptsControl({
                   commandForProjectScript(script.id),
                 );
                 return (
-                  <MenuItem
-                    key={`edit-${script.id}`}
-                    className={dropdownItemClassName}
-                    onClick={() => openEditDialog(script)}
-                  >
+                  <MenuItem key={`edit-${script.id}`} onClick={() => openEditDialog(script)}>
                     <SettingsIcon className="size-4" />
                     <span className="truncate">Edit {script.name}</span>
                     {shortcutLabel && <MenuShortcut>{shortcutLabel}</MenuShortcut>}
                   </MenuItem>
                 );
               })}
-              <MenuItem className={dropdownItemClassName} onClick={openAddDialog}>
+              <MenuItem onClick={openAddDialog}>
                 <PlusIcon className="size-4" />
                 Add action
               </MenuItem>

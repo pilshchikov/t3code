@@ -363,6 +363,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["composer rich text tiptap bold italic markdown styled wysiwyg"],
   },
   {
+    id: "composer-collapse",
+    title: "Collapse composer on scroll",
+    to: "/settings/general",
+    searchTerms: ["composer rest resting scroll wheel conversation timeline shrink minimize"],
+  },
+  {
     id: "send-shortcut",
     title: "Send shortcut",
     to: "/settings/general",
@@ -405,6 +411,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
     scope: "project-defaults",
     searchTerms: ["default workspace mode draft local worktree"],
+  },
+  {
+    id: "worktree-submodules",
+    title: "Submodules",
+    to: "/settings/general",
+    scope: "project-defaults",
+    searchTerms: ["git submodule init recursive top-level none worktree t3.json"],
   },
   {
     id: "start-from-origin",

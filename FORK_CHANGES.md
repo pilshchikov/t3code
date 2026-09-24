@@ -4,7 +4,35 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
-## Claude Opus 5.5 in the bundled model manifest
+## Upstream sync, September 24: the composer returns to upstream
+
+- Merged 111 upstream commits through `f26ee083fe`. The previous fork revision is retained as
+  `backup/pre-upstream-sync-20260924` at `a1a19ca69e`.
+- The prompt box is upstream's again, by request. `ChatComposer`, both prompt editors, the banner
+  stack, the stash badge and menu, the tasks badge, the command menu, the footer layout, the
+  focus and multiline hooks, and `composerScrollGesture.ts` are taken from upstream as-is. The
+  fork's compact layout, pen placeholder, one-line minimum height, inline stash chip, tasks
+  drawer, and the removal of scroll resting are all gone.
+- Scrolling a conversation rests the composer again, on by default, with upstream's
+  **Collapse composer on scroll** switch back in Settings → General. `timelineOverflows` is
+  passed to the composer again, and the composer's banner items keep the fork's `urgent`
+  ordering flag through a local type in `ChatView.tsx`.
+- Kept around the prompt box: the multi-directory workspace chips and the multiwork picker in
+  `BranchToolbar*`, the fork's glass composer shell, and the project memory and script controls.
+- Upstream now ships Claude Opus 5.5 in its own manifest with the same slug, badge, profile and
+  minimum CLI version, so the fork's entry is dropped in favor of theirs. Upstream keeps Opus 5
+  out of `currentModels`, which is their call, not a fork change.
+- `mod+[` and `mod+]` stay on the fork's editor history. Upstream bound them to its new
+  `navigation.back` and `navigation.forward`; those commands remain rebindable, without a
+  default chord.
+- Upstream's new `shadcn/no-restyle`, `no-arbitrary-values`, `no-raw-colors` and
+  `require-static-classes` rules report as warnings for `apps/web/src/**` in this fork. The
+  fork's own panels predate them and produce about 210 findings; leaving them as errors would
+  bury the 15 that were already failing.
+- Validation: typecheck passes for every package. Web (5,540), mobile (1,711), desktop,
+  contracts, shared and client-runtime tests pass.
+
+## Claude Opus 5.5 in the bundled model manifest (superseded by upstream, September 24)
 
 - `claude-opus-5-5` is a current Claude model with a `new` badge, ahead of Claude Opus 5, which
   stays current rather than moving to legacy. Claude Code 2.1.280 is the minimum version: its
@@ -16,7 +44,7 @@ fork-specific behavior so future upstream syncs are easier to review.
   file is what the app actually reads. Upstream has not added the model yet.
 - Source: `apps/server/src/provider/model-manifest.json`.
 
-## The desktop composer never rests on a timeline scroll
+## The desktop composer never rests on a timeline scroll (reverted, September 24)
 
 - Scrolling a conversation no longer shrinks the prompt. The wheel and scroll-key gestures, their
   eligibility tracking, and `composerScrollGesture.ts` are removed, so nothing can set the
@@ -31,7 +59,7 @@ fork-specific behavior so future upstream syncs are easier to review.
   `apps/web/src/components/ChatView.tsx`, `apps/web/src/components/settings/SettingsPanels.tsx`,
   `packages/contracts/src/settings.ts`.
 
-## Composer text stability
+## Composer text stability (reverted, September 24)
 
 - Compact and expanded desktop composer layouts keep the same prompt line height and top inset;
   only the space beneath the prompt contracts. The prompt follows the surface resize without a

@@ -6,7 +6,9 @@ function measure(input: { width: number; height: number; resting?: boolean; hidd
   const editor = { clientWidth: input.hidden ? 0 : input.resting ? 400 : 500 };
   const body = { clientWidth: 532, querySelector: () => editor };
   vi.stubGlobal("getComputedStyle", (element: unknown) =>
-    element === body ? { paddingLeft: "16px", paddingRight: "16px" } : { lineHeight: "22.75px" },
+    element === body
+      ? { paddingLeft: "16px", paddingRight: "16px" }
+      : { lineHeight: input.resting ? "32px" : "22.75px" },
   );
   vi.stubGlobal("document", {
     createRange: () => ({
@@ -29,11 +31,11 @@ describe("composer prompt line measurement", () => {
   });
 
   it("recognizes a long restored draft while the resting row is unwrapped", () => {
-    expect(measure({ width: 700, height: 22.75, resting: true })).toBe(true);
+    expect(measure({ width: 700, height: 32, resting: true })).toBe(true);
   });
 
   it("uses the expanded width so inline actions cannot cause a collapse loop", () => {
-    expect(measure({ width: 450, height: 22.75, resting: true })).toBe(false);
+    expect(measure({ width: 450, height: 32, resting: true })).toBe(false);
     expect(measure({ width: 500, height: 22.75 })).toBe(false);
   });
 

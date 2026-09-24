@@ -14,7 +14,7 @@ import {
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { SidebarMenuButton } from "../ui/sidebar";
+import { SidebarInput, SidebarMenuButton } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 export interface SidebarThreadHeaderProps {

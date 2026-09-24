@@ -78,12 +78,6 @@ describe("shouldUseCompactComposerPrimaryActions", () => {
 });
 
 describe("resolveComposerTimelineInset", () => {
-  it("reserves only the compact footer when opening a fork-sized resting composer", () => {
-    expect(
-      resolveComposerTimelineInset({ currentInset: 0, overlayHeight: 42, isResting: true }),
-    ).toBe(82);
-  });
-
   it("follows the expanded overlay height", () => {
     expect(
       resolveComposerTimelineInset({ currentInset: 160, overlayHeight: 140, isResting: false }),
@@ -110,6 +104,7 @@ describe("shouldUseRestingComposerLayout", () => {
     isScrollCollapsed: true,
     hasExpandedChrome: false,
     hasMultilinePrompt: false,
+    timelineOverflows: true,
   };
 
   it("uses the resting layout after a timeline scroll", () => {
@@ -118,6 +113,10 @@ describe("shouldUseRestingComposerLayout", () => {
 
   it("keeps the composer expanded until the timeline is scrolled", () => {
     expect(shouldUseRestingComposerLayout({ ...resting, isScrollCollapsed: false })).toBe(false);
+  });
+
+  it("keeps the composer expanded while the timeline fits above it", () => {
+    expect(shouldUseRestingComposerLayout({ ...resting, timelineOverflows: false })).toBe(false);
   });
 
   it("keeps new-thread composers expanded", () => {

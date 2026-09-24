@@ -32,7 +32,12 @@ const EMPTY_PROJECT_FILE_WATCH_ATOM = Atom.make(
 const EMPTY_PROJECT_ENTRIES_WATCH_ATOM = Atom.make(
   AsyncResult.initial<ProjectEntriesChangedEvent, never>(false),
 ).pipe(Atom.withLabel("project-entries-watch:empty"));
-function optimisticFileAtom(environmentId: EnvironmentId, cwd: string, relativePath: string) {
+/** A pending in-app write to the file, overlaying the query until confirmed. */
+export function optimisticFileAtom(
+  environmentId: EnvironmentId,
+  cwd: string,
+  relativePath: string,
+) {
   return projectEnvironment.optimisticFile({ environmentId, cwd, relativePath });
 }
 

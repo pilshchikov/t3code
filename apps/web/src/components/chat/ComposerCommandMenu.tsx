@@ -25,6 +25,7 @@ import { cn } from "~/lib/utils";
 import { Badge } from "../ui/badge";
 import { Command, CommandGroup, CommandItem, CommandList } from "../ui/command";
 import { PierreEntryIcon } from "./PierreEntryIcon";
+import { ComposerBanner } from "./ComposerBanner";
 import { resolvePullRequestState } from "../pullRequest/pullRequestPresentation";
 
 export type ComposerCommandItem =
@@ -97,9 +98,9 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
         );
       }}
     >
-      <div
+      <ComposerBanner.Surface
         ref={listRef}
-        className="chat-composer-drawer-surface chat-composer-drawer-attached relative w-full overflow-hidden **:data-[slot=scroll-area-scrollbar]:data-[orientation=vertical]:my-4"
+        className="flex min-h-0 w-full flex-col overflow-hidden pb-(--chat-composer-attachment-overlap) **:data-[slot=scroll-area-scrollbar]:data-[orientation=vertical]:my-4"
         data-composer-command-drawer="true"
       >
         {props.items.length > 0 ? (
@@ -136,7 +137,7 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
             </p>
           </div>
         )}
-      </div>
+      </ComposerBanner.Surface>
     </Command>
   );
 });
@@ -160,10 +161,7 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
     <CommandItem
       value={props.item.id}
       data-composer-item-id={props.item.id}
-      className={cn(
-        "cursor-pointer select-none gap-3 rounded-lg px-3 py-2! hover:bg-transparent hover:text-inherit data-highlighted:bg-transparent data-highlighted:text-inherit",
-        props.isActive && "bg-accent! text-accent-foreground!",
-      )}
+      active={props.isActive}
       onMouseMove={() => {
         if (!props.isActive) props.onHighlight(props.item.id);
       }}
@@ -199,7 +197,7 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
             props.item.label
           )}
         </span>
-        <span className="min-w-0 max-w-[48ch] flex-1 truncate text-right text-secondary-label text-xs">
+        <span className="min-w-0 max-w-[48ch] flex-1 truncate text-left text-secondary-label text-xs">
           {props.item.description}
         </span>
         {skillSourceKind ? (
@@ -235,8 +233,7 @@ function SkillSourceBadge(props: { kind: ProviderSkillSourceKind; showSkillSuffi
   const Icon = SKILL_SOURCE_ICON_BY_KIND[props.kind];
   return (
     <Badge className="ms-auto" variant="secondary">
-      <Icon aria-hidden="true" className="text-current text-icon-muted" />
-      <span className="sr-only">{SKILL_SOURCE_LABEL_BY_KIND[props.kind]} skill</span>
+      <Icon aria-hidden="true" className="text-current" />
       {SKILL_SOURCE_LABEL_BY_KIND[props.kind]}
       {props.showSkillSuffix ? " Skill" : null}
     </Badge>
