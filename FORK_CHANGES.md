@@ -35,9 +35,10 @@ fork-specific behavior so future upstream syncs are easier to review.
 
 ## The sidebar project picker keeps the height you drag it to
 
-- The project list has a grip along its bottom edge. Dragging resizes it between 120px and 720px,
-  a double click returns it to 288px, and the height is remembered per browser or desktop install
-  under `t3code:sidebar:project-picker-height`.
+- The grip sits on the popup's bottom edge, under the slot hint. Dragging it resizes the whole
+  popup between 120px and 720px of list, since upstream's 23rem popup cap is lifted to the space
+  the positioner reports. A double click returns it to 288px, and the height is remembered per
+  browser or desktop install under `t3code:sidebar:project-picker-height`.
 - Source: `apps/web/src/components/Sidebar.tsx`.
 
 ## Upstream sync, September 24: the composer returns to upstream

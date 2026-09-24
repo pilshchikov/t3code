@@ -4586,7 +4586,9 @@ export default function Sidebar() {
                   </ComboboxTrigger>
                   <ComboboxPopup
                     align="start"
-                    className="w-[var(--anchor-width)] max-w-[var(--available-width)] overflow-hidden"
+                    /* The dragged list height sizes the whole popup, so its own
+                       cap gives way to the space the positioner reports. */
+                    className="w-[var(--anchor-width)] max-w-[var(--available-width)] overflow-hidden [&_[data-slot=combobox-popup]]:max-h-[var(--available-height)]"
                   >
                     <ComboboxSearchInput
                       aria-label="Search projects"
@@ -4685,6 +4687,11 @@ export default function Sidebar() {
                         );
                       }}
                     </ComboboxList>
+                    {projectAssignHintLabel ? (
+                      <p className="border-t px-3 py-2 text-xs text-muted-foreground">
+                        Hover a project and press {projectAssignHintLabel} to assign slot 1.
+                      </p>
+                    ) : null}
                     <div
                       role="separator"
                       aria-orientation="horizontal"
@@ -4697,11 +4704,6 @@ export default function Sidebar() {
                     >
                       <span aria-hidden className="h-0.5 w-8 rounded-full bg-border" />
                     </div>
-                    {projectAssignHintLabel ? (
-                      <p className="border-t px-3 py-2 text-xs text-muted-foreground">
-                        Hover a project and press {projectAssignHintLabel} to assign slot 1.
-                      </p>
-                    ) : null}
                   </ComboboxPopup>
                 </Combobox>
               }
