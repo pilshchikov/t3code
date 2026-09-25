@@ -1,11 +1,12 @@
 import { memo, type PointerEventHandler } from "react";
 import { ChevronDownIcon, ChevronLeftIcon } from "lucide-react";
-import { useEnvironmentIdentificationMode } from "~/hooks/useSettings";
+import { useClientSettings, useEnvironmentIdentificationMode } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import { StageBackdropButtonArt, useSidebarStageBackdropVariant } from "../SidebarStageBackdrop";
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
+import { ComposerActionOrb } from "./ComposerActionOrb";
 import { composerFloatingLayerProps } from "./composerEventScope";
 
 interface PendingActionState {
@@ -82,6 +83,9 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     ? { onPointerDown: preventPointerFocus }
     : undefined;
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
+  const orbStyle = useClientSettings((settings) => settings.composerActionStyle) === "orb";
+  const orbSendColor = useClientSettings((settings) => settings.composerOrbSendColor);
+  const orbStopColor = useClientSettings((settings) => settings.composerOrbStopColor);
   const isSendDisabled = sendDisabledReason !== null;
   const stageBackdropVariant = useSidebarStageBackdropVariant(
     environmentIdentificationMode === "artwork",
@@ -91,7 +95,10 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     <button
       type="button"
       className={cn(
-        "flex cursor-pointer items-center justify-center rounded-full bg-destructive/90 text-white shadow-xs shadow-destructive/24 inset-shadow-2xs inset-shadow-white/16 transition-all duration-150 hover:bg-destructive hover:scale-105 active:inset-shadow-black/8 active:shadow-none",
+        "flex cursor-pointer items-center justify-center rounded-full text-white transition-all duration-150 hover:scale-105",
+        orbStyle
+          ? "relative isolate overflow-hidden bg-[#0c0913]"
+          : "bg-destructive/90 shadow-xs shadow-destructive/24 inset-shadow-2xs inset-shadow-white/16 hover:bg-destructive active:inset-shadow-black/8 active:shadow-none",
         insidePendingAction
           ? "size-8 sm:size-7"
           : hasSendableContent
@@ -102,6 +109,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       onClick={onInterrupt}
       aria-label="Stop generation"
     >
+      {orbStyle ? <ComposerActionOrb color={orbStopColor} /> : null}
       <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
         <rect x="2" y="2" width="8" height="8" rx="1.5" />
       </svg>
@@ -215,10 +223,14 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     <button
       type="submit"
       className={cn(
-        "relative isolate flex h-9 w-9 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 enabled:cursor-pointer enabled:inset-shadow-2xs enabled:inset-shadow-white/16 hover:scale-105 active:inset-shadow-black/8 active:shadow-none disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none disabled:hover:scale-100 sm:h-8 sm:w-8",
-        stageBackdropVariant
-          ? "bg-transparent text-white enabled:shadow-black/24 enabled:hover:brightness-110"
-          : "bg-message-action text-message-action-foreground enabled:shadow-message-action/24 hover:bg-message-action-hover",
+        "relative isolate flex h-9 w-9 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 enabled:cursor-pointer hover:scale-105 disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none disabled:hover:scale-100 sm:h-8 sm:w-8",
+        !orbStyle &&
+          "enabled:inset-shadow-2xs enabled:inset-shadow-white/16 active:inset-shadow-black/8 active:shadow-none",
+        orbStyle
+          ? "bg-[#0c0913] text-white enabled:shadow-black/24"
+          : stageBackdropVariant
+            ? "bg-transparent text-white enabled:shadow-black/24 enabled:hover:brightness-110"
+            : "bg-message-action text-message-action-foreground enabled:shadow-message-action/24 hover:bg-message-action-hover",
       )}
       {...pointerFocusProps}
       disabled={
@@ -244,7 +256,8 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
                     : "Send message"
       }
     >
-      {stageBackdropVariant ? (
+      {orbStyle ? <ComposerActionOrb color={orbSendColor} /> : null}
+      {!orbStyle && stageBackdropVariant ? (
         <span className="absolute inset-0 -z-10" aria-hidden="true">
           <StageBackdropButtonArt variant={stageBackdropVariant} />
         </span>

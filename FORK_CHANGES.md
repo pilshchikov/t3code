@@ -4,6 +4,45 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Arcane orb composer buttons
+
+- The composer's send and stop buttons are lit glass spheres with plasma churning inside, drawn by
+  a small WebGL fragment shader (domain-warped fbm, two depth layers, fresnel rim and meniscus).
+  Appearance settings choose between `Arcane orb` and upstream's `Classic` button, and set the
+  accent each orb burns with from a preset row or a colour picker.
+- All mounted orbs share one animation loop capped at 30fps. The loop stops when the tab is hidden
+  and when no orb is on screen, `prefers-reduced-motion` holds the cloud still, and a canvas
+  without WebGL falls back to a static gradient.
+- Client settings: `composerActionStyle` (default `orb`), `composerOrbSendColor`,
+  `composerOrbStopColor`.
+- Sources: `apps/web/src/components/chat/composerOrbRenderer.ts`,
+  `apps/web/src/components/chat/ComposerActionOrb.tsx`,
+  `apps/web/src/components/chat/ComposerPrimaryActions.tsx`,
+  `apps/web/src/components/settings/SettingsPanels.tsx`, `packages/contracts/src/settings.ts`.
+
+## Settled threads drop their worktrees, and expire
+
+- `storageCleanup.worktreeOnSettle` (new, on by default here) removes a thread's worktree as soon
+  as the thread settles. The branch, the commits and the conversation stay; the checkout goes. The
+  sweep's existing guards still apply, so a dirty tree, an unexpected branch, ignored files beyond
+  `node_modules`, a live terminal or a running session all cancel the removal, and a thread that
+  leaves the settled list before the sweep finishes keeps its worktree.
+- `storageCleanup.settledThreadAfterDays` (new, 14 by default) deletes a settled thread and
+  everything stored for it that many days after it settled. Deletion goes through the ordinary
+  `thread.delete` command, so sessions stop and attachments are removed exactly as a manual delete
+  does. Pinned threads are never swept, nor are threads with a running turn, live session,
+  background work or a pending approval. Archived threads are swept like active ones.
+- Both rules are editable in Storage settings; the worktree rule is project-scopable like the other
+  worktree rules, and a project's rules stored before this release read the settle rule as off.
+- Sources: `packages/contracts/src/settings.ts`, `packages/shared/src/projectSettings.ts`,
+  `packages/shared/src/serverSettings.ts`, `apps/server/src/storageCleanup.ts`,
+  `apps/web/src/components/settings/StorageSettings.tsx`.
+- Validation: `ThreadSettlementReactor.test.ts` covers the settle rule (removed, and retained when
+  the rule is off) and the retention sweep (expired active and archived threads deleted; recent,
+  pinned and running threads kept). Every package typechecks; web, contracts and shared suites
+  pass. The storage-cleanup tests need a `TMPDIR` that is not a symlink on macOS
+  (`TMPDIR=/private/tmp/... vp test run`), otherwise they fail on `realPath` comparisons.
+
 ## Upstream sync, September 25
 
 - Merged 55 upstream commits through `7a12aff471`. The previous fork revision is retained as

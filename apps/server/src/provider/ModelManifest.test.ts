@@ -467,7 +467,6 @@ describe("ModelManifest service", () => {
           providerVersionChecksEnabled: true,
           prefix: "model-manifest-malformed-test",
           response: () => Response.json({ version: 999, nonsense: true }),
-          providerVersionChecksEnabled: true,
         }),
       ),
     ),

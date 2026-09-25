@@ -237,6 +237,19 @@ export function StorageSettingsPanel() {
               }
             />
             <SettingsRow
+              title="Delete worktrees when threads settle"
+              status={ruleStatus("worktreeOnSettle")}
+              description="Remove the worktree as soon as a thread settles. The branch and the conversation are kept; a worktree with local changes is not touched."
+              serverScoped={!isProjectScope}
+              control={
+                <Switch
+                  aria-label="Delete worktrees when threads settle"
+                  checked={settings.worktreeOnSettle}
+                  onCheckedChange={(worktreeOnSettle) => updateWorktree({ worktreeOnSettle })}
+                />
+              }
+            />
+            <SettingsRow
               title="Delete unchanged worktrees"
               status={ruleStatus("worktreeUnchanged")}
               description="Remove worktrees with no commits beyond the default branch."
@@ -252,6 +265,24 @@ export function StorageSettingsPanel() {
           </>
         )}
       </SettingsSection>
+
+      {!isProjectScope && (
+        <SettingsSection id="storage-threads" title="Settled threads">
+          <SettingsRow
+            title="Delete settled threads"
+            status={ruleStatus("settledThreadAfterDays")}
+            description="Delete a settled thread, and everything stored for it, this many days after it settled. Pinned threads are kept."
+            serverScoped
+            control={
+              <RetentionControl
+                label="Delete settled threads"
+                value={settings.settledThreadAfterDays}
+                onChange={(settledThreadAfterDays) => update({ settledThreadAfterDays })}
+              />
+            }
+          />
+        </SettingsSection>
+      )}
 
       {!isProjectScope && (
         <SettingsSection id="storage-artifacts" title="Artifacts and logs">

@@ -21,6 +21,10 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import {
+  type ComposerActionStyle,
+  DEFAULT_COMPOSER_ACTION_STYLE,
+  DEFAULT_COMPOSER_ORB_SEND_COLOR,
+  DEFAULT_COMPOSER_ORB_STOP_COLOR,
   DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
   DEFAULT_UNIFIED_SETTINGS,
   type DiffLayout,
@@ -1159,6 +1163,24 @@ const APP_ACCENT_SWATCHES = [
 
 const DEFAULT_APP_ACCENT_HEX = APP_ACCENT_SWATCHES[0].hex;
 
+const ORB_SEND_SWATCHES = [
+  { hex: "#8b5cff", label: "violet" },
+  { hex: "#6d5cff", label: "indigo" },
+  { hex: "#a855f7", label: "purple" },
+  { hex: "#5b7cff", label: "blue" },
+  { hex: "#22b8c8", label: "teal" },
+  { hex: "#e0761f", label: "amber" },
+] as const;
+
+const ORB_STOP_SWATCHES = [
+  { hex: "#e2323a", label: "crimson" },
+  { hex: "#c81e2a", label: "blood" },
+  { hex: "#ff5a45", label: "coral" },
+  { hex: "#f43f5e", label: "rose" },
+  { hex: "#d9463d", label: "ember" },
+  { hex: "#a21caf", label: "magenta" },
+] as const;
+
 export function AppearanceSettingsPanel() {
   const {
     appearanceMode,
@@ -1307,6 +1329,111 @@ export function AppearanceSettingsPanel() {
             </div>
           }
         />
+
+        <SettingsRow
+          {...searchableSetting("composer-action-style")}
+          description="Arcane orb replaces the send and stop buttons with a lit glass sphere whose plasma keeps moving while it is on screen."
+          resetAction={
+            settings.composerActionStyle !== DEFAULT_COMPOSER_ACTION_STYLE ? (
+              <SettingResetButton
+                label="composer buttons"
+                onClick={() =>
+                  updateSettings({ composerActionStyle: DEFAULT_COMPOSER_ACTION_STYLE })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={settings.composerActionStyle}
+              onValueChange={(value) =>
+                updateSettings({ composerActionStyle: value as ComposerActionStyle })
+              }
+            >
+              <SelectTrigger size="sm" className="w-full sm:w-40" aria-label="Composer buttons">
+                <SelectValue>
+                  {settings.composerActionStyle === "orb" ? "Arcane orb" : "Classic"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                <SelectItem hideIndicator value="orb">
+                  Arcane orb
+                </SelectItem>
+                <SelectItem hideIndicator value="classic">
+                  Classic
+                </SelectItem>
+              </SelectPopup>
+            </Select>
+          }
+        />
+
+        {settings.composerActionStyle === "orb" ? (
+          <SettingsRow
+            {...searchableSetting("composer-orb-colors")}
+            description="The accent each orb burns with: send on the left, stop on the right."
+            resetAction={
+              settings.composerOrbSendColor !== DEFAULT_COMPOSER_ORB_SEND_COLOR ||
+              settings.composerOrbStopColor !== DEFAULT_COMPOSER_ORB_STOP_COLOR ? (
+                <SettingResetButton
+                  label="orb colours"
+                  onClick={() =>
+                    updateSettings({
+                      composerOrbSendColor: DEFAULT_COMPOSER_ORB_SEND_COLOR,
+                      composerOrbStopColor: DEFAULT_COMPOSER_ORB_STOP_COLOR,
+                    })
+                  }
+                />
+              ) : null
+            }
+            control={
+              <div className="flex flex-col items-end gap-2">
+                {(
+                  [
+                    {
+                      key: "composerOrbSendColor",
+                      label: "Send",
+                      value: settings.composerOrbSendColor,
+                      swatches: ORB_SEND_SWATCHES,
+                    },
+                    {
+                      key: "composerOrbStopColor",
+                      label: "Stop",
+                      value: settings.composerOrbStopColor,
+                      swatches: ORB_STOP_SWATCHES,
+                    },
+                  ] as const
+                ).map((row) => (
+                  <div key={row.key} className="flex flex-wrap items-center justify-end gap-1.5">
+                    <span className="me-1 text-xs text-secondary-label">{row.label}</span>
+                    {row.swatches.map((swatch) => (
+                      <button
+                        key={swatch.hex}
+                        type="button"
+                        aria-label={`${row.label} orb ${swatch.label}`}
+                        aria-pressed={row.value === swatch.hex}
+                        className={cn(
+                          "size-5 cursor-pointer rounded-full border transition-transform",
+                          row.value === swatch.hex
+                            ? "scale-110 border-foreground"
+                            : "border-border/70 hover:scale-110",
+                        )}
+                        style={{ backgroundColor: swatch.hex }}
+                        onClick={() => updateSettings({ [row.key]: swatch.hex })}
+                      />
+                    ))}
+                    <input
+                      type="color"
+                      className="size-5 cursor-pointer rounded-full border border-border/70 bg-transparent p-0"
+                      value={row.value}
+                      aria-label={`Custom ${row.label.toLowerCase()} orb colour`}
+                      onChange={(event) => updateSettings({ [row.key]: event.target.value })}
+                    />
+                  </div>
+                ))}
+              </div>
+            }
+          />
+        ) : null}
 
         {showEnvironmentIdentification ? (
           <SettingsRow

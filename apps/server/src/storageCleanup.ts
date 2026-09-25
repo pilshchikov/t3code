@@ -1,3 +1,4 @@
+import { CommandId } from "@t3tools/contracts";
 import type {
   OrchestrationThreadShell,
   ProjectId,
@@ -50,7 +51,8 @@ const worktreeCleanupEnabled = (rules: WorktreeCleanupRules) =>
   rules.worktreeAfterDays !== null ||
   rules.worktreeOnMerge ||
   rules.worktreeOnDelete ||
-  rules.worktreeUnchanged;
+  rules.worktreeUnchanged ||
+  rules.worktreeOnSettle;
 
 function anyWorktreePolicy(
   settings: ServerSettings,
@@ -83,6 +85,21 @@ function storageCleanupThreadIdle(thread: OrchestrationThreadShell, now: number)
   return (
     thread.branch !== null &&
     thread.worktreePath !== null &&
+    (thread.session === null || thread.session.status === "stopped") &&
+    thread.latestTurn?.state !== "running" &&
+    thread.backgroundLiveness == null &&
+    !thread.hasPendingApprovals &&
+    !thread.hasPendingUserInput &&
+    !threadHasQueuedTurnStart(thread, DateTime.formatIso(DateTime.makeUnsafe(now)))
+  );
+}
+
+/**
+ * Stricter than {@link storageCleanupThreadIdle}: a thread about to be deleted
+ * need not have a worktree, but nothing may still be running in it.
+ */
+function storageCleanupThreadDormant(thread: OrchestrationThreadShell, now: number): boolean {
+  return (
     (thread.session === null || thread.session.status === "stopped") &&
     thread.latestTurn?.state !== "running" &&
     thread.backgroundLiveness == null &&
@@ -242,7 +259,9 @@ export const make = Effect.gen(function* () {
           !deleted &&
           settings.worktreeAfterDays !== null &&
           storageCleanupActivityAt(thread) < now - settings.worktreeAfterDays * DAY_MS;
-        let eligible = deleted || old;
+        const settled =
+          settings.worktreeOnSettle && "settledAt" in thread && thread.settledAt !== null;
+        let eligible = deleted || old || settled;
         if (!eligible && (settings.worktreeUnchanged || settings.worktreeOnMerge)) {
           const repositoryCwd = path.resolve(project.workspaceRoot);
           const remote = yield* git.resolvePrimaryRemoteName(repositoryCwd);
@@ -313,7 +332,8 @@ export const make = Effect.gen(function* () {
           latest.length !== 1 ||
           latest[0]!.id !== thread.id ||
           !storageCleanupThreadIdle(latest[0]!, now) ||
-          storageCleanupActivityAt(latest[0]!) !== storageCleanupActivityAt(thread)
+          storageCleanupActivityAt(latest[0]!) !== storageCleanupActivityAt(thread) ||
+          (settled && latest[0]!.settledAt === null)
         )
           return;
         const finalStatus = yield* git.statusDetailsLocal(worktreePath);
@@ -361,6 +381,42 @@ export const make = Effect.gen(function* () {
         (effect) => withWorkspaceLease(worktreePath, effect),
         Effect.catch((error) =>
           Effect.logDebug("storage cleanup skipped worktree", { threadId: thread.id, error }),
+        ),
+      );
+    }
+  });
+
+  /**
+   * Settled threads are finished work. After the retention window the whole
+   * thread goes, conversation and stored data with it, through the ordinary
+   * delete command so sessions stop and attachments are removed the same way a
+   * manual delete does.
+   */
+  const cleanSettledThreads = Effect.fn("StorageCleanup.cleanSettledThreads")(function* (
+    days: number | null,
+    now: number,
+  ) {
+    if (days === null) return;
+    const cutoff = now - days * DAY_MS;
+    const snapshot = yield* readThreads();
+    for (const thread of snapshot.threads) {
+      if (thread.settledAt === null || Date.parse(thread.settledAt) >= cutoff) continue;
+      // A pinned thread is one the user asked to keep in front of them.
+      if (thread.pinnedAt != null) continue;
+      if (!storageCleanupThreadDormant(thread, now)) continue;
+      yield* Effect.gen(function* () {
+        if ((yield* settingsService.getSettings).storageCleanup.settledThreadAfterDays !== days)
+          return;
+        yield* engine.dispatch({
+          type: "thread.delete",
+          // Deterministic, so a retry after a failed sweep dedupes on receipt.
+          commandId: CommandId.make(`server:storage-cleanup:settled:${thread.id}`),
+          threadId: thread.id,
+        });
+        yield* Effect.logInfo("storage cleanup deleted settled thread", { threadId: thread.id });
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.logWarning("settled thread cleanup failed", { threadId: thread.id, error }),
         ),
       );
     }
@@ -415,6 +471,9 @@ export const make = Effect.gen(function* () {
     );
     yield* cleanFiles(config.logsDir, settings.logsAfterDays, now, true).pipe(
       Effect.catch((error) => Effect.logWarning("rotated log cleanup failed", { error })),
+    );
+    yield* cleanSettledThreads(settings.settledThreadAfterDays, now).pipe(
+      Effect.catch((error) => Effect.logWarning("settled thread cleanup failed", { error })),
     );
   });
   const worker = yield* makeDrainableWorker(() =>

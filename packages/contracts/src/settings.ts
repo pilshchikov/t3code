@@ -181,6 +181,17 @@ const DEFAULT_TERMINAL_FONT_SIZE: TerminalFontSize = 12;
 export const EnvironmentIdentificationMode = Schema.Literals(["artwork", "pill", "none"]);
 export type EnvironmentIdentificationMode = typeof EnvironmentIdentificationMode.Type;
 export const DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE: EnvironmentIdentificationMode = "artwork";
+/**
+ * How the composer's send and stop buttons are drawn. "orb" replaces the flat
+ * pill with a lit glass sphere whose plasma churns while the button is on
+ * screen; "classic" is upstream's button.
+ */
+export const ComposerActionStyle = Schema.Literals(["classic", "orb"]);
+export type ComposerActionStyle = typeof ComposerActionStyle.Type;
+export const DEFAULT_COMPOSER_ACTION_STYLE: ComposerActionStyle = "orb";
+export const DEFAULT_COMPOSER_ORB_SEND_COLOR = "#8b5cff";
+export const DEFAULT_COMPOSER_ORB_STOP_COLOR = "#e2323a";
+
 export const EditorSyntaxTheme = Schema.Literals([
   "app",
   "jetbrains-dracula-night",
@@ -407,6 +418,15 @@ export const ClientSettingsSchema = Schema.Struct({
   diffLayout: DiffLayout.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_DIFF_LAYOUT))),
   environmentIdentificationMode: EnvironmentIdentificationMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE)),
+  ),
+  composerActionStyle: ComposerActionStyle.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_COMPOSER_ACTION_STYLE)),
+  ),
+  composerOrbSendColor: AccentColorPreference.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_COMPOSER_ORB_SEND_COLOR)),
+  ),
+  composerOrbStopColor: AccentColorPreference.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_COMPOSER_ORB_STOP_COLOR)),
   ),
   glassOpacity: GlassOpacity.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_GLASS_OPACITY)),
@@ -1034,6 +1054,8 @@ export type BackgroundActivitySettings = typeof BackgroundActivitySettings.Type;
 export const ResponseStreamingMode = Schema.Literals(["turn", "paragraph", "token"]);
 export type ResponseStreamingMode = typeof ResponseStreamingMode.Type;
 
+export const DEFAULT_SETTLED_THREAD_RETENTION_DAYS = 14;
+
 const StorageRetentionDays = Schema.NullOr(
   Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3650 })),
 );
@@ -1043,6 +1065,8 @@ export const WorktreeCleanupRules = Schema.Struct({
   worktreeOnMerge: Schema.Boolean,
   worktreeOnDelete: Schema.Boolean,
   worktreeUnchanged: Schema.Boolean,
+  /** Rules stored before this rule existed keep their worktrees on settle. */
+  worktreeOnSettle: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
 });
 export type WorktreeCleanupRules = typeof WorktreeCleanupRules.Type;
 
@@ -1130,6 +1154,20 @@ export const StorageCleanupSettings = Schema.Struct({
   worktreeOnMerge: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   worktreeOnDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   worktreeUnchanged: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /**
+   * Remove a thread's worktree once the thread settles. A settled thread is
+   * finished work, and this fork keeps the conversation without keeping the
+   * checkout. The sweep's own guards still apply: a dirty tree, an unexpected
+   * branch, ignored files or a live terminal all cancel the removal.
+   */
+  worktreeOnSettle: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  /**
+   * Delete a settled thread, and everything stored for it, this many days
+   * after it settled. Null keeps settled threads forever.
+   */
+  settledThreadAfterDays: StorageRetentionDays.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_SETTLED_THREAD_RETENTION_DAYS)),
+  ),
   browserArtifactsAfterDays: StorageRetentionDays.pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
@@ -1516,6 +1554,7 @@ export const ServerSettingsPatch = Schema.Struct({
             worktreeOnMerge: Schema.optionalKey(Schema.Boolean),
             worktreeOnDelete: Schema.optionalKey(Schema.Boolean),
             worktreeUnchanged: Schema.optionalKey(Schema.Boolean),
+            worktreeOnSettle: Schema.optionalKey(Schema.Boolean),
           }),
         }),
       ]),
@@ -1527,6 +1566,8 @@ export const ServerSettingsPatch = Schema.Struct({
       worktreeOnMerge: Schema.optionalKey(Schema.Boolean),
       worktreeOnDelete: Schema.optionalKey(Schema.Boolean),
       worktreeUnchanged: Schema.optionalKey(Schema.Boolean),
+      worktreeOnSettle: Schema.optionalKey(Schema.Boolean),
+      settledThreadAfterDays: Schema.optionalKey(StorageRetentionDays),
       browserArtifactsAfterDays: Schema.optionalKey(StorageRetentionDays),
       logsAfterDays: Schema.optionalKey(StorageRetentionDays),
     }),
@@ -1655,6 +1696,9 @@ export const ClientSettingsPatch = Schema.Struct({
   diffIgnoreWhitespace: Schema.optionalKey(Schema.Boolean),
   diffLayout: Schema.optionalKey(DiffLayout),
   environmentIdentificationMode: Schema.optionalKey(EnvironmentIdentificationMode),
+  composerActionStyle: Schema.optionalKey(ComposerActionStyle),
+  composerOrbSendColor: Schema.optionalKey(AccentColorPreference),
+  composerOrbStopColor: Schema.optionalKey(AccentColorPreference),
   glassOpacity: Schema.optionalKey(GlassOpacity),
   accentColor: Schema.optionalKey(Schema.NullOr(AccentColorPreference)),
   fontSizeInterface: Schema.optionalKey(InterfaceFontSize),

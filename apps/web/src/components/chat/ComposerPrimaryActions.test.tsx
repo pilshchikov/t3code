@@ -5,10 +5,17 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 const stageArtworkState = vi.hoisted(() => ({
   mode: "none" as "artwork" | "none",
   variant: null as "nightly" | "dev" | null,
+  composerActionStyle: "classic" as "classic" | "orb",
 }));
 
 vi.mock("~/hooks/useSettings", () => ({
   useEnvironmentIdentificationMode: () => stageArtworkState.mode,
+  useClientSettings: (selector: (settings: Record<string, unknown>) => unknown) =>
+    selector({
+      composerActionStyle: stageArtworkState.composerActionStyle,
+      composerOrbSendColor: "#8b5cff",
+      composerOrbStopColor: "#e2323a",
+    }),
 }));
 vi.mock("../SidebarStageBackdrop", () => ({
   StageBackdropButtonArt: ({ variant }: { variant: string }) => `stage-${variant}`,

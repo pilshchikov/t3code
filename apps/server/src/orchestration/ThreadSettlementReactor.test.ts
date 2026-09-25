@@ -6,6 +6,7 @@ import {
   ProviderDriverKind,
   PullRequestOperationError,
   ThreadId,
+  TurnId,
   type OrchestrationCommand,
   type OrchestrationEvent,
   type OrchestrationProjectShell,
@@ -1485,6 +1486,100 @@ describe("storage cleanup", () => {
     }).pipe(Effect.scoped),
   );
 
+  it.effect("deletes settled threads once their retention window passes", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(Date.parse(NOW));
+      const deleted: string[] = [];
+      const swept = yield* Deferred.make<void>();
+      const settledAt = (iso: string) => ({ settledAt: iso, latestUserMessageAt: iso });
+      const settings = yield* ServerSettingsService.pipe(
+        Effect.provide(
+          ServerSettingsService.layerTest({
+            storageCleanup: {
+              worktreeAfterDays: null,
+              worktreeOnDelete: false,
+              worktreeOnMerge: false,
+              worktreeUnchanged: false,
+              worktreeOnSettle: false,
+              settledThreadAfterDays: 14,
+              browserArtifactsAfterDays: null,
+              logsAfterDays: null,
+            },
+          }),
+        ),
+      );
+      const cleanup = yield* StorageCleanup.make.pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(ServerSettingsService, settings),
+            Layer.mock(ProjectionSnapshotQuery)({
+              getDeletedWorktreeThreads: () => Effect.succeed([]),
+              getSnapshotSequence: () => Effect.succeed({ snapshotSequence: 1 }),
+              getShellSnapshot: () =>
+                Deferred.succeed(swept, undefined).pipe(
+                  Effect.as(
+                    makeSnapshot([
+                      makeThread("expired", settledAt("2026-08-01T00:00:00.000Z")),
+                      makeThread("recently-settled", settledAt("2026-08-26T00:00:00.000Z")),
+                      makeThread("pinned", {
+                        ...settledAt("2026-08-01T00:00:00.000Z"),
+                        pinnedAt: "2026-08-01T00:00:00.000Z",
+                      }),
+                      makeThread("running", {
+                        ...settledAt("2026-08-01T00:00:00.000Z"),
+                        latestTurn: {
+                          turnId: TurnId.make("turn-running"),
+                          state: "running",
+                          requestedAt: NOW,
+                          startedAt: NOW,
+                          completedAt: null,
+                        },
+                      }),
+                      makeThread("active"),
+                    ]),
+                  ),
+                ),
+              getArchivedShellSnapshot: () =>
+                Effect.succeed(
+                  makeSnapshot([
+                    makeThread("archived-expired", settledAt("2026-08-01T00:00:00.000Z")),
+                  ]),
+                ),
+            }),
+            Layer.mock(OrchestrationEngineService)({
+              subscribeDomainEvents: Effect.succeed(Stream.empty),
+              dispatch: (command) =>
+                Effect.sync(() => {
+                  assert.strictEqual(command.type, "thread.delete");
+                  deleted.push(command.type === "thread.delete" ? command.threadId : "");
+                  return { sequence: 1 };
+                }),
+            }),
+            Layer.mock(ThreadDeletionReactor)({ drainThrough: () => Effect.void }),
+            Layer.mock(ProviderService)({ listSessions: () => Effect.succeed([]) }),
+            Layer.mock(GitManager)({}),
+            Layer.mock(GitVcsDriver)({}),
+            Layer.mock(TerminalManager)({
+              subscribeMetadata: (listener) =>
+                listener({ type: "snapshot", terminals: [] }).pipe(Effect.as(() => {})),
+            }),
+          ),
+        ),
+      );
+      yield* cleanup.start();
+      yield* Deferred.await(swept);
+      yield* cleanup.drain;
+      assert.deepStrictEqual(deleted, ["expired", "archived-expired"]);
+    }).pipe(
+      Effect.provide(
+        ServerConfig.layerTest(process.cwd(), { prefix: "t3-settled-cleanup-" }).pipe(
+          Layer.provideMerge(NodeServices.layer),
+        ),
+      ),
+      Effect.scoped,
+    ),
+  );
+
   for (const protection of [
     "none",
     "dirty",
@@ -1523,6 +1618,8 @@ describe("storage cleanup", () => {
     "policy-extended",
     "files-disabled",
     "files-extended",
+    "settled",
+    "settled-off",
   ] as const) {
     it.effect(
       `retains protected worktrees (${protection}) and expires only old artifacts and rotated logs`,
@@ -1562,9 +1659,11 @@ describe("storage cleanup", () => {
           yield* fs.writeFileString(recentImage, "recent");
           const recent = DateTime.toDateUtc(DateTime.makeUnsafe(NOW));
           yield* fs.utimes(recentImage, recent, recent);
+          const settleRule = protection === "settled" || protection === "settled-off";
           const thread = makeThread("storage-thread", {
             branch: "feature",
             worktreePath,
+            ...(settleRule ? { settledAt: "2026-08-20T00:00:00.000Z" } : {}),
             latestUserMessageAt:
               protection === "recent" ? "2026-08-26T00:00:00.000Z" : "2026-08-01T00:00:00.000Z",
             ...(protection === "session"
@@ -1622,9 +1721,14 @@ describe("storage cleanup", () => {
                 },
                 storageCleanup: {
                   worktreeAfterDays:
-                    deleteRule || mergeRule || unchangedRule || protection === "project-custom"
+                    deleteRule ||
+                    mergeRule ||
+                    unchangedRule ||
+                    settleRule ||
+                    protection === "project-custom"
                       ? null
                       : 8,
+                  worktreeOnSettle: protection === "settled",
                   worktreeOnDelete: deleteRule && protection !== "deleted-project-custom",
                   worktreeOnMerge: mergeRule,
                   worktreeUnchanged: unchangedRule,
@@ -1938,6 +2042,7 @@ describe("storage cleanup", () => {
             protection === "files-disabled" ||
             protection === "files-extended" ||
             protection === "merged" ||
+            protection === "settled" ||
             protection === "unchanged" ||
             protection === "unchanged-two-worktrees";
           assert.strictEqual(yield* fs.exists(worktreePath), !removed);

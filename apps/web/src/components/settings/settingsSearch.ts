@@ -206,6 +206,18 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["transparent transparency solid menus dialogs composer"],
   },
   {
+    id: "composer-action-style",
+    title: "Composer buttons",
+    to: "/settings/appearance",
+    searchTerms: ["orb sphere send stop plasma arcane classic button style"],
+  },
+  {
+    id: "composer-orb-colors",
+    title: "Orb colours",
+    to: "/settings/appearance",
+    searchTerms: ["orb send stop accent colour color purple red"],
+  },
+  {
     id: "diff-color-scheme",
     title: "Diff colors",
     to: "/settings/appearance",

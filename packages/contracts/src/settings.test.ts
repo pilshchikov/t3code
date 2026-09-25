@@ -3,6 +3,7 @@ import * as Schema from "effect/Schema";
 
 import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 import {
+  DEFAULT_SETTLED_THREAD_RETENTION_DAYS,
   ClientSettingsSchema,
   ClientSettingsPatch,
   ClaudeSettings,
@@ -21,16 +22,33 @@ const encodeServerSettings = Schema.encodeSync(ServerSettings);
 const decodeClaudeSettings = Schema.decodeUnknownSync(ClaudeSettings);
 
 describe("storage cleanup settings", () => {
-  it("keeps cleanup disabled for existing installations", () => {
+  it("keeps upstream's cleanup rules off, and this fork's settle rules on", () => {
     expect(decodeServerSettings({}).worktreeCleanup).toBeNull();
     expect(decodeServerSettings({}).storageCleanup).toEqual({
       worktreeAfterDays: null,
       worktreeOnMerge: false,
       worktreeOnDelete: false,
       worktreeUnchanged: false,
+      worktreeOnSettle: true,
+      settledThreadAfterDays: DEFAULT_SETTLED_THREAD_RETENTION_DAYS,
       browserArtifactsAfterDays: null,
       logsAfterDays: null,
     });
+  });
+
+  it("keeps stored project rules without the settle rule", () => {
+    const stored = decodeServerSettings({
+      worktreeCleanup: {
+        mode: "custom",
+        rules: {
+          worktreeAfterDays: 3,
+          worktreeOnMerge: true,
+          worktreeOnDelete: false,
+          worktreeUnchanged: false,
+        },
+      },
+    }).worktreeCleanup;
+    expect(stored?.mode === "custom" ? stored.rules.worktreeOnSettle : null).toBe(false);
   });
 
   it("accepts eight-day retention and disabling one rule without resetting others", () => {
