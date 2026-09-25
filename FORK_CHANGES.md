@@ -4,6 +4,26 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Upstream sync, September 25
+
+- Merged 55 upstream commits through `7a12aff471`. The previous fork revision is retained as
+  `backup/pre-upstream-sync-20260925` at `c692e67b5d`.
+- Upstream's per-thread auto-settle lands whole: its menu items, its `setAutoSettle` action, and
+  its migration, which runs as 58 here because the fork already used 54 for usage history. The
+  fork's opt-in settlement mode still decides whether a settled thread leaves the inbox.
+- `BranchToolbar` takes upstream's required `envMode` instead of the fork's optional override.
+  Non-primary workspace rows pass their own root's default mode through the same prop, so the
+  multi-directory strip behaves as before.
+- Usage buckets carry the resolved transcript directory under both names: upstream's `sourcePath`
+  and the fork's `sourceId`, which its per-account rows read. Scanners that report a directory
+  without an account leave the fork's label and instance fields unset.
+- Attached composer banners inset from the composer's edge again. Upstream sets
+  `--chat-composer-drawer-inset` on its composer shell, which this fork replaces with its glass
+  host, so the variable was missing and the banner stretched to the full composer width with a
+  mismatched corner. The glass host now carries it.
+- Validation: typecheck passes for every package. Web (5,567), mobile, desktop, contracts, shared
+  and client-runtime tests pass.
+
 ## Usage limit trends read by day, with a crosshair
 
 - The time axis marks every local midnight with a rule and a date label, so days are

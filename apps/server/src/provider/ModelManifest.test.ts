@@ -376,6 +376,7 @@ describe("ModelManifest service", () => {
       Effect.scoped,
       Effect.provide(
         serviceLayers({
+          providerVersionChecksEnabled: true,
           prefix: "model-manifest-force-refresh-test",
           response: () => Response.json(fetchCount++ === 0 ? REMOTE_MANIFEST : updated),
         }),
@@ -398,6 +399,7 @@ describe("ModelManifest service", () => {
       Effect.scoped,
       Effect.provide(
         serviceLayers({
+          providerVersionChecksEnabled: true,
           prefix: "model-manifest-force-retry-test",
           response: () =>
             fetchCount++ === 1
@@ -421,6 +423,7 @@ describe("ModelManifest service", () => {
       Effect.scoped,
       Effect.provide(
         serviceLayers({
+          providerVersionChecksEnabled: true,
           prefix: "model-manifest-force-initial-retry-test",
           response: () =>
             fetchCount++ === 0
@@ -461,6 +464,7 @@ describe("ModelManifest service", () => {
       Effect.scoped,
       Effect.provide(
         serviceLayers({
+          providerVersionChecksEnabled: true,
           prefix: "model-manifest-malformed-test",
           response: () => Response.json({ version: 999, nonsense: true }),
           providerVersionChecksEnabled: true,
@@ -550,6 +554,7 @@ describe("ModelManifest service", () => {
       Effect.scoped,
       Effect.provide(
         serviceLayers({
+          providerVersionChecksEnabled: true,
           prefix: "model-manifest-newer-bundle-test",
           response: () => Response.json(REMOTE_MANIFEST),
         }),
@@ -610,6 +615,7 @@ it.effect("caches valid compatibility policies and keeps them after a malformed 
     Effect.scoped,
     Effect.provide(
       serviceLayers({
+        providerVersionChecksEnabled: true,
         prefix: "model-manifest-compatibility-test",
         response: () =>
           Response.json(

@@ -1448,7 +1448,7 @@ export default function ThreadTerminalDrawer({
             <TerminalActionButton
               className={`p-1 text-foreground/90 transition-colors ${
                 hasReachedSplitLimit
-                  ? "cursor-not-allowed opacity-45 hover:bg-transparent"
+                  ? "cursor-not-allowed opacity-64 hover:bg-transparent"
                   : "hover:bg-accent"
               }`}
               onClick={onSplitTerminalAction}
@@ -1460,7 +1460,7 @@ export default function ThreadTerminalDrawer({
             <TerminalActionButton
               className={`p-1 text-foreground/90 transition-colors ${
                 hasReachedSplitLimit
-                  ? "cursor-not-allowed opacity-45 hover:bg-transparent"
+                  ? "cursor-not-allowed opacity-64 hover:bg-transparent"
                   : "hover:bg-accent"
               }`}
               onClick={onSplitTerminalVerticalAction}
@@ -1593,7 +1593,7 @@ export default function ThreadTerminalDrawer({
                   <TerminalActionButton
                     className={`inline-flex h-full items-center px-1 text-foreground/90 transition-colors ${
                       hasReachedSplitLimit
-                        ? "cursor-not-allowed opacity-45 hover:bg-transparent"
+                        ? "cursor-not-allowed opacity-64 hover:bg-transparent"
                         : "hover:bg-accent/70"
                     }`}
                     onClick={onSplitTerminalAction}
@@ -1604,7 +1604,7 @@ export default function ThreadTerminalDrawer({
                   <TerminalActionButton
                     className={`inline-flex h-full items-center border-l border-border/70 px-1 text-foreground/90 transition-colors ${
                       hasReachedSplitLimit
-                        ? "cursor-not-allowed opacity-45 hover:bg-transparent"
+                        ? "cursor-not-allowed opacity-64 hover:bg-transparent"
                         : "hover:bg-accent/70"
                     }`}
                     onClick={onSplitTerminalVerticalAction}

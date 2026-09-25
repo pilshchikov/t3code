@@ -17,7 +17,7 @@ import {
   remainingPercent,
 } from "@t3tools/shared/usageLimits";
 import { GaugeIcon, TrendingDownIcon, TrendingUpIcon } from "lucide-react";
-import { Fragment, useState } from "react";
+import { Fragment, type ReactNode, useState } from "react";
 
 import { usePrimarySettings } from "../../hooks/useSettings";
 import { environmentPresentations } from "../../state/presentation";
@@ -323,9 +323,11 @@ export function ResetCredits({
 export function UsageLimitsSection({
   selectedEnvironmentIds,
   now,
+  cursorPrompt,
 }: {
   readonly selectedEnvironmentIds: ReadonlySet<EnvironmentId> | null;
   readonly now: number;
+  readonly cursorPrompt?: ReactNode;
 }) {
   const presentations = useAtomValue(environmentPresentations.presentationsAtom);
   const [view, setView] = useState<"current" | "trends">("current");
@@ -354,7 +356,7 @@ export function UsageLimitsSection({
         </Button>
       </div>
       {view === "current" ? (
-        <UsageLimitsPooled presentations={selected} now={now} />
+        <UsageLimitsPooled presentations={selected} now={now} cursorPrompt={cursorPrompt} />
       ) : (
         <UsageLimitTrends
           environments={[...selected].map(([environmentId, presentation]) => ({

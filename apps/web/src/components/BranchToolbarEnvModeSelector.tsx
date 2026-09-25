@@ -92,16 +92,15 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
         data-composer-context-control
       >
         {activeWorktreePath ? (
-          <>
-            <FolderGitIcon className="size-3" />
-            {resolveLockedWorkspaceLabel(activeWorktreePath)}
-          </>
+          <FolderGitIcon className="size-3" />
+        ) : effectiveEnvMode === "worktree" ? (
+          <FolderGit2Icon className="size-3" />
         ) : (
-          <>
-            <FolderIcon className="size-3" />
-            {resolveLockedWorkspaceLabel(activeWorktreePath)}
-          </>
+          <FolderIcon className="size-3" />
         )}
+        {forceNewWorktree
+          ? "Each model starts in its own worktree."
+          : resolveLockedWorkspaceLabel(activeWorktreePath, effectiveEnvMode)}
       </span>
     );
   }

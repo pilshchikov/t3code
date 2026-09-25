@@ -508,6 +508,7 @@ describe("ThreadSettlementReactor", () => {
             ...DEFAULT_SERVER_SETTINGS,
             sidebarAutoSettleAfterDays: null,
             sidebarAutoSettleOnMerge: true,
+            sidebarAutoSettleMode: "change-request",
           },
           branchPullRequest: () => Effect.succeed(makeBranchPullRequest("open")),
           pullRequestSummary: (input) =>
