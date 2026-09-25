@@ -1031,6 +1031,11 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     padding-bottom: var(--chat-composer-attachment-overlap);
   }
 
+  /* The stack is the nearest element that holds both the banner stack and the
+     composer. Upstream declares the inset on its composer shell, which sits
+     above both; this fork's shell is inside the composer, so a banner would
+     read 0 and stretch to the composer's full width. */
+  [data-chat-composer-stack="true"],
   [data-chat-composer-form="true"],
   .chat-composer-drawer-slot,
   .chat-composer-top-drawer {
@@ -1214,10 +1219,6 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   }
 
   .chat-composer-glass-host {
-    /* Upstream carries this on its composer shell, which this fork replaces with
-       the glass host. Attached banners read it to sit inside the composer's
-       width instead of matching it edge to edge. */
-    --chat-composer-drawer-inset: 1.375rem;
     box-shadow: 0 12px 28px -18px rgb(0 0 0 / 40%);
 
     @variant dark {

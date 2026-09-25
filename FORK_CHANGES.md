@@ -17,10 +17,11 @@ fork-specific behavior so future upstream syncs are easier to review.
 - Usage buckets carry the resolved transcript directory under both names: upstream's `sourcePath`
   and the fork's `sourceId`, which its per-account rows read. Scanners that report a directory
   without an account leave the fork's label and instance fields unset.
-- Attached composer banners inset from the composer's edge again. Upstream sets
-  `--chat-composer-drawer-inset` on its composer shell, which this fork replaces with its glass
-  host, so the variable was missing and the banner stretched to the full composer width with a
-  mismatched corner. The glass host now carries it.
+- Attached composer banners inset from the composer's edge again. Upstream declares
+  `--chat-composer-drawer-inset` on a shell that wraps both the banner stack and the composer;
+  this fork's glass host sits inside the composer, so a banner read no value, its width calc was
+  invalid, and it stretched to the composer's full width with a mismatched corner. The variable
+  now sits on `[data-chat-composer-stack="true"]`, the nearest element holding both.
 - Validation: typecheck passes for every package. Web (5,567), mobile, desktop, contracts, shared
   and client-runtime tests pass.
 
