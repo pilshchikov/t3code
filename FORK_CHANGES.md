@@ -25,6 +25,10 @@ fork-specific behavior so future upstream syncs are easier to review.
   thread sidebar does instead of the raised card colour, and both columns are one black. Each icon
   sits in a fixed, clipped box so a wide favicon cannot spill onto its neighbours, and the focus
   ring is inset rather than offset, which in a column this narrow would draw on the next project.
+- The rail holds the manual project order whatever the sidebar's sort is set to, so an icon keeps
+  its place instead of moving as work happens, and dragging one reorders it. Reordering writes the
+  same `projectOrder` the sidebar's manual sort reads, through `reorderProjects`. A 4px drag
+  threshold keeps a plain click selecting the project.
 - Clicking a project sets the sidebar's project scope, the same state the picker writes, so the
   rail and the picker can never disagree. From a settings route it also returns to the thread list.
 - The sidebar's logical-project chain (order, grouping, sort) moved into `useSidebarProjectGroups`

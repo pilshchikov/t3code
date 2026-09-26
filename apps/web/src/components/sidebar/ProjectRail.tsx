@@ -1,11 +1,24 @@
-import { memo, useMemo } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { useLocation, useRouter } from "@tanstack/react-router";
+import {
+  closestCenter,
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { LayersIcon, PanelLeftCloseIcon, PlusIcon } from "lucide-react";
 
 import { openCommandPalette } from "../../commandPaletteBus";
 import { useIsMobile } from "../../hooks/useMediaQuery";
 import { useSidebarProjectScope } from "../../hooks/useSidebarProjectScope";
+import type { SidebarProjectSnapshot } from "../../sidebarProjectGrouping";
 import { useThreadShells } from "../../state/entities";
+import { useUiStateStore } from "../../uiStateStore";
 import { cn } from "~/lib/utils";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -23,21 +36,90 @@ const ITEM_CLASS =
 /** Every project icon gets the same box, whatever shape its favicon is. */
 const ICON_BOX_CLASS = "grid size-4.5 place-items-center overflow-hidden";
 
+function ProjectRailItem({
+  group,
+  isCurrent,
+  isLive,
+  onSelect,
+}: {
+  group: SidebarProjectSnapshot;
+  isCurrent: boolean;
+  isLive: boolean;
+  onSelect: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: group.projectKey,
+  });
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            ref={setNodeRef}
+            type="button"
+            aria-current={isCurrent}
+            aria-label={group.displayName}
+            className={cn(ITEM_CLASS, isDragging && "z-20 opacity-80")}
+            style={{ transform: CSS.Translate.toString(transform), transition }}
+            onClick={onSelect}
+            {...attributes}
+            {...listeners}
+          >
+            <span className={ICON_BOX_CLASS}>
+              <ProjectFavicon project={group} className="size-full" />
+            </span>
+            {isLive ? (
+              <span
+                aria-hidden="true"
+                className="absolute end-0.5 top-0.5 size-1.5 rounded-full bg-primary"
+              />
+            ) : null}
+          </button>
+        }
+      />
+      <TooltipPopup side="right">{group.displayName}</TooltipPopup>
+    </Tooltip>
+  );
+}
+
 /**
  * A column of project icons left of the sidebar, so switching project is one
  * click instead of opening the picker first. Desktop only: the mobile sidebar
  * is a sheet with no room beside it.
+ *
+ * The rail always uses the manual project order, whatever the sidebar's sort is
+ * set to, and drag reorders it. An icon that moves on its own is a target that
+ * cannot be learned.
  */
 export const ProjectRail = memo(function ProjectRail() {
   const isMobile = useIsMobile();
   const [visible, setVisible] = useProjectRailVisible();
-  const projectGroups = useSidebarProjectGroups();
+  const { projectGroups, orderedProjectKeys } = useSidebarProjectGroups({ sortOrder: "manual" });
   const threads = useThreadShells();
   const [projectScopeKey, setProjectScopeKey] = useSidebarProjectScope();
+  const reorderProjects = useUiStateStore((store) => store.reorderProjects);
   const router = useRouter();
   const pathname = useLocation({ select: (location) => location.pathname });
 
   const liveProjectKeys = useMemo(() => projectKeysWithLiveWork(threads), [threads]);
+  // A short threshold, so a click still selects rather than starting a drag.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const dragged = projectGroups.find((group) => group.projectKey === active.id);
+      const target = projectGroups.find((group) => group.projectKey === over.id);
+      if (!dragged || !target) return;
+      reorderProjects(
+        orderedProjectKeys,
+        dragged.memberProjects.map((member) => member.physicalProjectKey),
+        target.memberProjects.map((member) => member.physicalProjectKey),
+      );
+    },
+    [orderedProjectKeys, projectGroups, reorderProjects],
+  );
 
   if (isMobile || !visible || projectGroups.length === 0) return null;
 
@@ -75,37 +157,29 @@ export const ProjectRail = memo(function ProjectRail() {
       </Tooltip>
 
       <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-y-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {projectGroups.map((group) => {
-          const isLive = group.memberProjects.some((member) =>
-            liveProjectKeys.has(`${member.environmentId}:${member.id}`),
-          );
-          return (
-            <Tooltip key={group.projectKey}>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-current={projectScopeKey === group.projectKey}
-                    aria-label={group.displayName}
-                    className={ITEM_CLASS}
-                    onClick={() => selectScope(group.projectKey)}
-                  >
-                    <span className={ICON_BOX_CLASS}>
-                      <ProjectFavicon project={group} className="size-full" />
-                    </span>
-                    {isLive ? (
-                      <span
-                        aria-hidden="true"
-                        className="absolute end-0.5 top-0.5 size-1.5 rounded-full bg-primary"
-                      />
-                    ) : null}
-                  </button>
-                }
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          modifiers={[restrictToVerticalAxis, restrictToFirstScrollableAncestor]}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={projectGroups.map((group) => group.projectKey)}
+            strategy={verticalListSortingStrategy}
+          >
+            {projectGroups.map((group) => (
+              <ProjectRailItem
+                key={group.projectKey}
+                group={group}
+                isCurrent={projectScopeKey === group.projectKey}
+                isLive={group.memberProjects.some((member) =>
+                  liveProjectKeys.has(`${member.environmentId}:${member.id}`),
+                )}
+                onSelect={() => selectScope(group.projectKey)}
               />
-              <TooltipPopup side="right">{group.displayName}</TooltipPopup>
-            </Tooltip>
-          );
-        })}
+            ))}
+          </SortableContext>
+        </DndContext>
       </div>
 
       <div className="flex shrink-0 flex-col items-center gap-1 pt-1.5">

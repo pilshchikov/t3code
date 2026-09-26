@@ -2313,7 +2313,7 @@ export default function Sidebar() {
       ),
     [environments],
   );
-  const projectGroups = useSidebarProjectGroups();
+  const { projectGroups } = useSidebarProjectGroups();
   const serverConfigs = useAtomValue(environmentServerConfigsAtom);
   // Threads on non-primary environments (T3 Connect, hosted) resolve their
   // provider entry from their own environment's config: default instance ids
