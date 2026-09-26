@@ -13,6 +13,8 @@ import { projectKeysWithLiveWork } from "./projectRail.logic";
 import { useSidebarProjectGroups } from "./useSidebarProjectGroups";
 import { useProjectRailVisible } from "./projectRailVisibility";
 
+export const PROJECT_RAIL_WIDTH = "3.25rem";
+
 const ITEM_CLASS =
   "relative grid size-8.5 shrink-0 cursor-pointer place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-accent aria-[current=true]:border-border aria-[current=true]:bg-muted";
 
@@ -43,7 +45,7 @@ export const ProjectRail = memo(function ProjectRail() {
     <nav
       aria-label="Projects"
       data-project-rail=""
-      className="flex h-full w-13 shrink-0 flex-col items-center gap-0.5 border-e border-border bg-sidebar py-2"
+      className="flex h-svh w-13 shrink-0 flex-col items-center gap-0.5 border-e border-border bg-sidebar pt-[var(--project-rail-top-inset,0.5rem)] pb-2"
     >
       <Tooltip>
         <TooltipTrigger

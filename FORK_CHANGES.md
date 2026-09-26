@@ -11,9 +11,16 @@ fork-specific behavior so future upstream syncs are easier to review.
   same component the sidebar rows use), with the project name in a tooltip, the current scope
   marked, an "All projects" entry at the top, and a dot on any project with a running turn, a
   pending approval or a question waiting.
-- The rail hides from its own button and comes back from a `PanelLeftOpen` button that appears in
-  the sidebar header while it is hidden. The choice is remembered per install under
+- The rail and the thread sidebar are shown together. Upstream's sidebar panel is `position: fixed`
+  at `left: 0`, which covered the rail until the sidebar was collapsed; the panel now starts at
+  `--project-rail-width`, which the layout sets to the rail's width while it is visible and to zero
+  otherwise. Collapsing the sidebar still hides only the sidebar, leaving the rail in place.
+- The rail has its own show and hide buttons, separate from the sidebar toggle: hide from the
+  button at the rail's foot, show from a `PanelLeftOpen` button that appears in the sidebar header
+  while it is hidden. The choice is remembered per install under
   `t3code:sidebar:project-rail-visible`. Never rendered on mobile, where the sidebar is a sheet.
+- On macOS the traffic lights sit over the rail's top, so the first project starts below them
+  (`--project-rail-top-inset`, set only for a non-fullscreen desktop window).
 - Clicking a project sets the sidebar's project scope, the same state the picker writes, so the
   rail and the picker can never disagree. From a settings route it also returns to the thread list.
 - The sidebar's logical-project chain (order, grouping, sort) moved into `useSidebarProjectGroups`
