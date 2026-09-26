@@ -21,6 +21,10 @@ fork-specific behavior so future upstream syncs are easier to review.
   `t3code:sidebar:project-rail-visible`. Never rendered on mobile, where the sidebar is a sheet.
 - On macOS the traffic lights sit over the rail's top, so the first project starts below them
   (`--project-rail-top-inset`, set only for a non-fullscreen desktop window).
+- The rail carries `data-app-sidebar`, so it reads the same surface, row and border tokens the
+  thread sidebar does instead of the raised card colour, and both columns are one black. Each icon
+  sits in a fixed, clipped box so a wide favicon cannot spill onto its neighbours, and the focus
+  ring is inset rather than offset, which in a column this narrow would draw on the next project.
 - Clicking a project sets the sidebar's project scope, the same state the picker writes, so the
   rail and the picker can never disagree. From a settings route it also returns to the thread list.
 - The sidebar's logical-project chain (order, grouping, sort) moved into `useSidebarProjectGroups`

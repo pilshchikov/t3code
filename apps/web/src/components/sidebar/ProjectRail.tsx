@@ -16,7 +16,12 @@ import { useProjectRailVisible } from "./projectRailVisibility";
 export const PROJECT_RAIL_WIDTH = "3.25rem";
 
 const ITEM_CLASS =
-  "relative grid size-8.5 shrink-0 cursor-pointer place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-accent aria-[current=true]:border-border aria-[current=true]:bg-muted";
+  // The focus ring is inset: an offset ring would sit on the neighbouring
+  // project in a column this narrow.
+  "relative grid size-9 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-md border border-transparent text-sidebar-muted-foreground outline-none transition-colors hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset aria-[current=true]:border-sidebar-border aria-[current=true]:bg-sidebar-row-selected";
+
+/** Every project icon gets the same box, whatever shape its favicon is. */
+const ICON_BOX_CLASS = "grid size-4.5 place-items-center overflow-hidden";
 
 /**
  * A column of project icons left of the sidebar, so switching project is one
@@ -45,7 +50,10 @@ export const ProjectRail = memo(function ProjectRail() {
     <nav
       aria-label="Projects"
       data-project-rail=""
-      className="flex h-svh w-13 shrink-0 flex-col items-center gap-0.5 border-e border-border bg-sidebar pt-[var(--project-rail-top-inset,0.5rem)] pb-2"
+      // Same token overrides the thread sidebar uses, so both columns share one
+      // surface instead of the rail landing on the raised card colour.
+      data-app-sidebar=""
+      className="flex h-svh w-13 shrink-0 flex-col items-center gap-1 border-e border-sidebar-border bg-sidebar pt-[var(--project-rail-top-inset,0.5rem)] pb-2 text-sidebar-foreground"
     >
       <Tooltip>
         <TooltipTrigger
@@ -57,14 +65,16 @@ export const ProjectRail = memo(function ProjectRail() {
               className={ITEM_CLASS}
               onClick={() => selectScope(null)}
             >
-              <LayersIcon className="size-4.5" />
+              <span className={ICON_BOX_CLASS}>
+                <LayersIcon className="size-4.5" />
+              </span>
             </button>
           }
         />
         <TooltipPopup side="right">All projects</TooltipPopup>
       </Tooltip>
 
-      <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-y-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {projectGroups.map((group) => {
           const isLive = group.memberProjects.some((member) =>
             liveProjectKeys.has(`${member.environmentId}:${member.id}`),
@@ -80,11 +90,13 @@ export const ProjectRail = memo(function ProjectRail() {
                     className={ITEM_CLASS}
                     onClick={() => selectScope(group.projectKey)}
                   >
-                    <ProjectFavicon project={group} className="size-4.5" />
+                    <span className={ICON_BOX_CLASS}>
+                      <ProjectFavicon project={group} className="size-full" />
+                    </span>
                     {isLive ? (
                       <span
                         aria-hidden="true"
-                        className="absolute end-1 top-1 size-1.5 rounded-full bg-primary"
+                        className="absolute end-0.5 top-0.5 size-1.5 rounded-full bg-primary"
                       />
                     ) : null}
                   </button>
@@ -96,17 +108,19 @@ export const ProjectRail = memo(function ProjectRail() {
         })}
       </div>
 
-      <div className="flex shrink-0 flex-col items-center gap-0.5 pt-1.5">
+      <div className="flex shrink-0 flex-col items-center gap-1 pt-1.5">
         <Tooltip>
           <TooltipTrigger
             render={
               <button
                 type="button"
                 aria-label="Add project"
-                className={cn(ITEM_CLASS, "hover:text-foreground")}
+                className={cn(ITEM_CLASS, "hover:text-sidebar-foreground")}
                 onClick={() => openCommandPalette({ open: "add-project" })}
               >
-                <PlusIcon className="size-4.5" />
+                <span className={ICON_BOX_CLASS}>
+                  <PlusIcon className="size-4.5" />
+                </span>
               </button>
             }
           />
@@ -118,10 +132,12 @@ export const ProjectRail = memo(function ProjectRail() {
               <button
                 type="button"
                 aria-label="Hide project rail"
-                className={cn(ITEM_CLASS, "hover:text-foreground")}
+                className={cn(ITEM_CLASS, "hover:text-sidebar-foreground")}
                 onClick={() => setVisible(false)}
               >
-                <PanelLeftCloseIcon className="size-4.5" />
+                <span className={ICON_BOX_CLASS}>
+                  <PanelLeftCloseIcon className="size-4.5" />
+                </span>
               </button>
             }
           />
