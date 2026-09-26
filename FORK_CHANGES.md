@@ -4,6 +4,31 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Project rail beside the sidebar
+
+- A column of project icons sits left of the sidebar on desktop, so switching project is one click
+  instead of opening the picker first. Each icon is the project's own icon (`ProjectFavicon`, the
+  same component the sidebar rows use), with the project name in a tooltip, the current scope
+  marked, an "All projects" entry at the top, and a dot on any project with a running turn, a
+  pending approval or a question waiting.
+- The rail hides from its own button and comes back from a `PanelLeftOpen` button that appears in
+  the sidebar header while it is hidden. The choice is remembered per install under
+  `t3code:sidebar:project-rail-visible`. Never rendered on mobile, where the sidebar is a sheet.
+- Clicking a project sets the sidebar's project scope, the same state the picker writes, so the
+  rail and the picker can never disagree. From a settings route it also returns to the thread list.
+- The sidebar's logical-project chain (order, grouping, sort) moved into `useSidebarProjectGroups`
+  so the rail and the sidebar read one source instead of two copies.
+- The project icon picker's default grid grew from 24 to 98 icons; searching still reaches every
+  Lucide icon.
+- Sources: `apps/web/src/components/sidebar/ProjectRail.tsx`,
+  `apps/web/src/components/sidebar/projectRail.logic.ts`,
+  `apps/web/src/components/sidebar/useSidebarProjectGroups.ts`,
+  `apps/web/src/components/sidebar/projectRailVisibility.ts`,
+  `apps/web/src/components/sidebar/SidebarThreadHeader.tsx`,
+  `apps/web/src/components/AppSidebarLayout.tsx`, `apps/web/src/projectIconOptions.ts`.
+- Validation: web typechecks and the full web suite passes (5,569 tests), including a focused test
+  for which projects earn a dot.
+
 ## Arcane orb composer buttons
 
 - The composer's send and stop buttons are lit glass spheres with plasma churning inside, drawn by

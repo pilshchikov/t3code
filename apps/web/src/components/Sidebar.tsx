@@ -106,13 +106,11 @@ import { useOpenPrLink } from "../lib/openPullRequestLink";
 import { releaseComposerDraftUploads } from "../lib/composerDraftUploads";
 import { readLocalApi } from "../localApi";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
-import { getProjectOrderKey, selectProjectGroupingSettings } from "../logicalProject";
 import {
-  buildSidebarProjectSnapshots,
   projectGroupsSpanEnvironments,
   type SidebarProjectSnapshot,
 } from "../sidebarProjectGrouping";
-import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
+import { useUiStateStore } from "../uiStateStore";
 import {
   getThreadKeysToDeselectAfterDelete,
   useThreadSelectionStore,
@@ -175,7 +173,6 @@ import {
   resolveWorkingStartedAt,
   sidebarListItemId,
   sidebarMarkerId,
-  sortLogicalProjectsForSidebar,
   sortPinnedThreadsForSidebar,
   sortSettledThreadsForSidebar,
   sortThreadsForSidebar,
@@ -247,6 +244,8 @@ import {
 import { applySidebarThreadOrder, useSidebarThreadOrderStore } from "../sidebarThreadOrderStore";
 import { useSidebarOrderMigration } from "../hooks/useSidebarOrderMigration";
 import { useSidebarProjectScope } from "../hooks/useSidebarProjectScope";
+import { useProjectRailVisible } from "./sidebar/projectRailVisibility";
+import { useSidebarProjectGroups } from "./sidebar/useSidebarProjectGroups";
 import { projectSlotNumber, useProjectSlotStore } from "../projectSlotStore";
 import { Kbd } from "./ui/kbd";
 import {
@@ -2175,16 +2174,13 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
 
 export default function Sidebar() {
   const projects = useProjects();
-  const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
   const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const confirmThreadDelete = useClientSettings((s) => s.confirmThreadDelete);
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
-  const sidebarProjectSortOrder = useClientSettings((s) => s.sidebarProjectSortOrder);
   const timestampFormat = useClientSettings((s) => s.timestampFormat);
-  const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const {
     settleThread,
     unsettleThread,
@@ -2317,40 +2313,7 @@ export default function Sidebar() {
       ),
     [environments],
   );
-  const orderedProjects = useMemo(
-    () =>
-      orderItemsByPreferredIds({
-        items: projects,
-        preferredIds: projectOrder,
-        getId: getProjectOrderKey,
-        getPreferenceIds: (project) => [
-          getProjectOrderKey(project),
-          legacyProjectCwdPreferenceKey(project.workspaceRoot),
-        ],
-      }),
-    [projectOrder, projects],
-  );
-  const unsortedProjectGroups = useMemo(
-    () =>
-      buildSidebarProjectSnapshots({
-        projects: sidebarProjectSortOrder === "manual" ? orderedProjects : projects,
-        settings: projectGroupingSettings,
-        primaryEnvironmentId,
-        resolveEnvironmentLabel: (environmentId) => environmentLabelById.get(environmentId) ?? null,
-      }),
-    [
-      environmentLabelById,
-      orderedProjects,
-      primaryEnvironmentId,
-      projectGroupingSettings,
-      projects,
-      sidebarProjectSortOrder,
-    ],
-  );
-  const projectGroups = useMemo(
-    () => sortLogicalProjectsForSidebar(unsortedProjectGroups, threads, sidebarProjectSortOrder),
-    [sidebarProjectSortOrder, threads, unsortedProjectGroups],
-  );
+  const projectGroups = useSidebarProjectGroups();
   const serverConfigs = useAtomValue(environmentServerConfigsAtom);
   // Threads on non-primary environments (T3 Connect, hosted) resolve their
   // provider entry from their own environment's config: default instance ids
@@ -2393,6 +2356,7 @@ export default function Sidebar() {
   // Project scope: one menu above the list. Scoping filters the list without
   // making the header width depend on the number or length of project names.
   const [projectScopeKey, setProjectScopeKey] = useSidebarProjectScope();
+  const [projectRailVisible, setProjectRailVisible] = useProjectRailVisible();
   const projectAccentColorByKey = useAccentColorStore((state) => state.projectColors);
   const projectSlots = useProjectSlotStore((state) => state.slots);
   const projectAssignHintLabel = useMemo(
@@ -4563,6 +4527,9 @@ export default function Sidebar() {
           <SidebarGroup className="z-[1]">
             <SidebarThreadHeader
               hasProjects={projectGroups.length > 0}
+              onShowProjectRail={
+                !isMobile && !projectRailVisible ? () => setProjectRailVisible(true) : undefined
+              }
               projectScope={
                 <Combobox
                   items={projectScopeItems}

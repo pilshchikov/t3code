@@ -2,7 +2,7 @@
  * Search and thread actions sit above a full-width, labeled project picker.
  * The picker state lives with the sidebar's filtering logic.
  */
-import { FolderPlusIcon, SearchIcon, SquarePenIcon, XIcon } from "lucide-react";
+import { FolderPlusIcon, PanelLeftOpenIcon, SearchIcon, SquarePenIcon, XIcon } from "lucide-react";
 import {
   type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -22,6 +22,8 @@ export interface SidebarThreadHeaderProps {
   hasProjects: boolean;
   /** The project scope combobox, rendered in its own row below search. */
   projectScope: ReactNode;
+  /** Present only while the project rail is hidden, and never on mobile. */
+  onShowProjectRail?: (() => void) | undefined;
   onNewProject: () => void;
   /** Receives the click so Shift+click can skip the project picker. */
   onNewThread: (event: ReactMouseEvent) => void;
@@ -43,6 +45,7 @@ export interface SidebarThreadHeaderProps {
 export function SidebarThreadHeader({
   hasProjects,
   projectScope,
+  onShowProjectRail,
   onNewProject,
   onNewThread,
   newThreadDisabled,
@@ -113,6 +116,11 @@ export function SidebarThreadHeader({
           hover states, and a background well reads far louder on themed
           palettes than on the base light and dark ones. */}
         <div className="flex shrink-0 items-center">
+          {onShowProjectRail ? (
+            <SidebarHeaderIconButton label="Show project rail" onClick={onShowProjectRail}>
+              <PanelLeftOpenIcon />
+            </SidebarHeaderIconButton>
+          ) : null}
           {hasProjects ? (
             <SidebarHeaderIconButton label="New project" onClick={onNewProject}>
               <FolderPlusIcon />
