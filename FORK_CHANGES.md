@@ -90,9 +90,15 @@ fork-specific behavior so future upstream syncs are easier to review.
 ## Mobile composer placeholder
 
 - The web composer's normal prompt placeholder reads "Ask anything…" below the `sm`
-  breakpoint, including the desktop app at narrow widths. This avoids wrapping the desktop's
-  file, skill, and command hints over the composer controls.
-- Source: `apps/web/src/components/chat/ChatComposer.tsx`.
+  breakpoint, including new drafts before a provider session connects and the desktop app at
+  narrow widths. This avoids wrapping hints over the composer controls.
+- Mobile composer body and toolbar padding is reduced. The app root includes the top safe area
+  within its viewport height, and the sidebar layout subtracts that inset instead of extending
+  below the screen. Mobile browsers follow `visualViewport.height` while the keyboard opens;
+  keyboard-covered viewports omit the extra bottom safe-area spacer.
+- Sources: `apps/web/src/components/chat/ChatComposer.tsx`,
+  `apps/web/src/components/AppSidebarLayout.tsx`, `apps/web/src/components/ChatView.tsx`,
+  `apps/web/src/index.css`.
 - Validation: source review only; no tests or interactive client verification requested.
 
 ## Conversation position and live following
