@@ -76,7 +76,10 @@ function ProjectRailItem({
             <span className={ICON_BOX_CLASS}>
               <ProjectFavicon project={group} className="size-full" />
             </span>
-            <span aria-hidden="true" className="absolute end-0.5 top-0.5 flex gap-0.5">
+            <span
+              aria-hidden="true"
+              className="absolute end-0.5 top-1/2 flex -translate-y-1/2 flex-col gap-0.5"
+            >
               {status.running ? <span className="size-1.5 rounded-full bg-primary" /> : null}
               {status.completed ? <span className="size-1.5 rounded-full bg-success" /> : null}
               {status.input ? <span className="size-1.5 rounded-full bg-agent-input" /> : null}

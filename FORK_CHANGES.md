@@ -51,6 +51,7 @@ fork-specific behavior so future upstream syncs are easier to review.
   marked, and an "All projects" entry at the top. Independent dots show running work, green for
   unread completions, and purple for pending input or approval. All three can coexist across
   threads in a project; completion dots clear using the same visit history as thread rows.
+  Status dots stack vertically along the right side of each project icon.
 - The fixed sidebar toggle is offset by the rail width, including in fullscreen, so it no longer
   overlaps the "All projects" button.
 - The rail and the thread sidebar are shown together. Upstream's sidebar panel is `position: fixed`
