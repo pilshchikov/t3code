@@ -33,6 +33,7 @@ import {
   staticAndDevRouteLayer,
   browserApiCorsLayer,
   httpCompressionLayer,
+  untracedRequestsLayer,
 } from "./http.ts";
 import { guardHttpResponseWriteErrors } from "./httpResponseErrorGuard.ts";
 import { fixPath } from "./os-jank.ts";
@@ -122,9 +123,12 @@ import * as SourceControlRepositoryService from "./sourceControl/SourceControlRe
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
 import * as WorktreeSetupTracker from "./project/WorktreeSetupTracker.ts";
 import { ObservabilityLive } from "./observability/Layers/Observability.ts";
+import * as HeapSnapshot from "./observability/HeapSnapshot.ts";
+import * as EventLoopMonitor from "./observability/EventLoopMonitor.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import * as RemoteOpenTargets from "./environment/RemoteOpenTargets.ts";
 import { authHttpApiLayer, environmentAuthenticatedAuthLayer } from "./auth/http.ts";
+import * as ReplayMarkers from "./auth/replayMarkers.ts";
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
 import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
 import {
@@ -189,7 +193,8 @@ export const HTTP_ROUTER_CONFIG = {
 // those finalizers get a chance to run.
 const HTTP_PREEMPTIVE_SHUTDOWN_GRACE_MS = 0;
 const ResourceAttributionLayerLive = ResourceAttribution.layer;
-const ApplicationObservabilityLive = ObservabilityLive.pipe(
+const ApplicationObservabilityLive = EventLoopMonitor.layer.pipe(
+  Layer.provideMerge(ObservabilityLive),
   Layer.provideMerge(ResourceAttributionLayerLive),
 );
 
@@ -523,6 +528,7 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(UsageLimitHistoryCollector.layer),
   Layer.provideMerge(UsageLimitHistory.layer),
   Layer.provideMerge(AntigravityInstallationRefreshLive),
+  Layer.provideMerge(ReplayMarkers.layer),
   Layer.provideMerge(ProviderAuthServiceLive),
   // Core Services
   Layer.provideMerge(ServerSettingsLayerLive),
@@ -625,6 +631,8 @@ export const makeRoutesLayer = Layer.mergeAll(
     websocketRpcRouteLayer,
   ),
   McpHttpServer.layer.pipe(Layer.provide(McpSessionRegistry.layer)),
+  // Last, so no route layer can replace the server's one TracerDisabledWhen.
+  untracedRequestsLayer,
 ).pipe(
   Layer.provide(PersistenceLayerLive),
   // Both transports consume the same service instance, so caches single-flight across clients
@@ -983,6 +991,7 @@ export const makeServerLayer = Layer.unwrap(
       runtimeStateLayer.pipe(Layer.provide(launcherLayer)),
       tailscaleServeLayer,
       cloudDesiredLinkReconcileLayer,
+      HeapSnapshot.layer,
     );
 
     return serverApplicationLayer.pipe(

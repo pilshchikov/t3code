@@ -4,6 +4,27 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Upstream sync, September 28
+
+- Merged upstream `main` through `d2c9281b81` (83 commits), including Claude Sonnet 5.5,
+  queued sends for background threads, chat width settings, Bitbucket credential settings,
+  provider interruption fixes, and lower server/client memory and idle work.
+- Preserved the project rail, simultaneous status dots, conversation position recovery and
+  live following, orb composer controls, project slots, privacy defaults, and worktree cleanup.
+- Reconciled upstream Usage shortcuts with the fork's project and structure shortcuts. Usage
+  period keys win on the Usage page; the structure shortcut still works elsewhere. Settings
+  lists all Usage commands in a consistent order, including the fork's `usage.open` command.
+- Kept automatic settlement's exclusive modes and default **Never** while adopting upstream's
+  narrower database reads. Regression coverage compares full and unsettled reads under both
+  inactivity and change-request policies.
+- Accepted upstream's offline-server banner correction while retaining the fork's persistent
+  version-banner dismissal. Preserved local browser test dependencies alongside upstream jsdom.
+- Validation: focused web, provider, settlement, and projection tests plus web/server typechecks.
+  Storage cleanup tests use `TMPDIR=/private/tmp` on macOS so their fixtures are real paths,
+  matching the cleanup service's deliberate refusal to traverse symlinks.
+- The pre-sync fork is retained at `backup/pre-upstream-20260928`; the preceding UI fixes are
+  recorded separately in `01516b62ee`. The installed desktop app was not rebuilt or restarted.
+
 ## Project rail beside the sidebar
 
 - A column of project icons sits left of the sidebar on desktop, so switching project is one click

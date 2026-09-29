@@ -216,7 +216,11 @@ const makeTestRunner = (
   manifest: ModelManifest.ModelManifestData = {
     version: 1,
     currentModels: {},
-    compatibility: [{ driver: CODEX_DRIVER, t3CodeRange: ">=0.0.42", ranges: [] }],
+    compatibility: [CODEX_DRIVER, CURSOR_DRIVER, OPENCODE_DRIVER].map((driver) => ({
+      driver,
+      t3CodeRange: ">=0.0.42",
+      ranges: [],
+    })),
   },
 ) =>
   Effect.service(ProviderMaintenanceRunner.ProviderMaintenanceRunner).pipe(
@@ -633,7 +637,11 @@ describe("providerMaintenanceRunner", () => {
           installed: true,
           version: "0.1.0",
         });
-        const updater = yield* makeTestRunner(registry);
+        const updater = yield* makeTestRunner({
+          ...registry,
+          getProviderMaintenanceCapabilitiesForInstance: (_instanceId, provider) =>
+            Effect.succeed({ ...lifecycleFor(provider), latestVersion: "9.9.9" }),
+        });
 
         const result = yield* updater.updateProvider(CODEX_DRIVER);
 
