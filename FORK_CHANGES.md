@@ -4,6 +4,24 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Upstream sync, September 29
+
+- Merged upstream `main` through `5e83e99c95` (two commits), adding managed ChatGPT
+  authentication for Codex and updating the current-model manifest to `gpt-6.1-sol`.
+  Model choices and reasoning options still come from the account/provider catalog.
+- Preserved the project rail and simultaneous status dots, conversation position recovery and
+  live following, per-account usage/history collection, existing Codex home and shadow-home
+  setup, and the opt-in gate for provider/version network checks.
+- Combined upstream's Codex installation refresh with the fork's usage polling/history layers
+  in `apps/server/src/server.ts`; retained account display names in
+  `apps/server/src/usage/UsageService.ts` and chat controls in
+  `apps/web/src/components/ChatView.tsx`.
+- Updated multiwork test expectations to include first-send and setup activity events; enabled
+  the fork's explicit network-check opt-in in the new manifest freshness regression test.
+- Validation: web/server typechecks and focused web, provider, authentication, usage, manifest,
+  and server router tests. The pre-sync fork is retained at `backup/pre-upstream-20260929`.
+  The installed desktop app was not rebuilt or restarted.
+
 ## Upstream sync, September 28
 
 - Merged upstream `main` through `d2c9281b81` (83 commits), including Claude Sonnet 5.5,

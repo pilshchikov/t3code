@@ -140,6 +140,7 @@ import {
   AntigravityInstallation,
   AntigravityInstallationError,
 } from "./provider/AntigravityInstallation.ts";
+import { CodexInstallation } from "./provider/CodexInstallation.ts";
 import type { ProviderInstance } from "./provider/ProviderDriver.ts";
 import * as ProviderSessionDirectory from "./provider/Services/ProviderSessionDirectory.ts";
 import { ProviderAdapterRequestError } from "./provider/Errors.ts";
@@ -534,6 +535,7 @@ const buildAppUnderTest = (options?: {
     providerAuth?: Partial<ProviderAuthService["Service"]>;
     providerInstanceRegistry?: Partial<ProviderInstanceRegistry["Service"]>;
     antigravityInstallation?: Partial<AntigravityInstallation["Service"]>;
+    codexInstallation?: Partial<CodexInstallation["Service"]>;
     serverSettings?: Partial<ServerSettings.ServerSettingsService["Service"]>;
     externalLauncher?: Partial<ExternalLauncher.ExternalLauncher["Service"]>;
     vcsDriver?: Partial<VcsDriver.VcsDriver["Service"]>;
@@ -835,6 +837,10 @@ const buildAppUnderTest = (options?: {
             getInstance: () => Effect.undefined,
             listInstances: Effect.succeed([]),
             ...options?.layers?.providerInstanceRegistry,
+          }),
+          Layer.mock(CodexInstallation)({
+            managedDirectory: "unused-test-codex-runtime",
+            ...options?.layers?.codexInstallation,
           }),
           Layer.mock(AntigravityInstallation)({
             managedDirectory: "unused-test-antigravity-runtime",
@@ -11512,10 +11518,17 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         assert.equal(createWorktree.mock.calls.length, 0);
         assert.deepEqual(
           commands.map((command) => command.type),
-          ["thread.create", "thread.meta.update", "thread.turn.start"],
+          [
+            "thread.create",
+            "thread.message.user.append",
+            "thread.activity.append",
+            "thread.meta.update",
+            "thread.turn.start",
+            "thread.activity.append",
+          ],
         );
         assert.equal(
-          commands[1]?.type === "thread.meta.update" ? commands[1].worktreePath : null,
+          commands[3]?.type === "thread.meta.update" ? commands[3].worktreePath : null,
           "/tmp/multiwork-copy",
         );
       }).pipe(Effect.provide(NodeHttpServer.layerTest)),
