@@ -201,7 +201,11 @@ fork-specific behavior so future upstream syncs are easier to review.
 - `localApi.contextMenu.show` always renders the in-app menu, on desktop too. The native Electron
   menu is the operating system's look and drops the icons and section headers the items carry.
   `close` dismisses that menu on every surface.
-- Source: `apps/web/src/localApi.ts`.
+- Context menus use the visible viewport height rather than a fixed 24rem/70vh cap, so all
+  thread actions are visible together when they fit. Scrolling remains only for menus taller
+  than the available screen. Colour choices display a small square in the actual palette tone.
+- Sources: `apps/web/src/localApi.ts`, `apps/web/src/contextMenuFallback.ts`,
+  `packages/contracts/src/ipc.ts`.
 
 ## The sidebar project picker keeps the height you drag it to
 
@@ -1371,7 +1375,9 @@ false`) and fetches a patch only for the file on screen. `git diff --numstat -z`
 
 ## Thread and project accent colours
 
-- Right-clicking a thread offers a Colour submenu: ten muted tones or none. The colour enters the
+- Right-clicking a thread offers a Colour submenu: ten muted tones or none, with preview squares.
+  Both the main and legacy sidebars offer the same picker and render the saved thread accent.
+  The colour enters the
   card from the left as a gradient that gives out by 29% of the width, over a two-pixel rule on the
   leading edge. The tail fades to transparent rather than to a fixed dark, so the same colour reads
   correctly on either theme.

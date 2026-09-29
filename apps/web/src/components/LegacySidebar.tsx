@@ -1,3 +1,10 @@
+import { buildThreadColorMenuItem } from "./threadActionMenu.logic";
+import {
+  readThreadAccentColor,
+  setThreadAccentColor,
+  useAccentColorStore,
+} from "../accentColorStore";
+import { threadCardAccentStyle } from "../lib/accentColors";
 import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
 import { resolveThreadCurrentPullRequestLink } from "@t3tools/shared/threadPullRequests";
 import { Spinner } from "~/components/ui/spinner";
@@ -384,6 +391,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   } = props;
   const threadRef = scopeThreadRef(thread.environmentId, thread.id);
   const threadKey = scopedThreadKey(threadRef);
+  const threadAccentColor = useAccentColorStore((state) => state.threadColors[threadKey] ?? null);
   const [isFileDragOver, setIsFileDragOver] = useState(false);
   const fileDropHandlers = useMemo(
     () =>
@@ -717,6 +725,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         data-sidebar="menu-sub-button"
         data-size="sm"
         data-testid={`thread-row-${thread.id}`}
+        style={threadCardAccentStyle({ threadColor: threadAccentColor, projectColor: null })}
         className={cn(
           "relative isolate flex h-8 w-full min-w-0 cursor-pointer select-none items-center gap-2 overflow-hidden rounded-md px-2 text-left text-xs outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring group-data-[collapsible=icon]:hidden [&>span:last-child]:truncate [&>svg:not([class*='size-'])]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-muted-foreground",
           isActive
@@ -2253,6 +2262,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             : []),
           { id: "rename", label: "Rename thread" },
           { id: "mark-unread", label: "Mark unread" },
+          buildThreadColorMenuItem(readThreadAccentColor(threadKey)),
           { id: "copy-path", label: "Copy Path" },
           { id: "copy-thread-id", label: "Copy Thread ID" },
           { id: "project-settings", label: "Project settings" },
@@ -2260,6 +2270,12 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         ],
         position,
       );
+
+      if (clicked?.startsWith("color:")) {
+        const choice = clicked.slice("color:".length);
+        setThreadAccentColor(threadKey, choice === "none" ? null : choice);
+        return;
+      }
 
       if (clicked === "project-settings") {
         if (isMobile) setOpenMobile(false);

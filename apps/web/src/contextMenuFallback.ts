@@ -173,7 +173,7 @@ function clampMenuPosition(menu: HTMLDivElement, preferredLeft: number, preferre
   );
   const top = Math.min(
     Math.max(4, preferredTop),
-    Math.max(4, window.innerHeight - rect.height - 4),
+    Math.max(4, (window.visualViewport?.height ?? window.innerHeight) - rect.height - 4),
   );
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
@@ -303,10 +303,9 @@ export function showContextMenuFallback<T extends string>(
       menu.dataset.level = String(level);
 
       const inner = document.createElement("div");
-      inner.className =
-        "max-h-[min(24rem,70vh)] min-w-0 max-w-sm overflow-y-auto overflow-x-hidden p-1";
+      inner.className = "min-w-0 max-w-sm overflow-y-auto overflow-x-hidden p-1";
       inner.style.cssText =
-        "max-height:min(24rem,70vh);min-width:0;max-width:24rem;overflow-x:hidden;overflow-y:auto;padding:0.25rem;";
+        "max-height:calc(var(--app-viewport-height,100dvh) - 8px);min-width:0;max-width:24rem;overflow-x:hidden;overflow-y:auto;padding:0.25rem;";
 
       for (const item of entries) {
         if (item.separatorBefore === true && inner.children.length > 0) {
@@ -372,6 +371,15 @@ export function showContextMenuFallback<T extends string>(
           if (icon) {
             button.appendChild(icon);
           }
+        }
+
+        if (typeof item.colorSwatch === "string") {
+          const swatch = document.createElement("span");
+          swatch.setAttribute("aria-hidden", "true");
+          swatch.style.cssText =
+            "display:inline-block;width:0.75rem;height:0.75rem;flex-shrink:0;border-radius:0.2rem;border:1px solid var(--contrast-muted-foreground);";
+          swatch.style.backgroundColor = item.colorSwatch;
+          button.appendChild(swatch);
         }
 
         const label = document.createElement("span");

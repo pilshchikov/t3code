@@ -1,7 +1,7 @@
 import type { ContextMenuItem } from "@t3tools/contracts";
 import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled";
 
-import { ACCENT_COLOR_OPTIONS } from "~/lib/accentColors";
+import { ACCENT_COLOR_OPTIONS, resolveAccentHex } from "~/lib/accentColors";
 
 /**
  * Ids for the per-thread action menu. Snooze presets are dispatched as
@@ -169,21 +169,7 @@ export function buildThreadActionMenuItems(
           },
         ]
       : []),
-    {
-      id: "color" as const,
-      label: "Colour",
-      // A native menu draws labels, not swatches, so the current colour is marked with a check.
-      children: [
-        {
-          id: "color:none" as const,
-          label: `${state.accentColor === null ? "\u2713 " : ""}No colour`,
-        },
-        ...ACCENT_COLOR_OPTIONS.map((option) => ({
-          id: `color:${option.id}` as const,
-          label: `${state.accentColor === option.id ? "\u2713 " : ""}${option.label}`,
-        })),
-      ],
-    },
+    buildThreadColorMenuItem(state.accentColor),
     {
       id: "copy",
       label: "Copy",
@@ -217,4 +203,27 @@ export function buildThreadActionMenuItems(
       icon: "trash",
     },
   ];
+}
+
+/** Shared by the main and legacy sidebar menus. */
+export function buildThreadColorMenuItem(
+  accentColor: string | null,
+): ContextMenuItem<ThreadActionMenuId> {
+  return {
+    id: "color",
+    label: "Colour",
+    colorSwatch: resolveAccentHex(accentColor) ?? "transparent",
+    children: [
+      {
+        id: "color:none",
+        label: `${accentColor === null ? "\u2713 " : ""}No colour`,
+        colorSwatch: "transparent",
+      },
+      ...ACCENT_COLOR_OPTIONS.map((option) => ({
+        id: `color:${option.id}` as const,
+        label: `${accentColor === option.id ? "\u2713 " : ""}${option.label}`,
+        colorSwatch: option.hex,
+      })),
+    ],
+  };
 }
