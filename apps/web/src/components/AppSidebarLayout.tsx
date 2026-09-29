@@ -1,3 +1,4 @@
+import { installMobileViewport } from "../mobileViewport";
 import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import {
@@ -239,25 +240,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const isMobile = useIsMobile();
   useEffect(() => {
     if (!isMobile || isElectron) return;
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-    const root = document.documentElement;
-    // Safari keeps the layout viewport tall while the keyboard covers it.
-    // Size the app to the visible viewport so the composer stays above it.
-    const updateViewport = () => {
-      root.style.setProperty("--app-viewport-height", `${viewport.height}px`);
-      root.style.setProperty(
-        "--app-safe-area-bottom",
-        window.innerHeight - viewport.height > 150 ? "0px" : "env(safe-area-inset-bottom)",
-      );
-    };
-    updateViewport();
-    viewport.addEventListener("resize", updateViewport);
-    return () => {
-      viewport.removeEventListener("resize", updateViewport);
-      root.style.removeProperty("--app-viewport-height");
-      root.style.removeProperty("--app-safe-area-bottom");
-    };
+    return installMobileViewport(window);
   }, [isMobile]);
   // Subscribed rather than read once: the clamp must track live window size,
   // and a clamped drag ends with an unchanged width, which skips the re-render
@@ -332,7 +315,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   return (
     <PanelAnimationSuppressionProvider value={panelAnimationsSuppressed}>
       <SidebarProvider
-        className="h-[calc(var(--app-viewport-height,100dvh)-env(safe-area-inset-top))]! min-h-0!"
+        className="h-full! min-h-0!"
         data-panel-animations={routePanelAnimationsActive ? "true" : "false"}
         defaultOpen
         style={sidebarProviderStyle}

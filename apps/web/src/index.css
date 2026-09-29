@@ -2233,6 +2233,20 @@ body {
   padding-right: var(--desktop-window-right-resize-inset);
 }
 
+@media (width < 48rem) {
+  #root {
+    /* Safari pans the visual viewport on focus independently of its height.
+       A fixed root cannot be scrolled out of view by caret placement. */
+    position: fixed;
+    /* Fixed toolbar controls share the root's viewport anchor. */
+    contain: layout;
+    --workspace-controls-top: env(safe-area-inset-top);
+    top: var(--app-viewport-top, 0px);
+    left: 0;
+    right: 0;
+  }
+}
+
 .electron-windows {
   --desktop-window-right-resize-inset: 6px;
 }

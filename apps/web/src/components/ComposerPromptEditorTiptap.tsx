@@ -822,6 +822,17 @@ function ComposerPromptEditorTiptapInner(props: ComposerPromptEditorProps) {
       editable: !disabled,
       editorProps: {
         attributes: editorAttributes,
+        handleScrollToSelection: (view) => {
+          // ProseMirror's default walks all scroll ancestors, including the
+          // phone's page. Only the prompt should move when placing its caret.
+          const caret = view.coordsAtPos(view.state.selection.head);
+          const bounds = view.dom.getBoundingClientRect();
+          const top = bounds.top + view.dom.clientTop;
+          const bottom = top + view.dom.clientHeight;
+          if (caret.top < top) view.dom.scrollTop -= top - caret.top;
+          else if (caret.bottom > bottom) view.dom.scrollTop += caret.bottom - bottom;
+          return true;
+        },
         handleKeyDown: (view, event) => {
           if (
             isMacPlatform(navigator.platform) &&
