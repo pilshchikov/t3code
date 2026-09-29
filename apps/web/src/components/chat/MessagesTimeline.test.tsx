@@ -11,6 +11,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { LegendListRef, MaintainScrollAtEndOptions } from "@legendapp/list/react";
+import { rememberTimelinePosition } from "./timelineScrollAnchoring";
 import { shouldUseRestingComposerLayout } from "../composerFooterLayout";
 import { useComposerFocusState } from "./useComposerFocusState";
 
@@ -2023,4 +2024,65 @@ describe("MessagesTimeline", () => {
       await act(() => renderer?.unmount());
     }
   });
+});
+
+it("returns to the latest message when the remembered row no longer exists", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal("requestAnimationFrame", () => 0);
+  vi.stubGlobal("cancelAnimationFrame", () => {});
+  const threadKey = "env-restore:missing-row";
+  rememberTimelinePosition(threadKey, {
+    rowId: "removed-row",
+    offsetWithinRow: 20,
+    scrollOffset: 0,
+    atEnd: false,
+  });
+  let scrollTop = 0;
+  const onIsAtEndChange = vi.fn();
+  const listRef = createRef<LegendListRef>();
+  listRef.current = {
+    getScrollableNode: () => null,
+    getState: () => ({ data: [] }),
+    scrollToEnd: async () => {
+      scrollTop = 2400;
+    },
+    scrollToOffset: async ({ offset }: { offset: number }) => {
+      scrollTop = offset;
+    },
+  } as unknown as LegendListRef;
+  let renderer: ReactTestRenderer | undefined;
+  try {
+    await act(async () => {
+      renderer = create(
+        <MessagesTimeline
+          {...buildProps()}
+          routeThreadKey={threadKey}
+          listRef={listRef}
+          liveFollowEnabled={false}
+          onIsAtEndChange={onIsAtEndChange}
+          timelineEntries={[
+            {
+              id: "restore-work",
+              kind: "work",
+              createdAt: MESSAGE_CREATED_AT,
+              entry: {
+                id: "restore-work-entry",
+                createdAt: MESSAGE_CREATED_AT,
+                label: "Run lint",
+                tone: "tool",
+                itemType: "command_execution",
+                command: "pnpm lint",
+                toolLifecycleStatus: "completed",
+              },
+            },
+          ]}
+        />,
+      );
+    });
+    expect(scrollTop).toBe(2400);
+    expect(onIsAtEndChange).toHaveBeenCalledWith(true);
+  } finally {
+    await act(() => renderer?.unmount());
+    vi.unstubAllGlobals();
+  }
 });

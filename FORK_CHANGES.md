@@ -9,8 +9,11 @@ fork-specific behavior so future upstream syncs are easier to review.
 - A column of project icons sits left of the sidebar on desktop, so switching project is one click
   instead of opening the picker first. Each icon is the project's own icon (`ProjectFavicon`, the
   same component the sidebar rows use), with the project name in a tooltip, the current scope
-  marked, an "All projects" entry at the top, and a dot on any project with a running turn, a
-  pending approval or a question waiting.
+  marked, and an "All projects" entry at the top. Independent dots show running work, green for
+  unread completions, and purple for pending input or approval. All three can coexist across
+  threads in a project; completion dots clear using the same visit history as thread rows.
+- The fixed sidebar toggle is offset by the rail width, including in fullscreen, so it no longer
+  overlaps the "All projects" button.
 - The rail and the thread sidebar are shown together. Upstream's sidebar panel is `position: fixed`
   at `left: 0`, which covered the rail until the sidebar was collapsed; the panel now starts at
   `--project-rail-width`, which the layout sets to the rail's width while it is visible and to zero
@@ -43,6 +46,19 @@ fork-specific behavior so future upstream syncs are easier to review.
   `apps/web/src/components/AppSidebarLayout.tsx`, `apps/web/src/projectIconOptions.ts`.
 - Validation: web typechecks and the full web suite passes (5,569 tests), including a focused test
   for which projects earn a dot.
+
+## Conversation position and live following
+
+- Thread switches start with fresh virtualizer measurements and restore the saved row and offset.
+  A missing row or a restoration that cannot settle falls back to the latest message.
+- Remember the follow mode while streaming, so a temporary gap before a layout correction does
+  not reopen the thread in history. Layout corrections do not count as manual upward scrolling.
+- Scrolling upward pauses following. Returning to the bottom re-enables it even when the viewport
+  never left the near-bottom band; a downward wheel at the bottom also resumes following.
+- Sources: `apps/web/src/components/ChatView.tsx`,
+  `apps/web/src/components/chat/MessagesTimeline.tsx`.
+- Validation: focused rail and timeline unit tests, web typecheck, and targeted lint. No desktop
+  build or interactive client verification was performed for this change.
 
 ## Arcane orb composer buttons
 

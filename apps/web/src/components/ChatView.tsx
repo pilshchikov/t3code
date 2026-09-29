@@ -5606,6 +5606,7 @@ export default function ChatView(props: ChatViewProps) {
   // gesture opts out.
   const scrollToEnd = useCallback((animated = false) => {
     cancelPositionRestoreRef.current?.();
+    timelineScrollIntentRef.current = null;
     isAtEndRef.current = true;
     setTimelineIsAtEnd(true);
     timelineScrollModeRef.current = "following-end";
@@ -5686,6 +5687,12 @@ export default function ChatView(props: ChatViewProps) {
             return;
           if (event.deltaY > 0) {
             timelineScrollIntentRef.current = "toward-end";
+            if (
+              !viewportIsAwayFromEnd() &&
+              liveFollowUserScrollGenerationRef.current !== anchorUserScrollGenerationRef.current
+            ) {
+              scrollToEnd();
+            }
             if (isAtEndRef.current) {
               composerRef.current?.restoreAfterTimelineReachedEnd();
             }
@@ -5701,6 +5708,7 @@ export default function ChatView(props: ChatViewProps) {
         // actually carried the viewport out of the end band — an upward flick
         // gets there within its first few events and later touchmoves break.
         const handleTouchMove = () => {
+          timelineScrollIntentRef.current = null;
           if (viewportIsAwayFromEnd()) {
             handleManualCollapseNavigation();
           }
@@ -5712,6 +5720,7 @@ export default function ChatView(props: ChatViewProps) {
         // the live edge keeps following.
         const handlePointerDown = (event: PointerEvent) => {
           if (event.target === scrollNode) {
+            timelineScrollIntentRef.current = null;
             if (contentScrollsUp()) {
               handleManualCollapseNavigation();
             }
@@ -5800,7 +5809,7 @@ export default function ChatView(props: ChatViewProps) {
       }
       removeListeners?.();
     };
-  }, [activeThread?.id, isTimelineAtLogicalEnd, timelineRealContentOverflowsViewport]);
+  }, [activeThread?.id, isTimelineAtLogicalEnd, scrollToEnd, timelineRealContentOverflowsViewport]);
 
   const onTimelineAnchorReady = useCallback((messageId: MessageId, anchorIndex: number) => {
     // Anchored-end space can be remeasured when the turn completes. Once the
@@ -5862,7 +5871,15 @@ export default function ChatView(props: ChatViewProps) {
       setShowScrollToBottom(false);
       return;
     }
-    if (isAtEndRef.current === isAtEnd) return;
+    // A gesture can disable following while we are still inside the end band.
+    // Returning to the bottom must re-arm even if the geometry flag stayed true.
+    if (
+      isAtEndRef.current === isAtEnd &&
+      (!isAtEnd ||
+        liveFollowUserScrollGenerationRef.current === anchorUserScrollGenerationRef.current)
+    )
+      return;
+    if (isAtEnd && timelineScrollIntentRef.current === "away-from-end") return;
     isAtEndRef.current = isAtEnd;
     if (isAtEnd) {
       if (timelineScrollIntentRef.current === "toward-end") {

@@ -558,8 +558,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const listIdentityRef = useRef(listIdentityKey);
   const previousLatestTurnRef = useRef(latestTurn);
-  // The list stays mounted across thread switches. Its first end pins on the
-  // new thread must snap, not glide, even if that thread is mid-turn.
+  // A thread's first end pins must snap, not glide, even mid-turn.
+  // Each thread gets fresh virtualizer measurements; saved row anchors restore history.
   const [settlingListIdentity, setSettlingListIdentity] = useState<string | null>(null);
   let paintedExpandedTurnIds = expandedTurnIds;
   let paintedExpandedWorkGroupIds = expandedWorkGroupIds;
@@ -874,35 +874,52 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     viewport?.ownerDocument.addEventListener("keydown", onScrollKey);
     const position = rememberedPosition;
     const index = position ? rows.findIndex((row) => row.id === position.rowId) : -1;
-    if (position?.atEnd === false) onManualNavigation();
+    const canRestoreRow =
+      position?.atEnd === false && index >= 0 && Number.isFinite(position.offsetWithinRow);
+    if (canRestoreRow) onManualNavigation();
+    const finishAtEnd = () => {
+      if (cancelled) return;
+      void list.scrollToEnd({ animated: false }).then(() => {
+        if (cancelled) return;
+        onIsAtEndChange(true);
+        setPositionedThreadKey(listIdentityKey);
+      });
+    };
     if (cancelPositionRestoreRef) cancelPositionRestoreRef.current = cancelRestoration;
-    const scrolling =
-      position?.atEnd === false
-        ? index >= 0
-          ? list.scrollToIndex({
-              index,
-              animated: false,
-              viewPosition: 0,
-              viewOffset: -position.offsetWithinRow,
-            })
-          : list.scrollToOffset({ offset: position.scrollOffset, animated: false })
-        : list.scrollToEnd({ animated: false });
+    const scrolling = canRestoreRow
+      ? list.scrollToIndex({
+          index,
+          animated: false,
+          viewPosition: 0,
+          viewOffset: -position.offsetWithinRow,
+        })
+      : list.scrollToEnd({ animated: false });
     void Promise.resolve(scrolling).then(() => {
       if (cancelled) return;
-      if (position?.atEnd !== false || index < 0) {
+      if (!canRestoreRow) {
+        onIsAtEndChange(true);
         setPositionedThreadKey(listIdentityKey);
         return;
       }
       // Index scrolling starts from estimates. Keep the saved row mounted
       // until its measured position and the DOM agree for two layout frames.
       let stableFrames = 0;
+      let attempts = 0;
       const reconcile = () => {
         if (cancelled) return;
+        // Missing/unmeasurable rows must never strand a thread at offset zero.
+        if (++attempts > 60) {
+          finishAtEnd();
+          return;
+        }
         const state = list.getState();
         const rowIndex = state.indexByKey(position.rowId);
         const row = rowIndex === undefined ? undefined : state.elementAtIndex(rowIndex);
         const element = list.getScrollableNode();
-        if (!row || !element) return;
+        if (!row || !element || element.clientHeight === 0) {
+          settleFrame = requestAnimationFrame(reconcile);
+          return;
+        }
         const offset = Math.max(
           0,
           Math.min(
@@ -913,6 +930,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             element.scrollHeight - element.clientHeight,
           ),
         );
+        if (!Number.isFinite(offset)) {
+          finishAtEnd();
+          return;
+        }
         if (Math.abs(element.scrollTop - offset) > 1) {
           stableFrames = 0;
           void list.scrollToOffset({ offset, animated: false }).then(() => {
@@ -945,6 +966,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     listIdentityKey,
     listRef,
     onManualNavigation,
+    onIsAtEndChange,
     rememberedPosition,
     restoringThreadPosition,
     rows,
@@ -1043,7 +1065,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           // DOM geometry includes the header and the virtualizer's layout adjustment.
           offsetWithinRow: element.getBoundingClientRect().top - row.getBoundingClientRect().top,
           scrollOffset: element.scrollTop,
-          atEnd: isAtEnd,
+          // Streaming can briefly grow beyond the viewport before the follow
+          // scroll runs. Preserve the user's follow mode across thread switches.
+          atEnd: liveFollowEnabled,
           disclosures: {
             turns: paintedExpandedTurnIds,
             workGroups: paintedExpandedWorkGroupIds,
@@ -1065,9 +1089,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     const scrollBottom = scrollTop + (state.scrollLength ?? 0);
     const previousScrollTop = previousScrollTopRef.current;
     previousScrollTopRef.current = scrollTop;
-    if (previousScrollTop !== null && scrollTop < previousScrollTop - 4 && liveFollowEnabled) {
+    if (previousScrollTop !== null && scrollTop < previousScrollTop - 4 && !liveFollowEnabled) {
       onTimelineScroll();
-      onManualNavigation();
     }
 
     if (minimapItems.length === 0) {
@@ -1117,7 +1140,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     minimapItems,
     minimapStripMap,
     onIsAtEndChange,
-    onManualNavigation,
     onTimelineScroll,
   ]);
 
@@ -1303,6 +1325,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             />
           ) : null}
           <LegendList<MessagesTimelineRow>
+            key={listIdentityKey}
             ref={listRef}
             data={rows}
             extraData={`${listIdentityKey}:${rows.length}`}

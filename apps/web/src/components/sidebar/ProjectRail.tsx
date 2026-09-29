@@ -22,7 +22,7 @@ import { useUiStateStore } from "../../uiStateStore";
 import { cn } from "~/lib/utils";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { projectKeysWithLiveWork } from "./projectRail.logic";
+import { projectRailStatuses, type ProjectRailStatus } from "./projectRail.logic";
 import { useSidebarProjectGroups } from "./useSidebarProjectGroups";
 import { useProjectRailVisible } from "./projectRailVisibility";
 
@@ -39,17 +39,25 @@ const ICON_BOX_CLASS = "grid size-4.5 place-items-center overflow-hidden";
 function ProjectRailItem({
   group,
   isCurrent,
-  isLive,
+  status,
   onSelect,
 }: {
   group: SidebarProjectSnapshot;
   isCurrent: boolean;
-  isLive: boolean;
+  status: ProjectRailStatus;
   onSelect: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: group.projectKey,
   });
+  const statusLabel = [
+    status.running && "Agent working",
+    status.completed && "Unread completion",
+    status.input && "Input or approval needed",
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const label = statusLabel ? `${group.displayName}: ${statusLabel}` : group.displayName;
   return (
     <Tooltip>
       <TooltipTrigger
@@ -58,7 +66,7 @@ function ProjectRailItem({
             ref={setNodeRef}
             type="button"
             aria-current={isCurrent}
-            aria-label={group.displayName}
+            aria-label={label}
             className={cn(ITEM_CLASS, isDragging && "z-20 opacity-80")}
             style={{ transform: CSS.Translate.toString(transform), transition }}
             onClick={onSelect}
@@ -68,16 +76,15 @@ function ProjectRailItem({
             <span className={ICON_BOX_CLASS}>
               <ProjectFavicon project={group} className="size-full" />
             </span>
-            {isLive ? (
-              <span
-                aria-hidden="true"
-                className="absolute end-0.5 top-0.5 size-1.5 rounded-full bg-primary"
-              />
-            ) : null}
+            <span aria-hidden="true" className="absolute end-0.5 top-0.5 flex gap-0.5">
+              {status.running ? <span className="size-1.5 rounded-full bg-primary" /> : null}
+              {status.completed ? <span className="size-1.5 rounded-full bg-success" /> : null}
+              {status.input ? <span className="size-1.5 rounded-full bg-agent-input" /> : null}
+            </span>
           </button>
         }
       />
-      <TooltipPopup side="right">{group.displayName}</TooltipPopup>
+      <TooltipPopup side="right">{label}</TooltipPopup>
     </Tooltip>
   );
 }
@@ -101,7 +108,11 @@ export const ProjectRail = memo(function ProjectRail() {
   const router = useRouter();
   const pathname = useLocation({ select: (location) => location.pathname });
 
-  const liveProjectKeys = useMemo(() => projectKeysWithLiveWork(threads), [threads]);
+  const lastVisitedByThread = useUiStateStore((state) => state.threadLastVisitedAtById);
+  const statuses = useMemo(
+    () => projectRailStatuses(threads, lastVisitedByThread),
+    [threads, lastVisitedByThread],
+  );
   // A short threshold, so a click still selects rather than starting a drag.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -172,8 +183,16 @@ export const ProjectRail = memo(function ProjectRail() {
                 key={group.projectKey}
                 group={group}
                 isCurrent={projectScopeKey === group.projectKey}
-                isLive={group.memberProjects.some((member) =>
-                  liveProjectKeys.has(`${member.environmentId}:${member.id}`),
+                status={group.memberProjects.reduce<ProjectRailStatus>(
+                  (combined, member) => {
+                    const status = statuses.get(`${member.environmentId}:${member.id}`);
+                    return {
+                      running: combined.running || !!status?.running,
+                      completed: combined.completed || !!status?.completed,
+                      input: combined.input || !!status?.input,
+                    };
+                  },
+                  { running: false, completed: false, input: false },
                 )}
                 onSelect={() => selectScope(group.projectKey)}
               />
