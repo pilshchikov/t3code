@@ -86,6 +86,14 @@ fork-specific behavior so future upstream syncs are easier to review.
 - Validation: web typechecks and the full web suite passes (5,569 tests), including a focused test
   for which projects earn a dot.
 
+## Mobile composer placeholder
+
+- The web composer's normal prompt placeholder reads "Ask anything…" below the `sm`
+  breakpoint, including the desktop app at narrow widths. This avoids wrapping the desktop's
+  file, skill, and command hints over the composer controls.
+- Source: `apps/web/src/components/chat/ChatComposer.tsx`.
+- Validation: source review only; no tests or interactive client verification requested.
+
 ## Conversation position and live following
 
 - Thread switches start with fresh virtualizer measurements and restore the saved row and offset.
