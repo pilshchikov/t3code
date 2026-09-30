@@ -4,6 +4,23 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Claude subagent effort reflects the worker runtime
+
+- The Agents panel receives effort from Claude's `PreToolUse` and `SubagentStop` SDK
+  hooks, which report the level actually applied inside each worker. Agent definition
+  overrides, environment overrides and model-specific downgrades therefore come from
+  Claude itself. T3 no longer substitutes the parent session's effort for an unknown
+  worker effort; the label is omitted until Claude reports it.
+- Buffer hook values that arrive before `task_started`, and emit metadata-only
+  `task.updated` events when effort changes. Repeated levels emit no additional updates;
+  progress text, token usage and task status remain intact across web and native mobile.
+- Source: `apps/server/src/provider/Layers/ClaudeAdapter.ts`. Focused adapter/catalog and
+  shared subagent-state tests pass (194 tests), and the server typecheck passes. A real
+  Claude Code 2.1.285 run against an isolated local simulated API confirmed parent requests
+  at medium, a file-defined Sonnet worker at high, and matching hook agent/task ids.
+- This source change does not rewrite old recorded labels. Existing provider processes
+  need a fresh session launch to receive the hooks. The app was not rebuilt or restarted.
+
 ## Upstream sync, September 29
 
 - Merged upstream `main` through `5e83e99c95` (two commits), adding managed ChatGPT

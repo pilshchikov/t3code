@@ -11,6 +11,7 @@
 import * as NodeUtil from "node:util";
 import {
   type CanUseTool,
+  type HookCallback,
   query,
   getSessionMessages,
   forkSession,
@@ -389,30 +390,26 @@ interface ClaudeTaskAgentState {
   /** Seeded from the launching tool's input; refined by the subagent's own
    * assistant snapshots (authoritative API model). */
   model: string | undefined;
+  /** Applied effort reported by a hook running inside this subagent. */
   effort: string | undefined;
 }
 
 /**
- * How many racing snapshot models to buffer per session. A snapshot whose
- * task_started never arrives would otherwise pin its entry for the session's
- * lifetime; oldest entries evict first.
+ * How many racing metadata values to buffer per session. A worker whose
+ * task_started never arrives must not pin its entry for the session's lifetime;
+ * oldest entries evict first.
  */
-const PENDING_TASK_MODEL_CAP = 64;
+const PENDING_TASK_METADATA_CAP = 64;
 /** How long Stop waits for Claude to abort a turn before killing the process. */
 const CLAUDE_INTERRUPT_GRACE = "3 seconds";
 
 /**
- * Buffers a subagent snapshot's authoritative model under its
- * parent_tool_use_id, for snapshots that beat their task_started to the
- * stream. task_started consumes the entry when it registers the task.
+ * Buffers authoritative models by parent_tool_use_id and applied effort by
+ * agent id when they beat task_started. The start row consumes the entry.
  */
-function rememberPendingTaskModel(
-  pending: Map<string, string>,
-  parentToolUseId: string,
-  model: string,
-): void {
-  pending.set(parentToolUseId, model);
-  if (pending.size > PENDING_TASK_MODEL_CAP) {
+function rememberPendingTaskValue(pending: Map<string, string>, key: string, value: string): void {
+  pending.set(key, value);
+  if (pending.size > PENDING_TASK_METADATA_CAP) {
     const oldest = pending.keys().next();
     if (!oldest.done) {
       pending.delete(oldest.value);
@@ -430,9 +427,6 @@ interface ClaudeSessionContext {
   readonly startedAt: string;
   readonly basePermissionMode: PermissionMode | undefined;
   currentApiModelId: string | undefined;
-  /** Effective effort for the session's turns; subagents without an explicit
-   * effort override inherit this. */
-  currentEffort: string | undefined;
   resumeSessionId: string | undefined;
   readonly pendingApprovals: Map<ApprovalRequestId, PendingApproval>;
   readonly pendingUserInputs: Map<ApprovalRequestId, PendingUserInput>;
@@ -447,9 +441,11 @@ interface ClaudeSessionContext {
   /**
    * Authoritative subagent models from assistant snapshots that arrived before
    * their task_started registered the task, keyed by parent_tool_use_id.
-   * Written through `rememberPendingTaskModel`, consumed by task_started.
+   * Written through `rememberPendingTaskValue`, consumed by task_started.
    */
   readonly pendingTaskModels: Map<string, string>;
+  /** Applied hook effort that raced ahead of task_started, keyed by agent id. */
+  readonly pendingTaskEfforts: Map<string, string>;
   /**
    * Last emitted workflow-member fingerprint per member slot. A coordinator
    * task_progress repeats the FULL member array every tick; without a
@@ -3374,7 +3370,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         } else {
           // The snapshot beat its task_started (or its tool_use_id was never
           // recorded): hold the model until the task registers.
-          rememberPendingTaskModel(
+          rememberPendingTaskValue(
             context.pendingTaskModels,
             assistantParentToolUseId,
             snapshotModel,
@@ -3742,12 +3738,12 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         ) {
           context.turnState.hasSubagents = true;
         }
-        // Model/effort: the Agent tool's input carries explicit overrides;
-        // absent ones inherit the session's selection (SDK behavior).
+        // The Agent tool can override model, but has no effort argument.
+        // Agent definitions can override effort independently of the parent;
+        // only hooks inside the worker report the effort actually applied.
         // Subagent assistant snapshots refine model with the authoritative API
         // id: one that already arrived is buffered and outranks the seed here,
-        // later ones refine the record in place. AgentInput.effort may be a
-        // named level or an integer.
+        // later ones refine the record in place.
         const launchInput = launchingTool?.input;
         const toolUseId = message.tool_use_id;
         const bufferedModel = toolUseId ? context.pendingTaskModels.get(toolUseId) : undefined;
@@ -3758,12 +3754,10 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           bufferedModel ??
           trimmedString(launchInput?.model) ??
           trimmedString(context.session.model ?? undefined);
-        const rawLaunchEffort = launchInput?.effort;
         const effort =
-          trimmedString(rawLaunchEffort) ??
-          (typeof rawLaunchEffort === "number" && Number.isFinite(rawLaunchEffort)
-            ? String(rawLaunchEffort)
-            : context.currentEffort);
+          context.pendingTaskEfforts.get(message.task_id) ??
+          context.taskAgents.get(message.task_id)?.effort;
+        context.pendingTaskEfforts.delete(message.task_id);
         // Remember the agent identity so every later task.* payload for this
         // taskId is self-describing (identity must survive activity retention).
         context.taskAgents.set(message.task_id, {
@@ -4530,10 +4524,48 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       const claudeTasks = new Map<string, ClaudeTaskState>();
       const taskAgents = new Map<string, ClaudeTaskAgentState>();
       const pendingTaskModels = new Map<string, string>();
+      const pendingTaskEfforts = new Map<string, string>();
       const workflowMemberFingerprints = new Map<string, string>();
       const liveTaskIds = new Set<string>();
 
       const contextRef = yield* Ref.make<ClaudeSessionContext | undefined>(undefined);
+
+      // Observe runtime effort rather than reimplementing Claude's definition
+      // loading, environment overrides and model-specific effort downgrades.
+      // PreToolUse captures working agents; SubagentStop also covers workers
+      // that return without calling any tools. Metadata-only updates preserve
+      // the existing status, progress text and usage. Repeated levels emit once.
+      const observeSubagentEffort: HookCallback = (hookInput) =>
+        runPromise(
+          Effect.gen(function* () {
+            const agentId = trimmedString(hookInput.agent_id);
+            const effort = trimmedString(hookInput.effort?.level);
+            if (!agentId || !effort) return {};
+            const context = yield* Ref.get(contextRef);
+            if (context?.stopped) return {};
+            const agent = taskAgents.get(agentId);
+            if (!agent || !context) {
+              rememberPendingTaskValue(pendingTaskEfforts, agentId, effort);
+              return {};
+            }
+            if (agent.effort === effort) return {};
+            agent.effort = effort;
+            const stamp = yield* makeEventStamp();
+            yield* offerRuntimeEvent({
+              ...stamp,
+              provider: PROVIDER,
+              threadId: context.session.threadId,
+              ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
+              providerRefs: nativeProviderRefs(context),
+              type: "task.updated",
+              payload: {
+                taskId: RuntimeTaskId.make(agentId),
+                ...taskLinkageFor(taskAgents, agentId),
+              },
+            });
+            return {};
+          }).pipe(Effect.catchCause(() => Effect.succeed({}))),
+        );
 
       /**
        * Handle AskUserQuestion tool calls by emitting a `user-input.requested`
@@ -5010,6 +5042,10 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           append: buildRuntimeInstructions({ harness: "Claude Code" }),
         },
         settingSources: [...CLAUDE_SETTING_SOURCES],
+        hooks: {
+          PreToolUse: [{ hooks: [observeSubagentEffort] }],
+          SubagentStop: [{ hooks: [observeSubagentEffort] }],
+        },
         // `ultracode` is a Claude Code setting, not an API effort level. It is
         // normalized to `xhigh` above and paired with `settings.ultracode`.
         ...(effectiveEffort
@@ -5128,7 +5164,6 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         startedAt,
         basePermissionMode: permissionMode,
         currentApiModelId: apiModelId,
-        currentEffort: effectiveEffort ?? undefined,
         resumeSessionId: sessionId,
         pendingApprovals,
         pendingUserInputs,
@@ -5137,6 +5172,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         claudeTasks,
         taskAgents,
         pendingTaskModels,
+        pendingTaskEfforts,
         workflowMemberFingerprints,
         liveTaskIds,
         turnState: undefined,
@@ -5264,14 +5300,6 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         ...context.session,
         model: modelSelection.model,
       };
-      const turnEffort = resolveClaudeCatalogEffort(
-        modelCatalog,
-        modelSelection.model,
-        getModelSelectionStringOptionValue(modelSelection, "effort"),
-      );
-      context.currentEffort =
-        getEffectiveClaudeAgentEffort(modelCatalog, turnEffort ?? null, modelSelection.model) ??
-        undefined;
     }
 
     // Apply interaction mode by switching the SDK's permission mode.

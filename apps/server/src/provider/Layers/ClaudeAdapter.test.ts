@@ -3558,7 +3558,7 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
-  it.effect("task.started carries model/effort; subagent snapshots refine the model", () => {
+  it.effect("task.started leaves effort unknown; subagent snapshots refine the model", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
@@ -3586,8 +3586,8 @@ describe("ClaudeAdapterLive", () => {
         attachments: [],
       });
 
-      // No explicit model/effort on the launch input: the task inherits the
-      // session's selection.
+      // Model starts with the session selection. Effort cannot be inferred
+      // from it because an agent definition may override the parent effort.
       harness.query.emit({
         type: "system",
         subtype: "task_started",
@@ -3625,19 +3625,157 @@ describe("ClaudeAdapterLive", () => {
       assert.equal(started?.type, "task.started");
       if (started?.type === "task.started") {
         assert.equal(started.payload.model, SYNTHETIC_CLAUDE_CAPABLE_MODEL);
-        assert.equal(started.payload.effort, "max");
+        assert.equal(started.payload.effort, undefined);
       }
       const progress = taskEvents[1];
       assert.equal(progress?.type, "task.progress");
       if (progress?.type === "task.progress") {
         assert.equal(progress.payload.model, SYNTHETIC_SUBAGENT_MODEL);
-        assert.equal(progress.payload.effort, "max");
+        assert.equal(progress.payload.effort, undefined);
       }
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
     );
   });
+
+  for (const scenario of ["before start", "while working", "without tools"] as const) {
+    it.effect(`uses a subagent's applied hook effort ${scenario} with a medium parent`, () => {
+      const harness = makeHarness();
+      return Effect.gen(function* () {
+        const adapter = yield* ClaudeAdapter;
+        const startedReceipt = yield* Deferred.make<void>();
+        const taskEventsFiber = yield* adapter.streamEvents.pipe(
+          Stream.filter((event) => event.type.startsWith("task.")),
+          Stream.tap((event) =>
+            event.type === "task.started"
+              ? Deferred.succeed(startedReceipt, undefined)
+              : Effect.void,
+          ),
+          Stream.takeUntil((event) => event.type === "task.completed"),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        const session = yield* adapter.startSession({
+          threadId: THREAD_ID,
+          provider: ProviderDriverKind.make("claudeAgent"),
+          modelSelection: createModelSelection(
+            ProviderInstanceId.make("claudeAgent"),
+            SYNTHETIC_CLAUDE_CAPABLE_MODEL,
+            [{ id: "effort", value: "medium" }],
+          ),
+          runtimeMode: "full-access",
+        });
+        yield* adapter.sendTurn({
+          threadId: session.threadId,
+          input: "use code-auditor at high effort",
+          attachments: [],
+        });
+        const options = harness.getLastCreateQueryInput()?.options;
+        assert.equal(options?.effort, "medium");
+        const hookEvent = scenario === "without tools" ? "SubagentStop" : "PreToolUse";
+        const hook = options?.hooks?.[hookEvent]?.[0]?.hooks[0];
+        assert.ok(hook);
+        const signal = new AbortController().signal;
+        const observeEffort = (effort: string) =>
+          Effect.promise(() =>
+            hook(
+              {
+                session_id: "sdk-session",
+                transcript_path: "/tmp/audit-transcript.jsonl",
+                cwd: "/tmp/claude-adapter-test",
+                agent_id: "task-high-audit",
+                agent_type: "code-auditor",
+                effort: { level: effort },
+                ...(hookEvent === "SubagentStop"
+                  ? {
+                      hook_event_name: "SubagentStop" as const,
+                      stop_hook_active: false,
+                      agent_transcript_path: "/tmp/subagent-transcript.jsonl",
+                    }
+                  : {
+                      hook_event_name: "PreToolUse" as const,
+                      tool_name: "Bash",
+                      tool_input: { command: "pwd" },
+                      tool_use_id: "tool-audit-pwd",
+                    }),
+              },
+              undefined,
+              { signal },
+            ),
+          );
+
+        // A main-thread hook must never supply a worker's effort, even when
+        // the main session itself uses an agent persona with agent_type.
+        yield* Effect.promise(() =>
+          hook(
+            {
+              session_id: "sdk-session",
+              transcript_path: "/tmp/main-transcript.jsonl",
+              cwd: "/tmp/claude-adapter-test",
+              agent_type: "code-auditor",
+              effort: { level: "medium" },
+              hook_event_name: "PreToolUse",
+              tool_name: "Read",
+              tool_input: {},
+              tool_use_id: "tool-main-read",
+            },
+            undefined,
+            { signal },
+          ),
+        );
+        if (scenario === "before start") yield* observeEffort("high");
+        harness.query.emit({
+          type: "system",
+          subtype: "task_started",
+          task_id: "task-high-audit",
+          task_type: "local_agent",
+          subagent_type: "code-auditor",
+          description: "High effort audit",
+          uuid: "00000000-0000-4000-8000-000000000001",
+          session_id: "sdk-session",
+        } as SDKMessage);
+        yield* Deferred.await(startedReceipt);
+        yield* observeEffort("high");
+        yield* observeEffort("high");
+        // The hook is authoritative even if Claude downgraded the requested
+        // level. A changed effort emits a fresh metadata update.
+        yield* observeEffort("medium");
+        harness.query.emit({
+          type: "system",
+          subtype: "task_notification",
+          task_id: "task-high-audit",
+          status: "completed",
+          summary: "Audit done",
+          output_file: "/tmp/audit-output.txt",
+          uuid: "00000000-0000-4000-8000-000000000002",
+          session_id: "sdk-session",
+        } as SDKMessage);
+        const events = Array.from(yield* Fiber.join(taskEventsFiber));
+        const start = events[0];
+        assert.equal(start?.type, "task.started");
+        if (start?.type === "task.started") {
+          assert.equal(start.payload.effort, scenario === "before start" ? "high" : undefined);
+        }
+        const updates = events.filter((event) => event.type === "task.updated");
+        assert.deepEqual(
+          updates.map((event) => event.payload.effort),
+          scenario === "before start" ? ["medium"] : ["high", "medium"],
+        );
+        for (const update of updates) {
+          assert.equal(update.payload.taskId, "task-high-audit");
+          assert.equal(update.payload.role, "code-auditor");
+          assert.equal(update.payload.status, undefined);
+        }
+        const completed = events.at(-1);
+        assert.equal(completed?.type, "task.completed");
+        if (completed?.type === "task.completed") assert.equal(completed.payload.effort, "medium");
+      }).pipe(
+        Effect.provideService(Random.Random, makeDeterministicRandomService()),
+        Effect.provide(harness.layer),
+      );
+    });
+  }
 
   it.effect("a subagent snapshot that beats task_started still wins over the seed", () => {
     const harness = makeHarness();
@@ -3704,7 +3842,7 @@ describe("ClaudeAdapterLive", () => {
       assert.equal(started?.type, "task.started");
       if (started?.type === "task.started") {
         assert.equal(started.payload.model, SYNTHETIC_SUBAGENT_MODEL);
-        assert.equal(started.payload.effort, "max");
+        assert.equal(started.payload.effort, undefined);
       }
       const progress = taskEvents[1];
       assert.equal(progress?.type, "task.progress");
