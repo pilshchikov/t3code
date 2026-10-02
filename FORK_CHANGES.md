@@ -7,10 +7,10 @@ fork-specific behavior so future upstream syncs are easier to review.
 ## Upstream sync and repository worktrees, October 2
 
 - Integrated upstream v2 orchestration, including PR #2829 (`de34391427`), and
-  main through `a7b3ce8c08`. Also includes fixes for idle shell project reloads,
+  main through `a8927712f8`. Also includes fixes for idle shell project reloads,
   Claude model changes while background agents run, Codex API-key startup warnings,
   steering retaining the newest next-turn model/effort selection, and the Pi/ACP
-  Registry settings badge correction.
+  Registry settings badge correction and tokenless Codex auth parsing.
 - Ported fork project roots, scripts/working directories, workspace and memory MCP,
   per-account limit polling/history, private network defaults, exclusive settlement
   modes, and safe settled-worktree retention onto the v2 services. Existing migration
