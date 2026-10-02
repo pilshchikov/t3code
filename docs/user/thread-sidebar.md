@@ -28,6 +28,22 @@ Right-click a pull request link in a thread and choose **Link to thread** to sho
 in the sidebar. With the finished-pull-request policy selected, that linked request can settle the
 thread. Right-click the same link and choose **Unlink from thread** to remove it.
 
+### Start without a project
+
+A thread does not need a project. To start one without a project, click **or
+start without a project** under a new thread's heading, pick **No project** from
+the project menu in that heading or from **New thread in...** in the command
+palette, or press `mod+alt+n`. On mobile, pick **No project** from the project
+list. To move a draft into a project, pick the project in the heading.
+
+Each thread without a project works in its own folder under `~/.t3/scratch` (the
+`scratch` folder of your T3 data directory), named after its date, the first words
+of its first message, and a short id, like
+`2026-09-25-convert-these-pngs-to-webp-a1b2c3d4`. Deleting a thread keeps its
+folder, so the files the agent wrote stay until you delete them. Branch, worktree, and diff controls stay hidden because
+these folders are not Git repositories. This is unavailable when the data
+directory itself sits inside a Git checkout.
+
 ### Start in the background
 
 In a desktop browser or the desktop app, press `Cmd+Enter` on macOS or `Ctrl+Enter`
@@ -96,6 +112,18 @@ if those actions are unavailable.
 
 Right-click a thread and choose **Colour** to mark it with one of ten muted colors, or **No
 colour** to clear it. The color enters the card from the left and fades out across it.
+
+### Fold working threads (beta)
+
+On web and desktop, turn on **Settings → General → Working section (beta)** to move threads that
+are working or monitoring into a collapsed **Working** section at the bottom of the sidebar. A
+thread returns to the top of the active list when it finishes, fails, or needs an approval or
+answer. Pinned threads stay in the pinned section.
+
+While this is on, the active list is ordered by when each thread last came back to you, so you
+cannot drag to reorder it. Your saved order returns when you turn it off.
+
+## Settle finished work
 
 A project can carry a color of its own, set in its settings. It marks that project's threads from
 the right, and only while the sidebar is showing every project — scoped to one project it would

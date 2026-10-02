@@ -130,7 +130,13 @@ import { DiffCommentAnnotation } from "../diffs/DiffCommentAnnotation";
 import { projectFileCacheKey, projectFileEditorCacheKey } from "./fileContentRevision";
 import { workspaceDocumentDirectory } from "./filePath";
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
-import { isMarkdownPreviewFile, setMarkdownTaskChecked } from "./filePreviewMode";
+import {
+  isMarkdownPreviewFile,
+  resolveFilePreviewPath,
+  setMarkdownTaskChecked,
+  shouldShowFileExplorer,
+} from "./filePreviewMode";
+import { useFileSaveCoordinator } from "./useFileSaveCoordinator";
 import {
   getOptimisticProjectFileQueryData,
   setProjectFileQueryData,
@@ -1272,7 +1278,7 @@ export default function FilePreviewPanel({
   primaryCwd,
   cwd,
   projectName,
-  relativePath,
+  relativePath: requestedPath,
   attachment,
   threadRef,
   composerDraftTarget,
@@ -1286,6 +1292,8 @@ export default function FilePreviewPanel({
   workspaceMutationId,
   workspaceRoots,
 }: FilePreviewPanelProps) {
+  const relativePath =
+    attachment === undefined ? resolveFilePreviewPath(requestedPath, cwd) : requestedPath;
   const { resolvedTheme } = useTheme();
   const wordWrap = useClientSettings((settings) => settings.wordWrap);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -1335,7 +1343,7 @@ export default function FilePreviewPanel({
     environmentId,
     activeCwd,
     relativePath,
-    attachment === undefined && !isPdf,
+    attachment === undefined && relativePath !== null,
     true,
     selectedFilePending,
     active,
@@ -1361,6 +1369,11 @@ export default function FilePreviewPanel({
   const explorerOpen = useExplorerViewStore((state) => state.open);
   const explorerView = useExplorerViewStore((state) => state.view);
   const selectExplorerView = useExplorerViewStore((state) => state.setView);
+  const showExplorer = shouldShowFileExplorer({
+    relativePath: previewPath,
+    explorerOpen,
+    attachmentOpen: attachment !== undefined,
+  });
   const toggleExplorer = useExplorerViewStore((state) => state.toggleOpen);
   const [commitDiffPath, setCommitDiffPath] = useState<string | null>(null);
   useEffect(() => {
@@ -1893,7 +1906,7 @@ export default function FilePreviewPanel({
         </div>
       ) : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {relativePath && explorerOpen ? (
+        {previewPath && showExplorer ? (
           <ResizableColumns
             className="h-full flex-1"
             storageKey="t3code.fileExplorerTreeRatio"
@@ -1959,7 +1972,7 @@ export default function FilePreviewPanel({
               </aside>
             }
           />
-        ) : relativePath ? (
+        ) : previewPath || !showExplorer ? (
           previewSurface
         ) : (
           <aside className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
@@ -1986,4 +1999,3 @@ export default function FilePreviewPanel({
     </div>
   );
 }
-import { useFileSaveCoordinator } from "./useFileSaveCoordinator";

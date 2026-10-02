@@ -4,6 +4,19 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Upstream sync, October 2
+
+- Merged upstream through `024d49520e` (the last commit before the v2 orchestration
+  replacement), including 0.0.45 fixes, the Working shelf, file/directory navigation,
+  project creation improvements and the mobile dependency upgrades.
+- Preserved fork sidebar layouts/order, private update policy, multi-directory roots,
+  workspace/memory MCP, settlement policy, usage history, mobile viewport handling,
+  and runtime subagent effort hooks. Combined upstream task-parent/model updates
+  with the effort hooks; retained the original database migration ids.
+- The v2 engine replacement requires a separate port of these features and a data
+  migration. It is not enabled in this fork by this sync.
+- Validation: server/web typechecks and focused merge regression tests.
+
 ## Claude subagent effort reflects the worker runtime
 
 - The Agents panel receives effort from Claude's `PreToolUse` and `SubagentStop` SDK
