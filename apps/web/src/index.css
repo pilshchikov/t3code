@@ -900,6 +900,13 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     border-bottom-color: transparent;
   }
 
+  .chat-content-lane {
+    margin-inline: auto;
+    width: 100%;
+    min-width: 0;
+    max-width: var(--chat-content-max-width);
+  }
+
   .chat-composer-horizontal-inset {
     padding-inline-start: calc(env(safe-area-inset-left) + 0.75rem);
     padding-inline-end: calc(env(safe-area-inset-right) + 0.75rem);

@@ -6,6 +6,9 @@ fork-specific behavior so future upstream syncs are easier to review.
 
 ## Upstream sync and repository worktrees, October 2
 
+- Restored upstream's `.chat-content-lane` width rule after the merge so messages
+  respect the Comfortable/Wide/Full appearance setting alongside the composer
+  (`apps/web/src/index.css`). This follow-up requires a new desktop build.
 - Integrated upstream v2 orchestration, including PR #2829 (`de34391427`), and
   main through `a8927712f8`. Also includes fixes for idle shell project reloads,
   Claude model changes while background agents run, Codex API-key startup warnings,
