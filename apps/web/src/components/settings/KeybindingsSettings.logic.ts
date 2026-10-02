@@ -375,7 +375,15 @@ export function keybindingFromKeyboardEvent(
 ): string | null {
   // Preserve the ISO section-sign shortcut before the upstream physical-key
   // normalizer maps Backquote to the US-layout key.
-  if (!event.metaKey && !event.ctrlKey && (event.key === "§" || event.key === "±")) {
+  if (
+    !event.metaKey &&
+    !event.ctrlKey &&
+    (event.key === "§" ||
+      event.key === "±" ||
+      (isMacPlatform(platform) &&
+        event.key === "Unidentified" &&
+        (event.code === "Backquote" || event.code === "IntlBackslash")))
+  ) {
     return event.shiftKey || event.key === "±" ? "shift+§" : "§";
   }
   const keyToken = normalizeShortcutKeyToken(shortcutKeyFromEvent(event));

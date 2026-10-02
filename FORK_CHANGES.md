@@ -6,6 +6,16 @@ fork-specific behavior so future upstream syncs are easier to review.
 
 ## Upstream sync and repository worktrees, October 2
 
+- Scroll restoration has an independent one-second recovery deadline, including
+  fresh thread openings. Streamed row updates cannot restart the budget; a stalled
+  virtualizer scroll falls back to the latest message without waiting for its
+  promise. Live following also repairs unexpected jumps to zero; explicit user
+  navigation still cancels recovery (`MessagesTimeline.tsx`).
+- Right-panel maximize buttons and global shortcuts share the same store state.
+  Shift+§ matches the settings recorder's canonical binding as well as literal ±,
+  including text-input fallback; held shortcut keys are consumed without inserting
+  characters (`ChatView.tsx`, `RightPanelShortcuts.tsx`, `keybindings.ts`).
+
 - Restored upstream's `.chat-content-lane` width rule after the merge so messages
   respect the Comfortable/Wide/Full appearance setting alongside the composer
   (`apps/web/src/index.css`). Added Custom chat width in pixels (320–3840),

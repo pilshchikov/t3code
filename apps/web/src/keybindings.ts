@@ -105,10 +105,14 @@ function resolveEventKeys(event: ShortcutEventLike): Set<string> {
   // The dedicated macOS ISO key is labelled `§` and produces `±` with Shift. Electron has
   // reported the shifted key as `±`, `§`, and `Unidentified` across releases. Preserve the
   // physical pair so a binding recorded by Settings continues to work after an Electron update.
+  if (layoutKey === "±") {
+    keys.add("§");
+  }
   if (event.shiftKey && layoutKey === "§") {
     keys.add("±");
   }
   if (event.code && MAC_SECTION_SIGN_CODES.has(event.code)) {
+    keys.add("§");
     keys.add(event.shiftKey ? "±" : "§");
   }
   // The physical-position fallback exists for layouts that type non-Latin
@@ -161,9 +165,12 @@ function matchesShortcut(
     (event.code !== undefined && MAC_SECTION_SIGN_CODES.has(event.code));
   const modifierEvent =
     !shortcut.altKey && (shortcut.key === "§" || shortcut.key === "±") && isSectionSignPhysicalKey
-      ? { ...event, altKey: false }
+      ? { ...event, altKey: false, shiftKey: event.shiftKey || layoutKey === "±" }
       : event;
-  if (!matchesShortcutModifiers(modifierEvent, shortcut, platform)) return false;
+  // A saved literal `±` also represents the shifted ISO key, even if an older recorder
+  // omitted Shift. New recordings use `shift+§` and must match the same event.
+  const modifierShortcut = shortcut.key === "±" ? { ...shortcut, shiftKey: true } : shortcut;
+  if (!matchesShortcutModifiers(modifierEvent, modifierShortcut, platform)) return false;
   return resolveEventKeys(event).has(shortcut.key);
 }
 

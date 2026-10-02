@@ -243,6 +243,7 @@ import {
   selectActiveRightPanelSurface,
   selectThreadPanelOpen,
   selectThreadRightPanelState,
+  selectThreadRightPanelMaximized,
   type RightPanelSurface,
   useRightPanelStore,
 } from "../rightPanelStore";
@@ -1831,9 +1832,6 @@ export default function ChatView(props: ChatViewProps) {
   const isRevertingCheckpoint = useComposerDraftStore((store) =>
     store.rewindingThreadKeys.has(routeThreadKey),
   );
-  const [maximizedRightPanelThreadKey, setMaximizedRightPanelThreadKey] = useState<string | null>(
-    null,
-  );
   const userInputResponsesInFlight = useRef(new Set<string>());
   const [respondingRequestIds, setRespondingRequestIds] = useState<RuntimeRequestId[]>([]);
 
@@ -2286,9 +2284,11 @@ export default function ChatView(props: ChatViewProps) {
     activePreviewMiniPlayer?.source ?? null,
     renderedRightPanelSurface,
   );
+  const rightPanelStoreMaximized = useRightPanelStore((state) =>
+    selectThreadRightPanelMaximized(state, activeThreadRef),
+  );
   const canMaximizeRightPanel = rightPanelOpen && !shouldUsePlanSidebarSheet;
-  const rightPanelMaximized =
-    canMaximizeRightPanel && maximizedRightPanelThreadKey === routeThreadKey;
+  const rightPanelMaximized = canMaximizeRightPanel && rightPanelStoreMaximized;
   const inlineRightPanelOwnsTitleBar = rightPanelOpen && !shouldUsePlanSidebarSheet;
   const [threadPanelPresentation, setThreadPanelPresentation] =
     useState<ThreadPanelPresentation>("inline");
@@ -5423,7 +5423,7 @@ export default function ChatView(props: ChatViewProps) {
           .getState()
           .open(activeThreadRef, { kind: "device", ...activeRightPanelSurface.target });
       }
-      setMaximizedRightPanelThreadKey(null);
+      useRightPanelStore.getState().setMaximized(null);
       useRightPanelStore.getState().close(activeThreadRef);
     }
   }, [activeRightPanelSurface, activeThreadRef]);
@@ -5592,10 +5592,8 @@ export default function ChatView(props: ChatViewProps) {
   }, [activeThreadRef, threadPanelPresentation]);
   const toggleRightPanelMaximized = useCallback(() => {
     if (!canMaximizeRightPanel) return;
-    setMaximizedRightPanelThreadKey((threadKey) =>
-      threadKey === routeThreadKey ? null : routeThreadKey,
-    );
-  }, [canMaximizeRightPanel, routeThreadKey]);
+    if (activeThreadRef) useRightPanelStore.getState().toggleMaximized(activeThreadRef);
+  }, [canMaximizeRightPanel, activeThreadRef]);
   const cleanupRightPanelSurfaces = useCallback(
     (surfaces: readonly RightPanelSurface[]) => {
       if (!activeThreadRef) return;
@@ -6330,7 +6328,9 @@ export default function ChatView(props: ChatViewProps) {
     timelineLiveFollowEnabled,
   ]);
 
-  useEffect(() => {
+  // Establish the thread's baseline before asynchronous list restoration reports
+  // success. A later passive reset could undo its fallback-to-end decision.
+  useLayoutEffect(() => {
     setPullRequestDialogState(null);
     const followEnd = readTimelinePosition(routeThreadKey)?.atEnd !== false;
     isAtEndRef.current = followEnd;
@@ -6346,8 +6346,8 @@ export default function ChatView(props: ChatViewProps) {
     activeTimelineAnchorIndexRef.current = null;
     showScrollDebouncer.current.cancel();
     setShowScrollToBottom(!followEnd);
-    // Environment identity is part of the scroll session too.
-  }, [activeThreadKey]);
+    // Draft routes also have distinct scroll sessions before a server ref exists.
+  }, [routeThreadKey]);
 
   useEffect(() => {
     if (!activeThread?.id || terminalUiState.terminalOpen) return;

@@ -563,9 +563,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   const [expandedAttemptIds, setExpandedAttemptIds] = useState<ReadonlySet<RunAttemptId>>(
     () => rememberedPosition?.disclosures?.attempts ?? new Set(),
   );
-  const [positionedThreadKey, setPositionedThreadKey] = useState<string | null>(() =>
-    rememberedPosition?.atEnd === false ? null : listIdentityKey,
-  );
+  // Initial end positioning also needs recovery: the virtualizer's initial scroll can
+  // be superseded while a migrated/paged transcript mounts.
+  const [positionedThreadKey, setPositionedThreadKey] = useState<string | null>(null);
+  const positionRestoreBudgetRef = useRef<{ threadKey: string; deadline: number } | null>(null);
   const restoringThreadPosition = positionedThreadKey !== listIdentityKey;
   const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const listIdentityRef = useRef(listIdentityKey);
@@ -816,11 +817,20 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     }
     let cancelled = false;
     let settleFrame: number | null = null;
-    const viewport: HTMLElement | null = list.getScrollableNode();
+    let recoveryFrame: number | null = null;
+    if (positionRestoreBudgetRef.current?.threadKey !== listIdentityKey) {
+      positionRestoreBudgetRef.current = {
+        threadKey: listIdentityKey,
+        deadline: performance.now() + 1000,
+      };
+    }
+    const deadline = positionRestoreBudgetRef.current.deadline;
+    const viewport: HTMLElement | null = list.getScrollableNode?.() ?? null;
     const cancelRestoration = () => {
       if (cancelled) return;
       cancelled = true;
       if (settleFrame !== null) cancelAnimationFrame(settleFrame);
+      if (recoveryFrame !== null) cancelAnimationFrame(recoveryFrame);
       // Supersede any pending estimated-index scroll before the browser applies the gesture.
       if (viewport) void list.scrollToOffset({ offset: viewport.scrollTop, animated: false });
       setPositionedThreadKey(listIdentityKey);
@@ -850,12 +860,30 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     if (canRestoreRow) onManualNavigation();
     const finishAtEnd = () => {
       if (cancelled) return;
-      void list.scrollToEnd({ animated: false }).then(() => {
-        if (cancelled) return;
-        onIsAtEndChange(true);
-        setPositionedThreadKey(listIdentityKey);
-      });
+      // Do not wait for another imperative-scroll promise: the virtualizer may be
+      // stuck settling the same layout that prevented the original restore.
+      const element = list.getScrollableNode?.();
+      if (element) {
+        const offset = Math.max(0, element.scrollHeight - element.clientHeight);
+        void list.scrollToOffset?.({ offset, animated: false }).catch(() => {});
+        element.scrollTop = offset;
+      }
+      void list.scrollToEnd?.({ animated: false }).catch(() => {});
+      onIsAtEndChange(true);
+      setPositionedThreadKey(listIdentityKey);
     };
+    // This deadline runs independently of scroll promises and survives data churn.
+    // Otherwise a never-resolving scroll, or stream updates restarting the effect,
+    // can leave the conversation at the beginning forever.
+    const recoverUnfinishedRestore = () => {
+      if (cancelled) return;
+      if (performance.now() >= deadline) {
+        finishAtEnd();
+      } else {
+        recoveryFrame = requestAnimationFrame(recoverUnfinishedRestore);
+      }
+    };
+    recoveryFrame = requestAnimationFrame(recoverUnfinishedRestore);
     if (cancelPositionRestoreRef) cancelPositionRestoreRef.current = cancelRestoration;
     const scrolling = canRestoreRow
       ? list.scrollToIndex({
@@ -864,68 +892,76 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           viewPosition: 0,
           viewOffset: -position.offsetWithinRow,
         })
-      : list.scrollToEnd({ animated: false });
-    void Promise.resolve(scrolling).then(() => {
-      if (cancelled) return;
-      if (!canRestoreRow) {
-        onIsAtEndChange(true);
-        setPositionedThreadKey(listIdentityKey);
-        return;
-      }
-      // Index scrolling starts from estimates. Keep the saved row mounted
-      // until its measured position and the DOM agree for two layout frames.
-      let stableFrames = 0;
-      let attempts = 0;
-      const reconcile = () => {
+      : list.scrollToEnd?.({ animated: false });
+    void Promise.resolve(scrolling)
+      .then(() => {
         if (cancelled) return;
-        // Missing/unmeasurable rows must never strand a thread at offset zero.
-        if (++attempts > 60) {
-          finishAtEnd();
-          return;
-        }
-        const state = list.getState();
-        const rowIndex = state.indexByKey(position.rowId);
-        const row = rowIndex === undefined ? undefined : state.elementAtIndex(rowIndex);
-        const element = list.getScrollableNode();
-        if (!row || !element || element.clientHeight === 0) {
-          settleFrame = requestAnimationFrame(reconcile);
-          return;
-        }
-        const offset = Math.max(
-          0,
-          Math.min(
-            element.scrollTop +
-              row.getBoundingClientRect().top -
-              element.getBoundingClientRect().top +
-              position.offsetWithinRow,
-            element.scrollHeight - element.clientHeight,
-          ),
-        );
-        if (!Number.isFinite(offset)) {
-          finishAtEnd();
-          return;
-        }
-        if (Math.abs(element.scrollTop - offset) > 1) {
-          stableFrames = 0;
-          void list.scrollToOffset({ offset, animated: false }).then(() => {
-            if (!cancelled) settleFrame = requestAnimationFrame(reconcile);
-          });
-          return;
-        }
-        if (++stableFrames >= 2) {
+        if (!canRestoreRow) {
+          const element = list.getScrollableNode?.();
+          if (element && element.scrollHeight - element.clientHeight - element.scrollTop > 40) {
+            finishAtEnd();
+            return;
+          }
+          onIsAtEndChange(true);
           setPositionedThreadKey(listIdentityKey);
-        } else {
-          settleFrame = requestAnimationFrame(reconcile);
+          return;
         }
-      };
-      settleFrame = requestAnimationFrame(reconcile);
-    });
+        // Index scrolling starts from estimates. Keep the saved row mounted
+        // until its measured position and the DOM agree for two layout frames.
+        let stableFrames = 0;
+        let attempts = 0;
+        const reconcile = () => {
+          if (cancelled) return;
+          // Missing/unmeasurable rows must never strand a thread at offset zero.
+          if (++attempts > 60) {
+            finishAtEnd();
+            return;
+          }
+          const state = list.getState();
+          const rowIndex = state.indexByKey(position.rowId);
+          const row = rowIndex === undefined ? undefined : state.elementAtIndex(rowIndex);
+          const element = list.getScrollableNode();
+          if (!row || !element || element.clientHeight === 0) {
+            settleFrame = requestAnimationFrame(reconcile);
+            return;
+          }
+          const offset = Math.max(
+            0,
+            Math.min(
+              element.scrollTop +
+                row.getBoundingClientRect().top -
+                element.getBoundingClientRect().top +
+                position.offsetWithinRow,
+              element.scrollHeight - element.clientHeight,
+            ),
+          );
+          if (!Number.isFinite(offset)) {
+            finishAtEnd();
+            return;
+          }
+          if (Math.abs(element.scrollTop - offset) > 1) {
+            stableFrames = 0;
+            void list.scrollToOffset({ offset, animated: false }).then(() => {
+              if (!cancelled) settleFrame = requestAnimationFrame(reconcile);
+            });
+            return;
+          }
+          if (++stableFrames >= 2) {
+            setPositionedThreadKey(listIdentityKey);
+          } else {
+            settleFrame = requestAnimationFrame(reconcile);
+          }
+        };
+        settleFrame = requestAnimationFrame(reconcile);
+      })
+      .catch(finishAtEnd);
     return () => {
       cancelled = true;
       if (cancelPositionRestoreRef?.current === cancelRestoration) {
         cancelPositionRestoreRef.current = null;
       }
       if (settleFrame !== null) cancelAnimationFrame(settleFrame);
+      if (recoveryFrame !== null) cancelAnimationFrame(recoveryFrame);
       viewport?.removeEventListener("wheel", cancelForNavigation);
       viewport?.removeEventListener("touchmove", cancelForNavigation);
       viewport?.removeEventListener("pointerdown", cancelForNavigation);
@@ -940,8 +976,29 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     onIsAtEndChange,
     rememberedPosition,
     restoringThreadPosition,
-    rows,
+    rows.length,
+    restoreRowIndex,
   ]);
+
+  // A virtualizer reset can also lose the live edge after opening. Repair a
+  // jump to zero only while following; explicit reading/navigation opts out.
+  useLayoutEffect(() => {
+    if (!liveFollowEnabled || restoringThreadPosition || anchorMessageId || citationRequest) return;
+    const frame = requestAnimationFrame(() => {
+      const list = listRef.current;
+      const element = list?.getScrollableNode?.();
+      if (
+        element &&
+        element.clientHeight > 0 &&
+        element.scrollTop <= 1 &&
+        element.scrollHeight - element.clientHeight > 40
+      ) {
+        void list?.scrollToEnd?.({ animated: false }).catch(() => {});
+        element.scrollTop = element.scrollHeight - element.clientHeight;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [rows, liveFollowEnabled, restoringThreadPosition, anchorMessageId, citationRequest, listRef]);
 
   const [timelineViewportElement, setTimelineViewportElement] = useState<HTMLDivElement | null>(
     null,

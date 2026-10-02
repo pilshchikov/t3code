@@ -94,11 +94,11 @@ export function RightPanelShortcuts() {
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.isComposing || event.repeat) return;
+      if (event.isComposing) return;
       const command = resolve(event.key, event);
       if (command === null) return;
       claim(event);
-      run(command);
+      if (!event.repeat) run(command);
     };
 
     // macOS can deliver a key such as the section sign to an editable surface as text input with no
