@@ -336,8 +336,15 @@ export const LoadBalancingWeights = Schema.Record(
 export const DiffColorScheme = Schema.Literals(["red-green", "blue-orange"]);
 
 /** Maximum width of the chat timeline and composer on wide screens. */
-export const ChatWidth = Schema.Literals(["comfortable", "wide", "full"]);
+export const ChatWidth = Schema.Literals(["comfortable", "wide", "full", "custom"]);
 export type ChatWidth = typeof ChatWidth.Type;
+
+export const MIN_CHAT_CUSTOM_WIDTH_PX = 320;
+export const MAX_CHAT_CUSTOM_WIDTH_PX = 3840;
+export const DEFAULT_CHAT_CUSTOM_WIDTH_PX = 736;
+export const ChatCustomWidthPx = Schema.Int.check(
+  Schema.isBetween({ minimum: MIN_CHAT_CUSTOM_WIDTH_PX, maximum: MAX_CHAT_CUSTOM_WIDTH_PX }),
+);
 
 export const ClientSettingsSchema = Schema.Struct({
   notificationMode: NotificationMode.pipe(
@@ -348,6 +355,9 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed("red-green" as const)),
   ),
   chatWidth: ChatWidth.pipe(Schema.withDecodingDefault(Effect.succeed("comfortable" as const))),
+  chatCustomWidthPx: ChatCustomWidthPx.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_CHAT_CUSTOM_WIDTH_PX)),
+  ),
   loadBalancingEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   loadBalancingWeights: LoadBalancingWeights.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   appearanceContrast: AppearanceContrast.pipe(
@@ -1823,6 +1833,7 @@ export const ClientSettingsPatch = Schema.Struct({
   inAppNotificationsEnabled: Schema.optionalKey(Schema.Boolean),
   diffColorScheme: Schema.optionalKey(DiffColorScheme),
   chatWidth: Schema.optionalKey(ChatWidth),
+  chatCustomWidthPx: Schema.optionalKey(ChatCustomWidthPx),
   loadBalancingEnabled: Schema.optionalKey(Schema.Boolean),
   loadBalancingWeights: Schema.optionalKey(LoadBalancingWeights),
   appearanceContrast: Schema.optionalKey(AppearanceContrast),

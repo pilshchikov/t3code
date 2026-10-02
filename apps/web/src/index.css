@@ -2782,6 +2782,10 @@ code {
   --chat-content-max-width: 100%;
 }
 
+:root[data-chat-width="custom"] {
+  --chat-content-max-width: var(--chat-custom-width, 736px);
+}
+
 :root[data-diff-color-scheme="blue-orange"] {
   --diff-addition: light-dark(var(--color-blue-600), var(--color-blue-400));
   --diff-deletion: light-dark(var(--color-orange-600), var(--color-orange-400));

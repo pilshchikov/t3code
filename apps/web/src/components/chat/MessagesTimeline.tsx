@@ -948,6 +948,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   );
   // Re-measure the minimap gutter when the chat column changes width without a viewport resize.
   const chatWidth = useClientSettings((settings) => settings.chatWidth);
+  const chatCustomWidthPx = useClientSettings((settings) => settings.chatCustomWidthPx);
   const {
     target: readyCitationRequest,
     positioning: citationPositioning,
@@ -1172,7 +1173,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [timelineViewportElement, rows.length, reportContentOverflow, chatWidth]);
+  }, [timelineViewportElement, rows.length, reportContentOverflow, chatWidth, chatCustomWidthPx]);
 
   const sharedState = useMemo<TimelineRowSharedState>(
     () => ({

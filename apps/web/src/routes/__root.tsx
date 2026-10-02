@@ -275,9 +275,11 @@ function ContrastAppearanceSync() {
   }, [diffColorScheme]);
 
   const chatWidth = useClientSettings((settings) => settings.chatWidth);
+  const chatCustomWidthPx = useClientSettings((settings) => settings.chatCustomWidthPx);
   useEffect(() => {
     document.documentElement.dataset.chatWidth = chatWidth;
-  }, [chatWidth]);
+    document.documentElement.style.setProperty("--chat-custom-width", `${chatCustomWidthPx}px`);
+  }, [chatWidth, chatCustomWidthPx]);
 
   useEffect(() => {
     applyAppearanceContrast(document.documentElement, appearanceContrast);

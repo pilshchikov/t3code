@@ -1,4 +1,5 @@
 import { SettingsGroup } from "./SettingsGroup";
+import { ChatCustomWidthControl } from "./ChatCustomWidthControl";
 import { Spinner } from "~/components/ui/spinner";
 import { NotificationSettings } from "./NotificationSettings";
 import { ArchiveIcon, ArchiveX, CheckIcon, ChevronRightIcon, SettingsIcon } from "lucide-react";
@@ -199,6 +200,7 @@ const CHAT_WIDTH_LABELS: Record<ChatWidth, string> = {
   comfortable: "Comfortable",
   wide: "Wide",
   full: "Full",
+  custom: "Custom",
 };
 
 const DIFF_LAYOUT_LABELS: Record<DiffLayout, string> = {
@@ -537,7 +539,10 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.diffColorScheme !== DEFAULT_UNIFIED_SETTINGS.diffColorScheme
         ? ["Diff colors"]
         : []),
-      ...(settings.chatWidth !== DEFAULT_UNIFIED_SETTINGS.chatWidth ? ["Chat width"] : []),
+      ...(settings.chatWidth !== DEFAULT_UNIFIED_SETTINGS.chatWidth ||
+      settings.chatCustomWidthPx !== DEFAULT_UNIFIED_SETTINGS.chatCustomWidthPx
+        ? ["Chat width"]
+        : []),
       ...(settings.panelAnimationDurationMs !== DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs
         ? ["Panel animations"]
         : []),
@@ -665,6 +670,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.appearanceContrast,
       settings.diffColorScheme,
       settings.chatWidth,
+      settings.chatCustomWidthPx,
       settings.enableAgentBrowserAccess,
       settings.confirmQuit,
       settings.confirmThreadArchive,
@@ -786,6 +792,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       appearanceContrast: DEFAULT_UNIFIED_SETTINGS.appearanceContrast,
       diffColorScheme: DEFAULT_UNIFIED_SETTINGS.diffColorScheme,
       chatWidth: DEFAULT_UNIFIED_SETTINGS.chatWidth,
+      chatCustomWidthPx: DEFAULT_UNIFIED_SETTINGS.chatCustomWidthPx,
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       notificationMode: DEFAULT_UNIFIED_SETTINGS.notificationMode,
       inAppNotificationsEnabled: DEFAULT_UNIFIED_SETTINGS.inAppNotificationsEnabled,
@@ -1548,21 +1555,32 @@ export function AppearanceSettingsPanel() {
 
         <SettingsRow
           {...searchableSetting("chat-width")}
-          description="Set how wide messages and the composer can grow on large screens."
+          description="Set the maximum width of messages and the composer. The column is centered; smaller widths leave larger side margins."
           resetAction={
-            settings.chatWidth !== DEFAULT_UNIFIED_SETTINGS.chatWidth ? (
+            settings.chatWidth !== DEFAULT_UNIFIED_SETTINGS.chatWidth ||
+            settings.chatCustomWidthPx !== DEFAULT_UNIFIED_SETTINGS.chatCustomWidthPx ? (
               <SettingResetButton
                 label="chat width"
-                onClick={() => updateSettings({ chatWidth: DEFAULT_UNIFIED_SETTINGS.chatWidth })}
+                onClick={() =>
+                  updateSettings({
+                    chatWidth: DEFAULT_UNIFIED_SETTINGS.chatWidth,
+                    chatCustomWidthPx: DEFAULT_UNIFIED_SETTINGS.chatCustomWidthPx,
+                  })
+                }
               />
             ) : null
           }
           control={
-            <div className="w-full sm:w-40">
+            <div className="flex w-full flex-col gap-2 sm:w-44">
               <Select
                 value={settings.chatWidth}
                 onValueChange={(value) => {
-                  if (value === "comfortable" || value === "wide" || value === "full")
+                  if (
+                    value === "comfortable" ||
+                    value === "wide" ||
+                    value === "full" ||
+                    value === "custom"
+                  )
                     updateSettings({ chatWidth: value });
                 }}
               >
@@ -1573,8 +1591,15 @@ export function AppearanceSettingsPanel() {
                   <SelectItem value="comfortable">Comfortable (default)</SelectItem>
                   <SelectItem value="wide">Wide</SelectItem>
                   <SelectItem value="full">Full</SelectItem>
+                  <SelectItem value="custom">Custom (pixels)</SelectItem>
                 </SelectPopup>
               </Select>
+              {settings.chatWidth === "custom" ? (
+                <ChatCustomWidthControl
+                  value={settings.chatCustomWidthPx}
+                  onChange={(chatCustomWidthPx) => updateSettings({ chatCustomWidthPx })}
+                />
+              ) : null}
             </div>
           }
         />
