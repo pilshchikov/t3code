@@ -8,6 +8,11 @@ import {
 } from "~/components/chat/composerMentionDrag";
 import { PierreEntryIcon } from "~/components/chat/PierreEntryIcon";
 import { cn } from "~/lib/utils";
+import { useLocalStorage } from "~/hooks/useLocalStorage";
+import * as Schema from "effect/Schema";
+
+const ExpandedFileDirectories = Schema.Array(Schema.String);
+const EMPTY_EXPANDED_FILE_DIRECTORIES: readonly string[] = [];
 
 interface DirectoryNode {
   readonly kind: "directory";
@@ -162,6 +167,8 @@ function flattenVisibleNodes(
 }
 
 export function NativeProjectFileTree(props: {
+  active: boolean;
+  workspaceKey: string;
   entries: ReadonlyArray<ProjectEntry>;
   query: string;
   selectedPath: string | null;
@@ -179,7 +186,20 @@ export function NativeProjectFileTree(props: {
   const filteredNodes = useMemo(() => filterTree(nodes, props.query), [nodes, props.query]);
   // Expansion is opt-in: a fresh tree shows only top-level entries, so opening a large
   // workspace never flattens tens of thousands of rows into the virtualizer.
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const [expandedPaths, setExpandedPaths] = useLocalStorage(
+    `t3code.files.expansion.v1:${props.workspaceKey}`,
+    EMPTY_EXPANDED_FILE_DIRECTORIES,
+    ExpandedFileDirectories,
+  );
+  const expanded = useMemo(() => new Set(expandedPaths), [expandedPaths]);
+  const setExpanded = useCallback(
+    (update: ReadonlySet<string> | ((current: ReadonlySet<string>) => ReadonlySet<string>)) => {
+      setExpandedPaths((current) => [
+        ...(typeof update === "function" ? update(new Set(current)) : update),
+      ]);
+    },
+    [setExpandedPaths],
+  );
   const visibleRows = useMemo(
     () => flattenVisibleNodes(filteredNodes, expanded, props.query.trim().length > 0),
     [expanded, filteredNodes, props.query],
@@ -233,7 +253,7 @@ export function NativeProjectFileTree(props: {
   // set, so opening a file in one directory shut every directory the reader had opened elsewhere.
   // Collapsing the tree is the collapse button's job.
   useEffect(() => {
-    if (!props.selectedPath) return;
+    if (!props.active || !props.selectedPath) return;
     const ancestors = ancestorDirectories(props.selectedPath);
     setExpanded((current) => {
       if (ancestors.every((directory) => current.has(directory))) return current;
@@ -242,10 +262,10 @@ export function NativeProjectFileTree(props: {
       return next;
     });
     props.onSelectionChange([props.selectedPath]);
-  }, [props.selectedPath, props.selectedPathRevealId]);
+  }, [props.active, props.selectedPath, props.selectedPathRevealId, setExpanded]);
 
   useEffect(() => {
-    if (!props.selectedPath) return;
+    if (!props.active || !props.selectedPath) return;
     const index = visibleRows.findIndex(({ node }) => node.path === props.selectedPath);
     const scrollElement = scrollRef.current;
     if (index < 0 || !scrollElement) return;
@@ -255,7 +275,7 @@ export function NativeProjectFileTree(props: {
     else if (rowBottom > scrollElement.scrollTop + scrollElement.clientHeight) {
       scrollElement.scrollTop = rowBottom - scrollElement.clientHeight;
     }
-  }, [props.selectedPath, props.selectedPathRevealId, visibleRows]);
+  }, [props.active, props.selectedPath, props.selectedPathRevealId, visibleRows]);
 
   const selectFile = useCallback(
     (path: string, event: React.MouseEvent<HTMLButtonElement>) => {

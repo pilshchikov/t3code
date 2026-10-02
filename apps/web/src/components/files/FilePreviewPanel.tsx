@@ -1012,7 +1012,15 @@ function renderedToggleLabel(mode: "markdown" | "html" | "table", rendered: bool
   return rendered ? "Show HTML source" : "Show rendered page";
 }
 
-const MIN_WORKSPACE_TREE_HEIGHT_PX = 96;
+const MIN_WORKSPACE_TREE_HEIGHT_PX = 160;
+const FileBrowserLayout = Schema.Struct({
+  collapsedRoots: Schema.Array(Schema.String),
+  rootWeights: Schema.Record(Schema.String, Schema.Number.check(Schema.isGreaterThan(0))),
+});
+const DEFAULT_FILE_BROWSER_LAYOUT: typeof FileBrowserLayout.Type = {
+  collapsedRoots: [],
+  rootWeights: {},
+};
 
 function MultiRootFileBrowser(props: {
   active: boolean;
@@ -1028,8 +1036,15 @@ function MultiRootFileBrowser(props: {
 }) {
   const rootDisplayName = (root: ProjectWorkspace, index: number) =>
     index === 0 ? props.projectName : root.label?.trim() || workspaceDirectoryName(root.path);
-  const [collapsedRoots, setCollapsedRoots] = useState<ReadonlySet<string>>(() => new Set());
-  const [rootWeights, setRootWeights] = useState<Record<string, number>>({});
+  const projectRoot = props.roots[0]?.workspaceRoot ?? "";
+  const [layout, setLayout] = useLocalStorage(
+    `t3code.files.layout.v1:${editorWorkspaceKey(props.environmentId, projectRoot)}`,
+    DEFAULT_FILE_BROWSER_LAYOUT,
+    FileBrowserLayout,
+  );
+  const collapsedRoots = useMemo(() => new Set(layout.collapsedRoots), [layout.collapsedRoots]);
+  const [dragWeights, setDragWeights] = useState<Record<string, number> | null>(null);
+  const rootWeights = dragWeights ?? layout.rootWeights;
   const sectionElements = useRef(new Map<string, HTMLElement>());
   const resizeState = useRef<{
     pointerId: number;
@@ -1041,25 +1056,34 @@ function MultiRootFileBrowser(props: {
     weights: Record<string, number>;
   } | null>(null);
 
-  const toggleRoot = useCallback((path: string) => {
-    setCollapsedRoots((current) => {
-      const next = new Set(current);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      return next;
-    });
-  }, []);
+  const toggleRoot = useCallback(
+    (workspaceRoot: string) => {
+      setLayout((current) => ({
+        ...current,
+        collapsedRoots: current.collapsedRoots.includes(workspaceRoot)
+          ? current.collapsedRoots.filter((path) => path !== workspaceRoot)
+          : [...current.collapsedRoots, workspaceRoot],
+      }));
+    },
+    [setLayout],
+  );
 
   const startResize = useCallback(
     (event: React.PointerEvent<HTMLDivElement>, upperPath: string, lowerPath: string) => {
+      if (event.button !== 0) return;
       const upper = sectionElements.current.get(upperPath);
       const lower = sectionElements.current.get(lowerPath);
       if (!upper || !lower) return;
+      event.preventDefault();
+      event.stopPropagation();
       event.currentTarget.setPointerCapture(event.pointerId);
       const weights = Object.fromEntries(
         props.roots
-          .filter((root) => !collapsedRoots.has(root.path))
-          .map((root) => [root.path, sectionElements.current.get(root.path)?.offsetHeight ?? 1]),
+          .filter((root) => !collapsedRoots.has(root.workspaceRoot))
+          .map((root) => [
+            root.workspaceRoot,
+            sectionElements.current.get(root.workspaceRoot)?.offsetHeight ?? 1,
+          ]),
       );
       resizeState.current = {
         pointerId: event.pointerId,
@@ -1070,6 +1094,7 @@ function MultiRootFileBrowser(props: {
         startY: event.clientY,
         weights,
       };
+      setDragWeights(weights);
     },
     [collapsedRoots, props.roots],
   );
@@ -1083,44 +1108,59 @@ function MultiRootFileBrowser(props: {
       pairHeight - minimumHeight,
       Math.max(minimumHeight, state.upperHeight + event.clientY - state.startY),
     );
-    setRootWeights({
+    state.weights = {
       ...state.weights,
       [state.upperPath]: upperHeight,
       [state.lowerPath]: pairHeight - upperHeight,
-    });
+    };
+    setDragWeights(state.weights);
   }, []);
 
-  const stopResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (resizeState.current?.pointerId !== event.pointerId) return;
-    resizeState.current = null;
-    event.currentTarget.releasePointerCapture(event.pointerId);
-  }, []);
+  const stopResize = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const state = resizeState.current;
+      if (!state || state.pointerId !== event.pointerId) return;
+      resizeState.current = null;
+      // Save once on release, rather than writing storage on every pointer move.
+      setLayout((current) => ({
+        ...current,
+        rootWeights: { ...current.rootWeights, ...state.weights },
+      }));
+      setDragWeights(null);
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    },
+    [setLayout],
+  );
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1 overflow-hidden p-2">
       {props.roots.map((root, index) => {
-        const collapsed = collapsedRoots.has(root.path);
-        const nextRoot = props.roots[index + 1];
+        const collapsed = collapsedRoots.has(root.workspaceRoot);
+        const nextRoot = props.roots
+          .slice(index + 1)
+          .find((candidate) => !collapsedRoots.has(candidate.workspaceRoot));
         const color = resolveWorkspaceColor(root, index);
         const colorOption = workspaceColorOption(color);
         return (
-          <div key={root.path} className="contents">
+          <div key={root.workspaceRoot} className="contents">
             <section
               ref={(element) => {
-                if (element) sectionElements.current.set(root.path, element);
-                else sectionElements.current.delete(root.path);
+                if (element) sectionElements.current.set(root.workspaceRoot, element);
+                else sectionElements.current.delete(root.workspaceRoot);
               }}
               className={cn(
                 "flex min-h-0 flex-col overflow-hidden rounded-lg border border-border/60 bg-background",
                 collapsed ? "shrink-0" : "basis-0",
               )}
-              style={collapsed ? undefined : { flexGrow: rootWeights[root.path] ?? 1 }}
+              style={collapsed ? undefined : { flexGrow: rootWeights[root.workspaceRoot] ?? 1 }}
             >
               <button
                 type="button"
                 className="flex shrink-0 items-center gap-2 bg-muted/20 px-3 py-2 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 aria-expanded={!collapsed}
-                onClick={() => toggleRoot(root.path)}
+                onClick={() => toggleRoot(root.workspaceRoot)}
               >
                 <ChevronRight
                   className={cn(
@@ -1159,16 +1199,19 @@ function MultiRootFileBrowser(props: {
                 </div>
               ) : null}
             </section>
-            {!collapsed && nextRoot && !collapsedRoots.has(nextRoot.path) ? (
+            {!collapsed && nextRoot ? (
               <div
                 role="separator"
                 aria-orientation="horizontal"
-                aria-label={`Resize ${rootDisplayName(root, index)} and ${rootDisplayName(nextRoot, index + 1)}`}
-                className="group -my-1 flex h-3 shrink-0 touch-none cursor-row-resize items-center justify-center"
-                onPointerDown={(event) => startResize(event, root.path, nextRoot.path)}
+                aria-label={`Resize ${rootDisplayName(root, index)} and ${rootDisplayName(nextRoot, props.roots.indexOf(nextRoot))}`}
+                className="group relative z-10 flex h-3 shrink-0 touch-none cursor-row-resize select-none items-center justify-center"
+                onPointerDown={(event) =>
+                  startResize(event, root.workspaceRoot, nextRoot.workspaceRoot)
+                }
                 onPointerMove={resize}
                 onPointerUp={stopResize}
                 onPointerCancel={stopResize}
+                onLostPointerCapture={stopResize}
               >
                 <GripHorizontal className="size-3.5 text-muted-foreground/35 transition-colors group-hover:text-muted-foreground" />
               </div>

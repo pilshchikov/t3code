@@ -6,6 +6,13 @@ fork-specific behavior so future upstream syncs are easier to review.
 
 ## Upstream sync and repository worktrees, October 2
 
+- Files repository collapse choices and tree height proportions are shared across
+  file tabs and saved per environment/project, keyed by configured repository
+  identity. Folder expansion is saved per checkout; inactive tabs do not reveal
+  their selected file and reopen folders. Height splitters keep a full hit area,
+  resize the next expanded repository across collapsed sections, and save weights
+  on release (`FilePreviewPanel.tsx`, `FileBrowserPanel.tsx`, `NativeProjectFileTree.tsx`).
+
 - Scroll restoration has an independent one-second recovery deadline, including
   fresh thread openings. Streamed row updates cannot restart the budget; a stalled
   virtualizer scroll falls back to the latest message without waiting for its

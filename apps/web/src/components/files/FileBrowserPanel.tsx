@@ -585,6 +585,8 @@ export default function FileBrowserPanel({
         <div className="p-4 text-xs text-muted-foreground">No files found in this directory.</div>
       ) : (
         <NativeProjectFileTree
+          active={active}
+          workspaceKey={`${encodeURIComponent(environmentId)}|${encodeURIComponent(cwd)}`}
           entries={entries}
           query={deferredQuery}
           selectedPath={selectedPath}
