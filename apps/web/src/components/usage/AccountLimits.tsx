@@ -1,3 +1,4 @@
+import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 /**
  * Account rate-limit views: the sidebar hover card and the usage page's
  * "Limits" strip. Both render whatever windows the server reports, so a
@@ -179,11 +180,15 @@ export function AccountLimitsHoverCard() {
         const rows = byProvider.get(provider) ?? [];
         const only = rows.length === 1 ? rows[0] : undefined;
         const presentation = PROVIDER_PRESENTATION[provider];
-        const Mark = presentation.mark;
+
         return (
           <div key={provider} className="flex flex-col gap-1">
             <div className="flex items-baseline gap-1.5">
-              <Mark className="size-3 shrink-0 self-center" />
+              <ProviderInstanceIcon
+                driverKind={presentation.driverKind}
+                displayName={presentation.label}
+                iconClassName="size-3 shrink-0 self-center"
+              />
               <span className="text-xs font-medium text-foreground">{presentation.label}</span>
               <span className="ml-auto">
                 {only !== undefined ? <SnapshotAge snapshot={only.snapshot} nowMs={nowMs} /> : null}
@@ -285,11 +290,15 @@ export function AccountLimitsSection() {
           const rows = byProvider.get(provider) ?? [];
           const only = rows.length === 1 ? rows[0] : undefined;
           const presentation = PROVIDER_PRESENTATION[provider];
-          const Mark = presentation.mark;
+
           return (
             <div key={provider} className="flex flex-col gap-1.5">
               <div className="flex items-baseline gap-2">
-                <Mark className="size-3.5 shrink-0 self-center" />
+                <ProviderInstanceIcon
+                  driverKind={presentation.driverKind}
+                  displayName={presentation.label}
+                  iconClassName="size-3.5 shrink-0 self-center"
+                />
                 <span className="text-sm font-medium text-foreground">{presentation.label}</span>
                 <span className="ml-auto">
                   {only !== undefined ? (

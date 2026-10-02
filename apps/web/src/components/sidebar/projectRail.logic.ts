@@ -20,7 +20,7 @@ export function projectRailStatuses(
     const key = `${thread.environmentId}:${thread.projectId}`;
     const status = projects.get(key) ?? { running: false, completed: false, input: false };
     const threadStatus = resolveSidebarThreadStatus(thread);
-    status.running ||= threadStatus === "working" || threadStatus === "monitoring";
+    status.running ||= threadStatus === "working" || threadStatus === "waiting";
     status.input ||= threadStatus === "approval" || threadStatus === "input";
     status.completed ||= hasUnseenCompletion({
       ...thread,

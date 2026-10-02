@@ -1,3 +1,5 @@
+import Migration0060 from "./Migrations/056_RemoveRedundantProjectionIndexes.ts";
+import Migration0059 from "./Migrations/055_OrchestrationV2.ts";
 /**
  * Migration runner with an inline loader.
  *
@@ -74,6 +76,7 @@ import Migration0055 from "./Migrations/051_ProjectionThreadMessageContext.ts";
 import Migration0056 from "./Migrations/052_ProjectionThreadTitleState.ts";
 import Migration0057 from "./Migrations/053_PullRequestFilesViewed.ts";
 // Upstream's own 054 lands after the fork's, so no released id is reused.
+import Migration0061 from "./Migrations/061_ForkWorkspaceCompatibility.ts";
 import Migration0058 from "./Migrations/054_ProjectionThreadsAutoSettleDisabledAt.ts";
 
 // Both fork histories used migration 041 for different additive schema changes.
@@ -152,6 +155,9 @@ export const migrationEntries = [
   [56, "ProjectionThreadTitleState", Migration0056],
   [57, "PullRequestFilesViewed", Migration0057],
   [58, "ProjectionThreadsAutoSettleDisabledAt", Migration0058],
+  [59, "OrchestrationV2", Migration0059],
+  [60, "OrchestrationV2RedundantIndexes", Migration0060],
+  [61, "ForkWorkspaceCompatibility", Migration0061],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

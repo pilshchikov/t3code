@@ -21,8 +21,9 @@ function thread(input: {
     archivedAt: input.archivedAt ?? null,
     hasPendingApprovals: input.hasPendingApprovals ?? false,
     hasPendingUserInput: input.hasPendingUserInput ?? false,
-    session: input.sessionStatus ? { status: input.sessionStatus } : null,
-    latestTurn: null,
+    runtime: input.sessionStatus ? { status: input.sessionStatus } : null,
+    latestRun: null,
+    pendingBackgroundTasks: [],
   } as unknown as EnvironmentThreadShell;
 }
 
@@ -62,7 +63,7 @@ describe("projectRailStatuses", () => {
 it("keeps all three project signals and clears only completions that were read", () => {
   const completed = {
     ...thread({ id: "completed", projectId: "mixed" }),
-    latestTurn: { completedAt: "2026-09-27T12:00:00.000Z" },
+    latestRun: { completedAt: "2026-09-27T12:00:00.000Z" },
   } as EnvironmentThreadShell;
   const threads = [
     completed,

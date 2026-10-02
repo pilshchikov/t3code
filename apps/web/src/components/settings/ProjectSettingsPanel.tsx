@@ -664,7 +664,7 @@ function ProjectDetail({
                 <Select
                   value={root.defaultThreadEnvMode ?? "inherit"}
                   onValueChange={(value) => {
-                    if (value === "local" || value === "worktree" || value === "multiwork") {
+                    if (value === "local" || value === "worktree") {
                       setWorkspaceRootMode(root.path, value);
                     } else if (value === "inherit") {
                       setWorkspaceRootMode(root.path, null);
@@ -685,7 +685,6 @@ function ProjectDetail({
                     <SelectItem value="inherit">Default</SelectItem>
                     <SelectItem value="local">Current checkout</SelectItem>
                     <SelectItem value="worktree">Worktree</SelectItem>
-                    <SelectItem value="multiwork">Multiwork</SelectItem>
                   </SelectPopup>
                 </Select>
                 {pathIsPrimary(root.path, representative.workspaceRoot) ? (

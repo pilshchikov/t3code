@@ -6,7 +6,7 @@ import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
-import { ProviderService } from "../provider/Services/ProviderService.ts";
+import { OrchestratorV2 } from "../orchestration-v2/Orchestrator.ts";
 import { UsageLimitHistory } from "./UsageLimitHistory.ts";
 import { providerHistoryPoints } from "./UsageLimitHistoryCollector.ts";
 
@@ -38,7 +38,7 @@ export class ActiveProviderLimitSchedule {
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const providers = yield* ProviderRegistry;
-    const service = yield* ProviderService;
+    const service = yield* OrchestratorV2;
     const history = yield* UsageLimitHistory;
     const scope = yield* Scope.Scope;
     const schedule = new ActiveProviderLimitSchedule();
@@ -72,40 +72,31 @@ export const layer = Layer.effectDiscard(
           Effect.forkIn(scope),
         );
       });
-    // Subscribe before seeding currently running sessions so quick turns cannot fall into a gap.
-    const events = yield* service.subscribeEvents ?? Effect.succeed(service.streamEvents);
-    for (const session of yield* service.listSessions()) {
-      if (session.status !== "running" || !session.providerInstanceId) continue;
-      for (const id of schedule.update(session.threadId, session.providerInstanceId, true))
-        yield* refresh(id, true);
-    }
-    yield* events.pipe(
+    yield* service.streamDomainEvents.pipe(
       Stream.filter(
         (event) =>
-          event.type === "turn.started" ||
-          event.type === "turn.completed" ||
-          event.type === "turn.aborted" ||
-          event.type === "session.exited",
+          event.type === "run.created" ||
+          event.type === "run.updated" ||
+          event.type === "thread.provider-switched" ||
+          event.type === "thread.deleted",
       ),
       Stream.runForEach((event) =>
         Effect.gen(function* () {
-          const snapshots = yield* providers.getProviders;
-          const candidates = snapshots.filter((p) => p.driver === event.provider && p.enabled);
-          const id =
-            event.providerInstanceId ??
-            (candidates.length === 1 ? candidates[0]!.instanceId : undefined);
-          if (!id) return;
-          for (const changed of schedule.update(
-            event.threadId,
-            id,
-            event.type === "turn.started",
-          )) {
-            yield* refresh(changed, true);
-          }
+          const thread = yield* service.getThreadShell(event.threadId);
+          if (!thread) return;
+          const running = event.type !== "thread.deleted" && thread.activeRunId !== null;
+          for (const id of schedule.update(thread.id, thread.providerInstanceId, running))
+            yield* refresh(id, true);
         }).pipe(Effect.ignoreCause({ log: true })),
       ),
       Effect.forkScoped,
     );
+    const snapshot = yield* service.getShellSnapshot();
+    for (const thread of snapshot.threads) {
+      if (thread.activeRunId === null) continue;
+      for (const id of schedule.update(thread.id, thread.providerInstanceId, true))
+        yield* refresh(id, true);
+    }
     yield* Effect.gen(function* () {
       for (const id of schedule.due(DateTime.toEpochMillis(yield* DateTime.now)))
         yield* refresh(id);

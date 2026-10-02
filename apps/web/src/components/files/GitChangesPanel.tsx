@@ -29,7 +29,7 @@ import { ProviderModelPicker } from "~/components/chat/ProviderModelPicker";
 import { toastManager } from "~/components/ui/toast";
 import { useClientSettings } from "~/hooks/useSettings";
 import { useWorkspaceMutationRefresh } from "~/hooks/useWorkspaceMutationRefresh";
-import { useThread } from "~/state/entities";
+import { useThreadShell } from "~/state/entities";
 import { serverEnvironment } from "~/state/server";
 import { threadEnvironment } from "~/state/threads";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -324,7 +324,7 @@ export default function GitChangesPanel({
   });
   useProjectEntriesWatchRefresh(environmentId, cwd, status.refresh);
   const clientSettings = useClientSettings();
-  const activeThread = useThread(threadRef);
+  const activeThread = useThreadShell(threadRef);
   const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
   const startThreadTurn = useAtomCommand(threadEnvironment.startTurn, {
     reportFailure: false,

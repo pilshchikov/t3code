@@ -1,7 +1,7 @@
 import type { EnvironmentId } from "@t3tools/contracts";
 import { SymbolView } from "../../components/AppSymbol";
 import { MaterialScreenContent } from "../../components/MaterialScreenContent";
-import { useCallback, useMemo, useState, type ComponentProps } from "react";
+import { useCallback, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { Platform, Pressable, View, type NativeSyntheticEvent } from "react-native";
 import {
   Screen,
@@ -22,6 +22,12 @@ import { preloadWorkspaceFileContents } from "./preload-workspace-file";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
 
 export function ThreadFileNavigatorPane(props: {
+  readonly renderHeader?: (input: {
+    searchQuery: string;
+    onSearchQueryChange: (value: string) => void;
+    onRefresh: () => void;
+    onBack: () => void;
+  }) => ReactNode;
   readonly cwd: string;
   readonly environmentId: EnvironmentId;
   readonly headerInset: number;
@@ -85,6 +91,20 @@ export function ThreadFileNavigatorPane(props: {
       onSelectFile={props.onSelectFile}
     />
   );
+
+  if (props.renderHeader) {
+    return (
+      <View className="flex-1 border-l border-border bg-sheet">
+        {props.renderHeader({
+          searchQuery,
+          onSearchQueryChange: setSearchQuery,
+          onRefresh: entriesQuery.refresh,
+          onBack: toggleAuxiliaryPane,
+        })}
+        {fileTree}
+      </View>
+    );
+  }
 
   if (Platform.OS === "ios") {
     return (

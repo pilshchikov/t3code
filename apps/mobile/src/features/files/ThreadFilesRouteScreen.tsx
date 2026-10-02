@@ -1,7 +1,19 @@
+import {
+  resolveThreadWorkspaces,
+  type SelectedProjectWorkspace,
+} from "@t3tools/shared/threadWorkspaces";
+import { threadEnvironment } from "../../state/threads";
+import { useAtomCommand } from "../../state/use-atom-command";
+import type { ProjectWorkspace, ScopedThreadRef, VcsRef } from "@t3tools/contracts";
+import type { ScreenHeaderMenu } from "../../components/ScreenHeader";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { StackActions, useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { Platform, View } from "react-native";
+import { Alert, Platform, View } from "react-native";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { EnvironmentId, type ProjectReadFileResult, ThreadId } from "@t3tools/contracts";
@@ -60,6 +72,7 @@ import {
 import { useWorkspaceFileAssetUrlState } from "./workspaceFileAssetUrl";
 
 function FilesBrowserHeader(props: {
+  readonly checkoutMenus?: ReadonlyArray<ScreenHeaderMenu>;
   readonly projectName: string;
   readonly searchQuery: string;
   readonly onSearchQueryChange: (query: string) => void;
@@ -81,7 +94,8 @@ function FilesBrowserHeader(props: {
         clearAccessibilityLabel: "Clear file search",
       }}
       menus={
-        Platform.OS === "android"
+        props.checkoutMenus ??
+        (Platform.OS === "android"
           ? [
               {
                 title: "File options",
@@ -89,7 +103,7 @@ function FilesBrowserHeader(props: {
                 items: [{ id: "refresh", title: "Refresh files", onPress: props.onRefresh }],
               },
             ]
-          : undefined
+          : undefined)
       }
     />
   );
@@ -360,15 +374,163 @@ function useThreadFilesWorkspace(params: {
   const project = selectedThreadProject as {
     readonly title?: string;
     readonly workspaceRoot?: string;
+    readonly workspaceRoots?: ReadonlyArray<ProjectWorkspace>;
   } | null;
 
   return {
     cwd: routeCwd ?? selectedThreadCwd ?? project?.workspaceRoot ?? null,
+    workspaces: project?.workspaceRoot
+      ? resolveThreadWorkspaces(
+          { workspaceRoot: project.workspaceRoot, workspaceRoots: project.workspaceRoots },
+          {
+            worktreePath: selectedThreadCwd ?? null,
+            branch: selectedThread?.branch ?? null,
+            workspaceSelections: selectedThread?.workspaceSelections,
+          },
+        )
+      : [],
     environmentId,
     projectName: routeProjectName ?? project?.title ?? "Files",
     selectedThread,
     threadId,
   };
+}
+
+function WorkspaceFilesHeader(
+  props: Parameters<typeof FilesBrowserHeader>[0] & {
+    readonly threadRef: ScopedThreadRef | null;
+    readonly workspaces: ReadonlyArray<SelectedProjectWorkspace>;
+    readonly workspaceRoot: string | null;
+    readonly onSelectRoot: (root: string) => void;
+  },
+) {
+  const root =
+    props.workspaces.find((entry) => entry.workspaceRoot === props.workspaceRoot) ??
+    props.workspaces[0];
+  const [cursor, setCursor] = useState<number | undefined>();
+  const [loadedRefs, setLoadedRefs] = useState<ReadonlyArray<VcsRef>>([]);
+  const selectionKey = JSON.stringify([props.threadRef, root?.workspaceRoot, root?.path]);
+  useEffect(() => {
+    setCursor(undefined);
+    setLoadedRefs([]);
+  }, [selectionKey]);
+  const inspect = useEnvironmentQuery(
+    props.threadRef && root
+      ? threadEnvironment.workspaceInspect({
+          environmentId: props.threadRef.environmentId,
+          input: {
+            threadId: props.threadRef.threadId,
+            workspaceRoot: root.workspaceRoot,
+            ...(cursor === undefined ? {} : { cursor }),
+          },
+        })
+      : null,
+  );
+  useEffect(() => {
+    if (!inspect.data) return;
+    setLoadedRefs((previous) => [
+      ...new Map(
+        [...(cursor === undefined ? [] : previous), ...inspect.data!.refs.refs].map((ref) => [
+          ref.name,
+          ref,
+        ]),
+      ).values(),
+    ]);
+  }, [cursor, inspect.data]);
+  const selectWorkspace = useAtomCommand(threadEnvironment.workspaceSelect);
+  const [pending, setPending] = useState(false);
+  const select = async (selection: { path: string } | { branch: string }) => {
+    if (!props.threadRef || !root) return;
+    setPending(true);
+    try {
+      const result = await selectWorkspace({
+        environmentId: props.threadRef.environmentId,
+        input: {
+          threadId: props.threadRef.threadId,
+          workspaceRoot: root.workspaceRoot,
+          ...selection,
+        },
+      });
+      if (result._tag !== "Success" && !isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        Alert.alert(
+          "Could not select checkout",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    } finally {
+      setPending(false);
+    }
+  };
+  const checkouts = new Map<string, string>();
+  for (const ref of loadedRefs) if (ref.worktreePath) checkouts.set(ref.worktreePath, ref.name);
+  if (root)
+    checkouts.set(root.path, checkouts.get(root.path) ?? root.branch ?? "Selected checkout");
+  const menus: ReadonlyArray<ScreenHeaderMenu> = [
+    {
+      title: "Repositories and checkouts",
+      icon: "folder",
+      items: [
+        {
+          id: "repositories",
+          title: "Repository",
+          items: props.workspaces.map((entry) => ({
+            id: entry.workspaceRoot,
+            title: entry.label ?? entry.workspaceRoot.split("/").at(-1) ?? entry.workspaceRoot,
+            subtitle: entry.path,
+            selected: entry.workspaceRoot === root?.workspaceRoot,
+            onPress: () => props.onSelectRoot(entry.workspaceRoot),
+          })),
+        },
+        {
+          id: "checkouts",
+          title: "Worktrees",
+          items: [...checkouts].map(([path, title]) => ({
+            id: path,
+            title,
+            subtitle: path,
+            disabled: pending,
+            selected: path === root?.path,
+            onPress: () => {
+              void select({ path });
+            },
+          })),
+        },
+        {
+          id: "branches",
+          title: "Branches",
+          items: loadedRefs.map((ref) => ({
+            id: ref.name,
+            title: ref.name,
+            disabled: pending,
+            selected: ref.name === root?.branch,
+            onPress: () => {
+              void select({ branch: ref.name });
+            },
+          })),
+        },
+        ...(inspect.data?.refs.nextCursor != null
+          ? [
+              {
+                id: "more-branches",
+                title: "Load more branches",
+                onPress: () => setCursor(inspect.data?.refs.nextCursor ?? undefined),
+              },
+            ]
+          : []),
+        {
+          id: "refresh",
+          title: "Refresh files and checkouts",
+          onPress: () => {
+            props.onRefresh();
+            setCursor(undefined);
+            inspect.refresh();
+          },
+        },
+      ],
+    },
+  ];
+  return <FilesBrowserHeader {...props} checkoutMenus={menus} />;
 }
 
 function FilesUnavailable() {
@@ -417,9 +579,17 @@ export function ThreadFilesTreeScreen(props: ThreadFilesRouteScreenProps) {
   const { fileInspector, layout, showAuxiliaryPane } = useAdaptiveWorkspaceLayout();
   const [searchQuery, setSearchQuery] = useState("");
   const { themeAppearance: highlightTheme } = useAppearancePreferences();
-  const { cwd, environmentId, projectName, selectedThread, threadId } = useThreadFilesWorkspace(
-    props.route.params,
-  );
+  const {
+    cwd: primaryCwd,
+    workspaces,
+    environmentId,
+    projectName,
+    selectedThread,
+    threadId,
+  } = useThreadFilesWorkspace(props.route.params);
+  const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null);
+  useEffect(() => setWorkspaceRoot(null), [threadId, environmentId]);
+  const cwd = workspaces.find((root) => root.workspaceRoot === workspaceRoot)?.path ?? primaryCwd;
   const revealedInspectorRef = useRef(false);
   const entriesQuery = useFileTreeEntries({
     environmentId,
@@ -449,6 +619,7 @@ export function ThreadFilesTreeScreen(props: ThreadFilesRouteScreenProps) {
       const params = {
         environmentId: String(environmentId),
         threadId: String(threadId),
+        ...(cwd ? { cwd } : {}),
         path: path.split("/").filter((segment) => segment.length > 0),
       };
       const navigationAction = resolveFileSelectionNavigationAction({
@@ -460,12 +631,22 @@ export function ThreadFilesTreeScreen(props: ThreadFilesRouteScreenProps) {
       }
       navigation.navigate("ThreadFile", params);
     },
-    [environmentId, fileInspector.supported, navigation, threadId],
+    [cwd, environmentId, fileInspector.supported, navigation, threadId],
   );
   const renderInspector = useCallback(
     (headerInset: number) =>
       environmentId !== null && cwd !== null ? (
         <ThreadFileNavigatorPane
+          renderHeader={(header) => (
+            <WorkspaceFilesHeader
+              {...header}
+              projectName={projectName}
+              threadRef={threadId ? { environmentId, threadId } : null}
+              workspaces={workspaces}
+              workspaceRoot={workspaceRoot}
+              onSelectRoot={setWorkspaceRoot}
+            />
+          )}
           cwd={cwd}
           environmentId={environmentId}
           headerInset={headerInset}
@@ -474,7 +655,7 @@ export function ThreadFilesTreeScreen(props: ThreadFilesRouteScreenProps) {
           onSelectFile={handleSelectFile}
         />
       ) : null,
-    [cwd, environmentId, handleSelectFile, projectName],
+    [cwd, environmentId, handleSelectFile, projectName, threadId, workspaces, workspaceRoot],
   );
   const handlePreviewFile = useCallback(
     (relativePath: string) => {
@@ -526,7 +707,11 @@ export function ThreadFilesTreeScreen(props: ThreadFilesRouteScreenProps) {
 
   const content = (
     <>
-      <FilesBrowserHeader
+      <WorkspaceFilesHeader
+        threadRef={environmentId && threadId ? { environmentId, threadId } : null}
+        workspaces={workspaces}
+        workspaceRoot={workspaceRoot}
+        onSelectRoot={setWorkspaceRoot}
         projectName={projectName}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}

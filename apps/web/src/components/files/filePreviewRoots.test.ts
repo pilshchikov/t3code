@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import {
+  resolveThreadWorkspaces,
+  threadWorkspaceInstructions,
+} from "@t3tools/shared/threadWorkspaces";
 import { resolveFilePreviewRoots, resolveFileWorktreeOptions } from "./filePreviewRoots";
 
 describe("resolveFilePreviewRoots", () => {
@@ -35,22 +39,6 @@ describe("resolveFilePreviewRoots", () => {
 });
 
 describe("resolveFileWorktreeOptions", () => {
-  it("includes existing multiwork copies without changing the active checkout", () => {
-    const options = resolveFileWorktreeOptions(
-      "/repo",
-      [],
-      [
-        { path: "/copies/task", name: "repo-task", branch: "task" },
-        { path: "/copies/task/", name: "duplicate" },
-      ],
-    );
-    expect(options).toHaveLength(2);
-    expect(options.find((option) => option.path === "/copies/task")).toMatchObject({
-      refName: "Multiwork · task",
-      current: false,
-    });
-    expect(options.find((option) => option.current)?.path).toBe("/repo");
-  });
   it("lists live worktrees by newest commit", () => {
     expect(
       resolveFileWorktreeOptions("/worktrees/project/task-b", [
@@ -125,5 +113,44 @@ describe("resolveFileWorktreeOptions", () => {
         lastCommitAt: 100,
       },
     ]);
+  });
+});
+
+describe("per-repository thread selections", () => {
+  const project = {
+    workspaceRoot: "/frontend",
+    workspaceRoots: [
+      { path: "/backend", label: "Backend", color: "green" as const },
+      { path: "/frontend", label: "Frontend" },
+      { path: "/tools" },
+    ],
+  };
+  it("uses configured identities independently of the selected checkout", () => {
+    const roots = resolveThreadWorkspaces(project, {
+      worktreePath: "/worktrees/frontend",
+      branch: "ui",
+      workspaceSelections: [
+        { workspaceRoot: "/backend", cwd: "/worktrees/backend", branch: "api" },
+        { workspaceRoot: "/unconfigured", cwd: "/elsewhere", branch: "bad" },
+      ],
+    });
+    expect(roots.map((r) => [r.workspaceRoot, r.path, r.branch, r.primary])).toEqual([
+      ["/frontend", "/worktrees/frontend", "ui", true],
+      ["/backend", "/worktrees/backend", "api", false],
+      ["/tools", "/tools", null, false],
+    ]);
+    expect(roots[1]?.color).toBe("green");
+    expect(threadWorkspaceInstructions(roots, true)).toContain("thread_workspace_select");
+    expect(threadWorkspaceInstructions(roots, true)).toContain(
+      "selected cwd /worktrees/backend; branch api",
+    );
+  });
+  it("synthesizes a missing primary root and uses configured roots as defaults", () => {
+    expect(
+      resolveThreadWorkspaces(
+        { workspaceRoot: "/main", workspaceRoots: [{ path: "/other" }] },
+        { worktreePath: null, branch: null },
+      ).map((r) => r.path),
+    ).toEqual(["/main", "/other"]);
   });
 });

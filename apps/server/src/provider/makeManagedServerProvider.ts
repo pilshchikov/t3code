@@ -1,3 +1,5 @@
+import * as Config from "effect/Config";
+import * as Option from "effect/Option";
 import {
   DEFAULT_PROVIDER_HEALTH_REFRESH_INTERVAL,
   type ServerProvider,
@@ -14,11 +16,9 @@ import * as Ref from "effect/Ref";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Semaphore from "effect/Semaphore";
-import * as Config from "effect/Config";
-import * as Option from "effect/Option";
 
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
-import { ServerSettingsService } from "../serverSettings.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import { applyUsageLimitsUpdate, resolveUsageLimitsAfterProbe } from "./providerUsageLimits.ts";
 import type { ServerProviderShape } from "./Services/ServerProvider.ts";
 
@@ -47,9 +47,6 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
   readonly haveSettingsChanged: (previous: Settings, next: Settings) => boolean;
   readonly initialSnapshot: (settings: Settings) => Effect.Effect<ServerProvider>;
   readonly checkProvider: Effect.Effect<ServerProvider, ServerSettingsError>;
-  readonly enableBackgroundRefresh?: boolean;
-  readonly refreshOnInterval?: boolean;
-  readonly checkProviderOnSettingsChange?: (previous: Settings, next: Settings) => boolean;
   readonly enrichSnapshot?: (input: {
     readonly settings: Settings;
     readonly snapshot: ServerProvider;
@@ -57,9 +54,12 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     readonly publishSnapshot: (snapshot: ServerProvider) => Effect.Effect<void>;
   }) => Effect.Effect<void>;
   readonly refreshInterval?: Duration.Input;
+  readonly enableBackgroundRefresh?: boolean;
+  readonly refreshOnInterval?: boolean;
+  readonly checkProviderOnSettingsChange?: (previous: Settings, next: Settings) => boolean;
 }): Effect.fn.Return<ServerProviderShape, ServerSettingsError, Scope.Scope> {
   const backgroundPolicy = yield* Effect.serviceOption(BackgroundPolicy.BackgroundPolicy);
-  const serverSettings = yield* Effect.serviceOption(ServerSettingsService);
+  const serverSettings = yield* Effect.serviceOption(ServerSettings.ServerSettingsService);
   const enableBackgroundRefresh =
     input.enableBackgroundRefresh ??
     (yield* Config.Boolean("T3CODE_ENABLE_PROVIDER_AUTO_REFRESH").pipe(
@@ -215,9 +215,9 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
   });
 
   const hasProviderStatusDemand = Effect.gen(function* () {
-    if (Option.isNone(backgroundPolicy)) return true;
     const state = yield* Ref.get(snapshotStateRef);
     const instanceId = state.snapshot.instanceId;
+    if (Option.isNone(backgroundPolicy)) return true;
     const [genericDemand, instanceDemand] = yield* Effect.all([
       backgroundPolicy.value.shouldRunScopeWork({ type: "provider-status" }),
       backgroundPolicy.value.shouldRunScopeWork({ type: "provider-status", instanceId }),
@@ -228,15 +228,15 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
   const getRefreshInterval =
     input.refreshInterval !== undefined
       ? Effect.succeed(input.refreshInterval)
-      : Option.isSome(serverSettings)
-        ? serverSettings.value.getSettings.pipe(
+      : Option.isNone(serverSettings)
+        ? Effect.succeed(DEFAULT_PROVIDER_HEALTH_REFRESH_INTERVAL)
+        : serverSettings.value.getSettings.pipe(
             Effect.map(
               (settings) =>
                 resolveServerBackgroundActivitySettings(settings).providerHealthRefreshInterval,
             ),
             Effect.orElseSucceed(() => DEFAULT_PROVIDER_HEALTH_REFRESH_INTERVAL),
-          )
-        : Effect.succeed(DEFAULT_PROVIDER_HEALTH_REFRESH_INTERVAL);
+          );
 
   const refreshIntervalChanges = yield* Queue.sliding<void>(1);
   if (input.refreshInterval === undefined && Option.isSome(serverSettings)) {
@@ -257,7 +257,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     Effect.asVoid(applySnapshot(nextSettings)),
   ).pipe(Effect.forkScoped);
 
-  if (enableBackgroundRefresh) {
+  if (enableBackgroundRefresh)
     yield* Effect.forever(
       getRefreshInterval.pipe(
         Effect.flatMap((refreshInterval) =>
@@ -287,11 +287,10 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
       ),
     ).pipe(Effect.forkScoped);
 
-    yield* applySnapshot(initialSettings, { forceRefresh: true }).pipe(
-      Effect.ignoreCause({ log: true }),
-      Effect.forkScoped,
-    );
-  }
+  yield* applySnapshot(initialSettings, { forceRefresh: true }).pipe(
+    Effect.ignoreCause({ log: true }),
+    Effect.forkScoped,
+  );
 
   return {
     resolveMaintenance: input.resolveMaintenance,

@@ -4,18 +4,41 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
-## Upstream sync, October 2
+## Upstream sync and repository worktrees, October 2
 
-- Merged upstream through `024d49520e` (the last commit before the v2 orchestration
-  replacement), including 0.0.45 fixes, the Working shelf, file/directory navigation,
-  project creation improvements and the mobile dependency upgrades.
-- Preserved fork sidebar layouts/order, private update policy, multi-directory roots,
-  workspace/memory MCP, settlement policy, usage history, mobile viewport handling,
-  and runtime subagent effort hooks. Combined upstream task-parent/model updates
-  with the effort hooks; retained the original database migration ids.
-- The v2 engine replacement requires a separate port of these features and a data
-  migration. It is not enabled in this fork by this sync.
-- Validation: server/web typechecks and focused merge regression tests.
+- Integrated upstream v2 orchestration, including PR #2829 (`de34391427`), and
+  main through `a7b3ce8c08`. Also includes fixes for idle shell project reloads,
+  Claude model changes while background agents run, Codex API-key startup warnings,
+  steering retaining the newest next-turn model/effort selection, and the Pi/ACP
+  Registry settings badge correction.
+- Ported fork project roots, scripts/working directories, workspace and memory MCP,
+  per-account limit polling/history, private network defaults, exclusive settlement
+  modes, and safe settled-worktree retention onto the v2 services. Existing migration
+  ids remain intact; v2 migrations use 59–60 and additive compatibility repair uses 61.
+- Files has a separate checkout/branch selector for every configured repository on
+  web/desktop and native mobile. Secondary selections persist in v2 thread metadata
+  and both shell/detail projections, so switching one never overwrites another.
+  Git History follows those selections too. Open text editor tabs retain their draft
+  state when another panel is active. Existing project colors, rail status dots,
+  mobile composer layout, and conversation scroll anchoring remain fork behavior.
+- Agents can inspect/create/select a repository checkout with
+  `thread_workspace_inspect`, `thread_workspace_create`, and `thread_workspace_select`.
+  Tools are scoped to the invoking session/thread and reject stale sessions or
+  conflicting selection updates. Every turn receives selected repository identities,
+  absolute checkouts/branches, private directory guidance, project memory guidance,
+  and instructions to update the Files selection before editing.
+- **Multiwork retired at the owner's request.** New isolated work uses Git worktrees.
+  Removed clone choices and creation/list RPCs; saved Multiwork defaults and drafts
+  decode to worktree mode. Existing selected clone paths and on-disk directories are
+  kept. Legacy clone implementation is dormant; no cleanup or conversion runs on it.
+  This supersedes the historical Multiwork section below.
+- Claude worker effort hooks now feed v2 subagents and their child threads' own model
+  selections. A worker's unknown effort is not copied from the parent. Upstream v2
+  represents subagents as child conversations instead of the old Agents panel.
+- Validation includes focused server/MCP, migration/restart, provider/effort, Files
+  controls, drafts, rail, viewport/scroll, native Files, and contract tests. Migration
+  tests use temporary databases. Server/web/mobile/desktop TypeScript checks pass. The installed application and live userdata are untouched.
+- Recovery: `backup/pre-upstream-20261002` and the preserved multi-repository WIP stash.
 
 ## Claude subagent effort reflects the worker runtime
 
@@ -27,7 +50,7 @@ fork-specific behavior so future upstream syncs are easier to review.
 - Buffer hook values that arrive before `task_started`, and emit metadata-only
   `task.updated` events when effort changes. Repeated levels emit no additional updates;
   progress text, token usage and task status remain intact across web and native mobile.
-- Source: `apps/server/src/provider/Layers/ClaudeAdapter.ts`. Focused adapter/catalog and
+- Source (before v2): `apps/server/src/provider/Layers/ClaudeAdapter.ts`. Focused adapter/catalog and
   shared subagent-state tests pass (194 tests), and the server typecheck passes. A real
   Claude Code 2.1.285 run against an isolated local simulated API confirmed parent requests
   at medium, a file-defined Sonnet worker at high, and matching hook agent/task ids.

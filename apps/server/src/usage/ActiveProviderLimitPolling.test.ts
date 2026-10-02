@@ -1,10 +1,14 @@
+import * as Deferred from "effect/Deferred";
 import { describe, expect, it } from "@effect/vitest";
 import {
   EventId,
-  ProviderDriverKind,
+  MessageId,
+  RunId,
   ProviderInstanceId,
   ThreadId,
-  type ProviderRuntimeEvent,
+  type OrchestrationV2DomainEvent,
+  type OrchestrationV2ThreadShell,
+  ProjectId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -14,8 +18,65 @@ import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import { ActiveProviderLimitSchedule, layer } from "./ActiveProviderLimitPolling.ts";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
-import { ProviderService } from "../provider/Services/ProviderService.ts";
+import { OrchestratorV2 } from "../orchestration-v2/Orchestrator.ts";
+import * as DateTime from "effect/DateTime";
 import { UsageLimitHistory } from "./UsageLimitHistory.ts";
+
+const NOW_MS = Date.parse("2026-06-10T12:00:00.000Z");
+const DAY_MS = 24 * 60 * 60 * 1_000;
+
+function at(offsetMs: number): DateTime.Utc {
+  return DateTime.makeUnsafe(NOW_MS + offsetMs);
+}
+
+function shell(overrides: Partial<OrchestrationV2ThreadShell> = {}): OrchestrationV2ThreadShell {
+  return {
+    id: ThreadId.make("thread-1"),
+    projectId: ProjectId.make("project-1"),
+    title: "Thread",
+    providerInstanceId: ProviderInstanceId.make("codex"),
+    modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
+    runtimeMode: "full-access",
+    interactionMode: "default",
+    worktreePath: null,
+    activeProviderThreadId: null,
+    lineage: {
+      rootThreadId: ThreadId.make("thread-1"),
+      parentThreadId: null,
+      relationshipToParent: null,
+    },
+    forkedFrom: null,
+    createdBy: "user",
+    creationSource: "web",
+    activeRunId: null,
+    latestVisibleMessage: null,
+    hasActionableProposedPlan: false,
+    itemCount: 0,
+    visibleItemCount: 0,
+    lastVisitedAt: null,
+    deletedAt: null,
+    branch: null,
+    linkedPullRequest: null,
+    status: "idle",
+    activityRunStatus: null,
+    pendingRuntimeRequest: null,
+    pendingBackgroundTasks: [],
+    latestRunId: null,
+    latestRunRequestedAt: null,
+    latestRunStartedAt: null,
+    latestRunCompletedAt: null,
+    latestUserMessageAt: null,
+    createdAt: at(-30 * DAY_MS),
+    updatedAt: at(-10 * DAY_MS),
+    archivedAt: null,
+    settledOverride: null,
+    settledAt: null,
+    snoozedUntil: null,
+    snoozedAt: null,
+    pinnedAt: null,
+    ...overrides,
+  };
+}
 
 const personal = ProviderInstanceId.make("personal");
 const work = ProviderInstanceId.make("work");
@@ -45,15 +106,36 @@ describe("active provider limit polling", () => {
   });
   it.effect("refreshes and records without a UI, stopping after work ends", () =>
     Effect.gen(function* () {
-      const events = yield* PubSub.unbounded<ProviderRuntimeEvent>();
+      const events = yield* PubSub.unbounded<OrchestrationV2DomainEvent>();
+      const subscribed = yield* Deferred.make<void>();
       const requests = yield* Queue.unbounded<ProviderInstanceId>();
       let recorded = 0;
+      const active = new Map<string, boolean>();
       yield* Layer.build(
         layer.pipe(
           Layer.provide(
-            Layer.mock(ProviderService)({
-              subscribeEvents: PubSub.subscribe(events).pipe(Effect.map(Stream.fromSubscription)),
-              listSessions: () => Effect.succeed([]),
+            Layer.mock(OrchestratorV2)({
+              streamDomainEvents: Stream.unwrap(
+                PubSub.subscribe(events).pipe(
+                  Effect.tap(() => Deferred.succeed(subscribed, undefined)),
+                  Effect.map(Stream.fromSubscription),
+                ),
+              ),
+              getShellSnapshot: () =>
+                Effect.succeed({
+                  schemaVersion: 2,
+                  threads: [],
+                  archivedThreads: [],
+                  snapshotSequence: 0,
+                }),
+              getThreadShell: (id) =>
+                Effect.sync(() =>
+                  shell({
+                    id,
+                    providerInstanceId: work,
+                    activeRunId: active.get(id) ? RunId.make("run:" + id) : null,
+                  }),
+                ),
             }),
           ),
           Layer.provide(
@@ -72,38 +154,46 @@ describe("active provider limit polling", () => {
           ),
         ),
       );
-      const base = {
-        eventId: EventId.make("event"),
-        provider: ProviderDriverKind.make("claudeAgent"),
-        providerInstanceId: work,
-        threadId: ThreadId.make("thread"),
-        createdAt: "2026-09-14T12:00:00.000Z",
-      };
-      yield* PubSub.publish(events, { ...base, type: "turn.started", payload: {} });
+      yield* Deferred.await(subscribed);
+      const publish = (id: string, running: boolean) =>
+        Effect.gen(function* () {
+          active.set(id, running);
+          const now = yield* DateTime.now;
+          yield* PubSub.publish(events, {
+            id: EventId.make("event:" + id),
+            type: "run.updated",
+            threadId: ThreadId.make(id),
+            occurredAt: now,
+            payload: {
+              id: RunId.make("run:" + id),
+              threadId: ThreadId.make(id),
+              ordinal: 1,
+              providerInstanceId: work,
+              modelSelection: { instanceId: work, model: "test" },
+              providerThreadId: null,
+              userMessageId: MessageId.make("message"),
+              rootNodeId: null,
+              activeAttemptId: null,
+              status: running ? "running" : "completed",
+              requestedAt: now,
+              startedAt: now,
+              completedAt: running ? null : now,
+              checkpointId: null,
+              contextHandoffId: null,
+            },
+          });
+        });
+      yield* publish("thread", true);
       expect(yield* Queue.take(requests)).toBe(work);
-      yield* PubSub.publish(events, {
-        ...base,
-        threadId: ThreadId.make("second"),
-        type: "turn.started",
-        payload: {},
-      });
+      yield* publish("second", true);
       yield* TestClock.adjust("1 millis");
       expect(yield* Queue.size(requests)).toBe(0);
       yield* TestClock.adjust("29999 millis");
       expect(yield* Queue.take(requests)).toBe(work);
-      yield* PubSub.publish(events, {
-        ...base,
-        type: "turn.completed",
-        payload: { state: "completed" },
-      });
+      yield* publish("thread", false);
       yield* TestClock.adjust("1 millis");
       expect(yield* Queue.size(requests)).toBe(0);
-      yield* PubSub.publish(events, {
-        ...base,
-        threadId: ThreadId.make("second"),
-        type: "turn.completed",
-        payload: { state: "completed" },
-      });
+      yield* publish("second", false);
       expect(yield* Queue.take(requests)).toBe(work);
       yield* TestClock.adjust("60 seconds");
       expect(yield* Queue.size(requests)).toBe(0);

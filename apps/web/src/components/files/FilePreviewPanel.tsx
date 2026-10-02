@@ -1,3 +1,9 @@
+import type { ThreadWorkspaceSelection } from "@t3tools/contracts";
+import {
+  resolveThreadWorkspaces,
+  type SelectedProjectWorkspace,
+} from "@t3tools/shared/threadWorkspaces";
+import { FileWorktreeToolbar } from "./FileWorktreeToolbar";
 import { Spinner } from "~/components/ui/spinner";
 import { DIFF_SURFACE_THEME_UNSAFE_CSS } from "~/lib/diffRendering";
 import type {
@@ -26,13 +32,11 @@ import { mediaFileReference } from "@t3tools/client-runtime/media-reference";
 import {
   ArrowLeft,
   ArrowRight,
-  ChevronDown,
   ChevronRight,
   Code2,
   Table2,
   WrapTextIcon,
   Eye,
-  FolderGit2,
   FolderTree,
   Globe2,
   GripHorizontal,
@@ -73,16 +77,6 @@ import {
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
 import { isAbsolutePath, resolvePathLinkTarget } from "~/terminal-links";
 import { ScrollArea } from "~/components/ui/scroll-area";
-import {
-  Menu,
-  MenuGroup,
-  MenuGroupLabel,
-  MenuItem,
-  MenuPopup,
-  MenuRadioGroup,
-  MenuRadioItem,
-  MenuTrigger,
-} from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { ResizableColumns } from "~/components/ui/resizable-columns";
@@ -95,8 +89,6 @@ import { projectEnvironment } from "~/state/projects";
 import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
-import { vcsEnvironment } from "~/state/vcs";
-import { multiworkEnvironment } from "~/state/multiwork";
 
 import { AttachmentFilePreview } from "./AttachmentFilePreview";
 import { AudioPreview } from "./AudioPreview";
@@ -121,11 +113,6 @@ import { resolveFileEditorHistoryAction } from "./fileEditorUndo";
 import { FileSurfaceAction, FileSurfaceFailure, FileSurfaceLoading } from "./fileSurfaceChrome";
 import SourceFilePreview from "./ReadOnlySourcePreview";
 import { resolveCenteredFileLineScrollTop } from "./fileLineReveal";
-import {
-  resolveFilePreviewRoots,
-  resolveFileWorktreeOptions,
-  type FileWorktreeOption,
-} from "./filePreviewRoots";
 import { DiffCommentAnnotation } from "../diffs/DiffCommentAnnotation";
 import { projectFileCacheKey, projectFileEditorCacheKey } from "./fileContentRevision";
 import { workspaceDocumentDirectory } from "./filePath";
@@ -149,6 +136,7 @@ interface FilePreviewPanelProps {
   active?: boolean;
   environmentId: EnvironmentId;
   primaryCwd: string;
+  projectRoot: string;
   cwd: string;
   projectName: string;
   relativePath: string | null;
@@ -164,6 +152,7 @@ interface FilePreviewPanelProps {
   selectedFilePending: boolean;
   workspaceMutationId: string | null;
   workspaceRoots?: ReadonlyArray<ProjectWorkspace> | undefined;
+  workspaceSelections?: ReadonlyArray<ThreadWorkspaceSelection> | undefined;
 }
 
 const RENDER_MARKDOWN_STORAGE_KEY = "t3code.renderMarkdown";
@@ -1025,101 +1014,13 @@ function renderedToggleLabel(mode: "markdown" | "html" | "table", rendered: bool
 
 const MIN_WORKSPACE_TREE_HEIGHT_PX = 96;
 
-function worktreeOptionLabel(option: FileWorktreeOption): string {
-  return option.refName ?? (workspaceDirectoryName(option.path) || "Current checkout");
-}
-
-function FileWorktreeToolbar(props: {
-  environmentId: EnvironmentId;
-  activeCwd: string;
-  onSelect: (path: string) => void;
-}) {
-  const copiesQuery = useEnvironmentQuery(
-    multiworkEnvironment.copies({
-      environmentId: props.environmentId,
-      input: { cwd: props.activeCwd },
-    }),
-  );
-  const refsQuery = useEnvironmentQuery(
-    vcsEnvironment.listRefs({
-      environmentId: props.environmentId,
-      input: {
-        cwd: props.activeCwd,
-        refKind: "local",
-        refresh: true,
-        limit: 200,
-      },
-    }),
-  );
-  const options = useMemo(
-    () =>
-      resolveFileWorktreeOptions(
-        props.activeCwd,
-        refsQuery.data?.refs ?? [],
-        copiesQuery.data?.copies ?? [],
-      ),
-    [props.activeCwd, refsQuery.data?.refs, copiesQuery.data?.copies],
-  );
-  const activeOption = options.find((option) => option.current) ?? options[0]!;
-
-  if (refsQuery.data?.isRepo === false) return null;
-
-  return (
-    <div
-      className="flex h-9 shrink-0 items-center gap-1 border-b border-border/60 px-2"
-      data-file-worktree-selector
-    >
-      <Menu
-        onOpenChange={(open) => {
-          if (open) {
-            refsQuery.refresh();
-            copiesQuery.refresh();
-          }
-        }}
-      >
-        <MenuTrigger className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded px-2 text-left text-xs text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
-          <FolderGit2 className="size-3.5 shrink-0" />
-          <span className="min-w-0 flex-1 truncate">{worktreeOptionLabel(activeOption)}</span>
-          <ChevronDown className="size-3.5 shrink-0 opacity-60" />
-        </MenuTrigger>
-        <MenuPopup align="start" className="w-80">
-          <MenuGroup>
-            <MenuGroupLabel>File tree workspace</MenuGroupLabel>
-            <MenuRadioGroup
-              value={activeOption.path}
-              onValueChange={(nextPath) => {
-                if (nextPath !== activeOption.path) props.onSelect(nextPath);
-              }}
-            >
-              {options.map((option) => (
-                <MenuRadioItem key={option.path} value={option.path}>
-                  <div className="min-w-0 py-0.5">
-                    <div className="truncate text-xs font-medium">
-                      {worktreeOptionLabel(option)}
-                    </div>
-                    <code className="block truncate text-[10px] text-muted-foreground">
-                      {option.path}
-                    </code>
-                  </div>
-                </MenuRadioItem>
-              ))}
-            </MenuRadioGroup>
-          </MenuGroup>
-          {refsQuery.error ? <MenuItem disabled>{refsQuery.error}</MenuItem> : null}
-          <MenuItem onClick={refsQuery.refresh}>
-            <RefreshCw className={cn("size-3.5", refsQuery.isPending && "animate-spin")} />
-            Refresh worktrees
-          </MenuItem>
-        </MenuPopup>
-      </Menu>
-    </div>
-  );
-}
-
 function MultiRootFileBrowser(props: {
   active: boolean;
   environmentId: EnvironmentId;
-  roots: ReadonlyArray<ProjectWorkspace>;
+  roots: ReadonlyArray<SelectedProjectWorkspace>;
+  threadRef: ScopedThreadRef;
+  selectedCwd?: string | undefined;
+  selectedPath?: string | null | undefined;
   projectName: string;
   revealRequestId: number;
   workspaceMutationId: string | null;
@@ -1235,6 +1136,11 @@ function MultiRootFileBrowser(props: {
                   </code>
                 </div>
               </button>
+              <FileWorktreeToolbar
+                environmentId={props.environmentId}
+                threadRef={props.threadRef}
+                root={root}
+              />
               {!collapsed ? (
                 <div className="min-h-0 flex-1 border-t border-border/60">
                   <FileBrowserPanel
@@ -1243,7 +1149,9 @@ function MultiRootFileBrowser(props: {
                     environmentId={props.environmentId}
                     cwd={root.path}
                     projectName={rootDisplayName(root, index)}
-                    selectedPath={null}
+                    selectedPath={
+                      props.selectedCwd === root.path ? (props.selectedPath ?? null) : null
+                    }
                     selectedPathRevealId={props.revealRequestId}
                     onOpenFile={(path) => props.onOpenFile(path, root.path)}
                     workspaceMutationId={props.workspaceMutationId}
@@ -1276,6 +1184,7 @@ export default function FilePreviewPanel({
   active = true,
   environmentId,
   primaryCwd,
+  projectRoot,
   cwd,
   projectName,
   relativePath: requestedPath,
@@ -1291,6 +1200,7 @@ export default function FilePreviewPanel({
   selectedFilePending,
   workspaceMutationId,
   workspaceRoots,
+  workspaceSelections,
 }: FilePreviewPanelProps) {
   const relativePath =
     attachment === undefined ? resolveFilePreviewPath(requestedPath, cwd) : requestedPath;
@@ -1307,18 +1217,13 @@ export default function FilePreviewPanel({
     (path: string, pending: boolean) => onWorkspacePendingChange(path, pending, activeCwd),
     [onWorkspacePendingChange, activeCwd],
   );
-  const selectFileTreeWorktree = useCallback(
-    (nextCwd: string) => {
-      // Opening another worktree creates a distinct tab; don't retarget the
-      // cached editor that still belongs to the original workspace.
-      if (relativePath !== null) onOpenFile(relativePath, nextCwd);
-      else setSelectedRootCwd(nextCwd);
-    },
-    [onOpenFile, relativePath],
-  );
   const roots = useMemo(
-    () => resolveFilePreviewRoots(relativePath === null ? activeCwd : primaryCwd, workspaceRoots),
-    [activeCwd, primaryCwd, relativePath, workspaceRoots],
+    () =>
+      resolveThreadWorkspaces(
+        { workspaceRoot: projectRoot, workspaceRoots },
+        { worktreePath: primaryCwd, branch: null, workspaceSelections },
+      ),
+    [primaryCwd, projectRoot, workspaceRoots, workspaceSelections],
   );
   const environmentHttpBaseUrl = useEnvironmentHttpBaseUrl(environmentId);
   const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
@@ -1845,7 +1750,6 @@ export default function FilePreviewPanel({
               availableEditors={availableEditors}
               openInCwd={absolutePath}
               compact
-              enableShortcut={false}
             />
           ) : null}
           {canToggleRendered && renderedMode ? (
@@ -1917,11 +1821,6 @@ export default function FilePreviewPanel({
             first={previewSurface}
             second={
               <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-background">
-                <FileWorktreeToolbar
-                  environmentId={environmentId}
-                  activeCwd={activeCwd}
-                  onSelect={selectFileTreeWorktree}
-                />
                 <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border/60 px-1.5">
                   {(["files", "structure", "commit"] as const).map((view) => (
                     <button
@@ -1956,16 +1855,16 @@ export default function FilePreviewPanel({
                     onNavigate={navigateToLineInCurrentFile}
                   />
                 ) : (
-                  <FileBrowserPanel
-                    key={`${environmentId}:${activeCwd}`}
+                  <MultiRootFileBrowser
                     active={active}
                     environmentId={environmentId}
-                    cwd={activeCwd}
+                    roots={roots}
+                    threadRef={threadRef}
                     projectName={projectName}
+                    revealRequestId={effectiveRevealRequestId}
+                    selectedCwd={activeCwd}
                     selectedPath={relativePath}
-                    selectedPathRevealId={effectiveRevealRequestId}
-                    onOpenFile={(path) => onOpenFile(path, activeCwd)}
-                    onRefreshSelectedFile={file.refresh}
+                    onOpenFile={onOpenFile}
                     workspaceMutationId={workspaceMutationId}
                   />
                 )}
@@ -1976,15 +1875,11 @@ export default function FilePreviewPanel({
           previewSurface
         ) : (
           <aside className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-            <FileWorktreeToolbar
-              environmentId={environmentId}
-              activeCwd={activeCwd}
-              onSelect={selectFileTreeWorktree}
-            />
             <MultiRootFileBrowser
               active={active}
               environmentId={environmentId}
               roots={roots}
+              threadRef={threadRef}
               projectName={projectName}
               revealRequestId={revealRequestId}
               workspaceMutationId={workspaceMutationId}

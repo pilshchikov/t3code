@@ -45,7 +45,7 @@ export const projectForThread = Effect.fn("ProjectMemory.projectForThread")(func
   const sql = yield* SqlClient.SqlClient;
   const rows = yield* sql<{
     projectId: ProjectId;
-  }>`SELECT project_id AS "projectId" FROM projection_threads WHERE thread_id = ${threadId} AND deleted_at IS NULL`;
+  }>`SELECT project_id AS "projectId" FROM orchestration_v2_projection_threads WHERE thread_id = ${threadId} AND deleted_at IS NULL`;
   if (!rows[0]) return yield* new ProjectMemoryError({ message: "Thread not found." });
   return rows[0].projectId;
 }, Effect.mapError(fail));

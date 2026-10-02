@@ -22,12 +22,12 @@ export interface EnvironmentOption {
   machine: EnvironmentMachineKind;
 }
 
-export const EnvMode = Schema.Literals(["local", "worktree", "multiwork"]);
+export const EnvMode = Schema.Literals(["local", "worktree"]);
 export type EnvMode = typeof EnvMode.Type;
 
-/** Env modes that provision a dedicated, isolated workspace (worktree or multiwork copy). */
+/** Env modes that provision a dedicated, isolated workspace (worktree). */
 export function isIsolatedEnvMode(mode: EnvMode): boolean {
-  return mode === "worktree" || mode === "multiwork";
+  return mode === "worktree";
 }
 
 const GENERIC_LOCAL_ENVIRONMENT_LABELS = new Set(["local", "local environment"]);
@@ -69,6 +69,8 @@ export function shouldShowEnvironmentIndicator(input: {
 }
 
 export function shouldShowComposerContextStrip(input: {
+  isDraftHeroState: boolean;
+  persistInActiveThreads: boolean;
   hasActiveProject: boolean;
   isGitRepo: boolean;
   showEnvironmentIndicator: boolean;
@@ -77,6 +79,7 @@ export function shouldShowComposerContextStrip(input: {
 }): boolean {
   return (
     input.hasActiveProject &&
+    (input.isDraftHeroState || input.persistInActiveThreads) &&
     (input.isGitRepo || input.showEnvironmentIndicator || input.hostsRestingComposerControls)
   );
 }
@@ -97,7 +100,6 @@ export function resolveContextStripLabelsCompact(input: {
 
 export function resolveEnvModeLabel(mode: EnvMode): string {
   if (mode === "worktree") return "New worktree";
-  if (mode === "multiwork") return "Multiwork copy";
   return "Current checkout";
 }
 
@@ -133,6 +135,13 @@ export function resolveLockedWorkspaceLabel(
 ): string {
   if (activeWorktreePath) return "Worktree";
   return effectiveEnvMode === "worktree" ? resolveEnvModeLabel("worktree") : "Local checkout";
+}
+
+export function resolveWorkspaceDisplayName(path: string | null): string | null {
+  if (!path) return null;
+  const normalizedPath = path.replace(/[\\/]+$/, "");
+  if (normalizedPath.length === 0) return path;
+  return normalizedPath.split(/[\\/]/).at(-1) ?? normalizedPath;
 }
 
 export interface PreviousWorktreeSeed {

@@ -43,7 +43,7 @@ it.effect(
       const sql = yield* SqlClient.SqlClient;
       for (const id of ["a", "b"]) {
         yield* sql`INSERT INTO projection_projects (project_id, title, workspace_root, scripts_json, created_at, updated_at) VALUES (${id}, 'Project', '/test', '[]', '2026-09-08', '2026-09-08')`;
-        yield* sql`INSERT INTO projection_threads (thread_id, project_id, title, created_at, updated_at) VALUES (${`memory-${id}`}, ${id}, 'Thread', '2026-09-08', '2026-09-08')`;
+        yield* sql`INSERT INTO orchestration_v2_projection_threads (thread_id, project_id, title, default_provider, runtime_mode, interaction_mode, created_at, updated_at, payload_json) VALUES (${`memory-${id}`}, ${id}, 'Thread', 'claude', 'full-access', 'default', '2026-09-08', '2026-09-08', '{}')`;
       }
       const server = yield* McpServer.McpServer;
       const call = (name: string, args: Record<string, unknown>, invocation = scope) =>

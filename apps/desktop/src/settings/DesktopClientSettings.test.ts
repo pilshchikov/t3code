@@ -59,6 +59,7 @@ const clientSettings: ClientSettings = {
   proactivePanelsEnabled: true,
   showEditorTabs: true,
   showSkillsInSlashMenu: false,
+  persistComposerContextStrip: true,
   providerModelPreferences: {},
   sidebarProjectGroupingMode: "repository_path",
   sidebarProjectGroupingOverrides: {

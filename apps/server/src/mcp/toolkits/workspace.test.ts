@@ -5,9 +5,9 @@ import {
   ProjectId,
   ProviderInstanceId,
   ThreadId,
-  TurnId,
-  type OrchestrationCommand,
-  type OrchestrationThreadShell,
+  RunId,
+  type OrchestrationV2ServerCommand,
+  type OrchestrationV2ThreadShell,
 } from "@t3tools/contracts";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -17,59 +17,85 @@ import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import type { Tool } from "effect/unstable/ai";
 import { GitWorkflowService } from "../../git/GitWorkflowService.ts";
-import { MultiworkService } from "../../multiwork/MultiworkService.ts";
-import { OrchestrationEngineService } from "../../orchestration/Services/OrchestrationEngine.ts";
-import { ProjectionSnapshotQuery } from "../../orchestration/Services/ProjectionSnapshotQuery.ts";
+import { ThreadManagementService } from "../../orchestration-v2/ThreadManagementService.ts";
+import { ProjectService } from "../../project/ProjectService.ts";
+import * as ThreadWorkspaces from "../../workspace/ThreadWorkspaces.ts";
+import * as DateTime from "effect/DateTime";
 import { ServerSettingsService } from "../../serverSettings.ts";
-import { CheckpointStore } from "../../checkpointing/CheckpointStore.ts";
 import { McpInvocationContext, type McpCapability } from "../McpInvocationContext.ts";
-import {
-  setMcpProviderSession,
-  clearMcpProviderSession,
-  readMcpWorkspaceOverride,
-} from "../McpProviderSession.ts";
+import { setMcpProviderSession, clearMcpProviderSession } from "../McpProviderSession.ts";
 import { WorkspaceHandlersLive, WorkspaceToolkit } from "./workspace.ts";
+
+const NOW_MS = Date.parse("2026-06-10T12:00:00.000Z");
+const DAY_MS = 24 * 60 * 60 * 1_000;
+
+function at(offsetMs: number): DateTime.Utc {
+  return DateTime.makeUnsafe(NOW_MS + offsetMs);
+}
+
+function shell(overrides: Partial<OrchestrationV2ThreadShell> = {}): OrchestrationV2ThreadShell {
+  return {
+    id: ThreadId.make("thread-1"),
+    projectId: ProjectId.make("project-1"),
+    title: "Thread",
+    providerInstanceId: ProviderInstanceId.make("codex"),
+    modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
+    runtimeMode: "full-access",
+    interactionMode: "default",
+    worktreePath: null,
+    activeProviderThreadId: null,
+    lineage: {
+      rootThreadId: ThreadId.make("thread-1"),
+      parentThreadId: null,
+      relationshipToParent: null,
+    },
+    forkedFrom: null,
+    createdBy: "user",
+    creationSource: "web",
+    activeRunId: null,
+    latestVisibleMessage: null,
+    hasActionableProposedPlan: false,
+    itemCount: 0,
+    visibleItemCount: 0,
+    lastVisitedAt: null,
+    deletedAt: null,
+    branch: null,
+    linkedPullRequest: null,
+    status: "idle",
+    activityRunStatus: null,
+    pendingRuntimeRequest: null,
+    pendingBackgroundTasks: [],
+    latestRunId: null,
+    latestRunRequestedAt: null,
+    latestRunStartedAt: null,
+    latestRunCompletedAt: null,
+    latestUserMessageAt: null,
+    createdAt: at(-30 * DAY_MS),
+    updatedAt: at(-10 * DAY_MS),
+    archivedAt: null,
+    settledOverride: null,
+    settledAt: null,
+    snoozedUntil: null,
+    snoozedAt: null,
+    pinnedAt: null,
+    ...overrides,
+  };
+}
 
 const threadId = ThreadId.make("workspace-test");
 const projectId = ProjectId.make("workspace-project");
-const turnId = TurnId.make("workspace-turn");
 const providerInstanceId = ProviderInstanceId.make("claude");
 const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
-  const commands: Array<OrchestrationCommand> = [];
+  const commands: Array<OrchestrationV2ServerCommand> = [];
   const creations: Array<unknown> = [];
   const captures: Array<string> = [];
   const now = "2026-09-13T00:00:00.000Z";
-  let thread: OrchestrationThreadShell = {
+  let thread = shell({
     id: threadId,
     projectId,
-    title: "Test",
     branch: "main",
-    worktreePath: null,
     modelSelection: { instanceId: providerInstanceId, model: "test" },
-    runtimeMode: "full-access",
-    interactionMode: "default",
-    pullRequests: [],
-    latestTurn: null,
-    createdAt: now,
-    updatedAt: now,
-    archivedAt: null,
-    settledAt: null,
-    settledOverride: null,
-    session: {
-      threadId,
-      providerName: "claudeAgent",
-      providerInstanceId,
-      runtimeMode: "full-access",
-      status: "running",
-      activeTurnId: turnId,
-      lastError: null,
-      updatedAt: now,
-    },
-    latestUserMessageAt: now,
-    hasPendingApprovals: false,
-    hasPendingUserInput: false,
-    hasActionableProposedPlan: false,
-  };
+  });
   const scope = {
     environmentId: EnvironmentId.make("test"),
     threadId,
@@ -82,6 +108,7 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
       setMcpProviderSession({
         ...scope,
         capabilities: new Set(["workspace"]),
+        browserToolsAvailable: false,
         endpoint: "http://test",
         authorizationHeader: "test",
       }),
@@ -98,44 +125,45 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
       }),
     ),
     Layer.mock(ServerSettingsService)({ getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS) }),
-    Layer.mock(ProjectionSnapshotQuery)({
-      getThreadShellById: (id) =>
-        Effect.sync(() => (id === threadId ? Option.some({ ...thread }) : Option.none())),
-      getThreadCheckpointContext: () =>
-        Effect.sync(() =>
-          Option.some({
-            threadId,
-            projectId,
-            workspaceRoot: "/repo",
-            worktreePath: thread.worktreePath,
-            checkpoints: [],
-          }),
-        ),
-      getProjectShellById: () =>
+    Layer.mock(ProjectService)({
+      getById: () =>
         Effect.succeed(
           Option.some({
             id: projectId,
             title: "Project",
             workspaceRoot: "/repo",
+            workspaceRoots: [{ path: "/repo" }, { path: "/backend", label: "Backend" }],
             defaultModelSelection: null,
             scripts: [],
-            repositoryIdentity: null,
             createdAt: now,
             updatedAt: now,
+            deletedAt: null,
           }),
         ),
     }),
-    Layer.mock(OrchestrationEngineService)({
+    Layer.mock(ThreadManagementService)({
+      getThreadShell: (id) => Effect.sync(() => (id === threadId ? thread : null)),
       dispatch: (command) =>
         Effect.sync(() => {
           commands.push(command);
-          if (command.type === "thread.meta.update")
+          if (command.type === "thread.metadata.update") {
             thread = {
               ...thread,
-              branch: command.branch ?? null,
-              worktreePath: command.worktreePath ?? null,
+              ...(command.branch === undefined ? {} : { branch: command.branch }),
+              ...(command.worktreePath === undefined ? {} : { worktreePath: command.worktreePath }),
+              ...(command.workspaceSelection === undefined
+                ? {}
+                : {
+                    workspaceSelections: [
+                      ...(thread.workspaceSelections ?? []).filter(
+                        (root) => root.workspaceRoot !== command.workspaceSelection!.workspaceRoot,
+                      ),
+                      command.workspaceSelection,
+                    ],
+                  }),
             };
-          return { sequence: commands.length };
+          }
+          return { sequence: commands.length, storedEvents: [] };
         }),
     }),
     Layer.mock(GitWorkflowService)({
@@ -148,7 +176,7 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
           hasWorkingTreeChanges: false,
           workingTree: { files: [], insertions: 0, deletions: 0 },
         }),
-      listRefs: ({ cursor }) =>
+      listRefs: ({ cursor, cwd }) =>
         Effect.succeed({
           isRepo: true,
           hasPrimaryRemote: true,
@@ -159,7 +187,14 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
               name: cursor === undefined ? "main" : "task",
               current: cursor === undefined,
               isDefault: cursor === undefined,
-              worktreePath: cursor === undefined ? "/repo" : "/worktrees/task",
+              worktreePath:
+                cursor === undefined
+                  ? cwd.startsWith("/backend")
+                    ? "/backend"
+                    : "/repo"
+                  : cwd.startsWith("/backend")
+                    ? "/backend/task"
+                    : "/worktrees/task",
             },
           ],
         }),
@@ -172,33 +207,11 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
         }),
       invalidateStatus: () => Effect.void,
     }),
-    Layer.mock(MultiworkService)({
-      list: () =>
-        Effect.succeed({
-          baseDirectory: "/copies",
-          copies: [{ path: "/copies/task", name: "task", branch: "task" }],
-        }),
-      create: (input) =>
-        Effect.sync(() => {
-          creations.push(input);
-          return {
-            path: "/copies/new",
-            branch: input.branch,
-            projectName: "Project",
-            reused: false,
-          };
-        }),
-    }),
-    Layer.mock(CheckpointStore)({
-      hasCheckpointRef: () => Effect.succeed(false),
-      captureCheckpoint: ({ cwd }) =>
-        Effect.sync(() => {
-          captures.push(cwd);
-        }),
-    }),
   );
   const toolkit = yield* WorkspaceToolkit.pipe(
-    Effect.provide(WorkspaceHandlersLive.pipe(Layer.provide(deps))),
+    Effect.provide(
+      WorkspaceHandlersLive.pipe(Layer.provide(ThreadWorkspaces.layer.pipe(Layer.provide(deps)))),
+    ),
   );
   const call = <Name extends keyof typeof WorkspaceToolkit.tools>(
     name: Name,
@@ -221,16 +234,36 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
 });
 
 describe("thread workspace MCP", () => {
-  it.effect("rejects ambiguous selection and unsupported multiwork bases without changes", () =>
+  it.effect("selects each repository independently and preserves the primary checkout", () =>
+    Effect.gen(function* () {
+      const h = yield* makeHarness();
+      const selected = yield* h.call("thread_workspace_select", {
+        workspaceRoot: "/backend",
+        branch: "task",
+      });
+      expect(selected.primary).toBe(false);
+      expect(h.commands[0]).toMatchObject({
+        type: "thread.metadata.update",
+        workspaceSelection: { workspaceRoot: "/backend", cwd: "/backend/task" },
+        expectedWorkspaceCwd: "/backend",
+      });
+      expect(h.commands[0]).not.toHaveProperty("worktreePath");
+      const inspect = yield* h.call("thread_workspace_inspect", { workspaceRoot: "/backend" });
+      expect(inspect.cwd).toBe("/backend/task");
+      expect(inspect.workspaces.find((root) => root.primary)?.cwd).toBe("/repo");
+      yield* h.call("thread_workspace_select", { path: "/worktrees/task" });
+      expect((yield* h.call("thread_workspace_inspect", { workspaceRoot: "/backend" })).cwd).toBe(
+        "/backend/task",
+      );
+    }).pipe(Effect.scoped),
+  );
+  it.effect("rejects ambiguous selection without changes", () =>
     Effect.gen(function* () {
       const h = yield* makeHarness();
       for (const input of [{}, { path: "/repo", branch: "main" }]) {
         const error = yield* h.call("thread_workspace_select", input).pipe(Effect.flip);
         expect(error.message).toContain("exactly one");
       }
-      yield* h
-        .call("thread_workspace_create", { mode: "multiwork", branch: "task", baseRef: "release" })
-        .pipe(Effect.flip);
       expect(h.commands).toEqual([]);
       expect(h.creations).toEqual([]);
     }).pipe(Effect.scoped),
@@ -241,7 +274,6 @@ describe("thread workspace MCP", () => {
       const result = yield* h.call("thread_workspace_inspect", {});
       expect(result.cwd).toBe("/repo");
       expect(result.refs.nextCursor).toBe(1);
-      expect(result.multiwork.copies[0]?.path).toBe("/copies/task");
       expect(h.commands).toEqual([]);
     }).pipe(Effect.scoped),
   );
@@ -257,30 +289,12 @@ describe("thread workspace MCP", () => {
         { cwd: "/repo", refName: "release", newRefName: "task", path: null },
       ]);
       expect(h.commands[0]).toMatchObject({
-        type: "thread.meta.update",
+        type: "thread.metadata.update",
         threadId,
         worktreePath: "/worktrees/new",
         branch: "task",
       });
-      expect(h.captures).toEqual(["/worktrees/new"]);
-      expect(readMcpWorkspaceOverride(threadId, turnId)).toBe(result.cwd);
-      expect(readMcpWorkspaceOverride(threadId, "next-turn")).toBeUndefined();
-      expect(result.instructions).toContain("previous directory");
-    }).pipe(Effect.scoped),
-  );
-  it.effect("creates a multiwork copy using the configured directory", () =>
-    Effect.gen(function* () {
-      const h = yield* makeHarness();
-      const result = yield* h.call("thread_workspace_create", {
-        mode: "multiwork",
-        branch: "task",
-      });
-      expect(result.cwd).toBe("/copies/new");
-      expect(h.creations[0]).toMatchObject({
-        cwd: "/repo",
-        branch: "task",
-        baseDirectory: DEFAULT_SERVER_SETTINGS.multiworkBaseDirectory,
-      });
+      expect(result.instructions).toContain("detaches");
     }).pipe(Effect.scoped),
   );
   it.effect("selects older worktrees across ref pages and can return to the project root", () =>
@@ -294,16 +308,14 @@ describe("thread workspace MCP", () => {
       expect(h.commands.at(-1)).toMatchObject({ worktreePath: null, branch: "main" });
     }).pipe(Effect.scoped),
   );
-  it.effect("selects existing multiwork copies but rejects unrelated directories", () =>
+  it.effect("rejects unrelated directories without mutation", () =>
     Effect.gen(function* () {
       const h = yield* makeHarness();
-      yield* h.call("thread_workspace_select", { path: "/copies/task" });
-      expect(h.commands).toHaveLength(1);
       const error = yield* h
         .call("thread_workspace_select", { path: "/unrelated/repo" })
         .pipe(Effect.flip);
       expect(error.message).toContain("not a checkout");
-      expect(h.commands).toHaveLength(1);
+      expect(h.commands).toHaveLength(0);
     }).pipe(Effect.scoped),
   );
   it.effect("rejects missing capabilities and stale sessions before any mutation", () =>

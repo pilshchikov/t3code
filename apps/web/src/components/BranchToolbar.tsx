@@ -1,3 +1,4 @@
+import { ComposerContextLabel } from "./ComposerContextLabel";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   isAtomCommandInterrupted,
@@ -40,7 +41,6 @@ import { useIsMobile } from "../hooks/useMediaQuery";
 import { projectEnvironment } from "../state/projects";
 import { useAtomCommand } from "../state/use-atom-command";
 import { useEnvironmentQuery } from "../state/query";
-import { multiworkEnvironment } from "../state/multiwork";
 import {
   PROJECT_WORKSPACE_COLORS,
   resolveWorkspaceColor,
@@ -103,6 +103,8 @@ export interface BranchToolbarHandle {
 }
 
 interface BranchToolbarProps {
+  layout?: "composer" | "panel";
+  panelSection?: "all" | "workspace" | "branch";
   forceNewWorktree?: boolean;
   ref?: Ref<BranchToolbarHandle>;
   environmentId: EnvironmentId;
@@ -125,8 +127,8 @@ interface BranchToolbarProps {
   onComposerFocusRequest?: () => void;
   availableEnvironments?: readonly EnvironmentOption[];
   onEnvironmentChange?: (environmentId: EnvironmentId) => void;
-  contextStripCollapsed: boolean;
-  onContextStripCollapsedChange: (collapsed: boolean) => void;
+  contextStripCollapsed?: boolean;
+  onContextStripCollapsedChange?: (collapsed: boolean) => void;
   /** Reserved host used by the upstream compact-composer layout. */
   composerControlsHostRef?: (element: HTMLDivElement | null) => void;
   contextStripVisible?: boolean;
@@ -192,11 +194,6 @@ function AgentGuidanceButton(props: { workspace: ProjectWorkspace; onClick: () =
 }
 
 interface MobileRunContextSelectorProps {
-  multiworkTarget?: {
-    environmentId: EnvironmentId;
-    cwd: string;
-    onSelect: (copy: import("@t3tools/contracts").MultiworkCopy) => void;
-  };
   forceNewWorktree: boolean;
   autoEnvironmentLabel?: string | undefined;
   onAutoEnvironment?: (() => void) | undefined;
@@ -216,7 +213,6 @@ interface MobileRunContextSelectorProps {
 }
 
 const MobileRunContextSelector = memo(function MobileRunContextSelector({
-  multiworkTarget,
   forceNewWorktree,
   autoEnvironmentLabel,
   onAutoEnvironment,
@@ -234,11 +230,6 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
   previousWorktreeBranch,
   onUsePreviousWorktree,
 }: MobileRunContextSelectorProps) {
-  const copies = useEnvironmentQuery(
-    multiworkTarget && !envModeLocked
-      ? multiworkEnvironment.copies({ environmentId, input: { cwd: multiworkTarget.cwd } })
-      : null,
-  );
   const composerFloatingLayerProps = useComposerMenuProps();
   const activeEnvironment = useMemo(
     () => availableEnvironments?.find((env) => env.environmentId === environmentId) ?? null,
@@ -278,18 +269,10 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
   const triggerContent = (
     <>
       {icon}
-      <span
-        data-composer-label
-        className="min-w-0 max-w-[240px] group-data-[compact]/composer-context:max-w-0"
-      >
-        <span
-          data-composer-label-motion
-          className="block w-full min-w-0 max-w-[240px] truncate transition-opacity duration-180 ease-drawer group-data-[compact]/composer-context:opacity-0 motion-reduce:transition-none"
-        >
-          {autoEnvironmentLabel ??
-            (showEnvironmentIndicator ? (activeEnvironment?.label ?? "Run on") : workspaceLabel)}
-        </span>
-      </span>
+      <ComposerContextLabel>
+        {autoEnvironmentLabel ??
+          (showEnvironmentIndicator ? (activeEnvironment?.label ?? "Run on") : workspaceLabel)}
+      </ComposerContextLabel>
     </>
   );
 
@@ -377,11 +360,6 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
             value={effectiveEnvMode}
             onValueChange={(value, eventDetails) => {
               if (!isExplicitWorkspaceModeSelectionReason(eventDetails.reason)) return;
-              if (value.startsWith("copy:")) {
-                const copy = copies.data?.copies.find((item) => `copy:${item.path}` === value);
-                if (copy) multiworkTarget?.onSelect(copy);
-                return;
-              }
               if (value === "previous-worktree") {
                 onUsePreviousWorktree();
                 return;
@@ -405,14 +383,6 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
                 <span className="min-w-0 truncate">{resolveEnvModeLabel("worktree")}</span>
               </span>
             </MenuRadioItem>
-            <MenuRadioItem disabled={envModeLocked} value="multiwork">
-              New multiwork copy
-            </MenuRadioItem>
-            {copies.data?.copies.map((copy) => (
-              <MenuRadioItem key={copy.path} value={`copy:${copy.path}`} disabled={envModeLocked}>
-                <span className="max-w-64 truncate">Multiwork · {copy.branch || copy.name}</span>
-              </MenuRadioItem>
-            ))}
             {previousWorktreeLabel ? (
               <MenuRadioItem disabled={envModeLocked} value="previous-worktree" closeOnClick>
                 <PreviousWorktreeItemContent branch={previousWorktreeBranch} />
@@ -602,6 +572,8 @@ function useLabelsOverflow(element: HTMLDivElement | null): boolean {
 }
 
 export const BranchToolbar = memo(function BranchToolbar({
+  layout = "composer",
+  panelSection = "all",
   forceNewWorktree = false,
   ref,
   environmentId,
@@ -622,8 +594,8 @@ export const BranchToolbar = memo(function BranchToolbar({
   onComposerFocusRequest,
   availableEnvironments,
   onEnvironmentChange,
-  contextStripCollapsed,
-  onContextStripCollapsedChange,
+  contextStripCollapsed = false,
+  onContextStripCollapsedChange = () => {},
   composerControlsHostRef,
 }: BranchToolbarProps) {
   const branchSelectorRef = useRef<BranchToolbarBranchSelectorHandle>(null);
@@ -659,21 +631,6 @@ export const BranchToolbar = memo(function BranchToolbar({
   // drafts can hop; started server threads have their workspace pinned.
   const canUsePreviousWorktree =
     draftThread !== null && serverThread === null && !envModeLocked && !forceNewWorktree;
-  const multiworkTarget =
-    canUsePreviousWorktree && activeProject && activeProjectRef
-      ? {
-          environmentId,
-          cwd: activeProject.workspaceRoot,
-          onSelect: (copy: import("@t3tools/contracts").MultiworkCopy) =>
-            setDraftThreadContext(draftId ?? threadRef, {
-              branch: copy.branch || null,
-              worktreePath: copy.path,
-              envMode: "multiwork",
-              environmentSelection: "manual",
-              projectRef: activeProjectRef,
-            }),
-        }
-      : undefined;
   const projectRefsForWorktreeLookup = useMemo(
     () => (canUsePreviousWorktree && activeProjectRef ? [activeProjectRef] : []),
     [canUsePreviousWorktree, activeProjectRef],
@@ -901,7 +858,6 @@ export const BranchToolbar = memo(function BranchToolbar({
                 ? {
                     previousWorktreeLabel,
                     onUsePreviousWorktree,
-                    ...(multiworkTarget ? { multiworkTarget } : {}),
                   }
                 : {})}
             />
@@ -1020,6 +976,40 @@ export const BranchToolbar = memo(function BranchToolbar({
 
   if (!hasActiveThread || !activeProject) return null;
 
+  if (layout === "panel") {
+    return (
+      <div className="flex w-full flex-col" data-thread-panel-run-context>
+        {panelSection !== "branch" ? (
+          <BranchToolbarEnvModeSelector
+            displayMode="panel"
+            envLocked={envModeLocked}
+            effectiveEnvMode={effectiveEnvMode}
+            activeWorktreePath={activeWorktreePath}
+            workspaceRoot={activeProject.workspaceRoot}
+            onEnvModeChange={onEnvModeChange}
+          />
+        ) : null}
+        {panelSection !== "workspace" ? (
+          <BranchToolbarBranchSelector
+            displayMode="panel"
+            className="w-full"
+            environmentId={environmentId}
+            threadId={threadId}
+            {...(draftId ? { draftId } : {})}
+            envLocked={envLocked}
+            effectiveEnvModeOverride={effectiveEnvMode}
+            {...(activeThreadBranchOverride !== undefined ? { activeThreadBranchOverride } : {})}
+            {...(onActiveThreadBranchOverrideChange ? { onActiveThreadBranchOverrideChange } : {})}
+            startFromOrigin={startFromOrigin}
+            onStartFromOriginChange={onStartFromOriginChange}
+            {...(onCheckoutPullRequestRequest ? { onCheckoutPullRequestRequest } : {})}
+            {...(onComposerFocusRequest ? { onComposerFocusRequest } : {})}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div
       ref={setStripElement}
@@ -1039,7 +1029,6 @@ export const BranchToolbar = memo(function BranchToolbar({
         <div className="flex min-w-0 flex-1 items-center gap-1">
           {addWorkspaceRootButton}
           <MobileRunContextSelector
-            {...(multiworkTarget ? { multiworkTarget } : {})}
             forceNewWorktree={forceNewWorktree}
             autoEnvironmentLabel={autoEnvironmentLabel}
             onAutoEnvironment={onAutoEnvironment}
@@ -1088,7 +1077,6 @@ export const BranchToolbar = memo(function BranchToolbar({
               <BranchToolbarEnvModeSelector
                 envLocked={envModeLocked}
                 forceNewWorktree={forceNewWorktree}
-                {...(multiworkTarget ? { multiworkTarget } : {})}
                 effectiveEnvMode={effectiveEnvMode}
                 activeWorktreePath={activeWorktreePath}
                 onEnvModeChange={onEnvModeChange}

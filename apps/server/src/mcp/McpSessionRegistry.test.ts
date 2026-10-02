@@ -48,6 +48,9 @@ it.effect("stores only a token hash, resolves the bearer token, and revokes by t
 
     const resolved = yield* registry.resolve(token);
     expect(resolved?.threadId).toBe(threadId);
+    expect(resolved?.capabilities).toEqual(
+      new Set(["preview", "orchestration", "worktree", "workspace", "memory", "pull-requests"]),
+    );
 
     yield* registry.revokeThread(threadId);
     expect(yield* registry.resolve(token)).toBeUndefined();
@@ -56,7 +59,7 @@ it.effect("stores only a token hash, resolves the bearer token, and revokes by t
   }),
 );
 
-it.effect("replaces preview credentials with memory-only access", () =>
+it.effect("replaces credentials while withholding preview access", () =>
   Effect.gen(function* () {
     const registry = yield* makeRegistry(() => 1_000);
     const threadId = ThreadId.make("memory-only-thread");
@@ -75,7 +78,13 @@ it.effect("replaces preview credentials with memory-only access", () =>
       credential.config.authorizationHeader.replace(/^Bearer\s+/, "");
     expect(yield* registry.resolve(token(before))).toBeUndefined();
     const scope = yield* registry.resolve(token(after));
-    expect([...scope!.capabilities]).toEqual(["pull-requests", "memory"]);
+    expect([...scope!.capabilities].sort()).toEqual([
+      "memory",
+      "orchestration",
+      "pull-requests",
+      "workspace",
+      "worktree",
+    ]);
   }),
 );
 
@@ -102,9 +111,29 @@ it.effect("always grants pull-requests and gates browser and device access indep
         .resolve(issued.config.authorizationHeader.replace(/^Bearer\s+/, ""))
         .pipe(Effect.map((scope) => [...(scope?.capabilities ?? [])].sort()));
 
-    expect(yield* capabilitiesOf(withPreview)).toEqual(["preview", "pull-requests"]);
-    expect(yield* capabilitiesOf(withoutPreview)).toEqual(["pull-requests"]);
-    expect(yield* capabilitiesOf(withDevice)).toEqual(["device", "pull-requests"]);
+    expect(yield* capabilitiesOf(withPreview)).toEqual([
+      "memory",
+      "orchestration",
+      "preview",
+      "pull-requests",
+      "workspace",
+      "worktree",
+    ]);
+    expect(yield* capabilitiesOf(withoutPreview)).toEqual([
+      "memory",
+      "orchestration",
+      "pull-requests",
+      "workspace",
+      "worktree",
+    ]);
+    expect(yield* capabilitiesOf(withDevice)).toEqual([
+      "device",
+      "memory",
+      "orchestration",
+      "pull-requests",
+      "workspace",
+      "worktree",
+    ]);
   }),
 );
 

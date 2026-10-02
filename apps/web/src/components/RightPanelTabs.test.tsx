@@ -97,6 +97,8 @@ function renderTabs(
 ) {
   return renderToStaticMarkup(
     <RightPanelTabs
+      gitHistoryAvailable={false}
+      onAddGitHistory={() => {}}
       mode="inline"
       showTabs={showTabs}
       surfaces={second ? [previewSurface, secondSurface] : [previewSurface]}
@@ -123,18 +125,13 @@ function renderTabs(
       onAddPullRequests={() => undefined}
       onAddDiff={() => undefined}
       onAddFiles={() => undefined}
-      onAddAgents={() => undefined}
-      onAddGitHistory={() => undefined}
       onAddDevice={() => undefined}
-      liveAgentCount={0}
       browserAvailable
       terminalAvailable={false}
       diffAvailable={false}
       filesAvailable={false}
       pullRequestAvailable={false}
       pullRequestsAvailable={false}
-      agentsAvailable={false}
-      gitHistoryAvailable={false}
       deviceAvailable={false}
     >
       <div>content</div>
