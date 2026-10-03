@@ -15,6 +15,9 @@ import * as Settings from "../../../serverSettings.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
 const PreferenceFields = {
+  idleCompactionEnabled: ServerSettings.fields.idleCompactionEnabled,
+  idleCompactionMinutes: ServerSettings.fields.idleCompactionMinutes,
+  idleCompactionTokens: ServerSettings.fields.idleCompactionTokens,
   defaultThreadEnvMode: ServerSettings.fields.defaultThreadEnvMode,
   newWorktreesStartFromOrigin: ServerSettings.fields.newWorktreesStartFromOrigin,
   enableProviderUpdateChecks: ServerSettings.fields.enableProviderUpdateChecks,
@@ -54,8 +57,11 @@ const EnvironmentReadTool = Tool.make("t3_environment_read", {
 const EnvironmentPreferencesTool = Tool.make("t3_environment_preferences_update", {
   ...shared,
   description:
-    "Update selected environment-wide preferences through normal settings persistence and notifications. Requires a live full-access/default calling thread. Omitted fields are preserved; empty customInstructions clears them.",
+    "Update selected environment-wide preferences through normal settings persistence and notifications. Requires a live full-access/default calling thread. Omitted fields are preserved; empty customInstructions clears them. Idle compaction is opt-in for Claude/Codex: set idleCompactionEnabled, idleCompactionMinutes (1–1440), and idleCompactionTokens (1000–10000000). It waits for all agent and background work to finish; project overrides take precedence.",
   parameters: Schema.Struct({
+    idleCompactionEnabled: ServerSettingsPatch.fields.idleCompactionEnabled,
+    idleCompactionMinutes: ServerSettingsPatch.fields.idleCompactionMinutes,
+    idleCompactionTokens: ServerSettingsPatch.fields.idleCompactionTokens,
     defaultThreadEnvMode: ServerSettingsPatch.fields.defaultThreadEnvMode,
     newWorktreesStartFromOrigin: ServerSettingsPatch.fields.newWorktreesStartFromOrigin,
     enableProviderUpdateChecks: ServerSettingsPatch.fields.enableProviderUpdateChecks,

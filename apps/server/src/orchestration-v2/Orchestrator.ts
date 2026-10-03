@@ -1,3 +1,4 @@
+import * as IdleCompaction from "./IdleCompaction.ts";
 import {
   latestExecutedRun,
   latestRootProviderFailure,
@@ -649,6 +650,7 @@ function lastDeliveredRunForProviderThread(
 }
 
 const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(function* () {
+  const idleCompaction = yield* Effect.serviceOption(IdleCompaction.IdleCompaction);
   const checkpointService = yield* CheckpointServiceV2;
   const commandPolicy = yield* CommandPolicyV2;
   const contextHandoffService = yield* ContextHandoffServiceV2;
@@ -4161,6 +4163,23 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
   ) =>
     Effect.gen(function* () {
       let projection = yield* getProjectionWithPendingEvents(command.threadId, events);
+      if (command.idleCompactionOfRunId !== undefined) {
+        const eligible = Option.isSome(idleCompaction)
+          ? yield* idleCompaction.value.due(command.threadId).pipe(mapDispatchError(command))
+          : [];
+        if (
+          command.text !== "/compact" ||
+          command.attachments.length > 0 ||
+          command.dispatchMode.type !== "start_immediately" ||
+          !eligible.some((candidate) => candidate.runId === command.idleCompactionOfRunId)
+        ) {
+          return yield* new OrchestratorDispatchError({
+            commandId: command.commandId,
+            commandType: command.type,
+            cause: "The thread is no longer eligible for idle compaction.",
+          });
+        }
+      }
       if (command.manualContinuationOfRunId !== undefined) {
         const source = projection.runs.find((run) => run.id === command.manualContinuationOfRunId);
         const limited = latestRootProviderFailure(source ?? null, projection.turnItems);

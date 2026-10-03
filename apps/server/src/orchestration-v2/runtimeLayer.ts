@@ -1,3 +1,5 @@
+import * as IdleCompaction from "./IdleCompaction.ts";
+import * as IdleCompactionWorker from "./IdleCompactionWorker.ts";
 import * as UsageLimitRecoveryWorker from "./UsageLimitRecoveryWorker.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as Layer from "effect/Layer";
@@ -189,6 +191,7 @@ const runFinalizationServiceProvided = runFinalizationServiceLayer.pipe(
 const orchestratorProvided = orchestratorLayer.pipe(
   Layer.provide(
     Layer.mergeAll(
+      IdleCompaction.layer,
       checkpointServiceProvided,
       commandPolicyLayer,
       storesLayer,
@@ -310,6 +313,9 @@ export const OrchestrationV2ProductionLayerLive = Layer.mergeAll(
     Layer.provide(Layer.mergeAll(projectionStoreLayer, threadManagementProvided)),
   ),
   providerContinuationWorkerProvided,
+  IdleCompactionWorker.workerLive.pipe(
+    Layer.provide(Layer.mergeAll(IdleCompaction.layer, threadManagementProvided)),
+  ),
   agentSessionImporterProvided,
 ).pipe(
   Layer.provide(Scheduler.layer),

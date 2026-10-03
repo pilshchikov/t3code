@@ -1,3 +1,4 @@
+import { IdleCompactionSettings } from "./IdleCompactionSettings";
 import { SettingsGroup } from "./SettingsGroup";
 import { ChatCustomWidthControl } from "./ChatCustomWidthControl";
 import { Spinner } from "~/components/ui/spinner";
@@ -3088,6 +3089,8 @@ export function GeneralSettingsPanel() {
             />
           }
         />
+
+        <IdleCompactionSettings />
 
         <SettingsRow
           {...searchableSetting("continue-threads-after-server-update")}

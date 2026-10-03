@@ -1,3 +1,4 @@
+import { IdleCompactionFields } from "./components/IdleCompactionFields";
 import { useNavigation } from "@react-navigation/native";
 import { SettingsRow } from "./components/SettingsRow";
 import { ScreenScrollView as ScrollView } from "../../components/ScreenScrollView";
@@ -56,7 +57,12 @@ const PAGE_PROJECT_KEYS: Record<SettingsPage, readonly ProjectScopedServerSettin
     "branchNameInstructions",
   ],
   "agent-behavior": ["responseStreamingMode", "enableAgentBrowserAccess"],
-  maintenance: ["continueThreadsAfterServerUpdate"],
+  maintenance: [
+    "continueThreadsAfterServerUpdate",
+    "idleCompactionEnabled",
+    "idleCompactionMinutes",
+    "idleCompactionTokens",
+  ],
 };
 
 const SUBMODULE_CHOICES: ReadonlyArray<{
@@ -415,6 +421,22 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                       ))}
                     </SettingsSection>
                   ) : null}
+                  <SettingsSection title="Idle compaction">
+                    <SettingsSwitchRow
+                      icon="arrow.clockwise"
+                      label="Compact idle threads"
+                      subtitle="Claude and Codex only. Waits until all monitors, commands, subagents, queues, and questions finish."
+                      value={uniform("idleCompactionEnabled")}
+                      disabled={disabledFor("idleCompactionEnabled")}
+                      onValueChange={(value) => write({ idleCompactionEnabled: value })}
+                    />
+                    <IdleCompactionFields
+                      minutes={uniform("idleCompactionMinutes")}
+                      tokens={uniform("idleCompactionTokens")}
+                      disabled={disabledFor("idleCompactionMinutes")}
+                      onChange={write}
+                    />
+                  </SettingsSection>
                   <SettingsSection title="Updates">
                     <SettingsSwitchRow
                       icon="arrow.clockwise"

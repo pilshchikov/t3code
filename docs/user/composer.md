@@ -202,6 +202,22 @@ Provider commands must start the message to run. T3 Code commands such as
 Send `/compact` in an existing conversation to reduce context usage when the
 provider supports it. Web and desktop also offer compaction from the context meter.
 
+### Compact idle threads automatically
+
+In **Settings → General → Compact idle threads**, enable idle compaction and choose a
+context token threshold and idle timeout. The defaults are **300,000 tokens** and
+**5 minutes**, with automatic compaction switched off. Select a project in settings to
+override any of these values, or clear its overrides to inherit the global defaults.
+On the native mobile app, these controls are under **Maintenance**.
+
+This currently supports Claude and Codex sessions with reported context usage. The timer
+starts after all work finishes, including monitors, background commands, and subagents.
+Queued messages and pending questions also prevent compaction. Reading the conversation
+does not reset the timer. Archived, settled, snoozed, failed, and interrupted threads are
+skipped. A compaction never triggers another compaction without a new conversation turn.
+The server must remain running; the client can be closed. Compaction uses the provider's
+normal `/compact` operation and can consume provider usage.
+
 ## Context in your message
 
 Context you attach lands where your cursor is, as a chip inside your text: a terminal excerpt,

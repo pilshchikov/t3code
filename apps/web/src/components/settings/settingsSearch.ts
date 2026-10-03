@@ -429,6 +429,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     scope: "environment-defaults",
   },
   {
+    id: "idle-compaction",
+    title: "Compact idle threads",
+    to: "/settings/general",
+    scope: "project-defaults",
+    searchTerms: ["automatic compact compaction context tokens idle timeout minutes claude codex"],
+  },
+  {
     id: "continue-threads-after-server-update",
     title: "Continue threads after restarts",
     to: "/settings/general",

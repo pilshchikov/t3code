@@ -4,6 +4,23 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Idle context compaction, October 3
+
+- Added opt-in idle compaction for Claude and Codex sessions with measured context
+  usage. Global defaults (off, 5 minutes, 300,000 tokens) and individual project
+  overrides use the shared settings schemas and inheritance UI on web/desktop
+  and native mobile. The environment MCP preference tools expose the same global
+  controls (`settings.ts`, `IdleCompactionSettings.tsx`, `IdleCompactionFields.tsx`).
+- A server scheduler checks persisted work state and sends the existing `/compact`
+  command only after all agent work finishes. Pending commands, persistent monitors,
+  subagents, queues, and questions block it. The timer uses work timestamps, not
+  thread visits. It skips non-active lifecycle states and native child threads.
+  Serialized dispatch rechecks eligibility; deterministic receipts and the latest
+  run's compact marker prevent repeated compaction without another conversation
+  turn (`IdleCompaction.ts`, `IdleCompactionWorker.ts`, `Orchestrator.ts`).
+- Validation: server, web, mobile, and desktop typechecks passed; focused lint
+  passed for the new modules. No runtime tests or app reinstall/restart for this feature.
+
 ## Upstream sync and repository worktrees, October 2
 
 - Ordinary primary checkout changes are rejected while a turn, pending question,

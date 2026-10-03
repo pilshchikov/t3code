@@ -1203,7 +1203,17 @@ export const WorktreeCleanup = Schema.NullOr(
 );
 export type WorktreeCleanup = typeof WorktreeCleanup.Type;
 
+export const IdleCompactionMinutes = Schema.Int.check(
+  Schema.isBetween({ minimum: 1, maximum: 1440 }),
+);
+export const IdleCompactionTokens = Schema.Int.check(
+  Schema.isBetween({ minimum: 1000, maximum: 10000000 }),
+);
+
 export const PROJECT_SCOPED_SERVER_SETTING_KEYS = [
+  "idleCompactionEnabled",
+  "idleCompactionMinutes",
+  "idleCompactionTokens",
   "worktreeCleanup",
   "defaultModelSelection",
   "defaultRuntimeMode",
@@ -1235,6 +1245,9 @@ export type ProjectScopedServerSettingKey = (typeof PROJECT_SCOPED_SERVER_SETTIN
  * model, no dedicated writer model, never auto-settle).
  */
 export const ProjectSettingsOverrides = Schema.Struct({
+  idleCompactionEnabled: Schema.optionalKey(Schema.Boolean),
+  idleCompactionMinutes: Schema.optionalKey(IdleCompactionMinutes),
+  idleCompactionTokens: Schema.optionalKey(IdleCompactionTokens),
   worktreeCleanup: Schema.optionalKey(WorktreeCleanup),
   defaultModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   defaultRuntimeMode: Schema.optionalKey(RuntimeMode),
@@ -1307,6 +1320,11 @@ export const StorageCleanupSettings = Schema.Struct({
 export type StorageCleanupSettings = typeof StorageCleanupSettings.Type;
 
 export const ServerSettings = Schema.Struct({
+  idleCompactionEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  idleCompactionMinutes: IdleCompactionMinutes.pipe(Schema.withDecodingDefault(Effect.succeed(5))),
+  idleCompactionTokens: IdleCompactionTokens.pipe(
+    Schema.withDecodingDefault(Effect.succeed(300000)),
+  ),
   worktreeCleanup: WorktreeCleanup.pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   storageCleanup: StorageCleanupSettings.pipe(
     Schema.withDecodingDefault(Effect.succeed(Schema.decodeSync(StorageCleanupSettings)({}))),
@@ -1687,6 +1705,9 @@ const OpenCodeSettingsPatch = Schema.Struct({
 });
 
 export const ServerSettingsPatch = Schema.Struct({
+  idleCompactionEnabled: Schema.optionalKey(Schema.Boolean),
+  idleCompactionMinutes: Schema.optionalKey(IdleCompactionMinutes),
+  idleCompactionTokens: Schema.optionalKey(IdleCompactionTokens),
   worktreeCleanup: Schema.optionalKey(
     Schema.NullOr(
       Schema.Union([

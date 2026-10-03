@@ -9,6 +9,9 @@ import { EnvironmentToolkit } from "./tools.ts";
 
 export function preferences(settings: ServerSettings) {
   const {
+    idleCompactionEnabled,
+    idleCompactionMinutes,
+    idleCompactionTokens,
     defaultThreadEnvMode,
     newWorktreesStartFromOrigin,
     enableProviderUpdateChecks,
@@ -17,6 +20,9 @@ export function preferences(settings: ServerSettings) {
   } = settings;
   const characters = Array.from(sourceControlWritingStyle.customInstructions);
   return {
+    idleCompactionEnabled,
+    idleCompactionMinutes,
+    idleCompactionTokens,
     defaultThreadEnvMode,
     newWorktreesStartFromOrigin,
     enableProviderUpdateChecks,
