@@ -112,6 +112,10 @@ import {
   ThreadForkServiceV2,
 } from "./ThreadForkService.ts";
 import { planThreadDeletion } from "./ThreadDeletion.ts";
+import {
+  PRIMARY_WORKSPACE_BUSY_MESSAGE,
+  threadHasWorkspaceBoundWork,
+} from "@t3tools/shared/threadWorkspaces";
 
 export class OrchestratorDispatchError extends Schema.TaggedError<OrchestratorDispatchError>()(
   "OrchestratorDispatchError",
@@ -2209,6 +2213,23 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         commandType: command.type,
         cause: `Thread ${command.threadId} worktree changed before the metadata update could be applied.`,
       });
+    }
+    if (
+      command.type === "thread.metadata.update" &&
+      command.worktreePath !== undefined &&
+      command.worktreePath !== thread.worktreePath &&
+      command.workspaceChangeMode !== "handoff"
+    ) {
+      const shell = yield* projectionStore
+        .getThreadShell(command.threadId)
+        .pipe(mapDispatchError(command));
+      if (threadHasWorkspaceBoundWork(shell)) {
+        return yield* new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause: PRIMARY_WORKSPACE_BUSY_MESSAGE,
+        });
+      }
     }
     if (command.type === "thread.metadata.update" && command.workspaceSelection !== undefined) {
       const project = yield* projects.get(thread.projectId).pipe(mapDispatchError(command));

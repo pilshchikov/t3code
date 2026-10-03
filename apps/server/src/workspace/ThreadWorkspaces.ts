@@ -8,7 +8,11 @@ import {
   ThreadWorkspaceResult,
   type VcsListRefsResult,
 } from "@t3tools/contracts";
-import { resolveThreadWorkspaces } from "@t3tools/shared/threadWorkspaces";
+import {
+  PRIMARY_WORKSPACE_BUSY_MESSAGE,
+  resolveThreadWorkspaces,
+  threadHasWorkspaceBoundWork,
+} from "@t3tools/shared/threadWorkspaces";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -97,6 +101,10 @@ const make = Effect.gen(function* () {
     };
   });
   type WorkspaceContext = Effect.Success<ReturnType<typeof context>>;
+  const requirePrimaryIdle = (ctx: WorkspaceContext) =>
+    ctx.workspace.primary && threadHasWorkspaceBoundWork(ctx.thread)
+      ? fail(PRIMARY_WORKSPACE_BUSY_MESSAGE)
+      : Effect.void;
   const attach = Effect.fn("ThreadWorkspaces.attach")(function* (
     ctx: WorkspaceContext,
     cwd: string,
@@ -104,6 +112,13 @@ const make = Effect.gen(function* () {
     yield* checkSession(ctx.input);
     const current = yield* engine.getThreadShell(ctx.thread.id);
     if (current === null) return yield* fail("Thread not found.");
+    if (
+      ctx.workspace.primary &&
+      path.resolve(cwd) !== path.resolve(ctx.cwd) &&
+      threadHasWorkspaceBoundWork(current)
+    ) {
+      return yield* fail(PRIMARY_WORKSPACE_BUSY_MESSAGE);
+    }
     const currentWorkspace = resolveThreadWorkspaces(ctx.project, current).find(
       (root) => root.workspaceRoot === ctx.root,
     );
@@ -175,6 +190,8 @@ const make = Effect.gen(function* () {
         mutations.withPermit(
           Effect.gen(function* () {
             const ctx = yield* context(input);
+            // Reject before creating a worktree: this tool must not terminate its own caller.
+            yield* requirePrimaryIdle(ctx);
             const cwd = (yield* git.createWorktree({
               cwd: ctx.cwd,
               refName: input.baseRef ?? "HEAD",
@@ -192,6 +209,11 @@ const make = Effect.gen(function* () {
             const ctx = yield* context(input);
             if ((input.path === undefined) === (input.branch === undefined))
               return yield* fail("Provide exactly one of path or branch.");
+            const alreadySelected =
+              input.path !== undefined
+                ? path.resolve(input.path) === path.resolve(ctx.cwd)
+                : input.branch === ctx.workspace.branch;
+            if (!alreadySelected) yield* requirePrimaryIdle(ctx);
             const refs: Array<VcsListRefsResult["refs"][number]> = [];
             let cursor: number | undefined;
             do {
@@ -205,6 +227,7 @@ const make = Effect.gen(function* () {
             if (input.branch !== undefined) {
               const ref = refs.find((ref) => ref.name === input.branch);
               if (!ref) return yield* fail("Unknown branch. Inspect available refs first.");
+              if (ref.worktreePath === null) yield* requirePrimaryIdle(ctx);
               const cwd =
                 ref.worktreePath ??
                 (yield* git.createWorktree({ cwd: ctx.cwd, refName: ref.name, path: null }))

@@ -33,6 +33,7 @@ import { usePaginatedBranches } from "../state/queries";
 import { useProject, useThreadShell } from "../state/entities";
 import { useEnvironmentQuery } from "../state/query";
 import { threadEnvironment } from "../state/threads";
+import { threadHasWorkspaceBoundWork } from "@t3tools/shared/threadWorkspaces";
 import { useAtomCommand } from "../state/use-atom-command";
 import { vcsEnvironment } from "../state/vcs";
 import { cn } from "../lib/utils";
@@ -120,7 +121,6 @@ export function BranchToolbarBranchSelector({
   const composerFloatingLayerProps = useComposerMenuProps();
   const selectWorkspace = useAtomCommand(threadEnvironment.workspaceSelect);
   const createWorkspace = useAtomCommand(threadEnvironment.workspaceCreate);
-  const stopThreadSession = useAtomCommand(threadEnvironment.stopSession, "thread session stop");
   const updateThreadMetadata = useAtomCommand(
     threadEnvironment.updateMetadata,
     "thread metadata update",
@@ -139,7 +139,6 @@ export function BranchToolbarBranchSelector({
     [environmentId, threadId],
   );
   const serverThread = useThreadShell(threadRef);
-  const serverSession = serverThread?.runtime ?? null;
   const draftThread = useComposerDraftStore((store) =>
     draftId ? store.getDraftSession(draftId) : store.getDraftThreadByRef(threadRef),
   );
@@ -151,6 +150,10 @@ export function BranchToolbarBranchSelector({
       ? scopeProjectRef(draftThread.environmentId, draftThread.projectId)
       : null;
   const activeProject = useProject(activeProjectRef);
+  const primaryWorkspaceLocked =
+    (workspaceRootOverride === undefined ||
+      workspaceRootOverride === activeProject?.workspaceRoot) &&
+    threadHasWorkspaceBoundWork(serverThread?.source);
 
   const activeThreadId = serverThread?.id ?? (draftThread ? threadId : undefined);
   const isIndependentWorkspace = workspaceRootOverride !== undefined;
@@ -185,12 +188,9 @@ export function BranchToolbarBranchSelector({
     (branch: string | null, worktreePath: string | null, automatic = false) => {
       if (!activeThreadId || !activeProject) return;
       if (isIndependentWorkspace) return;
-      if (serverSession && worktreePath !== activeWorktreePath) {
-        void stopThreadSession({
-          environmentId,
-          input: { threadId: activeThreadId },
-        });
-      }
+      if (primaryWorkspaceLocked && worktreePath !== activeWorktreePath) return;
+      // The server checks workspace liveness before committing metadata and detaching.
+      // A separate client Stop used to kill the turn even when the update was refused.
       if (hasServerThread) {
         void updateThreadMetadata({
           environmentId,
@@ -221,7 +221,7 @@ export function BranchToolbarBranchSelector({
     [
       activeThreadId,
       activeProject,
-      serverSession,
+      primaryWorkspaceLocked,
       activeWorktreePath,
       hasServerThread,
       onActiveThreadBranchOverrideChange,
@@ -231,7 +231,6 @@ export function BranchToolbarBranchSelector({
       environmentId,
       effectiveEnvMode,
       draftThread?.environmentSelection,
-      stopThreadSession,
       updateThreadMetadata,
       isIndependentWorkspace,
     ],
@@ -422,7 +421,7 @@ export function BranchToolbarBranchSelector({
   };
 
   const selectBranch = (refName: VcsRef) => {
-    if (!branchCwd || !activeProjectCwd || isBranchActionPending) return;
+    if (!branchCwd || !activeProjectCwd || isBranchActionPending || primaryWorkspaceLocked) return;
 
     if (isIndependentWorkspace && hasServerThread) {
       setIsBranchMenuOpen(false);
@@ -496,7 +495,7 @@ export function BranchToolbarBranchSelector({
 
   const createRef = (rawName: string) => {
     const name = sanitizeNewRefName(rawName);
-    if (!branchCwd || !name || isBranchActionPending) return;
+    if (!branchCwd || !name || isBranchActionPending || primaryWorkspaceLocked) return;
 
     setIsBranchMenuOpen(false);
     onComposerFocusRequest?.();
@@ -577,22 +576,26 @@ export function BranchToolbarBranchSelector({
   // ---------------------------------------------------------------------------
   // Combobox / list plumbing
   // ---------------------------------------------------------------------------
-  const handleOpenChange = useCallback((open: boolean) => {
-    setIsBranchMenuOpen(open);
-    if (!open) {
-      setBranchQuery("");
-    }
-  }, []);
+  const handleOpenChange = useCallback(
+    (open: boolean) => {
+      if (open && primaryWorkspaceLocked) return;
+      setIsBranchMenuOpen(open);
+      if (!open) {
+        setBranchQuery("");
+      }
+    },
+    [primaryWorkspaceLocked],
+  );
 
   useImperativeHandle(
     ref,
     () => ({
       open: () => {
-        if (isInitialBranchesLoadPending || isBranchActionPending) return;
+        if (isInitialBranchesLoadPending || isBranchActionPending || primaryWorkspaceLocked) return;
         handleOpenChange(true);
       },
     }),
-    [handleOpenChange, isBranchActionPending, isInitialBranchesLoadPending],
+    [handleOpenChange, isBranchActionPending, isInitialBranchesLoadPending, primaryWorkspaceLocked],
   );
 
   const triggerLabel = resolveBranchTriggerLabel({
@@ -777,7 +780,14 @@ export function BranchToolbarBranchSelector({
               )
             }
             className="min-w-0 max-w-full active:scale-100"
-            disabled={isInitialBranchesLoadPending || isBranchActionPending}
+            disabled={
+              isInitialBranchesLoadPending || isBranchActionPending || primaryWorkspaceLocked
+            }
+            title={
+              primaryWorkspaceLocked
+                ? "Primary checkout is pinned while this thread has active work"
+                : undefined
+            }
           >
             <GitBranchIcon
               className={cn(

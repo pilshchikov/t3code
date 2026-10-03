@@ -6,6 +6,21 @@ fork-specific behavior so future upstream syncs are easier to review.
 
 ## Upstream sync and repository worktrees, October 2
 
+- Ordinary primary checkout changes are rejected while a turn, pending question,
+  or background task is active, before creating a checkout or detaching the provider.
+  This fixes `thread_workspace_create/select` terminating their own Claude caller
+  and surfacing a generic event-stream error. Secondary repository selectors remain
+  available during a turn. The orchestrator rechecks at dispatch, and the branch
+  picker no longer sends a separate Stop before a metadata update. Explicit
+  `t3_worktree_handoff` opts into a deliberate session handoff and retains its
+  continuation behavior. MCP descriptions and per-turn workspace instructions
+  explain the distinction (`ThreadWorkspaces.ts`, `Orchestrator.ts`,
+  `WorktreeMcpService.ts`, `BranchToolbarBranchSelector.tsx`,
+  `packages/shared/src/threadWorkspaces.ts`). Confirmed against two saved failures:
+  both followed primary workspace creation and a `Workspace changed.` detach.
+  Related upstream issue #14245 remains open. Server/web/mobile/desktop typechecks
+  passed; no live reproduction or test runs. Source-only change; no reinstall or restart.
+
 - Files repository collapse choices and tree height proportions are shared across
   file tabs and saved per environment/project, keyed by configured repository
   identity. Folder expansion is saved per checkout; inactive tabs do not reveal
