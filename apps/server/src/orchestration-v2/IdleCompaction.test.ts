@@ -72,8 +72,9 @@ const seed = Effect.fn(function* (driver: "claudeAgent" | "codex") {
   })}`;
 });
 
-for (const driver of ["claudeAgent", "codex"] as const) {
-  it.effect(`${driver}: native background work can continue; strict mode still waits`, () =>
+it.effect.each(["claudeAgent", "codex"] as const)(
+  "%s: native background work can continue; strict mode still waits",
+  (driver) =>
     Effect.gen(function* () {
       yield* seed(driver);
       const sql = yield* SqlClient.SqlClient;
@@ -134,8 +135,7 @@ for (const driver of ["claudeAgent", "codex"] as const) {
         ${json({ contextUsage: { usedTokens: 400000 }, pendingBackgroundTasks: [{ taskId: "unknown" }] })}`;
       expect(yield* policy.due()).toEqual([]);
     }).pipe(Effect.provide(testLayer)),
-  );
-}
+);
 
 it.effect("project overrides control enablement, background work, timeout, and tokens", () =>
   Effect.gen(function* () {

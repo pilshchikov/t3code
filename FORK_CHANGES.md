@@ -4,6 +4,36 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Upstream sync, October 3
+
+- Merged upstream main through `00eb8f6183` (57 commits since `a8927712f8`), including
+  ordered run effects/release recovery, PR watches, model reporting, imported-chat scroll
+  fixes, Mermaid diagrams, usage breakdowns/performance, and symlink-safe settings saves.
+- Kept Claude worker effort hooks while adopting permission-mode reconciliation and actual
+  model reporting. Child model and effective effort now update together under the child
+  thread lock (`ClaudeAdapterV2.ts`, `ProviderEventIngestor.ts`).
+- Combined faster transcript scans and token/speed cost details with per-account labels and
+  aggregation. Model drilldowns retain account identity instead of opening the first account
+  with the same model (`UsageService.ts`, `usageMerge.ts`, `UsagePage.ts`, `UsageModelDialog.tsx`).
+- Kept repository-grouped thread PRs and totals while adding watch controls and MCP tools.
+  Runtime instructions retain multi-repository linking guidance. Changes previews adopt the
+  full branch-plus-working-tree comparison while retaining repository selectors, lazy files,
+  the resizable tree, and file context menus (`ThreadPullRequestsPanel.tsx`, `DiffPanel.tsx`,
+  `GitVcsDriverCore.ts`).
+- Preserved automatic compaction settings/worker, primary-checkout busy guards, Files collapse
+  and resize state, custom chat width, mobile keyboard/composer fixes, project rail/status
+  dots/colors, conversation recovery/following, privacy gates, and exclusive settlement policy.
+  Upstream's narrower workspace card and imported-thread grouping fix coexist with those paths.
+- Validation: frozen lockfile install and server/web/mobile/desktop typechecks passed. Focused
+  lint has no errors, with existing style/React warnings. No tests or app UI verification run
+  during this merge. No app rebuild, reinstall, or restart. Recovery branch:
+  `backup/pre-upstream-20261003`.
+- Owner requested daily source merges at 09:00 America/Vancouver. The local macOS launch agent
+  `com.pilshchikov.t3code-upstream-sync` prepares each merge in an isolated worktree, reads this
+  record, and advances local main only if it is clean and unchanged. Pending work stays on its
+  automation branch. Configuration and reports live in `~/.local/share/t3code-upstream-sync`.
+  Scheduled runs never push, rebuild, reinstall, or restart; app updates require an explicit ask.
+
 ## Automatic context compaction, October 3
 
 - Opt-in automatic compaction for Claude and Codex sessions with measured context usage.

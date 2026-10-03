@@ -251,8 +251,8 @@ export default function DiffPanel({
   const selectedScopeLabel =
     selectedRunId === null
       ? selectedGitScope === "unstaged"
-        ? "Working tree"
-        : "Branch changes"
+        ? "Uncommitted"
+        : "Changes"
       : selectedTurn?.runId === latestTurn?.runId
         ? "Latest turn"
         : `Turn ${selectedCheckpointTurnCount ?? "?"}`;
@@ -264,8 +264,8 @@ export default function DiffPanel({
   const reviewSectionTitle = selectedTurn
     ? `Turn ${selectedCheckpointTurnCount ?? "?"}`
     : selectedGitScope === "unstaged"
-      ? "Working tree"
-      : "Branch changes";
+      ? "Uncommitted"
+      : "Changes";
   const selectedCheckpointRange = useMemo(
     () =>
       typeof selectedCheckpointTurnCount === "number"
@@ -869,8 +869,8 @@ export default function DiffPanel({
               selectedTurn
                 ? "Loading checkpoint diff..."
                 : selectedGitScope === "unstaged"
-                  ? "Loading working tree diff..."
-                  : "Loading branch diff..."
+                  ? "Loading uncommitted changes..."
+                  : "Loading changes..."
             }
           />
         ) : (
@@ -951,11 +951,11 @@ export default function DiffPanel({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             <DropdownMenuRadioGroup value={selectedScopeValue} onValueChange={selectScopeValue}>
-              <DropdownMenuRadioItem value="unstaged" closeOnClick>
-                <span>Working tree</span>
-              </DropdownMenuRadioItem>
               <DropdownMenuRadioItem value="branch" closeOnClick>
-                <span>Branch changes</span>
+                <span>Changes</span>
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="unstaged" closeOnClick>
+                <span>Uncommitted</span>
               </DropdownMenuRadioItem>
               <DropdownMenuRadioItem value="latest" closeOnClick>
                 <span>Latest turn</span>
@@ -1304,6 +1304,25 @@ export default function DiffPanel({
                   (candidate) => candidate.filePath === headerFilePath,
                 );
                 if (file) toggleDiffFileCollapsed(file.fileKey);
+              }}
+              onContextMenuCapture={(event) => {
+                const composedPath = event.nativeEvent.composedPath?.() ?? [];
+                const title = composedPath.find(
+                  (node): node is HTMLElement =>
+                    node instanceof HTMLElement && node.hasAttribute("data-title"),
+                );
+                const filePath = title?.textContent?.trim();
+                if (!filePath) return;
+                event.preventDefault();
+                onFileContextMenu(
+                  {
+                    environmentId: activeThread?.environmentId ?? null,
+                    filePath,
+                    workspaceRoot: activeCwd,
+                    repositoryRoot: activeRepositoryRoot,
+                  },
+                  event,
+                );
               }}
             >
               {filesTreeOpen && diffTreeFiles.length > 1 ? (

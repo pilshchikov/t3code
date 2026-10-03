@@ -6,6 +6,7 @@ import {
   type OrchestrationV2PlanArtifact,
   type OrchestrationV2Run,
   type OrchestrationV2ProviderTurn,
+  type OrchestrationV2Subagent,
   type ModelSelection,
   type RuntimeMode,
   type ProviderInteractionMode,
@@ -31,6 +32,7 @@ import * as ProjectionStore from "./ProjectionStore.ts";
 import * as IdAllocator from "./IdAllocator.ts";
 import { ProviderAdapterV2Event } from "./ProviderAdapter.ts";
 import { makeProviderFailureTurnItem } from "./ProviderFailure.ts";
+import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 
 export class ProviderEventNormalizeError extends Schema.TaggedError<ProviderEventNormalizeError>()(
   "ProviderEventNormalizeError",
@@ -249,13 +251,17 @@ const decodeDomainEvent = Schema.decodeUnknownEffect(OrchestrationV2DomainEvent)
 export const layer: Layer.Layer<
   ProviderEventIngestorV2,
   never,
-  EventSink.EventSinkV2 | IdAllocator.IdAllocatorV2 | ProjectionStore.ProjectionStoreV2
+  | EventSink.EventSinkV2
+  | IdAllocator.IdAllocatorV2
+  | ProjectionStore.ProjectionStoreV2
+  | ThreadCommandExecutor.ThreadCommandExecutor
 > = Layer.effect(
   ProviderEventIngestorV2,
   Effect.gen(function* () {
     const eventSink = yield* EventSink.EventSinkV2;
     const projections = yield* ProjectionStore.ProjectionStoreV2;
     const idAllocator = yield* IdAllocator.IdAllocatorV2;
+    const threadCommands = yield* ThreadCommandExecutor.ThreadCommandExecutor;
     const analytics = yield* ProviderTurnAnalytics;
     const completedTurnAnalytics = new Set<string>();
 
@@ -338,6 +344,62 @@ export const layer: Layer.Layer<
       },
     );
 
+    /**
+     * A native subagent's thread starts on the parent's model when the
+     * provider names the real one later (a Claude agent file's model arrives
+     * with the subagent's first reply). Clients read the thread's model, so
+     * move the thread to the reported one. Thread commands rewrite the whole
+     * thread row under the thread's lock, so this read and write take it too.
+     */
+    const syncSubagentThreadModel = Effect.fn("ProviderEventIngestor.syncSubagentThreadModel")(
+      function* (input: ProviderEventIngestInput, subagent: OrchestrationV2Subagent) {
+        const { childThreadId, model, effort } = subagent;
+        if (
+          subagent.origin !== "provider_native" ||
+          childThreadId === null ||
+          (model === null && effort === undefined)
+        ) {
+          return [];
+        }
+        const staleThread = projections.getThread(childThreadId).pipe(
+          Effect.map((thread) =>
+            (model === null || thread.modelSelection.model === model) &&
+            (effort === undefined ||
+              getModelSelectionStringOptionValue(thread.modelSelection, "effort") === effort)
+              ? null
+              : thread,
+          ),
+          Effect.catchTags({ ProjectionStoreThreadNotFoundError: () => Effect.succeed(null) }),
+        );
+        // Nearly every update already matches; only a mismatch takes the lock.
+        if ((yield* staleThread) === null) return [];
+        return yield* threadCommands.withLock(
+          childThreadId,
+          Effect.gen(function* () {
+            const thread = yield* staleThread;
+            if (thread === null) return [];
+            const now = yield* DateTime.now;
+            const event = yield* makeDomainEvent(input, {
+              type: "thread.model-selection-updated",
+              threadId: thread.id,
+              // Only the worker runtime may supply effort; parent options do not apply.
+              payload: {
+                ...thread,
+                modelSelection: {
+                  instanceId: subagent.providerInstanceId,
+                  model: model ?? thread.modelSelection.model,
+                  ...(effort === undefined ? {} : { options: [{ id: "effort", value: effort }] }),
+                },
+                updatedAt: now,
+              },
+              occurredAt: now,
+            });
+            return yield* eventSink.write({ events: [event] });
+          }),
+        );
+      },
+    );
+
     const normalize: ProviderEventIngestorV2Shape["normalize"] = (input) =>
       Effect.gen(function* () {
         switch (input.event.type) {
@@ -392,39 +454,16 @@ export const layer: Layer.Layer<
                 nodeId: input.event.node.id,
               }),
             ];
-          case "subagent.updated": {
-            const task = input.event.subagent;
-            const events = [
+          case "subagent.updated":
+            return [
               yield* makeDomainEvent(input, {
                 type: "subagent.updated",
-                threadId: task.threadId,
-                payload: task,
-                runId: task.runId,
-                nodeId: task.id,
+                threadId: input.event.subagent.threadId,
+                payload: input.event.subagent,
+                runId: input.event.subagent.runId,
+                nodeId: input.event.subagent.id,
               }),
             ];
-            if (task.childThreadId !== null && task.effort !== undefined) {
-              const child = (yield* projections.getThreadRecords(task.childThreadId, [])).thread;
-              const selection = {
-                instanceId: task.providerInstanceId,
-                model: task.model ?? child.modelSelection.model,
-                options: [{ id: "effort", value: task.effort }],
-              };
-              if (
-                child.modelSelection.model !== selection.model ||
-                getModelSelectionStringOptionValue(child.modelSelection, "effort") !== task.effort
-              ) {
-                events.push(
-                  yield* makeDomainEvent(input, {
-                    type: "thread.model-selection-updated",
-                    threadId: child.id,
-                    payload: { ...child, modelSelection: selection, updatedAt: task.updatedAt },
-                  }),
-                );
-              }
-            }
-            return events;
-          }
           case "message.updated":
             return [
               yield* makeDomainEvent(input, {
@@ -566,6 +605,21 @@ export const layer: Layer.Layer<
             .pipe(Effect.mapError(mapWriteError));
           return result.storedEvents;
         }).pipe(
+          Effect.flatMap((storedEvents) =>
+            storedEvents.length === 0 || input.event.type !== "subagent.updated"
+              ? Effect.succeed(storedEvents)
+              : syncSubagentThreadModel(input, input.event.subagent).pipe(
+                  Effect.map((synced) => [...storedEvents, ...synced]),
+                  Effect.mapError(
+                    (cause) =>
+                      new ProviderEventPublishError({
+                        providerSessionId: input.providerSessionId,
+                        eventCount: 1,
+                        cause,
+                      }),
+                  ),
+                ),
+          ),
           Effect.tap((storedEvents) =>
             Effect.gen(function* () {
               if (storedEvents.length === 0 || input.event.type !== "provider_turn.updated") return;
