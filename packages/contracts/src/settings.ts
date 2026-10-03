@@ -1212,6 +1212,7 @@ export const IdleCompactionTokens = Schema.Int.check(
 
 export const PROJECT_SCOPED_SERVER_SETTING_KEYS = [
   "idleCompactionEnabled",
+  "idleCompactionAllowBackgroundWork",
   "idleCompactionMinutes",
   "idleCompactionTokens",
   "worktreeCleanup",
@@ -1246,6 +1247,7 @@ export type ProjectScopedServerSettingKey = (typeof PROJECT_SCOPED_SERVER_SETTIN
  */
 export const ProjectSettingsOverrides = Schema.Struct({
   idleCompactionEnabled: Schema.optionalKey(Schema.Boolean),
+  idleCompactionAllowBackgroundWork: Schema.optionalKey(Schema.Boolean),
   idleCompactionMinutes: Schema.optionalKey(IdleCompactionMinutes),
   idleCompactionTokens: Schema.optionalKey(IdleCompactionTokens),
   worktreeCleanup: Schema.optionalKey(WorktreeCleanup),
@@ -1321,6 +1323,9 @@ export type StorageCleanupSettings = typeof StorageCleanupSettings.Type;
 
 export const ServerSettings = Schema.Struct({
   idleCompactionEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  idleCompactionAllowBackgroundWork: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(true)),
+  ),
   idleCompactionMinutes: IdleCompactionMinutes.pipe(Schema.withDecodingDefault(Effect.succeed(5))),
   idleCompactionTokens: IdleCompactionTokens.pipe(
     Schema.withDecodingDefault(Effect.succeed(300000)),
@@ -1706,6 +1711,7 @@ const OpenCodeSettingsPatch = Schema.Struct({
 
 export const ServerSettingsPatch = Schema.Struct({
   idleCompactionEnabled: Schema.optionalKey(Schema.Boolean),
+  idleCompactionAllowBackgroundWork: Schema.optionalKey(Schema.Boolean),
   idleCompactionMinutes: Schema.optionalKey(IdleCompactionMinutes),
   idleCompactionTokens: Schema.optionalKey(IdleCompactionTokens),
   worktreeCleanup: Schema.optionalKey(

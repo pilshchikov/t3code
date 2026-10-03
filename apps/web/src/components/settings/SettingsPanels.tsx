@@ -3090,8 +3090,6 @@ export function GeneralSettingsPanel() {
           }
         />
 
-        <IdleCompactionSettings />
-
         <SettingsRow
           {...searchableSetting("continue-threads-after-server-update")}
           serverScoped
@@ -3223,6 +3221,8 @@ export function GeneralSettingsPanel() {
           }
         />
       </SettingsSection>
+
+      <IdleCompactionSettings />
 
       <SettingsSection id="projects-and-threads" title="Projects & threads">
         <SettingsRow

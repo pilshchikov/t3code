@@ -60,6 +60,7 @@ const PAGE_PROJECT_KEYS: Record<SettingsPage, readonly ProjectScopedServerSettin
   maintenance: [
     "continueThreadsAfterServerUpdate",
     "idleCompactionEnabled",
+    "idleCompactionAllowBackgroundWork",
     "idleCompactionMinutes",
     "idleCompactionTokens",
   ],
@@ -165,6 +166,32 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
   const isMixed = (key: keyof ServerSettings) =>
     reference === null ||
     displayTargets.some((entry) => entry.settings[key] !== reference.settings[key]);
+  const compactionSource = (key: ProjectScopedServerSettingKey) => {
+    if (!projectSelected) {
+      const names = projectGroups
+        .filter((group) =>
+          group.members.some((member) =>
+            displayTargets.some(
+              (target) =>
+                target.environment.environmentId === member.project.environmentId &&
+                target.environment.serverConfig.settings.projectSettingsOverrides[
+                  member.project.id
+                ]?.[key] !== undefined,
+            ),
+          ),
+        )
+        .map((group) => group.label);
+      return names.length > 0
+        ? `Global default. Overridden in: ${names.join(", ")}.`
+        : "Global default. No project overrides.";
+    }
+    const overridden = displayTargets.filter((target) => target.sources[key] === "project").length;
+    return overridden === 0
+      ? "Inherited from global defaults."
+      : overridden === displayTargets.length
+        ? `Overridden for ${selectedProject?.label ?? "this project"}.`
+        : "Overridden on some selected environments; inherited on others.";
+  };
   const updateSettings = useAtomCommand(serverEnvironment.updateSettings, {
     label: "environment settings update",
     reportFailure: true,
@@ -421,16 +448,34 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                       ))}
                     </SettingsSection>
                   ) : null}
-                  <SettingsSection title="Idle compaction">
+                  <SettingsSection title="Automatic compaction">
+                    <Text className="px-4 pt-3 text-sm text-foreground-muted">
+                      Select All projects for global defaults, or a project to override each
+                      setting. Use defaults above clears this page's project overrides.
+                    </Text>
                     <SettingsSwitchRow
                       icon="arrow.clockwise"
-                      label="Compact idle threads"
-                      subtitle="Claude and Codex only. Waits until all monitors, commands, subagents, queues, and questions finish."
+                      label="Enable automatic compaction"
+                      subtitle={`Claude and Codex, between replies. Active replies, queued messages, and unanswered questions wait. ${compactionSource("idleCompactionEnabled")}`}
                       value={uniform("idleCompactionEnabled")}
                       disabled={disabledFor("idleCompactionEnabled")}
                       onValueChange={(value) => write({ idleCompactionEnabled: value })}
                     />
+                    <SettingsSwitchRow
+                      icon="arrow.clockwise"
+                      label="Allow background work"
+                      subtitle={`Keep native monitors, commands, and provider subagents running. Other pending tools and T3-managed delegated tasks wait. ${compactionSource("idleCompactionAllowBackgroundWork")}`}
+                      value={uniform("idleCompactionAllowBackgroundWork")}
+                      disabled={disabledFor("idleCompactionAllowBackgroundWork")}
+                      onValueChange={(value) => write({ idleCompactionAllowBackgroundWork: value })}
+                    />
+                    <Text className="px-4 py-2 text-sm text-foreground-muted">
+                      Timeout starts after the last reply when background work is allowed; otherwise
+                      after all work finishes. Reading the thread does not reset it.
+                    </Text>
                     <IdleCompactionFields
+                      minutesSource={compactionSource("idleCompactionMinutes")}
+                      tokensSource={compactionSource("idleCompactionTokens")}
                       minutes={uniform("idleCompactionMinutes")}
                       tokens={uniform("idleCompactionTokens")}
                       disabled={disabledFor("idleCompactionMinutes")}

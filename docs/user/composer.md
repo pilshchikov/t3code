@@ -202,21 +202,27 @@ Provider commands must start the message to run. T3 Code commands such as
 Send `/compact` in an existing conversation to reduce context usage when the
 provider supports it. Web and desktop also offer compaction from the context meter.
 
-### Compact idle threads automatically
+### Compact sessions automatically
 
-In **Settings → General → Compact idle threads**, enable idle compaction and choose a
-context token threshold and idle timeout. The defaults are **300,000 tokens** and
-**5 minutes**, with automatic compaction switched off. Select a project in settings to
-override any of these values, or clear its overrides to inherit the global defaults.
-On the native mobile app, these controls are under **Maintenance**.
+In **Settings → General → Automatic compaction**, enable automatic compaction and choose a
+context token threshold and idle timeout. Defaults are **300,000 tokens** and **5 minutes**,
+with automatic compaction switched off. Select a project above the settings to override
+individual values. Each setting's indicator shows its source and the projects overriding it;
+reset a project value to inherit the global default. Native mobile has the same section under
+**Maintenance**, including the source of each value.
 
-This currently supports Claude and Codex sessions with reported context usage. The timer
-starts after all work finishes, including monitors, background commands, and subagents.
-Queued messages and pending questions also prevent compaction. Reading the conversation
-does not reset the timer. Archived, settled, snoozed, failed, and interrupted threads are
-skipped. A compaction never triggers another compaction without a new conversation turn.
-The server must remain running; the client can be closed. Compaction uses the provider's
-normal `/compact` operation and can consume provider usage.
+**Allow background work to continue** is on by default. Claude and Codex can compact between
+parent replies while native background commands and provider subagents keep running; Claude
+monitors can continue too. The timeout starts when the last parent reply finishes. Background
+output does not reset it, but a new parent reply does. Turn this option off to wait for all work
+to finish before starting the timeout. It can also be overridden per project.
+
+Active parent turns, queued messages, pending questions, other unfinished tools, and
+T3-managed delegated tasks still prevent compaction. Sessions without reported context usage,
+archived, settled, snoozed, failed, interrupted, and native child threads are skipped. Reading
+the conversation does not reset the timer. A compaction never triggers another compaction
+without a new conversation turn. The server must remain running; the client can be closed.
+Compaction uses the provider's normal operation and can consume provider usage.
 
 ## Context in your message
 

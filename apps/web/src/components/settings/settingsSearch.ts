@@ -430,10 +430,33 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "idle-compaction",
-    title: "Compact idle threads",
+    title: "Enable automatic compaction",
     to: "/settings/general",
     scope: "project-defaults",
-    searchTerms: ["automatic compact compaction context tokens idle timeout minutes claude codex"],
+    searchTerms: [
+      "automatic compact compaction context tokens idle timeout minutes claude codex overrides",
+    ],
+  },
+  {
+    id: "idle-compaction-background",
+    title: "Compaction while background work continues",
+    to: "/settings/general",
+    scope: "project-defaults",
+    searchTerms: ["automatic compact monitors commands subagents background work"],
+  },
+  {
+    id: "idle-compaction-timeout",
+    title: "Idle time before compaction",
+    to: "/settings/general",
+    scope: "project-defaults",
+    searchTerms: ["automatic compact timeout minutes wait"],
+  },
+  {
+    id: "idle-compaction-tokens",
+    title: "Context token threshold",
+    to: "/settings/general",
+    scope: "project-defaults",
+    searchTerms: ["automatic compact compaction context size amount tokens"],
   },
   {
     id: "continue-threads-after-server-update",

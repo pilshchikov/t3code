@@ -16,6 +16,7 @@ import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
 const PreferenceFields = {
   idleCompactionEnabled: ServerSettings.fields.idleCompactionEnabled,
+  idleCompactionAllowBackgroundWork: ServerSettings.fields.idleCompactionAllowBackgroundWork,
   idleCompactionMinutes: ServerSettings.fields.idleCompactionMinutes,
   idleCompactionTokens: ServerSettings.fields.idleCompactionTokens,
   defaultThreadEnvMode: ServerSettings.fields.defaultThreadEnvMode,
@@ -57,9 +58,10 @@ const EnvironmentReadTool = Tool.make("t3_environment_read", {
 const EnvironmentPreferencesTool = Tool.make("t3_environment_preferences_update", {
   ...shared,
   description:
-    "Update selected environment-wide preferences through normal settings persistence and notifications. Requires a live full-access/default calling thread. Omitted fields are preserved; empty customInstructions clears them. Idle compaction is opt-in for Claude/Codex: set idleCompactionEnabled, idleCompactionMinutes (1–1440), and idleCompactionTokens (1000–10000000). It waits for all agent and background work to finish; project overrides take precedence.",
+    "Update selected environment-wide preferences through normal settings persistence and notifications. Requires a live full-access/default calling thread. Omitted fields are preserved; empty customInstructions clears them. Idle compaction is opt-in for Claude/Codex: set idleCompactionEnabled, idleCompactionMinutes (1–1440), and idleCompactionTokens (1000–10000000). Set idleCompactionAllowBackgroundWork (default true) to compact between replies while native monitors, background commands, and provider subagents continue. False waits for all work to finish. Active replies, queues, pending questions, other tools, and T3-managed delegations still wait. Project overrides take precedence.",
   parameters: Schema.Struct({
     idleCompactionEnabled: ServerSettingsPatch.fields.idleCompactionEnabled,
+    idleCompactionAllowBackgroundWork: ServerSettingsPatch.fields.idleCompactionAllowBackgroundWork,
     idleCompactionMinutes: ServerSettingsPatch.fields.idleCompactionMinutes,
     idleCompactionTokens: ServerSettingsPatch.fields.idleCompactionTokens,
     defaultThreadEnvMode: ServerSettingsPatch.fields.defaultThreadEnvMode,

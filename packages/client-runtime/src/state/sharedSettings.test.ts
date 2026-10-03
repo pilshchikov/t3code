@@ -125,6 +125,10 @@ describe("pickSharedServerSettings", () => {
     ).toEqual([
       "autoResumeLimitedThreads",
       "continueThreadsAfterServerUpdate",
+      "idleCompactionAllowBackgroundWork",
+      "idleCompactionEnabled",
+      "idleCompactionMinutes",
+      "idleCompactionTokens",
       "newWorktreesStartFromOrigin",
       "sidebarAutoSettleAfterDays",
       "sidebarAutoSettleOnMerge",

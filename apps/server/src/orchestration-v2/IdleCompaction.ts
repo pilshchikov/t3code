@@ -51,16 +51,57 @@ const make = Effect.gen(function* () {
           now - Math.min(...policies.map((policy) => policy.idleCompactionMinutes)) * 60_000,
         ),
       );
-      // Read only summaries, never transcripts. Check all pending tasks, including
-      // persistent monitors and commands that intentionally do not hold completion alerts.
+      // Read only summaries, never transcripts. Classify pending work as 0 (none),
+      // 1 (native work that survives compaction), or 2 (must finish first).
+      // A completed root turn is required even when native background work is allowed.
       const rows = yield* sql<{
         thread_id: string;
         project_id: string;
         run_id: string;
         used_tokens: number;
         idle_since: string;
+        completed_at: string;
+        provider_status: string;
+        roster_work: number;
+        item_work: number;
+        subagent_work: number;
       }>`
-      SELECT t.thread_id, t.project_id, r.run_id,
+      SELECT t.thread_id, t.project_id, r.run_id, r.completed_at, p.status AS provider_status,
+        COALESCE((SELECT max(CASE
+          WHEN background.provider_thread_id = p.provider_thread_id
+            AND json_extract(task.value, '$.kind') IN ('command', 'monitor', 'subagent')
+          THEN 1 ELSE 2 END)
+          FROM orchestration_v2_projection_provider_threads background,
+            json_each(background.payload_json, '$.pendingBackgroundTasks') task
+          WHERE background.thread_id = t.thread_id), 0) AS roster_work,
+        COALESCE((SELECT max(CASE
+          WHEN item.type = 'subagent'
+            AND json_extract(item.payload_json, '$.origin') = 'provider_native'
+            AND json_extract(item.payload_json, '$.driver') = p.driver
+            AND json_extract(item.payload_json, '$.providerInstanceId') = p.provider_instance_id
+          THEN 1
+          WHEN (item.type = 'command_execution' OR (p.driver = 'claudeAgent'
+            AND item.type = 'dynamic_tool' AND json_extract(item.payload_json, '$.toolName') = 'Monitor'))
+            AND (item.provider_thread_id = p.provider_thread_id OR EXISTS (
+              SELECT 1 FROM orchestration_v2_projection_subagents native_child
+              WHERE native_child.thread_id = t.thread_id
+                AND native_child.provider_thread_id = item.provider_thread_id
+                AND native_child.origin = 'provider_native'
+                AND native_child.driver = p.driver
+                AND native_child.provider_instance_id = p.provider_instance_id))
+          THEN 1 ELSE 2 END)
+          FROM orchestration_v2_projection_turn_items item
+          WHERE item.thread_id = t.thread_id AND item.status IN ('pending', 'running', 'waiting')
+            AND item.type IN ('command_execution', 'dynamic_tool', 'subagent')
+            AND NOT EXISTS (SELECT 1 FROM orchestration_v2_projection_runs abandoned
+              WHERE abandoned.run_id = item.run_id AND abandoned.status = 'rolled_back')), 0) AS item_work,
+        COALESCE((SELECT max(CASE
+          WHEN child.origin = 'provider_native' AND child.driver = p.driver
+            AND child.provider_instance_id = p.provider_instance_id
+          THEN 1 ELSE 2 END)
+          FROM orchestration_v2_projection_subagents child
+          WHERE child.thread_id = t.thread_id AND child.status IN ('pending', 'running', 'waiting')), 0)
+          AS subagent_work,
         json_extract(p.payload_json, '$.contextUsage.usedTokens') AS used_tokens,
         max(r.completed_at, p.updated_at,
           COALESCE((SELECT max(provider.updated_at) FROM orchestration_v2_projection_provider_threads provider
@@ -94,21 +135,17 @@ const make = Effect.gen(function* () {
           AND busy.status IN ('queued', 'preparing', 'starting', 'running', 'waiting'))
         AND NOT EXISTS (SELECT 1 FROM orchestration_v2_projection_runtime_requests request
           WHERE request.thread_id = t.thread_id AND request.status = 'pending')
-        AND NOT EXISTS (SELECT 1 FROM orchestration_v2_projection_provider_threads background
-          WHERE background.thread_id = t.thread_id
-          AND json_array_length(background.payload_json, '$.pendingBackgroundTasks') > 0)
-        AND NOT EXISTS (SELECT 1 FROM orchestration_v2_projection_turn_items item
-          WHERE item.thread_id = t.thread_id AND item.status IN ('pending', 'running', 'waiting')
-          AND item.type IN ('command_execution', 'dynamic_tool', 'subagent')
-          AND NOT EXISTS (SELECT 1 FROM orchestration_v2_projection_runs abandoned
-            WHERE abandoned.run_id = item.run_id AND abandoned.status = 'rolled_back'))
-        AND NOT EXISTS (SELECT 1 FROM orchestration_v2_projection_subagents child
-          WHERE child.thread_id = t.thread_id AND child.status IN ('pending', 'running', 'waiting'))
       ORDER BY t.thread_id
     `;
       return rows.flatMap((row) => {
         const policy = resolveProjectSettings(preferences, ProjectId.make(row.project_id)).settings;
-        const idleSince = Date.parse(row.idle_since);
+        const work = Math.max(row.roster_work, row.item_work, row.subagent_work);
+        const allowBackground = policy.idleCompactionAllowBackgroundWork;
+        // Never resume an unloaded process hoping its background work survived.
+        if (work > (allowBackground && row.provider_status === "idle" ? 1 : 0)) return [];
+        // Background output does not keep postponing compaction. A new parent
+        // reply/continuation does: it creates a new run and restarts this timeout.
+        const idleSince = Date.parse(allowBackground ? row.completed_at : row.idle_since);
         return policy.idleCompactionEnabled &&
           Number.isFinite(idleSince) &&
           now - idleSince >= policy.idleCompactionMinutes * 60_000 &&

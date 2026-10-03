@@ -6,6 +6,7 @@ import { AppText as Text, AppTextInput } from "../../../components/AppText";
 function NumericField({
   value,
   label,
+  source,
   min,
   max,
   disabled,
@@ -13,6 +14,7 @@ function NumericField({
 }: {
   value: number | null;
   label: string;
+  source: string;
   min: number;
   max: number;
   disabled: boolean;
@@ -28,7 +30,10 @@ function NumericField({
   };
   return (
     <View className="flex-row items-center justify-between gap-3 px-4 py-3">
-      <Text className="flex-1 text-base text-foreground">{label}</Text>
+      <View className="flex-1 gap-1">
+        <Text className="text-base text-foreground">{label}</Text>
+        <Text className="text-sm text-foreground-muted">{source}</Text>
+      </View>
       <AppTextInput
         className="min-h-10 w-28 rounded-xl px-3 py-2 text-right text-base"
         keyboardType="number-pad"
@@ -48,17 +53,22 @@ function NumericField({
 export function IdleCompactionFields({
   minutes,
   tokens,
+  minutesSource,
+  tokensSource,
   disabled,
   onChange,
 }: {
   minutes: number | null;
   tokens: number | null;
+  minutesSource: string;
+  tokensSource: string;
   disabled: boolean;
   onChange: (patch: ServerSettingsPatch) => void;
 }) {
   return (
     <>
       <NumericField
+        source={minutesSource}
         value={minutes}
         label="Idle minutes (1–1,440)"
         min={1}
@@ -67,6 +77,7 @@ export function IdleCompactionFields({
         onChange={(value) => onChange({ idleCompactionMinutes: value })}
       />
       <NumericField
+        source={tokensSource}
         value={tokens}
         label="Context tokens (1k–10m)"
         min={1000}

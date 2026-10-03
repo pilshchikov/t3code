@@ -4,22 +4,31 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
-## Idle context compaction, October 3
+## Automatic context compaction, October 3
 
-- Added opt-in idle compaction for Claude and Codex sessions with measured context
-  usage. Global defaults (off, 5 minutes, 300,000 tokens) and individual project
-  overrides use the shared settings schemas and inheritance UI on web/desktop
-  and native mobile. The environment MCP preference tools expose the same global
-  controls (`settings.ts`, `IdleCompactionSettings.tsx`, `IdleCompactionFields.tsx`).
-- A server scheduler checks persisted work state and sends the existing `/compact`
-  command only after all agent work finishes. Pending commands, persistent monitors,
-  subagents, queues, and questions block it. The timer uses work timestamps, not
-  thread visits. It skips non-active lifecycle states and native child threads.
-  Serialized dispatch rechecks eligibility; deterministic receipts and the latest
-  run's compact marker prevent repeated compaction without another conversation
-  turn (`IdleCompaction.ts`, `IdleCompactionWorker.ts`, `Orchestrator.ts`).
-- Validation: server, web, mobile, and desktop typechecks passed; focused lint
-  passed for the new modules. No runtime tests or app reinstall/restart for this feature.
+- Opt-in automatic compaction for Claude and Codex sessions with measured context usage.
+  Dedicated **Automatic compaction** sections in General (web/desktop) and Maintenance
+  (native mobile) expose enablement, timeout, token threshold, and whether background work
+  may continue. Defaults: off, 5 minutes, 300,000 tokens, background work allowed.
+  Each value supports a project override; the UI shows inheritance and overriding projects.
+  Shared schemas/settings and environment MCP preference tools expose the same controls
+  (`settings.ts`, `IdleCompactionSettings.tsx`, `IdleCompactionFields.tsx`).
+- A scheduler compacts between completed parent turns. Native monitors, commands, and
+  provider subagents may continue; unknown tasks, T3-managed delegations, active parent
+  turns, queued messages, and questions block it. An unloaded provider with outstanding
+  work is skipped. With background work enabled, the timer uses parent completion;
+  otherwise it waits for all work to finish. Thread visits never reset it. Lifecycle filters,
+  serialized dispatch rechecks, and deterministic receipts prevent invalid or repeated
+  compaction (`IdleCompaction.ts`, `IdleCompactionWorker.ts`, `Orchestrator.ts`).
+- Manual isolated CLI experiments: Claude Code 2.1.288 preserved a native Monitor,
+  background Bash command, and background subagent through `/compact`, with events/results
+  delivered afterward and unchanged process IDs. Codex 0.160.0 preserved an exec session
+  and native subagent through parent `/compact`, then returned their successful results.
+  These are provider experiments, not installed-app UI tests. No reinstall/restart.
+- Validation: six real SQLite service tests cover background work, timing, settings
+  overrides, and blocking states; 298 focused policy/settings tests passed across seven
+  files. Server, web, mobile, and desktop typechecks and focused lint passed. Updated
+  shared-key expectations and two stale worktree-cleanup expectations in settings tests.
 
 ## Upstream sync and repository worktrees, October 2
 

@@ -10,6 +10,7 @@ import { EnvironmentToolkit } from "./tools.ts";
 export function preferences(settings: ServerSettings) {
   const {
     idleCompactionEnabled,
+    idleCompactionAllowBackgroundWork,
     idleCompactionMinutes,
     idleCompactionTokens,
     defaultThreadEnvMode,
@@ -21,6 +22,7 @@ export function preferences(settings: ServerSettings) {
   const characters = Array.from(sourceControlWritingStyle.customInstructions);
   return {
     idleCompactionEnabled,
+    idleCompactionAllowBackgroundWork,
     idleCompactionMinutes,
     idleCompactionTokens,
     defaultThreadEnvMode,

@@ -325,6 +325,7 @@ describe("resolveWorktreeCleanup", () => {
       worktreeAfterDays: null,
       worktreeOnDelete: false,
       worktreeOnMerge: false,
+      worktreeOnSettle: false,
       worktreeUnchanged: false,
     });
     expect(resolveWorktreeCleanup(off, otherProjectId)).toEqual(inherited);
@@ -358,6 +359,7 @@ describe("resolveWorktreeCleanup", () => {
       worktreeAfterDays: 15,
       worktreeOnDelete: true,
       worktreeOnMerge: true,
+      worktreeOnSettle: true,
       worktreeUnchanged: false,
     });
     expect(

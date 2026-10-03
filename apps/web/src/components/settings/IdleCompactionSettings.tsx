@@ -2,7 +2,7 @@ import { useState } from "react";
 import { DEFAULT_SERVER_SETTINGS } from "@t3tools/contracts";
 import { NumberField, NumberFieldGroup, NumberFieldInput } from "../ui/number-field";
 import { ScopedSwitch } from "./ScopedSwitch";
-import { SettingsRow, SettingResetButton } from "./settingsLayout";
+import { SettingsRow, SettingResetButton, SettingsSection } from "./settingsLayout";
 import {
   useScopedSettings,
   useScopedSettingsMixed,
@@ -52,13 +52,18 @@ export function IdleCompactionSettings() {
   const mixedMinutes = useScopedSettingsMixed(["idleCompactionMinutes"]);
   const mixedTokens = useScopedSettingsMixed(["idleCompactionTokens"]);
   return (
-    <>
+    <SettingsSection id="automatic-compaction" title="Automatic compaction">
+      <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">
+        Set global defaults here, or select a project above to override individual values. The
+        indicator beside each setting shows where its value comes from and which projects override
+        it.
+      </p>
       <SettingsRow
         id="idle-compaction"
-        title="Compact idle threads"
+        title="Enable automatic compaction"
         serverScoped
         settingKeys={["idleCompactionEnabled"]}
-        description="Compact large Claude and Codex sessions after all agent work finishes. Waits for monitors, commands, subagents, queued messages, and questions. Off by default; the server must stay running."
+        description="Compact large Claude and Codex sessions between replies. Off by default; the server must stay running. Active replies, queued messages, and unanswered questions always wait."
         resetAction={
           settings.idleCompactionEnabled ? (
             <SettingResetButton
@@ -71,16 +76,42 @@ export function IdleCompactionSettings() {
           <ScopedSwitch
             settingKeys={["idleCompactionEnabled"]}
             checked={settings.idleCompactionEnabled}
-            aria-label="Compact idle threads"
+            aria-label="Enable automatic compaction"
             onCheckedChange={(value) => update({ idleCompactionEnabled: Boolean(value) })}
           />
         }
       />
       <SettingsRow
+        id="idle-compaction-background"
+        title="Allow background work to continue"
+        serverScoped
+        settingKeys={["idleCompactionAllowBackgroundWork"]}
+        description="Keep native monitors, background commands, and provider subagents running during compaction. Turn off to wait until all work finishes. T3-managed delegated tasks and other pending tools still wait."
+        resetAction={
+          !settings.idleCompactionAllowBackgroundWork ? (
+            <SettingResetButton
+              label="compaction with background work"
+              onClick={() => update({ idleCompactionAllowBackgroundWork: true })}
+            />
+          ) : null
+        }
+        control={
+          <ScopedSwitch
+            settingKeys={["idleCompactionAllowBackgroundWork"]}
+            checked={settings.idleCompactionAllowBackgroundWork}
+            aria-label="Allow background work during compaction"
+            onCheckedChange={(value) =>
+              update({ idleCompactionAllowBackgroundWork: Boolean(value) })
+            }
+          />
+        }
+      />
+      <SettingsRow
+        id="idle-compaction-timeout"
         title="Idle time before compaction"
         serverScoped
         settingKeys={["idleCompactionMinutes"]}
-        description="Minutes since the last work finished, from 1 to 1,440. Reading the thread does not reset this timer."
+        description="Minutes since the last reply finished (1–1,440). When background work is allowed, its output does not reset the timer. Otherwise the timer waits for all work to finish. Reading the thread does not reset it."
         resetAction={
           settings.idleCompactionMinutes !== DEFAULT_SERVER_SETTINGS.idleCompactionMinutes ? (
             <SettingResetButton
@@ -103,6 +134,7 @@ export function IdleCompactionSettings() {
         }
       />
       <SettingsRow
+        id="idle-compaction-tokens"
         title="Context token threshold"
         serverScoped
         settingKeys={["idleCompactionTokens"]}
@@ -128,6 +160,6 @@ export function IdleCompactionSettings() {
           />
         }
       />
-    </>
+    </SettingsSection>
   );
 }
