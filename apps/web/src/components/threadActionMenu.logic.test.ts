@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { ACCENT_COLOR_OPTIONS } from "~/lib/accentColors";
-import { buildThreadActionMenuItems, type ThreadActionMenuState } from "./threadActionMenu.logic";
+import {
+  buildDraftActionMenuItems,
+  buildThreadActionMenuItems,
+  type ThreadActionMenuState,
+} from "./threadActionMenu.logic";
 
 const baseState: ThreadActionMenuState = {
   branch: null,
@@ -192,5 +196,26 @@ describe("colour submenu", () => {
     expect(colour?.children?.find((child) => child.id === "color:none")?.label).toBe(
       "\u2713 No colour",
     );
+  });
+});
+
+describe("buildDraftActionMenuItems", () => {
+  it("offers only the copy values the draft has", () => {
+    const items = buildDraftActionMenuItems({ hasPath: false, hasBranch: true, hasProject: true });
+    expect(items[0]).toMatchObject({ id: "copy", disabled: false });
+    expect(items[0]?.children?.map((item) => item.id)).toEqual(["copy-branch"]);
+
+    const noCopy = buildDraftActionMenuItems({
+      hasPath: false,
+      hasBranch: false,
+      hasProject: true,
+    });
+    expect(noCopy[0]).toMatchObject({ id: "copy", disabled: true, children: [] });
+  });
+
+  it("drops project settings without a project and keeps discard last", () => {
+    const items = buildDraftActionMenuItems({ hasPath: true, hasBranch: false, hasProject: false });
+    expect(items.map((item) => item.id)).toEqual(["copy", "discard"]);
+    expect(items.at(-1)).toMatchObject({ label: "Discard draft", destructive: true });
   });
 });

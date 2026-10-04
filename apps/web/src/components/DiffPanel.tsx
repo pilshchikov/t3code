@@ -12,9 +12,6 @@ import {
   ArrowRightIcon,
   CheckIcon,
   ChevronDownIcon,
-  ChevronRightIcon,
-  ChevronsDownUpIcon,
-  ChevronsUpDownIcon,
   Columns2Icon,
   FolderGit2Icon,
   FolderTreeIcon,
@@ -22,6 +19,7 @@ import {
   Rows3Icon,
   TextWrapIcon,
 } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide";
 import * as DateTime from "effect/DateTime";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCodeViewFileReveal } from "./diffs/useCodeViewFileReveal";
@@ -58,6 +56,7 @@ import { AnnotatableCodeView, type AnnotatableCodeViewHandle } from "./diffs/Ann
 import { DiffFilesTreeNavigator } from "./diffs/DiffFilesTreeNavigator";
 import { ResizableColumns } from "./ui/resizable-columns";
 import { Button } from "./ui/button";
+import { MorphIcon } from "~/components/MorphIcon";
 import { ToggleGroup, Toggle } from "./ui/toggle-group";
 import { Switch } from "./ui/switch";
 import {
@@ -838,11 +837,7 @@ export default function DiffPanel({
                 />
               }
             >
-              {collapsed ? (
-                <ChevronRightIcon className="size-4" />
-              ) : (
-                <ChevronDownIcon className="size-4" />
-              )}
+              <MorphIcon className="size-4" icon={collapsed ? ChevronRight : ChevronDown} />
             </TooltipTrigger>
             <TooltipPopup side="top">{collapsed ? "Expand diff" : "Collapse diff"}</TooltipPopup>
           </Tooltip>
@@ -1148,11 +1143,10 @@ export default function DiffPanel({
                 />
               }
             >
-              {allDiffFilesCollapsed ? (
-                <ChevronsUpDownIcon className="size-3.5" />
-              ) : (
-                <ChevronsDownUpIcon className="size-3.5" />
-              )}
+              <MorphIcon
+                className="size-3.5"
+                icon={allDiffFilesCollapsed ? ChevronsUpDown : ChevronsDownUp}
+              />
             </TooltipTrigger>
             <TooltipPopup side="top">
               {allDiffFilesCollapsed ? "Expand all files" : "Collapse all files"}

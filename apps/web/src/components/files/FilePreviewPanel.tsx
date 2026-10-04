@@ -33,10 +33,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ChevronRight,
-  Code2,
-  Table2,
   WrapTextIcon,
-  Eye,
   FolderTree,
   Globe2,
   GripHorizontal,
@@ -44,6 +41,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
+import { Code2, Eye, Table2 } from "lucide";
 import * as Schema from "effect/Schema";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -61,6 +59,7 @@ import {
   useEditorNavigationStore,
 } from "~/editorNavigationStore";
 import { useExplorerViewStore } from "~/explorerViewStore";
+import { MorphIcon } from "~/components/MorphIcon";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { useClientSettings, useUpdateClientSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
@@ -1809,13 +1808,10 @@ export default function FilePreviewPanel({
                 );
               }}
             >
-              {rendered ? (
-                <Code2 className="size-3.5" />
-              ) : renderedMode === "table" ? (
-                <Table2 className="size-3.5" />
-              ) : (
-                <Eye className="size-3.5" />
-              )}
+              <MorphIcon
+                className="size-3.5"
+                icon={rendered ? Code2 : renderedMode === "table" ? Table2 : Eye}
+              />
             </FileSurfaceAction>
           ) : null}
           {showsRawText ? (

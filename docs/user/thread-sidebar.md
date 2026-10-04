@@ -13,7 +13,7 @@ desktop, or mobile client is connected. The default is **Never**, so threads mov
 settle them manually. **When PR merges or closes** settles a thread only when the finished pull
 request is not older than the user's latest activity. **After inactivity** uses the configured day
 count and keeps threads with open pull requests active. Active work, pending input, and live
-background work always keep the thread active. Change the policy in **Settings > General**. A
+agent background work keep the thread active. Change the policy in **Settings > General**. A
 settings change affects future settlement and does not reopen a settled thread.
 
 The change is written to every environment you are
@@ -34,7 +34,9 @@ A thread does not need a project. To start one without a project, click **or
 start without a project** under a new thread's heading, pick **No project** from
 the project menu in that heading or from **New thread in...** in the command
 palette, or press `mod+alt+n`. On mobile, pick **No project** from the project
-list. To move a draft into a project, pick the project in the heading.
+list. It starts on your current machine; before sending, pick another machine
+from the machine menu to move it there. To move a draft into a project, pick the
+project in the heading.
 
 Each thread without a project works in its own folder under `~/.t3/scratch` (the
 `scratch` folder of your T3 data directory), named after its date, the first words
@@ -63,7 +65,8 @@ Pin a thread from its menu to keep it above your active work.
 On web and desktop, unpinning, settling, snoozing, and archiving a thread each show
 a notification with **Undo** for five seconds. Undo restores the thread's previous
 state, including its pinned position, and reopens an archived thread you were
-viewing. `mod+z` triggers the most recent Undo when no text field is focused; see
+viewing. Discarding an unsent draft from the sidebar works the same way: Undo brings
+back its text and attachments. `mod+z` triggers the most recent Undo when no text field is focused; see
 [Keybindings](./keybindings.md#commands-with-special-behavior).
 On web and desktop, you can also drag files from your computer onto any thread row:
 the thread opens and the files are attached in its composer, ready for
@@ -127,8 +130,9 @@ open.
 Turn on **Settings → General → Working section (beta)** on web and desktop, or **Settings →
 Thread behavior → Working section** on iOS and Android, to move threads that are working or
 monitoring into a collapsed **Working** section below the active list. A thread returns to the top
-of the active list when it finishes, fails, or needs an approval or answer. Pinned threads stay in
-the pinned section. Each device keeps its own choice.
+of the active list when it finishes, fails, or needs an approval or answer. The Working section
+lists the thread you last sent work to first. Pinned threads stay in the pinned section. Each
+device keeps its own choice.
 
 While this is on, the active list is ordered by when each thread last came back to you, so you
 cannot drag or move threads within it. Your saved order returns when you turn it off.
@@ -156,12 +160,19 @@ sending an answer or restarting the agent. Settling also closes the thread's
 terminals that wait at an idle prompt, and keeps their output. A terminal that
 runs a command, such as a dev server, stays open.
 
-By default, environments settle inactive threads after three days and settle
-threads whose pull request merged. A closed pull request can also settle an idle
-thread. Work in progress, pending questions or approvals, and live background work
-prevent automatic settlement. An open pull request does not prevent inactivity
-settlement, but an old closed or merged pull request does not settle work you
-resumed after it closed.
+On web and desktop, press a thread's **Settle** button and drag up or down to
+settle every thread in that section between it and the one you release on.
+The **Un-settle** and **Wake** buttons work the same way in their sections.
+Press `Escape` while dragging to cancel.
+
+Automatic settlement is disabled by default. Choose **When PR merges or closes**
+to settle idle threads when their linked pull requests are all closed or merged,
+or choose **After inactivity** to settle them after the configured inactivity period.
+These modes are exclusive. Open pull requests keep threads active in inactivity
+mode. Work in progress, pending questions or approvals, and live agent background
+work prevent automatic settlement. An old closed or merged pull request does not
+settle work you resumed after it closed. Only your own messages count as resuming;
+automatic background turns and pull request watches do not.
 
 To keep one thread out of the settled shelf no matter how long it sits idle, open its menu,
 choose **Auto-settle behavior**, and pick **Disabled**. The current option is checked. Pick

@@ -48,6 +48,7 @@ export interface ModelTotals {
   readonly totalTokens: number;
   readonly records: number;
   readonly costShare: number;
+  readonly tokenShare: number;
 }
 
 export interface UsageSourceTotals {
@@ -668,6 +669,7 @@ export function mergeUsage(
       unpricedRecords: totals.unpricedRecords,
       unpricedTokens: totals.unpricedTokens,
       costShare: costUsd === 0 ? 0 : totals.costUsd / costUsd,
+      tokenShare: totalTokens === 0 ? 0 : totals.totalTokens / totalTokens,
     }))
     .sort((a, b) => b.costUsd - a.costUsd || b.totalTokens - a.totalTokens);
 

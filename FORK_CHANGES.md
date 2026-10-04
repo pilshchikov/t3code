@@ -4,6 +4,60 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Upstream sync, October 4
+
+- Merged all 70 upstream commits through `4ee6bfd50ef4a089440d5c3662db2298da9cc50e`
+  from fork base `2db0d268552127ce30c1faa0c257eb0267b3da43` with a real merge.
+  Reviewed conflicts individually and automatically merged code at the fork's live call sites.
+- Adopted upstream retryable workspace preparation while retaining the validated preparation-run
+  identity for initial binding and cancellation cleanup (`ThreadLaunchService.ts`). Failed recorded
+  checkouts remain available for retry; cleanup clears the binding only after removal succeeds.
+  The orchestrator still rejects ordinary checkout changes during active sessions, background work,
+  or pending input; queued follow-ups alone may wait behind the initial preparation.
+- Kept the actual orb renderer mounted in `ComposerPrimaryActions.tsx`: saved send color covers
+  send/resume/queue/steer, and saved stop color covers normal and pending-input Stop. Classic stays
+  available alongside upstream's morphing queue/steer icons. Existing mobile chats and draft heroes
+  keep the expanded composer, keyboard layout, and disabled scroll/focus collapse.
+- Integrated upstream lazy tool-output loading, retry controls, and hover timing with the fork's
+  first assistant text outside settled folds, mixed-work disclosure labels, scroll recovery/bottom
+  following, and stable imported-thread grouping (`MessagesTimeline.tsx`, `ChatView.tsx`).
+  `ResumeSessionsSection` remains mounted and creates V2 native-session references; project-root
+  markdown links continue to open the explorer.
+- Kept the project rail, status dots/colors, custom chat width, manual sidebar ordering, per-root
+  Files/worktree selectors, and stored collapse/resize state. Diff and preview panes adopt upstream
+  icon changes in their existing fork renderers (`AppSidebarLayout.tsx`, `DiffPanel.tsx`,
+  `FilePreviewPanel.tsx`). File deletion still reads its undo snapshot via `readFileOnce`; upstream's
+  store-ready scratch-project command coexists with it (`client-runtime/state/projectCommands.ts`).
+- Integrated upstream model token shares into account-specific model rows rather than account
+  totals (`shared/usageMerge.ts`). Native usage rows now include account identity in both their keys
+  and labels (`UsageRouteScreen.tsx`); web model drilldowns, pooled limits/history, and per-account
+  Claude probes remain connected. Claude worker effort hooks and account-isolated environments
+  survive provider/tool-presentation updates.
+- Adopted upstream temporary-index commit-message context without staging the real index. The
+  fork's staged-only context remains read-only and separately reachable from the Commit panel
+  (`GitVcsDriverCore.ts`, `GitManager.ts`).
+- Preserved privacy/network defaults, project memory/workspace MCP services, automatic compaction
+  and project overrides, and cleanup preferences. Settlement still defaults to Never with exclusive
+  PR/inactivity policies and open-PR protection. Opted-in PR settlement now uses the latest
+  user-authored message, so automatic wakes do not hold merged work open; upstream's background
+  completion rules distinguish agent work from leftover commands (`ThreadSettlementService.ts`).
+  Updated the affected user guidance. Multiwork remains intentionally retired; pooled usage and
+  the V2 composer sync indicator remain the replacements for their legacy components.
+- Manually completed the cancelled daily sync from its saved merge worktree after fetching and
+  confirming that upstream main still points to the same revision.
+- Validation: frozen-lockfile dependency installation passed. Contracts, shared, client-runtime,
+  mobile, desktop, relay, web, and server scoped typechecks passed. Scoped lint
+  passed for 271 changed source files with zero errors and 442 warnings (React dependency/ref and
+  compiler rules, unused symbols, and styling among others). Effect style suggestions are also
+  reported by typechecks. Source whitespace checks passed; `git diff --check` flags the unchanged
+  upstream Alchemy patch context line at `patches/alchemy@2.0.0-beta.79.patch:68`, retained as patch
+  syntax. No repo-wide validation was run.
+  Passed 624 focused tests across 18 files covering composer/timeline behavior, Files selectors,
+  menus, project rail, keybindings, workspace launch, settlement, compaction, cleanup, usage,
+  and commit context/index operations (117 unrelated Git cases skipped). No tests were authored.
+  No app builds, packaging,
+  browser/device verification, dev servers, reinstall/restart, or installed-app/live-userdata writes.
+
 ## Fork regression audit, October 3
 
 - Traced documented fork features through their live callers/settings/services after the V2
