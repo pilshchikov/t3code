@@ -1,3 +1,4 @@
+import { ResumeSessionsSection } from "./sidebar/ResumeSessionsSection";
 import { PROJECT_JUMP_KEYBINDING_COMMANDS } from "@t3tools/contracts";
 import { useReducer } from "react";
 import { ChevronDownIcon } from "lucide-react";
@@ -5421,6 +5422,15 @@ export default function Sidebar() {
               )}
             </div>
           ) : null}
+          {!isSearchingThreads &&
+            scopedProjectGroup?.memberProjects.map((project) => (
+              <ResumeSessionsSection
+                key={`${project.environmentId}:${project.id}`}
+                environmentId={project.environmentId}
+                cwd={project.workspaceRoot}
+                projectRef={scopeProjectRef(project.environmentId, project.id)}
+              />
+            ))}
         </SidebarGroup>
       </SidebarContent>
       <SidebarChromeFooter />

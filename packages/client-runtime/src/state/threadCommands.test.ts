@@ -6,6 +6,7 @@ import {
   ORCHESTRATION_V2_WS_METHODS,
   ProjectId,
   ProviderInstanceId,
+  ProviderDriverKind,
   ThreadId,
   type OrchestrationV2Command,
   type OrchestrationV2ShellSnapshot,
@@ -375,3 +376,46 @@ describe("remote thread lifecycle commands", () => {
       }),
   );
 });
+
+// Persist the native identity before any prompt is sent: both CLI providers must
+// resume that conversation through V2, including on a remote environment.
+it.effect.each(["claudeAgent", "codex"] as const)(
+  "creates a resumable %s thread with its original provider instance and native id",
+  (driver) =>
+    Effect.gen(function* () {
+      const h = yield* makeHarness();
+      const importedNativeThread = {
+        ref: {
+          driver: ProviderDriverKind.make(driver),
+          nativeId: "cli-session",
+          strength: "strong" as const,
+        },
+      };
+      const modelSelection = {
+        instanceId: ProviderInstanceId.make(`${driver}-work`),
+        model: "test-model",
+      };
+      const result = h.commands.create.run(h.registry, {
+        environmentId: ENVIRONMENT_ID,
+        input: {
+          threadId: THREAD_ID,
+          projectId: ProjectId.make("project"),
+          title: "Continue CLI work",
+          modelSelection,
+          runtimeMode: "approval-required",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          importedNativeThread,
+        },
+      });
+      const request = yield* Queue.take(h.requests);
+      expect(request.command).toMatchObject({
+        type: "thread.create",
+        importedNativeThread,
+        modelSelection,
+      });
+      yield* Deferred.succeed(request.reply, { sequence: 3 });
+      expect((yield* Effect.promise(() => result))._tag).toBe("Success");
+    }),
+);

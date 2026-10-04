@@ -2364,11 +2364,34 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       const shell = yield* projectionStore
         .getThreadShell(command.threadId)
         .pipe(mapDispatchError(command));
-      if (threadHasWorkspaceBoundWork(shell)) {
+      // Launch accepts the initial prompt before provisioning its checkout. That
+      // preparing run has no provider work to interrupt; validate its identity
+      // under the same dispatch lock so a started/cancelled run cannot bypass this guard.
+      const preparationRunId = command.workspacePreparationRunId;
+      const records =
+        preparationRunId === undefined
+          ? null
+          : yield* projectionStore
+              .getThreadRecords(command.threadId, ["runs", "providerSessions"])
+              .pipe(mapDispatchError(command));
+      const isInitialPreparation =
+        records !== null &&
+        records.runs.some((run) => run.id === preparationRunId && run.status === "preparing") &&
+        records.runs.every((run) => run.id === preparationRunId || run.status === "queued") &&
+        records.providerSessions.length === 0 &&
+        shell?.pendingRuntimeRequest == null &&
+        (shell?.pendingBackgroundTasks?.length ?? 0) === 0;
+      if (
+        !isInitialPreparation &&
+        (preparationRunId !== undefined || threadHasWorkspaceBoundWork(shell))
+      ) {
         return yield* new OrchestratorDispatchError({
           commandId: command.commandId,
           commandType: command.type,
-          cause: PRIMARY_WORKSPACE_BUSY_MESSAGE,
+          cause:
+            preparationRunId === undefined
+              ? PRIMARY_WORKSPACE_BUSY_MESSAGE
+              : "Initial workspace preparation no longer matches a pending launch.",
         });
       }
     }

@@ -10932,9 +10932,9 @@ export default function ChatView(props: ChatViewProps) {
                               promptHistoryMessages={timelineMessages}
                               isServerThread={isServerThread}
                               isLocalDraftThread={isLocalDraftThread}
-                              forceExpandedOnMobile={
-                                forceExpandedMobileComposer && isDraftHeroState
-                              }
+                              // Keep the prompt and controls stable when scrolling dismisses
+                              // the keyboard, including in existing conversations.
+                              forceExpandedOnMobile
                               projectSelectionRequired={
                                 isLocalDraftThread && activeProject === null
                               }

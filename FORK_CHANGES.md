@@ -4,6 +4,45 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Fork regression audit, October 3
+
+- Traced documented fork features through their live callers/settings/services after the V2
+  migration and latest upstream merge. File presence alone missed regressions; the repairs below
+  supersede the earlier preservation claims where those paths were disconnected.
+- Mobile web/desktop composer stays expanded in existing conversations as well as new chats.
+  `ChatView.tsx` now passes `forceExpandedOnMobile` on every chat, so scrolling or keyboard blur
+  cannot hide the prompt and footer. The fork's disabled desktop wheel-collapse remains in place.
+- Restored the first assistant message outside settled-turn folds, mixed activity's visible latest
+  status and expandable earlier entries, and the missing disclosure labels
+  (`MessagesTimeline.logic.ts`, `MessagesTimeline.tsx`). Kept upstream's stable imported-V1 fold
+  identities, initiating-prompt timing, persistent resource cards, and failed-tool expansion.
+- Project-root markdown links again resolve to `.` and open the explorer; multi-root ownership and
+  external paths retain their existing handling (`markdown-links.ts`).
+- Restored the scoped project sidebar's **Resume from CLI** section. Selection now creates a V2
+  thread with a strong native session reference before navigating, preserving the Claude/Codex
+  provider instance and discovered model. Unknown models use that instance's advertised default;
+  runtime permissions honor project settings. This replaces the disconnected V1 draft seed path
+  (`ResumeSessionsSection.tsx`, `Sidebar.tsx`, client-runtime `operations/commands.ts`). Discovery
+  still scans only when the section is expanded; other environments use their own server.
+- Fixed the primary-checkout busy guard blocking initial worktree launches and cancellation cleanup.
+  `ThreadLaunchService.ts` identifies its preparation run; `Orchestrator.ts` accepts that identity
+  only while the initial run is preparing, all other runs are queued, no provider session exists,
+  and no question/background work is pending. Stale preparation is rejected under the dispatch
+  lock. Ordinary workspace changes retain the busy guard; explicit handoff stays separate.
+  The optional command field is in `contracts/orchestrationV2.ts`.
+- Checked live paths for orb style/colors, custom chat width, project rail/dots/colors, context
+  menus, sidebar order migration, scroll recovery/live following, per-repository worktrees and
+  Files collapse/resize/refresh, editor navigation/history/changes, workspace and memory MCP tools,
+  compaction overrides, Claude worker effort, account limits/history, settlement, and privacy gates.
+  Multiwork remains intentionally retired. Pooled usage and the V2 composer sync indicator remain
+  their current replacements; unused legacy components are not features to restore.
+- Updated stale test expectations for separate account/model usage rows, retained cleanup settings,
+  and fork timeline presentation. Passed 1,231 focused tests across 46 files (including 86 selected
+  Claude adapter cases); web, server, and client-runtime typechecks passed. Scoped lint has no errors,
+  with existing React/style warnings. Daily merge instructions now explicitly cover these regressions.
+  Validation is source/tests, not an installed-app or real-device visual pass. No rebuild, reinstall,
+  restart, or live-userdata writes.
+
 ## Upstream sync, October 3
 
 - Merged upstream main through `00eb8f6183` (57 commits since `a8927712f8`), including
@@ -1272,32 +1311,17 @@ fork-specific behavior so future upstream syncs are easier to review.
       recency rather than true attach).
   - Exposed over `sessions.listResumable` (`packages/contracts/src/resumableSessions.ts`, `rpc.ts`,
     `ipc.ts`, `ws.ts`, read scope), merged across providers and sorted by recency.
-  - **Resume seam**: `thread.turn.start` gained an optional `resumeSession` seed
-    (`packages/contracts/src/orchestration.ts`); the decider forwards it on
-    `thread.turn-start-requested`, and `ProviderCommandReactor.ensureSessionForThread` honors it only
-    on a thread's first (fresh) provider-session start — so a new t3 thread attaches to the chosen
-    on-disk CLI session. Existing-thread turns are unaffected.
-  - Source: the files above plus `apps/server/src/orchestration/decider.ts`,
-    `apps/server/src/orchestration/Layers/ProviderCommandReactor.ts`, `apps/server/src/server.ts`.
-  - Validated with `ResumableSessionDiscovery.test.ts` (Claude + Codex header/prompt/count parsing,
-    project-dir encoding) and a manual run against the real `~/.claude*`/`~/.codex` stores.
-- The project sidebar surfaces these sessions under a collapsible "Resume from CLI" group beneath
-  each expanded project's own threads.
-  - The list scans on demand — it mounts (and hits the disk) only when the user expands the group,
-    not on every sidebar render. Rows show the session title, source provider/instance, relative
-    time, and a green dot for recently-active sessions.
-  - Clicking a row mints a fresh draft thread for the project, presets the model picker to the
-    session's provider instance (using the model recovered from the session, so routing matches the
-    resume cursor), and stashes a one-off resume seed keyed by the draft. The seed is consumed by the
-    composer on that thread's first turn (`thread.turn.start.resumeSession`) and then cleared, so the
-    new thread attaches to the existing CLI session and the conversation round-trips.
-  - The model slug is also discovered per session (`ResumableSession.model`, parsed from the Claude
-    assistant events / Codex `session_meta`) to drive the picker preset.
+  - **V2 resume seam (October 3 repair)**: the scoped project sidebar's collapsible
+    `ResumeSessionsSection` calls `threadEnvironment.create` with `importedNativeThread.ref`.
+    The orchestrator persists the owning provider instance and native session id; the next message
+    resumes through the normal Claude/Codex adapter path. No V1 turn-start seed is required.
+  - Rows retain the source account/model, title, relative time, and best-effort recently-active dot.
+    Discovery mounts only while expanded. Creation errors do not show a success toast or navigate.
   - Source: `apps/web/src/components/sidebar/ResumeSessionsSection.tsx`,
-    `apps/web/src/resumeSeedStore.ts`, `apps/web/src/hooks/useHandleNewThread.ts` (a `forceNew` +
-    `onDraftCreated` option), `apps/web/src/components/ChatView.tsx` (turn-start seed),
-    `apps/web/src/components/Sidebar.tsx`,
-    `packages/client-runtime/src/state/projectCommands.ts` (the `listResumableSessions` query atom).
+    `apps/web/src/components/Sidebar.tsx`, `packages/client-runtime/src/operations/commands.ts`,
+    `apps/server/src/orchestration-v2/Orchestrator.ts`, provider adapters, and the discovery service.
+  - Validation includes discovery tests, remote command tests for both provider identities, and
+    the V2 launch/provider-session suites. CLI processes were not launched during this audit.
 
 ## Claude Profiles
 

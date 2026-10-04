@@ -929,7 +929,7 @@ describe("MessagesTimeline", () => {
     );
 
     expect(markup).toContain('data-anchor-index="1"');
-    expect(markup).toContain('data-anchor-offset="24"');
+    expect(markup).toContain('data-anchor-offset="16"');
     expect(markup).toContain('data-anchor-on-ready="true"');
     expect(markup).not.toContain("data-anchor-max-size=");
     expect(markup).toContain('data-content-inset-end="144"');
@@ -1315,6 +1315,19 @@ describe("MessagesTimeline", () => {
               createdAt: "2026-03-17T19:12:30.000Z",
               updatedAt: "2026-03-17T19:12:31.000Z",
               streaming: false,
+            },
+          },
+          {
+            id: "work-spacing",
+            kind: "work",
+            createdAt: "2026-03-17T19:12:31.000Z",
+            entry: {
+              id: "work-spacing",
+              runId,
+              createdAt: "2026-03-17T19:12:31.000Z",
+              label: "Checked layout",
+              tone: "tool",
+              toolLifecycleStatus: "completed",
             },
           },
           {
@@ -1877,7 +1890,7 @@ describe("MessagesTimeline", () => {
       />,
     );
 
-    expect(markup).toContain("Ran 2 commands and received 1 update");
+    expect(markup).toContain("+2 previous log entries");
     expect(markup).not.toContain('aria-label="Hidden work includes a failure"');
   });
 
@@ -2165,7 +2178,7 @@ describe("MessagesTimeline", () => {
 
     expect(markup).toContain('data-v2-item-type="command_execution"');
     expect(markup).toContain('data-v2-item-visibility="inherited"');
-    expect(markup).toContain("Received 1 update and ran 1 command");
+    expect(markup).toContain("Show fewer log entries");
   });
 
   it("renders T3 MCP dynamic tools with the product logo and pretty name", async () => {

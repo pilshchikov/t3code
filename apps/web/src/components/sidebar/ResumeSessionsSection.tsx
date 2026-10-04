@@ -1,15 +1,25 @@
-import type { EnvironmentId, ResumableSession, ScopedProjectRef } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  type EnvironmentId,
+  type ResumableSession,
+  type ScopedProjectRef,
+} from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { ChevronRight, History, LoaderCircle, RotateCcw } from "lucide-react";
 import { useState } from "react";
+import { useNowMinute } from "../../hooks/useNowMinute";
 
-import { type DraftId, useComposerDraftStore } from "../../composerDraftStore";
-import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
-import { cn } from "../../lib/utils";
-import { useResumeSeedStore } from "../../resumeSeedStore";
+import { useAtomValue } from "@effect/atom-react";
+import { useRouter } from "@tanstack/react-router";
+import { serverEnvironment } from "../../state/server";
+import { threadEnvironment } from "../../state/threads";
+import { useAtomCommand } from "../../state/use-atom-command";
+import { cn, newThreadId } from "../../lib/utils";
 import { projectEnvironment } from "../../state/projects";
 import { useEnvironmentQuery } from "../../state/query";
 import { toastManager } from "../ui/toast";
+import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 
 interface ResumeSessionsSectionProps {
   readonly environmentId: EnvironmentId;
@@ -36,81 +46,121 @@ function ResumeSessionsList({ environmentId, cwd, projectRef }: ResumeSessionsSe
   const query = useEnvironmentQuery(
     projectEnvironment.listResumableSessions({ environmentId, input: { cwd } }),
   );
-  const handleNewThread = useNewThreadHandler();
-  const setModelSelection = useComposerDraftStore((store) => store.setModelSelection);
-  const setSeed = useResumeSeedStore((store) => store.setSeed);
-  const now = Date.now();
+  const createThread = useAtomCommand(threadEnvironment.create);
+  const router = useRouter();
+  const config = useAtomValue(serverEnvironment.configValueAtom(environmentId));
+  const [resuming, setResuming] = useState(false);
+  const now = Date.parse(`${useNowMinute()}:00Z`);
 
-  const handleResume = (session: ResumableSession) => {
-    void handleNewThread(projectRef, {
-      forceNew: true,
-      onDraftCreated: ({ draftId, threadId }) => {
-        if (session.model) {
-          setModelSelection(
-            draftId as DraftId,
-            createModelSelection(session.providerInstanceId, session.model),
-          );
-        }
-        setSeed(threadId, {
-          resumeCursor: session.resumeCursor,
-          providerLabel: session.providerLabel,
-          title: session.title,
-        });
-      },
-    }).then(
-      () =>
-        toastManager.add({
-          type: "info",
-          title: `Continuing ${session.providerLabel} session`,
-          description: "Send a message to pick up where it left off.",
-        }),
-      () => undefined,
+  const handleResume = async (session: ResumableSession) => {
+    if (resuming) return;
+    const provider = config?.providers.find(
+      (entry) => entry.instanceId === session.providerInstanceId,
     );
+    const model =
+      session.model ??
+      provider?.models.find((entry) => entry.isDefault)?.slug ??
+      provider?.models[0]?.slug;
+    if (!model) {
+      toastManager.add({ type: "error", title: "No model available for this session's provider" });
+      return;
+    }
+    setResuming(true);
+    try {
+      const threadId = newThreadId();
+      const result = await createThread({
+        environmentId,
+        input: {
+          threadId,
+          projectId: projectRef.projectId,
+          title: session.title,
+          modelSelection: createModelSelection(session.providerInstanceId, model),
+          runtimeMode: resolveProjectSettings(
+            config?.settings ?? DEFAULT_SERVER_SETTINGS,
+            projectRef.projectId,
+          ).settings.defaultRuntimeMode,
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          importedNativeThread: {
+            ref: { driver: session.provider, nativeId: session.sessionId, strength: "strong" },
+          },
+        },
+      });
+      if (result._tag !== "Success") return;
+      await router.navigate({
+        to: "/$environmentId/$threadId",
+        params: { environmentId, threadId },
+      });
+      toastManager.add({
+        type: "info",
+        title: `Continuing ${session.providerLabel} session`,
+        description: "Send a message to pick up where it left off.",
+      });
+    } catch (error) {
+      toastManager.add({
+        type: "error",
+        title: "Could not open the resumed session",
+        description: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setResuming(false);
+    }
   };
 
   if (query.isPending && query.data === null) {
     return (
-      <div className="flex h-6 items-center gap-2 px-2 text-[10px] text-muted-foreground">
+      <div className="flex h-6 items-center gap-2 px-2 text-3xs text-muted-foreground">
         <LoaderCircle className="size-3 animate-spin" /> Scanning sessions…
       </div>
     );
   }
   if (query.error && query.data === null) {
-    return <div className="px-2 py-1 text-[10px] text-destructive">{query.error}</div>;
+    return <div className="px-2 py-1 text-3xs text-destructive">{query.error}</div>;
   }
   const sessions = query.data?.sessions ?? [];
   if (sessions.length === 0) {
     return (
-      <div className="px-2 py-1 text-[10px] text-muted-foreground">
-        No CLI sessions for this repo
-      </div>
+      <div className="px-2 py-1 text-3xs text-muted-foreground">No CLI sessions for this repo</div>
     );
   }
   return (
     <div className="flex flex-col gap-0.5">
       {sessions.map((session) => (
-        <button
-          key={session.key}
-          type="button"
-          className="group/resume flex w-full min-w-0 items-center gap-2 rounded px-2 py-1 text-left hover:bg-accent"
-          title={`Continue ${session.providerLabel} session — ${session.title}`}
-          onClick={() => handleResume(session)}
-        >
-          <RotateCcw className="size-3 shrink-0 text-muted-foreground group-hover/resume:text-foreground" />
-          <span className="min-w-0 flex-1 truncate text-[11px] text-foreground">
-            {session.title}
-          </span>
-          <span className="flex shrink-0 items-center gap-1 text-[9px]">
-            {session.status === "active" ? (
-              <span className="size-1.5 rounded-full bg-emerald-500" aria-label="recently active" />
-            ) : null}
-            <span className="font-medium text-foreground/75">{session.providerLabel}</span>
-            <span className="text-muted-foreground">·</span>
-            <span className="tabular-nums text-foreground/60">
-              {relativeTime(session.updatedAt, now)}
+        <Tooltip key={session.key}>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                className="group/resume flex w-full min-w-0 items-center gap-2 rounded px-2 py-1 text-left hover:bg-accent"
+                aria-label={`Continue ${session.providerLabel} session — ${session.title}`}
+                disabled={resuming}
+                onClick={() => void handleResume(session)}
+              />
+            }
+          >
+            <RotateCcw className="size-3 shrink-0 text-muted-foreground group-hover/resume:text-foreground" />
+            <span className="min-w-0 flex-1 truncate text-2xs text-foreground">
+              {session.title}
             </span>
-          </span>
-        </button>
+            <span className="flex shrink-0 items-center gap-1 text-[9px]">
+              {session.status === "active" ? (
+                <span
+                  className="size-1.5 rounded-full bg-emerald-500"
+                  aria-label="recently active"
+                />
+              ) : null}
+              <span className="font-medium text-foreground/75">{session.providerLabel}</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="tabular-nums text-foreground/60">
+                {relativeTime(session.updatedAt, now)}
+              </span>
+            </span>
+          </TooltipTrigger>
+          <TooltipPopup side="right">
+            Continue {session.providerLabel} session — {session.title}
+          </TooltipPopup>
+        </Tooltip>
       ))}
     </div>
   );
@@ -126,7 +176,7 @@ export function ResumeSessionsSection(props: ResumeSessionsSectionProps) {
     <div className="mx-0.5 mt-0.5 flex flex-col px-1 sm:mx-1 sm:px-1.5">
       <button
         type="button"
-        className="flex h-6 w-full items-center gap-1.5 rounded px-2 text-left text-[10px] font-medium uppercase tracking-wide text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="flex h-6 w-full items-center gap-1.5 rounded px-2 text-left text-3xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-accent hover:text-foreground"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >

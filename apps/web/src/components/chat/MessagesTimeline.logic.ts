@@ -524,8 +524,8 @@ type MessagesTimelineRowContent =
       groupId: string;
       hiddenCount: number;
       expanded: boolean;
-      summary: string;
-      summaryKind: ToolGroupSummaryKind;
+      summary: string | null;
+      summaryKind: ToolGroupSummaryKind | null;
       toolSurface?: WorkLogEntry["toolSurface"];
       toolIcon?: WorkLogEntry["toolIcon"];
       summaryToolIcon?: "browser" | "device" | "t3-code" | "pull-request";
@@ -962,12 +962,15 @@ function deriveTurnFolds(input: {
     if (group.hasStreamingMessage) {
       continue;
     }
+    const firstAssistantEntry = group.entries.find(
+      (entry) => entry.kind === "message" && entry.message.role === "assistant",
+    );
     const hiddenEntryIds = new Set<string>();
     const terminalEntryIndex = group.terminalEntry
       ? group.entries.findIndex((entry) => entry.id === group.terminalEntry?.id)
       : group.entries.length;
     for (const [index, entry] of group.entries.entries()) {
-      if (entry.id === group.terminalEntry?.id) {
+      if (entry.id === firstAssistantEntry?.id || entry.id === group.terminalEntry?.id) {
         continue;
       }
       const isCompaction =
@@ -1030,9 +1033,12 @@ function deriveTurnFolds(input: {
         ? `Worked for ${duration}`
         : "Worked";
 
-    foldsByAnchorEntryId.set(group.anchorEntryId, {
+    const firstHiddenEntry = group.entries.find((entry) => hiddenEntryIds.has(entry.id))!;
+    const anchorEntryId =
+      group.anchorEntryId === firstAssistantEntry?.id ? firstHiddenEntry.id : group.anchorEntryId;
+    foldsByAnchorEntryId.set(anchorEntryId, {
       runId,
-      anchorEntryId: group.anchorEntryId,
+      anchorEntryId,
       createdAt: group.startBoundary ?? firstEntry.createdAt,
       hiddenEntryIds,
       label,
@@ -1500,8 +1506,11 @@ export function deriveMessagesTimelineRows(input: {
         workEntryIsVisibleInGroup(entry, workEntryIsInActiveRun(entry)),
       );
       if (visibleGroupedEntries.length > 0) {
+        const onlyToolEntries = visibleGroupedEntries.every(
+          (entry) => workLogEntryIsToolLike(entry) && entry.tone !== "error",
+        );
         const activeInProgressToolEntries = visibleGroupedEntries.filter(workEntryIsInActiveRun);
-        if (activeInProgressToolEntries.length > 0) {
+        if (onlyToolEntries && activeInProgressToolEntries.length > 0) {
           const groupId = workGroupId(timelineEntry.id);
           const expanded = input.expandedWorkGroupIds?.has(groupId) ?? false;
           const latestActiveToolEntry = activeInProgressToolEntries.at(-1)!;
@@ -1521,10 +1530,7 @@ export function deriveMessagesTimelineRows(input: {
               expandedWorkGroupRow(groupId, timelineEntry.createdAt, visibleGroupedEntries),
             );
           }
-        } else if (
-          visibleGroupedEntries.length === 1 &&
-          workLogEntryIsToolLike(visibleGroupedEntries[0]!)
-        ) {
+        } else if (onlyToolEntries && visibleGroupedEntries.length === 1) {
           const singleEntry = visibleGroupedEntries[0]!;
           nextRows.push({
             kind: "work",
@@ -1537,7 +1543,7 @@ export function deriveMessagesTimelineRows(input: {
                 ? summarizeToolGroup(visibleGroupedEntries).summary
                 : singleToolCallLabel(singleEntry),
           });
-        } else {
+        } else if (onlyToolEntries) {
           const groupId = workGroupId(timelineEntry.id);
           const expanded = input.expandedWorkGroupIds?.has(groupId) ?? false;
           const summaryKind = toolGroupSummaryKind(visibleGroupedEntries);
@@ -1575,6 +1581,7 @@ export function deriveMessagesTimelineRows(input: {
             groupId,
             hiddenCount: visibleGroupedEntries.length,
             expanded,
+            onlyToolEntries: true,
             summary: usesSingleToolCallLabel
               ? singleToolCallLabel(singleEntry)
               : singleEntry !== null && !workLogEntryIsToolLike(singleEntry)
@@ -1592,6 +1599,45 @@ export function deriveMessagesTimelineRows(input: {
             nextRows.push(
               expandedWorkGroupRow(groupId, timelineEntry.createdAt, visibleGroupedEntries),
             );
+          }
+        } else {
+          // Keep the latest status/error visible; older mixed activity can expand.
+          const hiddenEntries = visibleGroupedEntries.slice(0, -1);
+          const groupId = workGroupId(timelineEntry.id);
+          const expanded = input.expandedWorkGroupIds?.has(groupId) ?? false;
+          for (const entry of expanded ? visibleGroupedEntries : visibleGroupedEntries.slice(-1)) {
+            nextRows.push({
+              kind: "work",
+              id: entry.id,
+              createdAt: entry.createdAt,
+              groupedEntries: [entry],
+              isExpandedToolGroup: false,
+            });
+          }
+          if (hiddenEntries.length > 0) {
+            const latestToolEntry = visibleGroupedEntries.findLast(workLogEntryIsToolLike);
+            const hasDetailedFailure =
+              latestToolEntry !== undefined &&
+              workEntryDisplayIndicatesToolFailure(latestToolEntry) &&
+              Boolean(latestToolEntry.detail?.trim());
+            nextRows.push({
+              kind: "work-toggle",
+              id: `work-toggle:${timelineEntry.id}`,
+              createdAt: timelineEntry.createdAt,
+              runId: timelineEntry.entry.runId ?? null,
+              groupId,
+              hiddenCount: hiddenEntries.length,
+              expanded,
+              onlyToolEntries: hiddenEntries.every(workLogEntryIsToolLike),
+              summary: hasDetailedFailure
+                ? summarizeToolGroup(visibleGroupedEntries).summary
+                : null,
+              summaryKind: hasDetailedFailure ? toolGroupSummaryKind(visibleGroupedEntries) : null,
+              hasFailure:
+                latestToolEntry !== undefined &&
+                workEntryDisplayIndicatesToolFailure(latestToolEntry) &&
+                (hiddenEntries.some(workEntryDisplayIndicatesToolFailure) || hasDetailedFailure),
+            });
           }
         }
       }
@@ -2059,6 +2105,7 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
         a.summaryKind === bw.summaryKind &&
         a.toolSurface === bw.toolSurface &&
         Equal.equals(a.toolIcon, bw.toolIcon) &&
+        a.onlyToolEntries === bw.onlyToolEntries &&
         a.hasFailure === bw.hasFailure
       );
     }

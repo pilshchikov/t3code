@@ -20,6 +20,7 @@ import {
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
+  RunId,
   OrchestrationV2ThreadProjectionJson,
   ScheduledTaskId,
   type ServerProvider,
@@ -2042,4 +2043,96 @@ it.effect.each([0, 1])("releases an async setup before its completion with exit 
       );
     }).pipe(Effect.provide(harness.layer));
   }),
+);
+
+it.effect.each(["run.interrupt", "prepared-run.release"] as const)(
+  "only binds the exact initial run and rejects stale preparation after %s",
+  (transition) => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const threads = yield* ThreadManagement.ThreadManagementService;
+      const threadId = ThreadId.make("thread:preparation-guard");
+      yield* threads.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("guard:create"),
+        threadId,
+        projectId,
+        title: "Prepare safely",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        createdBy: "user",
+        creationSource: "web",
+      });
+      yield* threads.dispatch({
+        type: "message.dispatch",
+        commandId: CommandId.make("guard:message"),
+        threadId,
+        messageId: MessageId.make("guard:message"),
+        text: "Start",
+        attachments: [],
+        modelSelection,
+        dispatchMode: { type: "defer_start" },
+        createdBy: "user",
+        creationSource: "web",
+      });
+      const runId = (yield* threads.getThreadProjection(threadId)).runs[0]!.id;
+      const update = {
+        type: "thread.metadata.update" as const,
+        threadId,
+        worktreePath: "/repo-worktrees/new",
+      };
+      assert.isTrue(
+        Exit.isFailure(
+          yield* threads
+            .dispatch({ ...update, commandId: CommandId.make("guard:ordinary") })
+            .pipe(Effect.exit),
+        ),
+      );
+      assert.isTrue(
+        Exit.isFailure(
+          yield* threads
+            .dispatch({
+              ...update,
+              commandId: CommandId.make("guard:wrong-run"),
+              workspacePreparationRunId: RunId.make("wrong"),
+            })
+            .pipe(Effect.exit),
+        ),
+      );
+      yield* threads.dispatch({
+        ...update,
+        commandId: CommandId.make("guard:prepare"),
+        workspacePreparationRunId: runId,
+      });
+      const bound = yield* threads.getThreadProjection(threadId);
+      assert.equal(bound.thread.worktreePath, update.worktreePath);
+      assert.equal(bound.runs[0]?.status, "preparing");
+      assert.equal(bound.providerSessions.length, 0);
+      yield* threads.dispatch({
+        type: transition,
+        commandId: CommandId.make("guard:transition"),
+        threadId,
+        runId,
+      });
+      assert.isTrue(
+        Exit.isFailure(
+          yield* threads
+            .dispatch({
+              ...update,
+              worktreePath: "/repo-worktrees/stale",
+              commandId: CommandId.make("guard:stale"),
+              workspacePreparationRunId: runId,
+            })
+            .pipe(Effect.exit),
+        ),
+      );
+      assert.equal(
+        (yield* threads.getThreadProjection(threadId)).thread.worktreePath,
+        update.worktreePath,
+      );
+    }).pipe(Effect.provide(harness.layer));
+  },
 );

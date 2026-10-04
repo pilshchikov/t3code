@@ -2275,15 +2275,16 @@ describe("deriveMessagesTimelineRows", () => {
       );
 
     // V2 work starts from a sent prompt, or with no new prompt (a wake or a resume).
-    expect(rows([message("new-prompt", "user", 20, "run-1")]).slice(0, 4)).toEqual([
+    expect(rows([message("new-prompt", "user", 20, "run-1")]).slice(0, 5)).toEqual([
       "user:imported-prompt",
+      "assistant:imported-update",
       "turn-fold",
       "assistant:imported-answer",
       "user:new-prompt",
     ]);
     const withoutPrompt = rows([]);
     expect(withoutPrompt).toContain("turn-fold");
-    expect(withoutPrompt).not.toContain("assistant:imported-update");
+    expect(withoutPrompt).toContain("assistant:imported-update");
   });
 
   it("shows a provider-native subagent's runless tools as live work while it works", () => {
@@ -3168,7 +3169,7 @@ describe("deriveMessagesTimelineRows", () => {
       });
 
       expect(rows.find((row) => row.kind === "work-toggle")).toMatchObject({
-        hiddenCount: 2,
+        hiddenCount: statuses.some((status) => status === "error") ? 1 : 2,
         summary: null,
         hasFailure,
       });
@@ -3538,6 +3539,7 @@ describe("v2 run and attempt history", () => {
     expect(foldRow?.label).toBe("Worked for 22s");
     expect(collapsedRows.map((row) => row.id)).toEqual([
       "user-entry",
+      "assistant-thought-entry",
       "turn-fold:turn-1",
       "thread-created-entry",
       "assistant-final-entry",
@@ -3553,8 +3555,9 @@ describe("v2 run and attempt history", () => {
 
     expect(expandedRows.map((row) => row.id)).toEqual([
       "user-entry",
-      "turn-fold:turn-1",
       "assistant-thought-entry",
+      "turn-fold:turn-1",
+      "provider-recovered",
       "work-toggle:work-entry-1",
       "thread-created-entry",
       "assistant-final-entry",
@@ -3571,8 +3574,10 @@ describe("v2 run and attempt history", () => {
       supportsConversationRollback: false,
     });
     // Expanding the activity preserves tool output and provider recovery details.
-    const expandedWork = openedActivity.find((row) => row.kind === "work");
-    expect(expandedWork?.kind === "work" ? expandedWork.groupedEntries : []).toEqual([
+    const expandedWork = openedActivity.flatMap((row) =>
+      row.kind === "work" ? row.groupedEntries : [],
+    );
+    expect(expandedWork).toEqual([
       expect.objectContaining({ id: "work-1" }),
       expect.objectContaining({ id: "provider-recovered" }),
     ]);
@@ -3644,6 +3649,7 @@ describe("v2 run and attempt history", () => {
     expect(collapsedRows.map((row) => row.id)).toEqual([
       "user-entry",
       "turn-fold:turn-1",
+      "assistant-commentary-entry",
       "assistant-final-entry",
     ]);
   });
@@ -4428,7 +4434,8 @@ describe("linked timeline resources", () => {
     ];
     const collapsed = deriveMessagesTimelineRows({ ...common, timelineEntries });
     expect(collapsed.map((row) => row.id)).toEqual([
-      "turn-fold:resource-run",
+      "intro",
+      "created",
       "final",
       "summary:created",
       "assistant-meta:final",
@@ -4442,7 +4449,6 @@ describe("linked timeline resources", () => {
       expandedRunIds: new Set([runId]),
     });
     expect(expanded.map((row) => row.id)).toEqual([
-      "turn-fold:resource-run",
       "intro",
       "created",
       "final",

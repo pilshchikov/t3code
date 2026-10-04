@@ -69,6 +69,10 @@ export interface DeleteProjectInput extends CommandMetadata {
 }
 
 export interface CreateThreadInput extends CommandMetadata {
+  readonly importedNativeThread?: Extract<
+    OrchestrationV2Command,
+    { type: "thread.create" }
+  >["importedNativeThread"];
   readonly threadId: ThreadId;
   readonly projectId: ProjectId;
   readonly title: string;
@@ -396,6 +400,7 @@ export const createThread = Effect.fn("EnvironmentCommands.createThread")(functi
 ) {
   return yield* dispatch({
     type: "thread.create",
+    ...(input.importedNativeThread ? { importedNativeThread: input.importedNativeThread } : {}),
     commandId: yield* allocateCommandId(input),
     createdBy: "user",
     creationSource: input.creationSource ?? "web",

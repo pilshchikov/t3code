@@ -363,6 +363,7 @@ const make = Effect.gen(function* () {
           type: "thread.metadata.update",
           commandId: CommandId.make(`${input.commandId}:workspace`),
           threadId,
+          ...(runId === null ? {} : { workspacePreparationRunId: runId }),
           branch,
           worktreePath,
         })
@@ -529,6 +530,8 @@ const make = Effect.gen(function* () {
                 type: "thread.metadata.update",
                 commandId: CommandId.make(`${input.commandId}:cancel-workspace`),
                 threadId,
+                ...(runId === null ? {} : { workspacePreparationRunId: runId }),
+                expectedWorktreePath: createdWorktreePath,
                 worktreePath: null,
                 branch: null,
               })

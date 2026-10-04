@@ -2582,6 +2582,8 @@ export const OrchestrationV2Command = Schema.Union([
     expectedWorktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
     /** Explicit handoff permits ending the live session; ordinary selection requires idle work. */
     workspaceChangeMode: Schema.optional(Schema.Literal("handoff")),
+    /** Bind the initial checkout only while this exact launch run is still preparing. */
+    workspacePreparationRunId: Schema.optional(RunId),
     /** Reject unless no message or run has landed on this thread. */
     expectedEmpty: Schema.optional(Schema.Boolean),
     limitRecovery: Schema.optional(Schema.NullOr(OrchestrationV2LimitRecoveryUpdate)),

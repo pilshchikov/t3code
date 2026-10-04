@@ -454,6 +454,7 @@ function workspaceRelativePath(path: string, workspaceRoot: string | undefined):
   );
   const pathForCompare = comparableWorkspacePath(normalizedPath);
   const rootForCompare = comparableWorkspacePath(normalizedRoot);
+  if (pathForCompare === rootForCompare) return ".";
   if (!pathForCompare.startsWith(`${rootForCompare}/`)) return null;
   return normalizedPath.slice(normalizedRoot.length + 1);
 }

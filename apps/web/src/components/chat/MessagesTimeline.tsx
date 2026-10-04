@@ -3819,7 +3819,11 @@ function WorkGroupToggleTimelineRow({
       : "log entries";
   return (
     <WorkGroupHeader
-      label={row.summary}
+      label={
+        row.expanded
+          ? `Show fewer ${row.onlyToolEntries ? "tool calls" : "log entries"}`
+          : `+${row.hiddenCount} previous ${labelNoun}`
+      }
       iconName={row.summaryToolIcon ?? row.toolSurface ?? toolGroupSummaryIconName(row.summaryKind)}
       toolIcon={row.toolIcon}
       failed={row.hasFailure}

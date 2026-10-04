@@ -649,9 +649,12 @@ describe("mergeUsage", () => {
     expect(merged.speedCost).toEqual({ standard: 9, fast: 6, ultrafast: 0, premium: 3 });
     expect(merged.models.map(({ model, unpricedTokens }) => [model, unpricedTokens])).toEqual([
       ["claude-fable-5", 0],
+      ["claude-fable-5", 0],
       ["unknown-model", 1160],
       ["partly-reported", 928],
     ]);
+    const sameModelAccounts = merged.models.filter(({ model }) => model === "claude-fable-5");
+    expect(new Set(sameModelAccounts.map(({ sourceId }) => sourceId)).size).toBe(2);
   });
 
   it("orders models by cost descending", () => {

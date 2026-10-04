@@ -36,6 +36,8 @@ describe("serverSettings helpers", () => {
       worktreeAfterDays: null,
       worktreeOnMerge: true,
       worktreeOnDelete: false,
+      worktreeOnSettle: true,
+      settledThreadAfterDays: 14,
       worktreeUnchanged: false,
       browserArtifactsAfterDays: null,
       logsAfterDays: 30,
