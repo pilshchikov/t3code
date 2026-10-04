@@ -271,6 +271,14 @@ fork-specific behavior so future upstream syncs are easier to review.
 
 ## Arcane orb composer buttons
 
+- October 3 repair: restored the live `ComposerPrimaryActions` connection to
+  `ComposerActionOrb` and the three saved appearance settings after the orchestrator merge
+  dropped that wiring. Send/resume/queue/steer and both ordinary/pending-input Stop paths
+  use the original shader and chosen colors. Classic style keeps upstream artwork behavior.
+  Check the actual mounted button paths during future merges; retaining renderer files and
+  settings alone does not preserve the feature. Web typecheck and focused lint passed;
+  no runtime/UI tests, rebuild, reinstall, or restart in this repair.
+
 - The composer's send and stop buttons are lit glass spheres with plasma churning inside, drawn by
   a small WebGL fragment shader (domain-warped fbm, two depth layers, fresnel rim and meniscus).
   Appearance settings choose between `Arcane orb` and upstream's `Classic` button, and set the

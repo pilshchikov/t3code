@@ -7,7 +7,7 @@ import {
   ListPlusIcon,
   PlayIcon,
 } from "lucide-react";
-import { useEnvironmentIdentificationMode } from "~/hooks/useSettings";
+import { useClientSettings, useEnvironmentIdentificationMode } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import { useShortcutModifierState } from "../../shortcutModifierState";
 import { StageBackdropButtonArt, useSidebarStageBackdropVariant } from "../SidebarStageBackdrop";
@@ -15,6 +15,7 @@ import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { ComposerActionOrb } from "./ComposerActionOrb";
 import { composerFloatingLayerProps } from "./composerEventScope";
 import {
   alternateComposerDispatchAction,
@@ -111,6 +112,9 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     ? { onPointerDown: preventPointerFocus }
     : undefined;
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
+  const orbStyle = useClientSettings((settings) => settings.composerActionStyle) === "orb";
+  const orbSendColor = useClientSettings((settings) => settings.composerOrbSendColor);
+  const orbStopColor = useClientSettings((settings) => settings.composerOrbStopColor);
   const shortcutModifiers = useShortcutModifierState();
   const isQueuing =
     !isEditingQueuedMessage &&
@@ -132,15 +136,20 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           <button
             type="button"
             className={cn(
-              "flex cursor-pointer items-center justify-center rounded-full bg-destructive/90 text-white shadow-xs shadow-destructive/24 inset-shadow-control-highlight transition-all duration-150 hover:bg-destructive hover:scale-105 active:inset-shadow-control-pressed active:shadow-none [&_svg]:pointer-events-none",
+              "flex cursor-pointer items-center justify-center rounded-full text-white transition-all duration-150 hover:scale-105 [&_svg]:pointer-events-none",
+              orbStyle
+                ? "relative isolate overflow-hidden"
+                : "bg-destructive/90 shadow-xs shadow-destructive/24 inset-shadow-control-highlight hover:bg-destructive active:inset-shadow-control-pressed active:shadow-none",
               insidePendingAction ? "size-8 sm:size-7" : "size-8 sm:h-8 sm:w-8",
             )}
+            style={orbStyle ? { backgroundColor: "#0c0913" } : undefined}
             {...pointerFocusProps}
             onClick={onInterrupt}
             aria-label="Stop generation"
           />
         }
       >
+        {orbStyle ? <ComposerActionOrb color={orbStopColor} /> : null}
         <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
           <rect x="2" y="2" width="8" height="8" rx="1.5" />
         </svg>
@@ -288,11 +297,16 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     <button
       type={showResume ? "button" : "submit"}
       className={cn(
-        "relative isolate flex h-9 w-9 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 enabled:cursor-pointer enabled:inset-shadow-control-highlight hover:scale-105 active:inset-shadow-control-pressed active:shadow-none disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none disabled:hover:scale-100 sm:h-8 sm:w-8 [&_svg]:pointer-events-none",
-        stageBackdropVariant
-          ? "bg-transparent text-white enabled:shadow-black/24 enabled:hover:brightness-110"
-          : "bg-message-action text-message-action-foreground enabled:shadow-message-action/24 hover:bg-message-action-hover",
+        "relative isolate flex h-9 w-9 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 enabled:cursor-pointer hover:scale-105 disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none disabled:hover:scale-100 sm:h-8 sm:w-8 [&_svg]:pointer-events-none",
+        !orbStyle &&
+          "enabled:inset-shadow-control-highlight active:inset-shadow-control-pressed active:shadow-none",
+        orbStyle
+          ? "text-white enabled:shadow-black/24"
+          : stageBackdropVariant
+            ? "bg-transparent text-white enabled:shadow-black/24 enabled:hover:brightness-110"
+            : "bg-message-action text-message-action-foreground enabled:shadow-message-action/24 hover:bg-message-action-hover",
       )}
+      style={orbStyle ? { backgroundColor: "#0c0913" } : undefined}
       {...pointerFocusProps}
       onClick={showResume ? onResume : onSubmitMessage}
       disabled={
@@ -304,7 +318,8 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       }
       aria-label={submitStatus ?? submitLabel}
     >
-      {stageBackdropVariant ? (
+      {orbStyle ? <ComposerActionOrb color={orbSendColor} /> : null}
+      {!orbStyle && stageBackdropVariant ? (
         <span className="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
           <StageBackdropButtonArt variant={stageBackdropVariant} />
         </span>
