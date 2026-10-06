@@ -4,6 +4,22 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Upstream refresh, October 6
+
+- Merged all 11 additional upstream commits through `9bd1d8009a` from fork `beaf5ad903`.
+  Includes stalled-run Stop recovery, OpenCode 2 MCP tools, composer notice/typing repairs,
+  collision-safe screenshot IDs, versioned JetBrains app detection, clone URL argument safety,
+  explicit Bitbucket repository validation, and packaging catalog resolution.
+- Reviewed automatically merged Stop/projection and composer paths. Keep initial-workspace busy
+  guards, timed compaction/current usage, orb colors/renderer, mobile expansion and disabled scroll
+  collapse, conversation recovery, multi-repository Files state, and disabled analytics/network
+  telemetry. New queued notices use upstream's attachment slot in the existing fork composer.
+- Fixed newly added external-launcher tests still calling the pre-refactor `testLayer` name.
+  Frozen-lockfile dependencies, server/web/desktop typechecks, and 117 focused tests across six files
+  passed. Scoped lint has no errors (48 existing warnings in changed files); source whitespace passed.
+  Owner requested packaged reinstall/restart after this source merge; installation is verified
+  separately from these source checks. No push or manual live-userdata writes.
+
 ## Upstream sync and disabled external telemetry, October 6
 
 - Merged all 137 upstream commits through `76d3c96fd5`, retaining fork ancestry at `63ba504c65`.
