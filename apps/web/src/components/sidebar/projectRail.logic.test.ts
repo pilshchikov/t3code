@@ -83,3 +83,19 @@ it("keeps all three project signals and clears only completions that were read",
       ?.completed,
   ).toBe(false);
 });
+
+it("keeps a background command visible until its roster clears, alongside pending input", () => {
+  const base = thread({ id: "background", projectId: "background", hasPendingUserInput: true });
+  const running = {
+    ...base,
+    pendingBackgroundTasks: [{ taskId: "command", kind: "command" as const }],
+  };
+  expect(projectRailStatuses([running], {}).get("local:background")).toEqual({
+    running: true,
+    completed: false,
+    input: true,
+  });
+  expect(
+    projectRailStatuses([{ ...running, pendingBackgroundTasks: [] }], {}).get("local:background"),
+  ).toEqual({ running: false, completed: false, input: true });
+});

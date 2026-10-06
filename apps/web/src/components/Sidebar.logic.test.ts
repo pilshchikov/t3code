@@ -1252,7 +1252,7 @@ describe("resolveThreadStatusPill", () => {
     ).toMatchObject({ label: "Working", pulse: true });
   });
 
-  it("shows waiting for an idle thread with pending background tasks", () => {
+  it("shows working for an idle thread with pending background tasks", () => {
     expect(
       resolveThreadStatusPill({
         thread: {
@@ -1266,10 +1266,10 @@ describe("resolveThreadStatusPill", () => {
         },
       }),
     ).toMatchObject({
-      label: "Waiting",
-      colorClass: "text-sidebar-muted-foreground",
-      dotClass: "bg-sidebar-muted-foreground",
-      pulse: false,
+      label: "Working",
+      colorClass: "text-sky-600 dark:text-sky-300/80",
+      dotClass: "bg-sky-500 dark:bg-sky-300/80",
+      pulse: true,
     });
   });
 
@@ -2074,8 +2074,16 @@ describe("navigation after parking a thread", () => {
 
 describe("unseen completion with background work", () => {
   it.each([
-    { kind: "command", status: "ready", topStatus: "done", receded: false, pill: "Completed" },
-    { kind: "monitor", status: "waiting", topStatus: "waiting", receded: true, pill: "Waiting" },
+    { kind: "command", status: "working", topStatus: "working", receded: true, pill: "Working" },
+    { kind: "monitor", status: "working", topStatus: "working", receded: true, pill: "Working" },
+    { kind: "subagent", status: "working", topStatus: "working", receded: true, pill: "Working" },
+    {
+      kind: "background_task",
+      status: "working",
+      topStatus: "working",
+      receded: true,
+      pill: "Working",
+    },
   ] as const)("presents a completed thread with a $kind roster", (expected) => {
     const thread = presentThreadShell(localEnvironmentId, {
       ...makeThreadFixture().source,

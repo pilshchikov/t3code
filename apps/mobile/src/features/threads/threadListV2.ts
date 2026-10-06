@@ -183,7 +183,8 @@ export function threadHasUnseenCompletion(
 }
 
 export function resolveThreadListV2Status(
-  thread: Pick<EnvironmentThreadShell, "hasPendingApprovals" | "hasPendingUserInput" | "runtime">,
+  thread: Pick<EnvironmentThreadShell, "hasPendingApprovals" | "hasPendingUserInput" | "runtime"> &
+    Partial<Pick<EnvironmentThreadShell, "pendingBackgroundTasks">>,
 ): ThreadListV2Status {
   if (thread.hasPendingApprovals) {
     return "approval";
@@ -195,6 +196,9 @@ export function resolveThreadListV2Status(
     thread.runtime !== null &&
     ["preparing", "queued", "starting", "running", "waiting"].includes(thread.runtime.status)
   ) {
+    return "working";
+  }
+  if (thread.runtime?.status !== "failed" && (thread.pendingBackgroundTasks?.length ?? 0) > 0) {
     return "working";
   }
   if (thread.runtime?.status === "idle") {

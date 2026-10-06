@@ -157,7 +157,7 @@ describe("resolveThreadListV2Status", () => {
     expect(resolveThreadListV2Status(thread)).toBe("approval");
   });
 
-  it("reports waiting when presentation parks runtime idle for background tasks", () => {
+  it("reports working when presentation parks runtime idle for background tasks", () => {
     expect(
       resolveThreadListV2Status(
         makeThread({
@@ -174,12 +174,14 @@ describe("resolveThreadListV2Status", () => {
           },
         }),
       ),
-    ).toBe("waiting");
+    ).toBe("working");
   });
 
   it.each([
-    { kind: "command", status: "ready" },
-    { kind: "monitor", status: "waiting" },
+    { kind: "command", status: "working" },
+    { kind: "monitor", status: "working" },
+    { kind: "subagent", status: "working" },
+    { kind: "background_task", status: "working" },
   ] as const)(
     "presents an unseen completion with a $kind roster as $status",
     ({ kind, status }) => {

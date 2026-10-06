@@ -4,6 +4,21 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Background work remains visibly working, October 6
+
+- Thread status and the shared Working-group classifier now include all pending background
+  operations, including commands left running after the parent reply. Web/desktop and native
+  mobile show Working rather than Completed or a muted Waiting state for pending commands,
+  monitors, provider subagents, and PR-watch/background tasks. Clearing the roster releases
+  the status. Approval/input and failure handling keep their priority.
+- Project-rail running dots also inspect the pending roster directly, allowing running and
+  input dots to coexist even in the same thread. Root run/session states, completion alerts,
+  follow-up dispatch and idle-compaction eligibility are unchanged; display/grouping does not
+  invent an active model turn (`Sidebar.logic.ts`, `threadListV2.ts`, `threadInbox.ts`,
+  `sidebar/projectRail.logic.ts`).
+- Passed 253 focused tests across four files, web/native-mobile typechecks, and scoped lint
+  with existing warnings. No app rebuild/reinstall/restart or live-userdata changes.
+
 ## Owner branch and worktree naming, October 6
 
 - Default generated branches and temporary worktree branches use `spilshchikov/<name>`;
