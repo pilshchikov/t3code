@@ -102,7 +102,22 @@ const make = Effect.gen(function* () {
           FROM orchestration_v2_projection_subagents child
           WHERE child.thread_id = t.thread_id AND child.status IN ('pending', 'running', 'waiting')), 0)
           AS subagent_work,
-        json_extract(p.payload_json, '$.contextUsage.usedTokens') AS used_tokens,
+        -- Live usage is recorded on provider turns. The thread snapshot is
+        -- carried across handoffs and can predate many subsequent turns.
+        COALESCE((SELECT json_extract(turn.payload_json, '$.tokenUsage.usedTokens')
+          FROM orchestration_v2_projection_provider_turns turn
+          JOIN orchestration_v2_projection_run_attempts attempt
+            ON attempt.attempt_id = turn.run_attempt_id
+            AND attempt.provider_thread_id = p.provider_thread_id
+            AND attempt.root_node_id = turn.node_id
+            AND json_extract(attempt.payload_json, '$.nativeThreadId') =
+              json_extract(p.payload_json, '$.nativeThreadRef.nativeId')
+          WHERE turn.provider_thread_id = p.provider_thread_id
+            AND turn.thread_id = t.thread_id
+            AND json_extract(turn.payload_json, '$.tokenUsage.usedTokens') IS NOT NULL
+          ORDER BY json_extract(turn.payload_json, '$.tokenUsage.updatedAt') DESC,
+            turn.ordinal DESC LIMIT 1),
+          json_extract(p.payload_json, '$.contextUsage.usedTokens')) AS used_tokens,
         max(r.completed_at, p.updated_at,
           COALESCE((SELECT max(provider.updated_at) FROM orchestration_v2_projection_provider_threads provider
             WHERE provider.thread_id = t.thread_id), r.completed_at),
@@ -128,7 +143,7 @@ const make = Effect.gen(function* () {
         AND p.driver IN ('claudeAgent', 'codex')
         AND p.status IN ('idle', 'not_loaded')
         AND r.completed_at <= ${cutoff}
-        AND json_extract(p.payload_json, '$.contextUsage.usedTokens') >= ${minTokens}
+        AND used_tokens >= ${minTokens}
         AND lower(trim(json_extract(m.payload_json, '$.text'))) <> '/compact'
         AND NOT EXISTS (SELECT 1 FROM orchestration_v2_projection_runs busy
           WHERE busy.thread_id = t.thread_id

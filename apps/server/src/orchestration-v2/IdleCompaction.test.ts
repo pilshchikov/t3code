@@ -137,6 +137,66 @@ it.effect.each(["claudeAgent", "codex"] as const)(
     }).pipe(Effect.provide(testLayer)),
 );
 
+it.effect.each(["claudeAgent", "codex"] as const)(
+  "%s: idle timeout uses current native turn usage instead of a stale handoff snapshot",
+  (driver) =>
+    Effect.gen(function* () {
+      yield* seed(driver);
+      const sql = yield* SqlClient.SqlClient;
+      const policy = yield* IdleCompaction.IdleCompaction;
+      const now = DateTime.formatIso(yield* DateTime.now);
+      yield* sql`UPDATE orchestration_v2_projection_provider_threads SET payload_json = ${json({
+        nativeThreadRef: { nativeId: "native" },
+        contextUsage: { usedTokens: 10000 },
+      })}`;
+      yield* sql`INSERT INTO orchestration_v2_projection_run_attempts ${sql.insert({
+        attempt_id: "attempt",
+        thread_id: threadId,
+        run_id: "run",
+        attempt_ordinal: 1,
+        root_node_id: "root",
+        provider: driver,
+        provider_instance_id: driver,
+        provider_thread_id: "provider",
+        status: "completed",
+        payload_json: json({ nativeThreadId: "native" }),
+      })}`;
+      const usage = (usedTokens: number) => json({ tokenUsage: { usedTokens, updatedAt: now } });
+      yield* sql`INSERT INTO orchestration_v2_projection_provider_turns ${sql.insert({
+        provider_turn_id: "turn",
+        thread_id: threadId,
+        provider_thread_id: "provider",
+        node_id: "root",
+        run_attempt_id: "attempt",
+        ordinal: 1,
+        status: "completed",
+        payload_json: usage(400000),
+      })}`;
+      expect(yield* policy.due()).toEqual([]);
+      yield* TestClock.adjust("5 minutes");
+      expect(yield* policy.due()).toEqual([{ threadId, runId: "run" }]);
+      // Codex can report live usage without a thread-level snapshot at all.
+      yield* sql`UPDATE orchestration_v2_projection_provider_threads SET payload_json =
+        ${json({ nativeThreadRef: { nativeId: "native" } })}`;
+      expect(yield* policy.due()).toHaveLength(1);
+      // A stale large snapshot must not compact an already small context.
+      yield* sql`UPDATE orchestration_v2_projection_provider_threads SET payload_json =
+        ${json({ nativeThreadRef: { nativeId: "native" }, contextUsage: { usedTokens: 500000 } })}`;
+      yield* sql`UPDATE orchestration_v2_projection_provider_turns SET payload_json = ${usage(10000)}`;
+      expect(yield* policy.due()).toEqual([]);
+      // A report from a different native session must not replace this snapshot.
+      yield* sql`UPDATE orchestration_v2_projection_provider_threads SET payload_json =
+        ${json({ nativeThreadRef: { nativeId: "other-native" }, contextUsage: { usedTokens: 10000 } })}`;
+      yield* sql`UPDATE orchestration_v2_projection_provider_turns SET payload_json = ${usage(400000)}`;
+      expect(yield* policy.due()).toEqual([]);
+      yield* sql`UPDATE orchestration_v2_projection_provider_threads SET payload_json =
+        ${json({ nativeThreadRef: { nativeId: "native" }, contextUsage: { usedTokens: 10000 } })}`;
+      yield* sql`UPDATE orchestration_v2_projection_messages SET payload_json = '{"text":"/compact"}'`;
+      yield* TestClock.adjust("5 minutes");
+      expect(yield* policy.due()).toEqual([]);
+    }).pipe(Effect.provide(testLayer)),
+);
+
 it.effect("project overrides control enablement, background work, timeout, and tokens", () =>
   Effect.gen(function* () {
     yield* seed("claudeAgent");

@@ -4,6 +4,21 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Idle compaction usage repair, October 6
+
+- The server's idle-compaction sweep now reads the latest root provider-turn token usage for the
+  active native session, matching the attempt's native identity and root node. The provider-thread
+  context snapshot is only a fallback when no matching live measurement exists; it can be stale
+  after normal turns and absent for Codex (`orchestration-v2/IdleCompaction.ts`).
+- Preserve the independent five-second scheduler sweep, configured idle timeout/token threshold,
+  project overrides, dispatch-time eligibility check, and suppression after a compact-only turn.
+  Upstream's separate resume-banner compact-before-send behavior is unchanged; its trigger
+  is independent of the configurable idle-compaction token threshold.
+- Passed 12 focused idle-compaction/scheduler tests, including stale-small/missing snapshots,
+  stale-large snapshots after compaction, native identity isolation, and repeat suppression for
+  Claude/Codex. Server typecheck and scoped lint passed. No installed-app, settings, or live
+  database writes; no rebuild/restart.
+
 ## Upstream sync, October 4
 
 - Merged all 70 upstream commits through `4ee6bfd50ef4a089440d5c3662db2298da9cc50e`
