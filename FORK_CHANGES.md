@@ -4,6 +4,22 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Owner branch and worktree naming, October 6
+
+- Default generated branches and temporary worktree branches use `spilshchikov/<name>`;
+  generated worktree folder names inherit the owner prefix. Automatic feature-branch fallbacks
+  and local cross-repository PR branches use the same namespace. Bitbucket clone instructions
+  use `spilshchikov-pr-<number>` instead of tool-branded directory names.
+- Settings decode legacy `t3`/`t3code` prefixes into `spilshchikov`, including project overrides
+  and patches, so an old stored default cannot restore branding. Retain advanced unbranded custom
+  naming choices. Existing temporary branch forms remain recognizable for compatibility.
+- Every agent turn's workspace guidance requests `spilshchikov/<task-name>` branches and
+  `spilshchikov-<task-name>` worktree directories. Branch-name generation rejects tool branding
+  in its prompt and replaces a branded leading namespace in its output. Updated web/native
+  settings examples. No existing refs/checkouts or live settings are rewritten.
+- Server/web typechecks and scoped lint passed. Focused naming/settings/PR tests passed;
+  no app rebuild/reinstall/restart or push as part of this source change.
+
 ## Upstream refresh, October 6
 
 - Merged all 11 additional upstream commits through `9bd1d8009a` from fork `beaf5ad903`.

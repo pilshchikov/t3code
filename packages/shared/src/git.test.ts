@@ -294,11 +294,14 @@ describe("applyGitStatusStreamEvent", () => {
 });
 
 describe("formatGeneratedBranchName", () => {
-  it.each(["t3code", "t3code/"])("joins static prefix %s with one slash", (prefix) => {
-    expect(
-      formatGeneratedBranchName("Add Search", { mode: "static", prefix, instructions: "" }),
-    ).toBe("t3code/add-search");
-  });
+  it.each(["t3code", "t3code/", "t3", "spilshchikov"])(
+    "replaces legacy/default static prefix %s with the owner namespace",
+    (prefix) => {
+      expect(
+        formatGeneratedBranchName("Add Search", { mode: "static", prefix, instructions: "" }),
+      ).toBe("spilshchikov/add-search");
+    },
+  );
   it("supports an empty prefix and preserves user prefix casing", () => {
     expect(
       formatGeneratedBranchName("Add Search", { mode: "static", prefix: "", instructions: "" }),

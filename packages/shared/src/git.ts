@@ -11,8 +11,8 @@ import * as Arr from "effect/Array";
 import * as Result from "effect/Result";
 import { detectSourceControlProviderFromRemoteUrl } from "./sourceControl.ts";
 
-export const WORKTREE_BRANCH_PREFIX = "t3";
-// Canonical form is `t3/<8 hex>`. `t3-<8 hex>` is the fallback when a plain `t3`
+export const WORKTREE_BRANCH_PREFIX = "spilshchikov";
+// Canonical form is `spilshchikov/<8 hex>`. A flat sibling is used when that
 // branch blocks the namespace. The matcher also accepts every legacy shape, so
 // existing threads stay eligible for branch regeneration: `t3code/<8 hex>` and
 // `t3code-<8 hex>` from before the prefix was shortened, and `t3code/<uuid>` from
@@ -22,7 +22,7 @@ const TEMP_WORKTREE_HEX_TOKEN = "[0-9a-f]{8}";
 const TEMP_WORKTREE_UUID_V4_TOKEN =
   "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
 const TEMP_WORKTREE_BRANCH_PATTERN = new RegExp(
-  `^(?:${WORKTREE_BRANCH_PREFIX}[-/]${TEMP_WORKTREE_HEX_TOKEN}|t3code(?:[-/]${TEMP_WORKTREE_HEX_TOKEN}|\\/${TEMP_WORKTREE_UUID_V4_TOKEN}))$`,
+  `^(?:(?:${WORKTREE_BRANCH_PREFIX}|t3)[-/]${TEMP_WORKTREE_HEX_TOKEN}|t3code(?:[-/]${TEMP_WORKTREE_HEX_TOKEN}|\\/${TEMP_WORKTREE_UUID_V4_TOKEN}))$`,
 );
 
 /**
@@ -49,10 +49,14 @@ export function sanitizeBranchFragment(raw: string): string {
 
 /** Custom naming preserves the model's complete ref; Git validates it on rename. */
 export function formatGeneratedBranchName(raw: string, naming?: BranchNamingOptions): string {
-  if (naming?.mode === "custom") return raw.trim();
-  const branch = sanitizeBranchFragment(raw);
+  const normalizedRaw = raw.trim().replace(/^(?:t3code|t3)[/-]/i, `${WORKTREE_BRANCH_PREFIX}/`);
+  if (naming?.mode === "custom") return normalizedRaw;
+  const branch = sanitizeBranchFragment(normalizedRaw);
   if (naming?.mode !== "static") return branch;
-  const prefix = naming.prefix
+  const effectivePrefix = /^(?:t3|t3code)\/?$/i.test(naming.prefix.trim())
+    ? WORKTREE_BRANCH_PREFIX
+    : naming.prefix;
+  const prefix = effectivePrefix
     .split("/")
     .map((part) =>
       part
@@ -62,25 +66,29 @@ export function formatGeneratedBranchName(raw: string, naming?: BranchNamingOpti
     )
     .filter(Boolean)
     .join("/");
-  return prefix ? `${prefix}/${branch}` : branch;
+  const fragment =
+    prefix === WORKTREE_BRANCH_PREFIX && branch.startsWith(`${WORKTREE_BRANCH_PREFIX}/`)
+      ? branch.slice(WORKTREE_BRANCH_PREFIX.length + 1)
+      : branch;
+  return prefix ? `${prefix}/${fragment}` : fragment;
 }
 
 /**
- * Sanitize a string into a `feature/…` refName name.
- * Preserves an existing `feature/` prefix or slash-separated namespace.
+ * Sanitize an automatically generated branch under the fork owner namespace.
+ * Replaces old automatic namespaces and preserves the task path.
  */
 export function sanitizeFeatureBranchName(raw: string): string {
-  const sanitized = sanitizeBranchFragment(raw);
-  if (sanitized.includes("/")) {
-    return sanitized.startsWith("feature/") ? sanitized : `feature/${sanitized}`;
-  }
-  return `feature/${sanitized}`;
+  const sanitized = sanitizeBranchFragment(raw).replace(
+    /^(?:(?:feature|t3|t3code|spilshchikov)\/)+/,
+    "",
+  );
+  return `${WORKTREE_BRANCH_PREFIX}/${sanitized || "update"}`;
 }
 
-const AUTO_FEATURE_BRANCH_FALLBACK = "feature/update";
+const AUTO_FEATURE_BRANCH_FALLBACK = "spilshchikov/update";
 
 /**
- * Resolve a unique `feature/…` refName name that doesn't collide with
+ * Resolve a unique owner-prefixed refName name that doesn't collide with
  * any existing refName. Appends a numeric suffix when needed.
  */
 export function resolveAutoFeatureBranchName(
@@ -129,8 +137,8 @@ export function buildTemporaryWorktreeBranchName(
 }
 
 /**
- * Git stores refs as paths, so a plain `t3` branch makes every `t3/<hex>`
- * ref impossible. This moves a temporary name to the flat `t3-<hex>` sibling.
+ * Git stores refs as paths, so a plain namespace branch makes every owner-prefixed
+ * ref impossible. This moves a temporary name to the flat owner-prefixed sibling.
  */
 export function flattenTemporaryWorktreeBranchName(refName: string): string {
   // Keep only the canonical 8-hex token so legacy `t3code/` and UUID names map cleanly.

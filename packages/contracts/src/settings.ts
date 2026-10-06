@@ -1127,6 +1127,19 @@ export type SourceControlWritingStyleSettings = typeof SourceControlWritingStyle
 export const BranchNamingMode = Schema.Literals(["static", "semantic", "custom"]);
 export type BranchNamingMode = typeof BranchNamingMode.Type;
 
+export const DEFAULT_BRANCH_NAME_PREFIX = "spilshchikov";
+
+export const BranchNamePrefix = TrimmedString.pipe(
+  Schema.decodeTo(
+    TrimmedString,
+    SchemaTransformation.transform({
+      decode: (prefix) =>
+        /^(?:t3|t3code)\/?$/i.test(prefix) ? DEFAULT_BRANCH_NAME_PREFIX : prefix,
+      encode: (prefix) => prefix,
+    }),
+  ),
+);
+
 export interface BranchNamingOptions {
   mode: BranchNamingMode;
   prefix: string;
@@ -1283,7 +1296,7 @@ export const ProjectSettingsOverrides = Schema.Struct({
   sourceControlWritingStyle: Schema.optionalKey(SourceControlWritingStyleSettings),
   removeAgentCreditsOnMerge: Schema.optionalKey(Schema.Boolean),
   branchNamingMode: Schema.optionalKey(BranchNamingMode),
-  branchNamePrefix: Schema.optionalKey(TrimmedString),
+  branchNamePrefix: Schema.optionalKey(BranchNamePrefix),
   branchNameInstructions: Schema.optionalKey(TrimmedString),
   pullRequestMergeMethod: Schema.optionalKey(Schema.NullOr(PullRequestMergeMethod)),
   sidebarAutoSettleOnMerge: Schema.optionalKey(Schema.Boolean),
@@ -1522,7 +1535,9 @@ export const ServerSettings = Schema.Struct({
   branchNamingMode: BranchNamingMode.pipe(
     Schema.withDecodingDefault(Effect.succeed("static" as const)),
   ),
-  branchNamePrefix: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed("t3"))),
+  branchNamePrefix: BranchNamePrefix.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_BRANCH_NAME_PREFIX)),
+  ),
   branchNameInstructions: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   removeAgentCreditsOnMerge: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   sourceControlWritingStyle: SourceControlWritingStyleSettings.pipe(
@@ -1839,7 +1854,7 @@ export const ServerSettingsPatch = Schema.Struct({
   multiworkBaseDirectory: Schema.optionalKey(TrimmedString),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
   branchNamingMode: Schema.optionalKey(BranchNamingMode),
-  branchNamePrefix: Schema.optionalKey(TrimmedString),
+  branchNamePrefix: Schema.optionalKey(BranchNamePrefix),
   branchNameInstructions: Schema.optionalKey(TrimmedString),
   removeAgentCreditsOnMerge: Schema.optionalKey(Schema.Boolean),
   sourceControlWritingStyle: Schema.optionalKey(
