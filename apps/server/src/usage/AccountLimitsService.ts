@@ -45,7 +45,7 @@ import * as Semaphore from "effect/Semaphore";
 import { writeFileStringAtomically } from "../atomicWrite.ts";
 import { ServerConfig } from "../config.ts";
 import { resolveCodexHomeLayout } from "../provider/Drivers/CodexHomeLayout.ts";
-import { deriveProviderInstanceConfigMap } from "../provider/Layers/ProviderInstanceRegistryHydration.ts";
+import { deriveProviderInstanceConfigMap } from "../provider/ProviderInstanceRegistryHydration.ts";
 import { HostProcessEnvironment } from "@t3tools/shared/hostProcess";
 
 import { expandHomePath } from "../pathExpansion.ts";

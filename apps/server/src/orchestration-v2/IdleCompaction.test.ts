@@ -4,14 +4,14 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 import { TestClock } from "effect/testing";
-import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as IdleCompaction from "./IdleCompaction.ts";
 
 const dependencies = Layer.merge(
-  SqlitePersistenceMemory,
+  SqlitePersistence.layerMemory,
   ServerSettings.layerTest({ idleCompactionEnabled: true }),
 );
 const testLayer = IdleCompaction.layer.pipe(Layer.provideMerge(dependencies));

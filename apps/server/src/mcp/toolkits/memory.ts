@@ -6,9 +6,13 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { Tool, Toolkit } from "effect/unstable/ai";
-import { McpInvocationContext, requireMcpCapability } from "../McpInvocationContext.ts";
+import * as SqlClient from "effect/sql/SqlClient";
+import { Tool, Toolkit } from "effect/ai";
+import {
+  McpInvocationContext,
+  requireMcpCapability,
+  requireThreadScope,
+} from "../McpInvocationContext.ts";
 import * as Memory from "../../project/ProjectMemory.ts";
 
 const dependencies = [McpInvocationContext];
@@ -45,9 +49,10 @@ const saveTool = Tool.make("project_memory_save", {
 export const MemoryToolkit = Toolkit.make(listTool, readTool, saveTool);
 const project = Effect.gen(function* () {
   const scope = yield* requireMcpCapability("memory").pipe(
+    Effect.flatMap((scope) => requireThreadScope(scope, "project memory")),
     Effect.mapError(() => new ProjectMemoryError({ message: "Project memory access denied." })),
   );
-  return yield* Memory.projectForThread(scope.threadId);
+  return yield* Memory.projectForThread(scope.thread.threadId);
 });
 export const MemoryHandlersLive = MemoryToolkit.toLayer(
   Effect.gen(function* () {

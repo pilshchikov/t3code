@@ -7,7 +7,6 @@ import { FileWorktreeToolbar } from "./FileWorktreeToolbar";
 import { Spinner } from "~/components/ui/spinner";
 import { DIFF_SURFACE_THEME_UNSAFE_CSS } from "~/lib/diffRendering";
 import type {
-  ChatFileAttachment,
   EditorId,
   EnvironmentId,
   ProjectCodeSearchMatch,
@@ -73,6 +72,7 @@ import {
   workspaceColorOption,
   workspaceDirectoryName,
 } from "~/lib/projectWorkspacePresentation";
+import type { ChatFileAttachment } from "~/types";
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
 import { isAbsolutePath, resolvePathLinkTarget } from "~/terminal-links";
 import { ScrollArea } from "~/components/ui/scroll-area";
@@ -1591,6 +1591,7 @@ export default function FilePreviewPanel({
           mimeType={attachment.mimeType}
           sizeBytes={attachment.sizeBytes}
           asset={{ environmentId, attachmentId: attachment.id }}
+          htmlRender={attachment.htmlRender === true}
         />
       ) : relativePath && isAudio && absolutePath ? (
         <WorkspaceAudioPreview

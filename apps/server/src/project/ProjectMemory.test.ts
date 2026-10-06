@@ -2,8 +2,8 @@ import { assert, describe, it } from "@effect/vitest";
 import { ProjectId, ProjectMemorySaveInput, ThreadId, MessageId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
+import * as SqlClient from "effect/sql/SqlClient";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as Memory from "./ProjectMemory.ts";
 
 const projectId = ProjectId.make("memory-project");
@@ -56,7 +56,7 @@ describe("project memory", () => {
         yield* Memory.initialContext(projectId, threadId, MessageId.make("compact")),
         "",
       );
-    }).pipe(Effect.provide(SqlitePersistenceMemory)),
+    }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
   );
   it.effect("persists content, lists only descriptions, isolates projects, edits and deletes", () =>
     Effect.gen(function* () {
@@ -80,7 +80,7 @@ describe("project memory", () => {
       assert.equal((yield* Memory.list(projectId)).length, 1);
       yield* Memory.remove(projectId, "hosts");
       assert.deepEqual(yield* Memory.list(projectId), []);
-    }).pipe(Effect.provide(SqlitePersistenceMemory)),
+    }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
   );
 
   it.effect("makes a saved note available to another thread in the same project", () =>
@@ -114,7 +114,7 @@ describe("project memory", () => {
         ),
         '"deployment"',
       );
-    }).pipe(Effect.provide(SqlitePersistenceMemory)),
+    }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
   );
 
   it.effect("rejects missing and deleted projects and unknown threads", () =>
@@ -133,7 +133,7 @@ describe("project memory", () => {
         (yield* Effect.exit(Memory.projectForThread(ThreadId.make("unknown"))))._tag,
         "Failure",
       );
-    }).pipe(Effect.provide(SqlitePersistenceMemory)),
+    }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
   );
 
   it("validates names and bounds payload size", () => {

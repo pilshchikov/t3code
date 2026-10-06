@@ -4,10 +4,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { vi } from "vite-plus/test";
 
-import { remoteHttpClientLayer } from "@t3tools/client-runtime/rpc";
+import { layerRemoteHttpClient } from "@t3tools/client-runtime/rpc";
 import { withRelayClientTracing } from "@t3tools/shared/relayTracing";
 
-import { makeTracingLayer } from "./tracing";
+import * as Tracing from "./tracing";
 
 vi.mock("expo-constants", () => ({
   default: {
@@ -17,9 +17,9 @@ vi.mock("expo-constants", () => ({
   },
 }));
 
-it.effect("exports spans through the scoped mobile OTLP layer", () => {
+it.effect("never exports mobile spans, even with a supplied collector", () => {
   const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));
-  const tracingLayer = makeTracingLayer(
+  const layerTracing = Tracing.layerFromConfig(
     {
       tracesUrl: "https://api.axiom.test/v1/traces",
       tracesDataset: "mobile-traces",
@@ -29,25 +29,20 @@ it.effect("exports spans through the scoped mobile OTLP layer", () => {
       appVariant: "test",
       serviceVersion: "1.2.3",
     },
-  ).pipe(Layer.provide(remoteHttpClientLayer(fetchFn)));
-  const tracedApplication = Layer.effectDiscard(
+  ).pipe(Layer.provide(layerRemoteHttpClient(fetchFn)));
+  const layerTracedApplication = Layer.effectDiscard(
     Effect.void.pipe(Effect.withSpan("mobile.test.span"), withRelayClientTracing),
-  ).pipe(Layer.provide(tracingLayer));
+  ).pipe(Layer.provide(layerTracing));
 
   return Effect.gen(function* () {
-    yield* Layer.build(tracedApplication);
+    yield* Layer.build(layerTracedApplication);
 
     expect(fetchFn).not.toHaveBeenCalled();
   }).pipe(
     Effect.scoped,
     Effect.andThen(
       Effect.sync(() => {
-        expect(fetchFn).toHaveBeenCalledOnce();
-        const [url, init] = fetchFn.mock.calls[0]!;
-        expect(String(url)).toBe("https://api.axiom.test/v1/traces");
-        expect(new Headers(init?.headers).get("authorization")).toBe("Bearer public-ingest-token");
-        expect(new Headers(init?.headers).get("x-axiom-dataset")).toBe("mobile-traces");
-        expect(new TextDecoder().decode(init?.body as Uint8Array)).toContain("mobile.test.span");
+        expect(fetchFn).not.toHaveBeenCalled();
       }),
     ),
   );
@@ -55,7 +50,7 @@ it.effect("exports spans through the scoped mobile OTLP layer", () => {
 
 it.effect("does not let OTLP serialization failures alter application effects", () => {
   const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));
-  const tracingLayer = makeTracingLayer(
+  const layerTracing = Tracing.layerFromConfig(
     {
       tracesUrl: "https://api.axiom.test/v1/traces",
       tracesDataset: "mobile-traces",
@@ -65,9 +60,9 @@ it.effect("does not let OTLP serialization failures alter application effects", 
       appVariant: "test",
       serviceVersion: "1.2.3",
     },
-  ).pipe(Layer.provide(remoteHttpClientLayer(fetchFn)));
+  ).pipe(Layer.provide(layerRemoteHttpClient(fetchFn)));
   const failure = { durationNanos: 1n };
-  const tracedApplication = Layer.effectDiscard(
+  const layerTracedApplication = Layer.effectDiscard(
     Effect.fail(failure).pipe(
       Effect.withSpan("mobile.test.failed-span"),
       withRelayClientTracing,
@@ -81,16 +76,13 @@ it.effect("does not let OTLP serialization failures alter application effects", 
           : Effect.die(new Error("Expected the original typed failure."));
       }),
     ),
-  ).pipe(Layer.provide(tracingLayer));
+  ).pipe(Layer.provide(layerTracing));
 
-  return Layer.build(tracedApplication).pipe(
+  return Layer.build(layerTracedApplication).pipe(
     Effect.scoped,
     Effect.andThen(
       Effect.sync(() => {
-        expect(fetchFn).toHaveBeenCalledOnce();
-        expect(new TextDecoder().decode(fetchFn.mock.calls[0]?.[1]?.body as Uint8Array)).toContain(
-          "mobile.test.failed-span",
-        );
+        expect(fetchFn).not.toHaveBeenCalled();
       }),
     ),
   );

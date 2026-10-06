@@ -8,8 +8,12 @@ import {
 } from "@t3tools/contracts";
 import * as Struct from "effect/Struct";
 import * as Effect from "effect/Effect";
-import { Tool, Toolkit } from "effect/unstable/ai";
-import { McpInvocationContext, requireMcpCapability } from "../McpInvocationContext.ts";
+import { Tool, Toolkit } from "effect/ai";
+import {
+  McpInvocationContext,
+  requireMcpCapability,
+  requireThreadScope,
+} from "../McpInvocationContext.ts";
 import * as ThreadWorkspaces from "../../workspace/ThreadWorkspaces.ts";
 
 const dependencies = [McpInvocationContext];
@@ -49,6 +53,7 @@ export const WorkspaceHandlersLive = WorkspaceToolkit.toLayer(
   Effect.gen(function* () {
     const workspaces = yield* ThreadWorkspaces.ThreadWorkspaces;
     const scope = requireMcpCapability("workspace").pipe(
+      Effect.flatMap((scope) => requireThreadScope(scope, "thread workspace selection")),
       Effect.mapError((cause) => new ThreadWorkspaceError({ message: cause.message })),
     );
     return WorkspaceToolkit.of({
@@ -56,24 +61,24 @@ export const WorkspaceHandlersLive = WorkspaceToolkit.toLayer(
         Effect.flatMap(scope, (ctx) =>
           workspaces.inspect({
             ...input,
-            threadId: ctx.threadId,
-            providerSessionId: ctx.providerSessionId,
+            threadId: ctx.thread.threadId,
+            providerSessionId: ctx.thread.providerSessionId,
           }),
         ),
       thread_workspace_create: (input) =>
         Effect.flatMap(scope, (ctx) =>
           workspaces.create({
             ...input,
-            threadId: ctx.threadId,
-            providerSessionId: ctx.providerSessionId,
+            threadId: ctx.thread.threadId,
+            providerSessionId: ctx.thread.providerSessionId,
           }),
         ),
       thread_workspace_select: (input) =>
         Effect.flatMap(scope, (ctx) =>
           workspaces.select({
             ...input,
-            threadId: ctx.threadId,
-            providerSessionId: ctx.providerSessionId,
+            threadId: ctx.thread.threadId,
+            providerSessionId: ctx.thread.providerSessionId,
           }),
         ),
     });

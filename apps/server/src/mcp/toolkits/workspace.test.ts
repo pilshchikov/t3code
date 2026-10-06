@@ -15,7 +15,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
-import type { Tool } from "effect/unstable/ai";
+import type { Tool } from "effect/ai";
 import { GitWorkflowService } from "../../git/GitWorkflowService.ts";
 import { ThreadManagementService } from "../../orchestration-v2/ThreadManagementService.ts";
 import { ProjectService } from "../../project/ProjectService.ts";
@@ -225,7 +225,15 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
         (chunk) => chunk.at(-1)!.result as Tool.Success<(typeof WorkspaceToolkit.tools)[Name]>,
       ),
       Effect.provideService(McpInvocationContext, {
-        ...scope,
+        environmentId: scope.environmentId,
+        issuedAt: scope.issuedAt,
+        requestNamespace: scope.providerSessionId,
+        client: undefined,
+        thread: {
+          threadId: scope.threadId,
+          providerSessionId: scope.providerSessionId,
+          providerInstanceId: scope.providerInstanceId,
+        },
         capabilities: new Set(capabilities),
       }),
       Effect.provide(deps),

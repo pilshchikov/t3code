@@ -6,8 +6,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 
 import * as DesktopConfig from "./DesktopConfig.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
@@ -52,7 +52,7 @@ const environmentInput = (baseDir: string) =>
     runningUnderArm64Translation: false,
   }) satisfies DesktopEnvironment.MakeDesktopEnvironmentInput;
 
-const makeEnvironmentLayer = (
+const layerEnvironmentFor = (
   baseDir: string,
   isDevelopment = true,
   env: Readonly<Record<string, string | undefined>> = {},
@@ -77,7 +77,7 @@ interface ExportedRequest {
 }
 
 /** Answers every export with a 200 and keeps what was posted for assertions. */
-const collectorLayer = (requests: Array<ExportedRequest>) =>
+const layerCollector = (requests: Array<ExportedRequest>) =>
   Layer.succeed(
     HttpClient.HttpClient,
     HttpClient.make((request) =>
@@ -94,7 +94,7 @@ const collectorLayer = (requests: Array<ExportedRequest>) =>
   );
 
 // A developer's own OTEL_* variables would otherwise pick the endpoints.
-const emptyEnv = ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} }));
+const layerEmptyEnv = ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} }));
 
 const encodeObservabilitySettingsFile = Schema.encodeSync(
   Schema.fromJsonString(
@@ -103,7 +103,7 @@ const encodeObservabilitySettingsFile = Schema.encodeSync(
 );
 
 const writeObservabilitySettings = Effect.fn(function* (
-  environmentLayer: ReturnType<typeof makeEnvironmentLayer>,
+  environmentLayer: ReturnType<typeof layerEnvironmentFor>,
   observability: Readonly<Record<string, string>>,
 ) {
   const fileSystem = yield* FileSystem.FileSystem;
@@ -146,15 +146,15 @@ describe("DesktopObservability", () => {
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
         prefix: "t3-desktop-observability-test-",
       });
-      const environmentLayer = makeEnvironmentLayer(baseDir);
+      const layerEnvironment = layerEnvironmentFor(baseDir);
       const tracePath = yield* Effect.gen(function* () {
         const environment = yield* DesktopEnvironment.DesktopEnvironment;
         return environment.path.join(environment.logDir, "desktop.trace.ndjson");
-      }).pipe(Effect.provide(environmentLayer));
+      }).pipe(Effect.provide(layerEnvironment));
       const logPath = yield* Effect.gen(function* () {
         const environment = yield* DesktopEnvironment.DesktopEnvironment;
         return environment.path.join(environment.logDir, "desktop-main.log");
-      }).pipe(Effect.provide(environmentLayer));
+      }).pipe(Effect.provide(layerEnvironment));
 
       yield* Effect.scoped(
         Effect.gen(function* () {
@@ -162,7 +162,7 @@ describe("DesktopObservability", () => {
           yield* Effect.logInfo("desktop trace event");
         }).pipe(
           Effect.withSpan("desktop-observability-test"),
-          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(environmentLayer))),
+          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(layerEnvironment))),
         ),
       );
 
@@ -185,7 +185,7 @@ describe("DesktopObservability", () => {
       assert.isFalse(yield* fileSystem.exists(logPath));
     }).pipe(
       Effect.scoped,
-      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici, emptyEnv)),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici, layerEmptyEnv)),
     ),
   );
 
@@ -195,15 +195,15 @@ describe("DesktopObservability", () => {
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
         prefix: "t3-desktop-backend-output-log-test-",
       });
-      const environmentLayer = makeEnvironmentLayer(baseDir, false);
+      const layerEnvironment = layerEnvironmentFor(baseDir, false);
       const logPath = yield* Effect.gen(function* () {
         const environment = yield* DesktopEnvironment.DesktopEnvironment;
         return environment.path.join(environment.logDir, "server-child.log");
-      }).pipe(Effect.provide(environmentLayer));
+      }).pipe(Effect.provide(layerEnvironment));
       const tracePath = yield* Effect.gen(function* () {
         const environment = yield* DesktopEnvironment.DesktopEnvironment;
         return environment.path.join(environment.logDir, "desktop.trace.ndjson");
-      }).pipe(Effect.provide(environmentLayer));
+      }).pipe(Effect.provide(layerEnvironment));
 
       yield* Effect.gen(function* () {
         const factory = yield* DesktopObservability.DesktopBackendOutputLogFactory;
@@ -219,7 +219,7 @@ describe("DesktopObservability", () => {
         yield* outputLog.discardSession;
       }).pipe(
         Effect.annotateLogs({ runId: "test-run" }),
-        Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(environmentLayer))),
+        Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(layerEnvironment))),
       );
 
       const log = yield* fileSystem.readFileString(logPath);
@@ -263,7 +263,7 @@ describe("DesktopObservability", () => {
       );
     }).pipe(
       Effect.scoped,
-      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici, emptyEnv)),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici, layerEmptyEnv)),
     ),
   );
 
@@ -273,11 +273,11 @@ describe("DesktopObservability", () => {
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
         prefix: "t3-desktop-backend-output-snapshot-test-",
       });
-      const environmentLayer = makeEnvironmentLayer(baseDir, false);
+      const layerEnvironment = layerEnvironmentFor(baseDir, false);
       const logPath = yield* Effect.gen(function* () {
         const environment = yield* DesktopEnvironment.DesktopEnvironment;
         return environment.path.join(environment.logDir, "server-child.log");
-      }).pipe(Effect.provide(environmentLayer));
+      }).pipe(Effect.provide(layerEnvironment));
 
       yield* Effect.gen(function* () {
         const factory = yield* DesktopObservability.DesktopBackendOutputLogFactory;
@@ -289,7 +289,7 @@ describe("DesktopObservability", () => {
         yield* outputLog.persistFailure({ details: "code=1" });
       }).pipe(
         Effect.annotateLogs({ runId: "test-run" }),
-        Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(environmentLayer))),
+        Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(layerEnvironment))),
       );
 
       const records = yield* Effect.forEach(
@@ -303,7 +303,7 @@ describe("DesktopObservability", () => {
       assert.equal(records.at(-1)?.annotations.details, "code=1");
     }).pipe(
       Effect.scoped,
-      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici, emptyEnv)),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici, layerEmptyEnv)),
     ),
   );
 
@@ -313,11 +313,11 @@ describe("DesktopObservability", () => {
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
         prefix: "t3-desktop-backend-output-bound-test-",
       });
-      const environmentLayer = makeEnvironmentLayer(baseDir, false);
+      const layerEnvironment = layerEnvironmentFor(baseDir, false);
       const logPath = yield* Effect.gen(function* () {
         const environment = yield* DesktopEnvironment.DesktopEnvironment;
         return environment.path.join(environment.logDir, "server-child.log");
-      }).pipe(Effect.provide(environmentLayer));
+      }).pipe(Effect.provide(layerEnvironment));
       const maxBufferedBytes = 1024 * 1024;
       const discardedPrefixBytes = 128;
       const output = new Uint8Array(maxBufferedBytes + discardedPrefixBytes);
@@ -332,7 +332,7 @@ describe("DesktopObservability", () => {
           yield* outputLog.writeOutputChunk("stderr", output);
           yield* outputLog.persistFailure({ details: "code=1" });
         }).pipe(
-          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(environmentLayer))),
+          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(layerEnvironment))),
         ),
       );
 
@@ -347,7 +347,7 @@ describe("DesktopObservability", () => {
       assert.isFalse(text.includes("y"));
     }).pipe(
       Effect.scoped,
-      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici, emptyEnv)),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici, layerEmptyEnv)),
     ),
   );
 
@@ -357,11 +357,11 @@ describe("DesktopObservability", () => {
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
         prefix: "t3-desktop-backend-output-chunks-test-",
       });
-      const environmentLayer = makeEnvironmentLayer(baseDir, false);
+      const layerEnvironment = layerEnvironmentFor(baseDir, false);
       const logPath = yield* Effect.gen(function* () {
         const environment = yield* DesktopEnvironment.DesktopEnvironment;
         return environment.path.join(environment.logDir, "server-child.log");
-      }).pipe(Effect.provide(environmentLayer));
+      }).pipe(Effect.provide(layerEnvironment));
 
       yield* Effect.scoped(
         Effect.gen(function* () {
@@ -373,7 +373,7 @@ describe("DesktopObservability", () => {
           }
           yield* outputLog.persistFailure({ details: "code=1" });
         }).pipe(
-          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(environmentLayer))),
+          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(layerEnvironment))),
         ),
       );
 
@@ -381,40 +381,34 @@ describe("DesktopObservability", () => {
       assert.equal(lines.length, 258);
     }).pipe(
       Effect.scoped,
-      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici, emptyEnv)),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici, layerEmptyEnv)),
     ),
   );
 
-  it.effect("exports main process log records to the configured logs endpoint", () => {
+  it.effect("keeps main process logs local despite a configured collector", () => {
     const requests: Array<ExportedRequest> = [];
     return Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
         prefix: "t3-desktop-observability-test-",
       });
-      const environmentLayer = makeEnvironmentLayer(baseDir, true, {
+      const layerEnvironment = layerEnvironmentFor(baseDir, true, {
         T3CODE_OTLP_LOGS_URL: "https://collector.example.com/v1/logs",
         T3CODE_OTLP_HEADERS: "x-scope=desktop",
       });
       const tracePath = yield* Effect.gen(function* () {
         const environment = yield* DesktopEnvironment.DesktopEnvironment;
         return environment.path.join(environment.logDir, "desktop.trace.ndjson");
-      }).pipe(Effect.provide(environmentLayer));
+      }).pipe(Effect.provide(layerEnvironment));
 
       yield* Effect.scoped(
         Effect.logInfo("desktop log export").pipe(
           Effect.withSpan("desktop-log-export-test"),
-          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(environmentLayer))),
+          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(layerEnvironment))),
         ),
       );
 
-      assert.lengthOf(requests, 1);
-      const [request] = requests;
-      assert.strictEqual(request?.url, "https://collector.example.com/v1/logs");
-      assert.include(request?.body ?? "", "desktop log export");
-      assert.include(request?.body ?? "", "service.runtime");
-      assert.strictEqual(request?.headers["x-scope"], "desktop");
-
+      assert.lengthOf(requests, 0);
       // The log record is the export now, so the same message must not also
       // ride along as an event on the span.
       const record = (yield* fileSystem.readFileString(tracePath))
@@ -424,45 +418,40 @@ describe("DesktopObservability", () => {
         .map((line) => decodeTraceRecordLine(line))
         .find((entry) => entry.name === "desktop-log-export-test");
       assert.notEqual(record, undefined);
-      assert.lengthOf(record?.events ?? [], 0);
+      assert.ok((record?.events ?? []).length > 0);
     }).pipe(
       Effect.scoped,
-      Effect.provide(Layer.mergeAll(NodeServices.layer, collectorLayer(requests), emptyEnv)),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, layerCollector(requests), layerEmptyEnv)),
     );
   });
 
-  it.effect("exports to an OTEL endpoint over Settings, with its own headers and protocol", () => {
+  it.effect("ignores OTEL endpoints and persisted Settings for remote export", () => {
     const requests: Array<ExportedRequest> = [];
     return Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
         prefix: "t3-desktop-observability-test-",
       });
-      const environmentLayer = makeEnvironmentLayer(baseDir, true, {
+      const layerEnvironment = layerEnvironmentFor(baseDir, true, {
         T3CODE_OTLP_HEADERS: "x-scope=desktop",
       });
-      yield* writeObservabilitySettings(environmentLayer, {
+      yield* writeObservabilitySettings(layerEnvironment, {
         otlpLogsUrl: "https://settings.example.com/v1/logs",
       });
 
       yield* Effect.scoped(
         Effect.logInfo("desktop otel export").pipe(
-          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(environmentLayer))),
+          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(layerEnvironment))),
         ),
       );
 
-      assert.lengthOf(requests, 1);
-      const [request] = requests;
-      assert.strictEqual(request?.url, "https://collector.example.com/v1/logs");
-      assert.strictEqual(request?.headers["x-otel"], "desktop");
-      assert.strictEqual(request?.headers["x-scope"], undefined);
-      assert.strictEqual(request?.headers["content-type"], "application/json");
+      assert.lengthOf(requests, 0);
     }).pipe(
       Effect.scoped,
       Effect.provide(
         Layer.mergeAll(
           NodeServices.layer,
-          collectorLayer(requests),
+          layerCollector(requests),
           ConfigProvider.layer(
             ConfigProvider.fromEnv({
               env: {
@@ -477,35 +466,30 @@ describe("DesktopObservability", () => {
     );
   });
 
-  it.effect("keeps its service name while OTEL resource attributes add dimensions", () => {
+  it.effect("keeps resource attributes local", () => {
     const requests: Array<ExportedRequest> = [];
     return Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
         prefix: "t3-desktop-observability-test-",
       });
-      const environmentLayer = makeEnvironmentLayer(baseDir, true, {
+      const layerEnvironment = layerEnvironmentFor(baseDir, true, {
         T3CODE_OTLP_LOGS_URL: "https://collector.example.com/v1/logs",
       });
 
       yield* Effect.scoped(
         Effect.logInfo("desktop service name").pipe(
-          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(environmentLayer))),
+          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(layerEnvironment))),
         ),
       );
 
-      assert.lengthOf(requests, 1);
-      const body = requests[0]?.body ?? "";
-      assert.include(body, '"stringValue":"t3code-desktop"');
-      assert.include(body, "deployment.environment.name");
-      assert.include(body, '"key":"service.namespace","value":{"stringValue":"t3code"}');
-      assert.notInclude(body, "renamed");
+      assert.lengthOf(requests, 0);
     }).pipe(
       Effect.scoped,
       Effect.provide(
         Layer.mergeAll(
           NodeServices.layer,
-          collectorLayer(requests),
+          layerCollector(requests),
           ConfigProvider.layer(
             ConfigProvider.fromEnv({
               env: {
@@ -527,16 +511,16 @@ describe("DesktopObservability", () => {
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
         prefix: "t3-desktop-observability-test-",
       });
-      const environmentLayer = makeEnvironmentLayer(baseDir, true, {
+      const layerEnvironment = layerEnvironmentFor(baseDir, true, {
         T3CODE_OTLP_HEADERS: "x-scope=desktop",
       });
-      yield* writeObservabilitySettings(environmentLayer, {
+      yield* writeObservabilitySettings(layerEnvironment, {
         otlpLogsUrl: "https://settings.example.com/v1/logs",
       });
 
       yield* Effect.scoped(
         Effect.logInfo("desktop otel off").pipe(
-          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(environmentLayer))),
+          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(layerEnvironment))),
         ),
       );
 
@@ -546,7 +530,7 @@ describe("DesktopObservability", () => {
       Effect.provide(
         Layer.mergeAll(
           NodeServices.layer,
-          collectorLayer(requests),
+          layerCollector(requests),
           ConfigProvider.layer(
             ConfigProvider.fromEnv({
               env: {
@@ -560,45 +544,45 @@ describe("DesktopObservability", () => {
     );
   });
 
-  it.effect("exports kill switch warnings through the configured logger", () => {
+  it.effect("never sends kill switch warnings to a collector", () => {
     const requests: Array<ExportedRequest> = [];
     return Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
         prefix: "t3-desktop-observability-test-",
       });
-      const environmentLayer = makeEnvironmentLayer(baseDir, true, {
+      const layerEnvironment = layerEnvironmentFor(baseDir, true, {
         T3CODE_OTLP_LOGS_URL: "https://collector.example.com/v1/logs",
       });
 
       yield* Effect.scoped(
         Effect.void.pipe(
-          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(environmentLayer))),
+          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(layerEnvironment))),
         ),
       );
 
-      assert.include(requests[0]?.body ?? "", "OTEL_SDK_DISABLED=1 was read as false");
+      assert.lengthOf(requests, 0);
     }).pipe(
       Effect.scoped,
       Effect.provide(
         Layer.mergeAll(
           NodeServices.layer,
-          collectorLayer(requests),
+          layerCollector(requests),
           ConfigProvider.layer(ConfigProvider.fromEnv({ env: { OTEL_SDK_DISABLED: "1" } })),
         ),
       ),
     );
   });
 
-  it.effect("reads every signal endpoint from Settings when the environment names none", () => {
+  it.effect("never exports to persisted Settings endpoints", () => {
     const requests: Array<ExportedRequest> = [];
     return Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
         prefix: "t3-desktop-observability-test-",
       });
-      const environmentLayer = makeEnvironmentLayer(baseDir);
-      yield* writeObservabilitySettings(environmentLayer, {
+      const layerEnvironment = layerEnvironmentFor(baseDir);
+      yield* writeObservabilitySettings(layerEnvironment, {
         otlpTracesUrl: "https://settings.example.com/v1/traces",
         otlpLogsUrl: "https://settings.example.com/v1/logs",
         // The main process records no metrics yet, so this endpoint must
@@ -609,25 +593,14 @@ describe("DesktopObservability", () => {
       yield* Effect.scoped(
         Effect.logInfo("desktop log export from settings").pipe(
           Effect.withSpan("desktop-settings-export-test"),
-          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(environmentLayer))),
+          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(layerEnvironment))),
         ),
       );
 
-      assert.deepEqual(requests.map((request) => request.url).toSorted(), [
-        "https://settings.example.com/v1/logs",
-        "https://settings.example.com/v1/traces",
-      ]);
-      assert.include(
-        requests.find((request) => request.url.endsWith("/v1/logs"))?.body ?? "",
-        "desktop log export from settings",
-      );
-      assert.include(
-        requests.find((request) => request.url.endsWith("/v1/traces"))?.body ?? "",
-        "desktop-settings-export-test",
-      );
+      assert.lengthOf(requests, 0);
     }).pipe(
       Effect.scoped,
-      Effect.provide(Layer.mergeAll(NodeServices.layer, collectorLayer(requests), emptyEnv)),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, layerCollector(requests), layerEmptyEnv)),
     );
   });
 
@@ -643,7 +616,7 @@ describe("DesktopObservability", () => {
         Effect.logInfo("desktop log stays local").pipe(
           Effect.withSpan("desktop-offline-test"),
           Effect.provide(
-            DesktopObservability.layer.pipe(Layer.provideMerge(makeEnvironmentLayer(baseDir))),
+            DesktopObservability.layer.pipe(Layer.provideMerge(layerEnvironmentFor(baseDir))),
           ),
         ),
       );
@@ -651,7 +624,7 @@ describe("DesktopObservability", () => {
       assert.lengthOf(requests, 0);
     }).pipe(
       Effect.scoped,
-      Effect.provide(Layer.mergeAll(NodeServices.layer, collectorLayer(requests), emptyEnv)),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, layerCollector(requests), layerEmptyEnv)),
     );
   });
 
@@ -662,8 +635,8 @@ describe("DesktopObservability", () => {
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
         prefix: "t3-desktop-observability-test-",
       });
-      const environmentLayer = makeEnvironmentLayer(baseDir);
-      yield* writeObservabilitySettings(environmentLayer, {
+      const layerEnvironment = layerEnvironmentFor(baseDir);
+      yield* writeObservabilitySettings(layerEnvironment, {
         otlpTracesUrl: "https://settings.example.com/v1/traces",
         otlpLogsUrl: "https://settings.example.com/v1/logs",
       });
@@ -671,7 +644,7 @@ describe("DesktopObservability", () => {
       yield* Effect.scoped(
         Effect.logInfo("desktop log stays local when disabled").pipe(
           Effect.withSpan("desktop-disabled-test"),
-          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(environmentLayer))),
+          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(layerEnvironment))),
         ),
       );
 
@@ -681,7 +654,7 @@ describe("DesktopObservability", () => {
       Effect.provide(
         Layer.mergeAll(
           NodeServices.layer,
-          collectorLayer(requests),
+          layerCollector(requests),
           ConfigProvider.layer(ConfigProvider.fromEnv({ env: { OTEL_SDK_DISABLED: "true" } })),
         ),
       ),

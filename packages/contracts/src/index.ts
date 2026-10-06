@@ -67,3 +67,4 @@ export * from "./accountLimits.ts";
 export * from "./usageLimitHistory.ts";
 export * from "./projectMemory.ts";
 export * from "./threadWorkspace.ts";
+export * from "./secretRequest.ts";

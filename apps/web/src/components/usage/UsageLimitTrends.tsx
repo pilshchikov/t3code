@@ -5,7 +5,7 @@ import type {
   UsageLimitHistoryInput,
   UsageLimitHistoryPoint,
 } from "@t3tools/contracts";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import * as Option from "effect/Option";
 import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { appAtomRegistry } from "../../rpc/atomRegistry";

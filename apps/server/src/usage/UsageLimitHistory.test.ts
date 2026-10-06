@@ -2,12 +2,12 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as TestClock from "effect/testing/TestClock";
-import { SqlClient } from "effect/unstable/sql";
+import { SqlClient } from "effect/sql";
 import type { UsageLimitHistoryPoint } from "@t3tools/contracts";
-import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import { UsageLimitHistory, layer } from "./UsageLimitHistory.ts";
 
-const testLayer = layer.pipe(Layer.provideMerge(SqlitePersistenceMemory));
+const testLayer = layer.pipe(Layer.provideMerge(SqlitePersistence.layerMemory));
 const point = (
   measuredAt: string,
   remainingPercent: number,

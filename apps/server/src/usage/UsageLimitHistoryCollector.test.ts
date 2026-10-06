@@ -10,7 +10,7 @@ import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
+import { ProviderRegistry } from "../provider/ProviderRegistry.ts";
 import { UsageLimitSources } from "./UsageLimitSources.ts";
 import { UsageLimitHistory } from "./UsageLimitHistory.ts";
 import { layer, providerHistoryPoints, sourceHistoryPoints } from "./UsageLimitHistoryCollector.ts";

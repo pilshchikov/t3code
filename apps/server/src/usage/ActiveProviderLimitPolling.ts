@@ -5,7 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
+import { ProviderRegistry } from "../provider/ProviderRegistry.ts";
 import { OrchestratorV2 } from "../orchestration-v2/Orchestrator.ts";
 import { UsageLimitHistory } from "./UsageLimitHistory.ts";
 import { providerHistoryPoints } from "./UsageLimitHistoryCollector.ts";

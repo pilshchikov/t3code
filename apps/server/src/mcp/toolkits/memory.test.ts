@@ -3,9 +3,9 @@ import { EnvironmentId, ProviderInstanceId, ThreadId } from "@t3tools/contracts"
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { McpSchema, McpServer } from "effect/unstable/ai";
-import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
+import * as SqlClient from "effect/sql/SqlClient";
+import { McpSchema, McpServer } from "effect/ai";
+import * as SqlitePersistence from "../../persistence/Sqlite.ts";
 import { McpInvocationContext, type McpInvocationScope } from "../McpInvocationContext.ts";
 import { MemoryToolkit, MemoryHandlersLive } from "./memory.ts";
 
@@ -24,16 +24,20 @@ const client = McpSchema.McpServerClient.of({
 });
 const scope: McpInvocationScope = {
   environmentId: EnvironmentId.make("test"),
-  threadId: ThreadId.make("memory-a"),
-  providerInstanceId: ProviderInstanceId.make("claude"),
-  providerSessionId: "memory-test",
+  requestNamespace: "memory-test",
+  client: undefined,
+  thread: {
+    threadId: ThreadId.make("memory-a"),
+    providerInstanceId: ProviderInstanceId.make("claude"),
+    providerSessionId: "memory-test",
+  },
   capabilities: new Set(["memory"]),
   issuedAt: 1,
 };
 const testLayer = McpServer.toolkit(MemoryToolkit).pipe(
   Layer.provide(MemoryHandlersLive),
   Layer.provideMerge(McpServer.McpServer.layer),
-  Layer.provideMerge(SqlitePersistenceMemory),
+  Layer.provideMerge(SqlitePersistence.layerMemory),
 );
 
 it.effect(
@@ -69,7 +73,7 @@ it.effect(
       const other = yield* call(
         "project_memory_read",
         { name: "hosts" },
-        { ...scope, threadId: ThreadId.make("memory-b") },
+        { ...scope, thread: { ...scope.thread!, threadId: ThreadId.make("memory-b") } },
       );
       expect(other.isError).toBe(true);
       const denied = yield* call(

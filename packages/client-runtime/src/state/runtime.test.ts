@@ -1,4 +1,4 @@
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it, vi } from "@effect/vitest";
 import { EnvironmentId } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
@@ -12,7 +12,7 @@ import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { AsyncResult, Atom, AtomRegistry } from "effect/unstable/reactivity";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 
 import {
   AVAILABLE_CONNECTION_STATE,
@@ -81,8 +81,14 @@ function queryConnectionState(
 
 const makeEnvironmentQueryHarness = Effect.fn("TestEnvironmentQuery.makeHarness")(function* <A, E>(
   execute: Effect.Effect<A, E>,
-  options?: { readonly retainPreviousData?: boolean; readonly refreshSignal?: Atom.Atom<unknown> },
+  options: {
+    readonly retainPreviousData?: boolean;
+    readonly refreshSignal?: Atom.Atom<unknown>;
+    readonly refreshTrigger?: Atom.Atom<unknown>;
+    readonly idleTtlMs?: number;
+  } = {},
 ) {
+  const { refreshTrigger, idleTtlMs } = options;
   const supervisorState = yield* SubscriptionRef.make(queryConnectionState());
   const supervisorSession = yield* SubscriptionRef.make(Option.some(QUERY_RPC_SESSION));
   const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
@@ -118,6 +124,8 @@ const makeEnvironmentQueryHarness = Effect.fn("TestEnvironmentQuery.makeHarness"
       ? {}
       : { retainPreviousData: options.retainPreviousData }),
     execute: () => execute,
+    ...(refreshTrigger === undefined ? {} : { refreshTrigger: () => refreshTrigger }),
+    ...(idleTtlMs === undefined ? {} : { idleTtlMs }),
   });
 
   return {
@@ -126,6 +134,18 @@ const makeEnvironmentQueryHarness = Effect.fn("TestEnvironmentQuery.makeHarness"
     supervisorState,
   };
 });
+
+/**
+ * Reads a query's settled value without leaving it mounted. `getResult` resumes from inside the
+ * query's listener, so it only unsubscribes once the reader yields.
+ */
+const readEnvironmentQuery = <A, E>(
+  registry: AtomRegistry.AtomRegistry,
+  atom: Atom.Atom<AsyncResult.AsyncResult<A, E>>,
+) =>
+  AtomRegistry.getResult(registry, atom, { suspendOnWaiting: true }).pipe(
+    Effect.tap(() => Effect.yieldNow),
+  );
 
 const mountEnvironmentQuery = Effect.fn("TestEnvironmentQuery.mount")(function* <A, E>(
   atom: Atom.Atom<AsyncResult.AsyncResult<A, E>>,
@@ -556,51 +576,135 @@ describe("environment query lifecycle", () => {
     ),
   );
 
-  for (const refreshBySignal of [false, true]) {
-    it.effect(
-      `drops the last value while a non-retaining query refreshes by ${refreshBySignal ? "signal" : "command"}`,
-      () =>
-        Effect.scoped(
-          Effect.gen(function* () {
-            const refreshStarted = Latch.makeUnsafe();
-            const finishRefresh = Latch.makeUnsafe();
-            const refreshSignal = Atom.make(0);
-            let executions = 0;
-            const execute = Effect.suspend(() => {
-              executions += 1;
-              if (executions === 1) return Effect.succeed("first");
-              refreshStarted.openUnsafe();
-              return finishRefresh.await.pipe(Effect.as("second"));
-            });
-            const harness = yield* makeEnvironmentQueryHarness(execute, {
-              retainPreviousData: false,
-              ...(refreshBySignal ? { refreshSignal } : {}),
-            });
-            const registry = yield* mountEnvironmentQuery(harness.atom);
+  it.effect.each([false, true])(
+    "drops the last value while a non-retaining query refreshes (signal: %s)",
+    (refreshBySignal) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const refreshStarted = Latch.makeUnsafe();
+          const finishRefresh = Latch.makeUnsafe();
+          const refreshSignal = Atom.make(0);
+          let executions = 0;
+          const execute = Effect.suspend(() => {
+            executions += 1;
+            if (executions === 1) return Effect.succeed("first");
+            refreshStarted.openUnsafe();
+            return finishRefresh.await.pipe(Effect.as("second"));
+          });
+          const harness = yield* makeEnvironmentQueryHarness(execute, {
+            retainPreviousData: false,
+            ...(refreshBySignal ? { refreshSignal } : {}),
+          });
+          const registry = yield* mountEnvironmentQuery(harness.atom);
 
-            expect(
-              yield* AtomRegistry.getResult(registry, harness.atom, {
-                suspendOnWaiting: true,
-              }),
-            ).toBe("first");
+          expect(
+            yield* AtomRegistry.getResult(registry, harness.atom, {
+              suspendOnWaiting: true,
+            }),
+          ).toBe("first");
 
-            if (refreshBySignal) registry.set(refreshSignal, 1);
-            else registry.refresh(harness.atom);
-            yield* refreshStarted.await;
-            const refreshing = registry.get(harness.atom);
-            expect(refreshing.waiting).toBe(true);
-            expect(AsyncResult.value(refreshing)).toEqual(Option.none());
+          if (refreshBySignal) registry.set(refreshSignal, 1);
+          else registry.refresh(harness.atom);
+          yield* refreshStarted.await;
+          const refreshing = registry.get(harness.atom);
+          expect(refreshing.waiting).toBe(true);
+          expect(AsyncResult.value(refreshing)).toEqual(Option.none());
 
-            finishRefresh.openUnsafe();
-            expect(
-              yield* AtomRegistry.getResult(registry, harness.atom, {
-                suspendOnWaiting: true,
-              }),
-            ).toBe("second");
-          }),
-        ),
-    );
-  }
+          finishRefresh.openUnsafe();
+          expect(
+            yield* AtomRegistry.getResult(registry, harness.atom, {
+              suspendOnWaiting: true,
+            }),
+          ).toBe("second");
+        }),
+      ),
+  );
+
+  it.effect("refreshes on its trigger while read, and once on its next read when idle", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        let executions = 0;
+        const trigger = Atom.make(0).pipe(Atom.keepAlive);
+        const harness = yield* makeEnvironmentQueryHarness(
+          Effect.sync(() => (executions += 1)),
+          { refreshTrigger: trigger },
+        );
+        const registry = AtomRegistry.make();
+        yield* Effect.addFinalizer(() => Effect.sync(() => registry.dispose()));
+        const read = readEnvironmentQuery(registry, harness.atom);
+
+        const unmount = registry.mount(harness.atom);
+        expect(yield* read).toBe(1);
+        registry.set(trigger, 1);
+        expect(yield* read).toBe(2);
+
+        // Unmounted, the query stays alive on its idle TTL, but nothing reads it.
+        unmount();
+        registry.set(trigger, 2);
+        registry.set(trigger, 3);
+        expect(executions).toBe(2);
+
+        expect(yield* read).toBe(3);
+      }),
+    ),
+  );
+
+  it.effect("keeps an idle query when its trigger recomputes to the same value", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        let executions = 0;
+        const settings = Atom.make({ theme: "dark" }).pipe(Atom.keepAlive);
+        const trigger = Atom.make((get) => JSON.stringify([get(settings) !== null]));
+        const harness = yield* makeEnvironmentQueryHarness(
+          Effect.sync(() => (executions += 1)),
+          { refreshTrigger: trigger },
+        );
+        const registry = AtomRegistry.make();
+        yield* Effect.addFinalizer(() => Effect.sync(() => registry.dispose()));
+        const read = readEnvironmentQuery(registry, harness.atom);
+
+        const unmount = registry.mount(harness.atom);
+        expect(yield* read).toBe(1);
+        unmount();
+        registry.set(settings, { theme: "light" });
+        expect(yield* read).toBe(1);
+        expect(executions).toBe(1);
+      }),
+    ),
+  );
+
+  it.effect("refreshes an idle query the registry swept and rebuilt after its trigger moved", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        // Only the registry's idle-TTL sweeps run on these; effects keep their own scheduler.
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+        yield* Effect.addFinalizer(() => Effect.sync(() => vi.useRealTimers()));
+        let executions = 0;
+        const trigger = Atom.make(0).pipe(Atom.keepAlive);
+        const harness = yield* makeEnvironmentQueryHarness(
+          Effect.sync(() => (executions += 1)),
+          { refreshTrigger: trigger, idleTtlMs: 1_000 },
+        );
+        const registry = AtomRegistry.make({ timeoutResolution: 100 });
+        yield* Effect.addFinalizer(() => Effect.sync(() => registry.dispose()));
+        const read = readEnvironmentQuery(registry, harness.atom);
+
+        const unmount = registry.mount(harness.atom);
+        expect(yield* read).toBe(1);
+        unmount();
+        // Lets the registry start the query node's idle TTL.
+        yield* Effect.yieldNow;
+        vi.advanceTimersByTime(500);
+        registry.set(trigger, 1);
+        yield* Effect.yieldNow;
+        // Sweeps the query node but not the data it read, whose idle TTL started with the trigger.
+        vi.advanceTimersByTime(700);
+        expect(executions).toBe(1);
+
+        expect(yield* read).toBe(2);
+      }),
+    ),
+  );
 });
 
 describe("Atom.fn mutation semantics", () => {

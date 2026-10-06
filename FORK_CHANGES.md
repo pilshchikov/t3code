@@ -4,6 +4,45 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## Upstream sync and disabled external telemetry, October 6
+
+- Merged all 137 upstream commits through `76d3c96fd5`, retaining fork ancestry at `63ba504c65`.
+  Adopted Effect 4.0.1 and upstream service/layer naming without disconnecting fork services.
+  Integrated worktree location settings, goals, inline HTML, private secret requests, webhook
+  automations, PR polling improvements, and desktop connection recovery. Upstream reverted the
+  separate compact-before-send behavior; the fork's timed automatic compaction remains intact,
+  including the latest-native-context usage repair below.
+- Kept the live orb buttons and saved colors, expanded mobile composer and viewport behavior,
+  scroll recovery/live following, custom chat width, project rail/dots/colors, context menus,
+  CLI resume, multi-repository Files/worktree controls and collapse/resize state, editor navigation,
+  staged-only commit context, account-specific usage/limits, and exclusive Never-default settlement.
+  Retained workspace preparation identities and busy guards while adding worktree location selection.
+- Fork memory/workspace MCP tools now use upstream's nested thread invocation scope and explicitly
+  reject callers without a thread credential. Keep account/session isolation and per-turn workspace,
+  directory guidance, project memory, and Claude worker effort hooks through provider updates.
+- Webhook migrations use fork IDs 62–63; existing released fork IDs remain stable. Genuine upstream
+  V2 preview ledgers are detected separately and translated atomically into the fork ledger, including
+  missing workspace compatibility, project-memory and usage-history additions. Import progress and
+  rollback/retry survive; unknown histories fail without modifying the ledger.
+- Preserved non-retaining Files reads with an explicit waiting-state wrapper after the Effect upgrade,
+  while adopting upstream signal refresh only when a query is read (`client-runtime/state/runtime.ts`).
+- Owner requested no internet tracking. Analytics is now an unconditional no-op with no identifier
+  collection, PostHog client, buffering, delivery, or shutdown flush (`telemetry/AnalyticsService.ts`).
+  Desktop remote log/span exporters are removed; server effective OTLP URLs are always unset; web
+  client/relay tracing and native mobile tracing cannot install network exporters. Environment,
+  persisted settings, and cloud build tokens cannot opt these production paths back in. Local
+  diagnostic files/resource monitoring and intentional provider/Git/connection traffic remain.
+  This supersedes opt-in external telemetry behavior; future merges must preserve these disabled
+  paths. Existing update, provider/version/manifest refresh, and keychain gates also remain.
+- Validation: frozen-lockfile install passed after reconciling the merged lockfile. Seven scoped
+  typechecks passed (server, web, desktop, mobile, contracts, shared, client-runtime). Passed 570
+  focused tests across 24 files, including configured-collector privacy checks, preview migrations,
+  workspace launch/busy guards, MCP isolation, settlement, compaction, composer/scrolling, Files,
+  and query refresh. Scoped lint covered 1,437 changed source files; its one fork test-loop error
+  was repaired and edited files rechecked. Existing React/style and other warnings remain.
+  No repo-wide checks, app builds, device/browser verification, reinstall/restart, push, or live
+  userdata writes. Tracking changes require a new app install before affecting the running app.
+
 ## Idle compaction usage repair, October 6
 
 - The server's idle-compaction sweep now reads the latest root provider-turn token usage for the
