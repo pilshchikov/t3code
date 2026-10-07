@@ -14,7 +14,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { serverEnvironment } from "../../state/server";
 import { threadEnvironment } from "../../state/threads";
-import { useAtomCommand } from "../../state/use-atom-command";
+import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 import { cn, newThreadId } from "../../lib/utils";
 import { projectEnvironment } from "../../state/projects";
 import { useEnvironmentQuery } from "../../state/query";
@@ -46,7 +46,7 @@ function ResumeSessionsList({ environmentId, cwd, projectRef }: ResumeSessionsSe
   const query = useEnvironmentQuery(
     projectEnvironment.listResumableSessions({ environmentId, input: { cwd } }),
   );
-  const createThread = useAtomCommand(threadEnvironment.create);
+  const createThread = useOrchestrationCommand(threadEnvironment.create);
   const router = useRouter();
   const config = useAtomValue(serverEnvironment.configValueAtom(environmentId));
   const [resuming, setResuming] = useState(false);
@@ -58,7 +58,7 @@ function ResumeSessionsList({ environmentId, cwd, projectRef }: ResumeSessionsSe
       (entry) => entry.instanceId === session.providerInstanceId,
     );
     const model =
-      session.model ??
+      (provider?.models.some((entry) => entry.slug === session.model) ? session.model : null) ??
       provider?.models.find((entry) => entry.isDefault)?.slug ??
       provider?.models[0]?.slug;
     if (!model) {

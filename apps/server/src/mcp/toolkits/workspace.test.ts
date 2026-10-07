@@ -1,3 +1,4 @@
+import * as McpToolAccess from "../McpToolAccess.ts";
 import { describe, expect, it } from "@effect/vitest";
 import {
   DEFAULT_SERVER_SETTINGS,
@@ -94,6 +95,8 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
     id: threadId,
     projectId,
     branch: "main",
+    providerInstanceId,
+    activeRunId: RunId.make("workspace-run"),
     modelSelection: { instanceId: providerInstanceId, model: "test" },
   });
   const scope = {
@@ -210,7 +213,9 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
   );
   const toolkit = yield* WorkspaceToolkit.pipe(
     Effect.provide(
-      WorkspaceHandlersLive.pipe(Layer.provide(ThreadWorkspaces.layer.pipe(Layer.provide(deps)))),
+      McpToolAccess.HandlersLayer.layer(WorkspaceHandlersLive).pipe(
+        Layer.provide(ThreadWorkspaces.layer.pipe(Layer.provide(deps))),
+      ),
     ),
   );
   const call = <Name extends keyof typeof WorkspaceToolkit.tools>(

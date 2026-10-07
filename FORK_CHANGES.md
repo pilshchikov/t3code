@@ -1,5 +1,47 @@
 # Fork Changes
 
+## Daily upstream integration — 2026-10-07
+
+- Merge target: `611132c171f3a821bd2e32f22261135cef6330ac`; fork parent:
+  `4bbe768de0aa28a71b7114b51e8583024d43c021`. This work uses a real merge and
+  preserves the fork ancestry. Validation is still pending; this entry does not claim readiness.
+- Integrated upstream filesystem/source-control/diagnostic grants with the fork's file editing,
+  fetch/index/commit RPCs and multi-repository selectors. The file query retains selected-panel
+  watcher/10-second metadata validation and dirty-editor protection, while honoring read grants
+  and showing attempted-path errors (`projectFilesQueryState.ts`, `FilePreviewPanel.tsx`,
+  `RpcAuthorization.ts`, `clientRpcPermissions.ts`). Adopted the new highlighted editor API;
+  explicit environment/checkout/file `editStateKey` retains undo/redo history, with focus-aware
+  shortcuts, review annotations, navigation, symbol links, and save coordination still mounted.
+- Memory and workspace MCP toolkits now declare access through upstream `McpToolAccess` and
+  its nominal registration layer. Thread/project isolation and capability checks remain;
+  writing tools also require the live calling provider. Initial-preparation checkout binding
+  and clearing keep their validated-run exception, while queued follow-ups and ordinary
+  active/background work remain protected (`Orchestrator.ts`, `ThreadLaunchService.ts`,
+  `ThreadWorkspaces.ts`, `mcp/toolkits/{memory,workspace}.ts`, `McpHttpServer.ts`).
+- Live regression audit: `ComposerPrimaryActions` mounts `ComposerActionOrb` with saved send
+  color for send/resume/queue/steer and the new compact-and-send action, and saved stop color
+  for ordinary and pending-input Stop; Classic remains available. `ChatView` still forces
+  mobile composer expansion for existing chats and draft heroes, and scroll collapse stays
+  disabled. Timeline recovery/bottom-following, first assistant text outside settled folds,
+  mixed-work labels, and upstream imported-thread grouping remain in the live timeline.
+- `ResumeSessionsSection` stays mounted and creates V2 native references; unknown imported
+  model names fall back to the provider's advertised model. Root Markdown links still open
+  the explorer. Per-project width, project rail/dots/accent/order/slots, per-root Files and
+  worktree controls, collapse/resize state, and exact-root media/Markdown previews remain live.
+  PR rows retain repository grouping and touch-accessible menus alongside upstream speed actions.
+- Adopted reopened-tab shortcuts while moving the fork's ISO section-sign and non-Latin
+  shortcut matching into upstream's shared matcher. Setup scripts retain their chosen working
+  directories alongside upstream settle scripts. Claude worker effort hooks, separate
+  account/model usage rows and collectors, privacy/network gates, project memory guidance,
+  and the mounted automatic-compaction worker/settings/project overrides remain connected.
+  Multiwork and older usage/sync components remain intentionally retired/superseded as recorded
+  below. Welcome and telemetry guidance now describe the fork's disabled external analytics.
+- Frozen dependency installation completed after verifying/recovering the missing Darwin arm64
+  Effect compiler archive against the lockfile integrity. Resolved-file formatting and
+  `git diff --check` passed. Scoped typechecks and changed-source lint are pending.
+  No tests were added or run; no app build, UI/browser verification, packaging, app/process
+  lifecycle operation, live-userdata write, push, PR, subagent, or other-worktree change.
+
 This file tracks intentional fork-local changes in `pilshchikov/t3code` that may differ from the
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.

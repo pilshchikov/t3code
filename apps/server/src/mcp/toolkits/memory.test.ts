@@ -1,5 +1,15 @@
+import { toolkitRegistration } from "../McpHttpServer.ts";
 import { expect, it } from "@effect/vitest";
-import { EnvironmentId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ProviderInstanceId,
+  ThreadId,
+  ProjectId,
+  RunId,
+  type OrchestrationV2ThreadShell,
+} from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
+import { ThreadManagementService } from "../../orchestration-v2/ThreadManagementService.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -34,10 +44,70 @@ const scope: McpInvocationScope = {
   capabilities: new Set(["memory"]),
   issuedAt: 1,
 };
-const testLayer = McpServer.toolkit(MemoryToolkit).pipe(
-  Layer.provide(MemoryHandlersLive),
+function shell(overrides: Partial<OrchestrationV2ThreadShell> = {}): OrchestrationV2ThreadShell {
+  return {
+    id: ThreadId.make("thread-1"),
+    projectId: ProjectId.make("project-1"),
+    title: "Thread",
+    providerInstanceId: ProviderInstanceId.make("codex"),
+    modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
+    runtimeMode: "full-access",
+    interactionMode: "default",
+    worktreePath: null,
+    activeProviderThreadId: null,
+    lineage: {
+      rootThreadId: ThreadId.make("thread-1"),
+      parentThreadId: null,
+      relationshipToParent: null,
+    },
+    forkedFrom: null,
+    createdBy: "user",
+    creationSource: "web",
+    activeRunId: null,
+    latestVisibleMessage: null,
+    hasActionableProposedPlan: false,
+    itemCount: 0,
+    visibleItemCount: 0,
+    lastVisitedAt: null,
+    deletedAt: null,
+    branch: null,
+    linkedPullRequest: null,
+    status: "idle",
+    activityRunStatus: null,
+    pendingRuntimeRequest: null,
+    pendingBackgroundTasks: [],
+    latestRunId: null,
+    latestRunRequestedAt: null,
+    latestRunStartedAt: null,
+    latestRunCompletedAt: null,
+    latestUserMessageAt: null,
+    createdAt: DateTime.makeUnsafe("2026-09-08"),
+    updatedAt: DateTime.makeUnsafe("2026-09-08"),
+    archivedAt: null,
+    settledOverride: null,
+    settledAt: null,
+    snoozedUntil: null,
+    snoozedAt: null,
+    pinnedAt: null,
+    ...overrides,
+  };
+}
+
+const testLayer = toolkitRegistration(MemoryToolkit, MemoryHandlersLive).pipe(
   Layer.provideMerge(McpServer.McpServer.layer),
   Layer.provideMerge(SqlitePersistence.layerMemory),
+  Layer.provideMerge(
+    Layer.mock(ThreadManagementService)({
+      getThreadShell: (id) =>
+        Effect.succeed(
+          shell({
+            id,
+            providerInstanceId: ProviderInstanceId.make("claude"),
+            activeRunId: RunId.make("memory-run"),
+          }),
+        ),
+    }),
+  ),
 );
 
 it.effect(
