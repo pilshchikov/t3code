@@ -238,8 +238,6 @@ describe("project query refresh", () => {
 
     try {
       render(null);
-      await flushEffects();
-      render("mutation-1");
       await vi.waitFor(() => expect(requests).toHaveLength(1));
       unmountMetadata = registry.mount(metadataAtom);
       expect(renderedContents).toBe("cached");
@@ -248,9 +246,13 @@ describe("project query refresh", () => {
       await flushEffects();
       expect(reads).toBe(1);
       render("mutation-1");
+      await vi.waitFor(() => expect(requests).toHaveLength(2));
+      requests.at(-1)!.resolve({ ...file(""), revision: "1", metadataOnly: true });
+      await vi.waitFor(() => expect(registry.get(metadataAtom).waiting).toBe(false));
+      await flushEffects();
       expect(renderedContents).toBe("cached");
       render("mutation-2");
-      await vi.waitFor(() => expect(requests).toHaveLength(2));
+      await vi.waitFor(() => expect(requests).toHaveLength(3));
       requests.at(-1)!.resolve({ ...file(""), revision: "2", metadataOnly: true });
       await vi.waitFor(() => expect(reads).toBe(2));
       render("mutation-2");
@@ -369,6 +371,125 @@ describe("project query refresh", () => {
       resetAppAtomRegistryForTests();
     }
   });
+
+  it("detects missed watcher changes with cached reads, and stops validation for hidden or dirty tabs", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    let snapshot = { ...file("before"), revision: "disk-1" };
+    let reads = 0;
+    let checks = 0;
+    const readAtom = Atom.make(
+      Effect.sync(() => {
+        reads++;
+        return snapshot;
+      }),
+    ).pipe(Atom.swr({ staleTime: Infinity, revalidateOnMount: true }), Atom.setIdleTTL(0));
+    const metadataAtom = Atom.make(
+      Effect.sync(() => {
+        checks++;
+        return { ...snapshot, contents: "", metadataOnly: true };
+      }),
+    ).pipe(Atom.swr({ staleTime: Infinity, revalidateOnMount: true }), Atom.setIdleTTL(0));
+    const watchAtom = Atom.make(
+      AsyncResult.success({ relativePath: "src/preview.ts", revision: 0 }),
+    );
+    const optimisticAtom = Atom.make(null);
+    const registry = appAtomRegistry;
+    const release = [readAtom, watchAtom, optimisticAtom].map((atom) => registry.mount(atom));
+    projectMocks.readFile.mockImplementation(({ input }) =>
+      input.metadataOnly ? metadataAtom : readAtom,
+    );
+    projectMocks.optimisticFile.mockReturnValue(optimisticAtom);
+    projectMocks.watchFile.mockReturnValue(watchAtom);
+    atomHooks.registry = registry;
+    const render = (active = true, dirty = false) => {
+      reactHooks.beginRender();
+      return useProjectFileQuery(
+        environmentId,
+        "/repo",
+        "src/preview.ts",
+        true,
+        true,
+        dirty,
+        active,
+      );
+    };
+    try {
+      render();
+      await vi.waitFor(() => expect(checks).toBeGreaterThan(0));
+      const original = render().data;
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(reads).toBe(1);
+      expect(render().data).toBe(original);
+      // Same length; no watch event and no agent/workspace signal.
+      snapshot = { ...file("after!"), revision: "disk-2" };
+      await vi.advanceTimersByTimeAsync(2000);
+      await vi.waitFor(() => expect(reads).toBe(2));
+      expect(render().data?.contents).toBe("after!");
+      render(false);
+      const hiddenChecks = checks;
+      snapshot = { ...file("third!"), revision: "disk-3" };
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(checks).toBe(hiddenChecks);
+      render();
+      await vi.waitFor(() => expect(reads).toBe(3));
+      expect(render().data?.contents).toBe("third!");
+      render(true, true);
+      const dirtyChecks = checks;
+      snapshot = { ...file("fourth"), revision: "disk-4" };
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(checks).toBe(dirtyChecks);
+      expect(reads).toBe(3);
+      render();
+      await vi.waitFor(() => expect(reads).toBe(4));
+      expect(render().data?.contents).toBe("fourth");
+    } finally {
+      reactHooks.reset();
+      release.forEach((unmount) => unmount());
+      atomHooks.registry = null;
+      resetAppAtomRegistryForTests();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["preview.png", "preview.pdf"])(
+    "refreshes %s metadata without reading binary contents",
+    async (relativePath) => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      let revision = "disk-1";
+      const metadataAtom = Atom.make(
+        Effect.sync(() => ({ ...file(""), relativePath, revision, metadataOnly: true })),
+      ).pipe(Atom.swr({ staleTime: Infinity, revalidateOnMount: true }));
+      const watchAtom = Atom.make(AsyncResult.success({ relativePath, revision: 0 }));
+      const optimisticAtom = Atom.make(null);
+      const registry = appAtomRegistry;
+      const release = [metadataAtom, watchAtom, optimisticAtom].map((atom) => registry.mount(atom));
+      projectMocks.readFile.mockImplementation(({ input }) => {
+        expect(input.metadataOnly).toBe(true);
+        return metadataAtom;
+      });
+      projectMocks.optimisticFile.mockReturnValue(optimisticAtom);
+      projectMocks.watchFile.mockReturnValue(watchAtom);
+      atomHooks.registry = registry;
+      const render = () => {
+        reactHooks.beginRender();
+        return useProjectFileQuery(environmentId, "/repo", relativePath, true, true);
+      };
+      try {
+        render();
+        await flushEffects();
+        revision = "disk-2";
+        await vi.advanceTimersByTimeAsync(2000);
+        await vi.waitFor(() => expect(render().data?.revision).toBe("disk-2"));
+        expect(render().data?.contents).toBe("");
+      } finally {
+        reactHooks.reset();
+        release.forEach((unmount) => unmount());
+        atomHooks.registry = null;
+        resetAppAtomRegistryForTests();
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it("ignores an outstanding disk check when the editor becomes dirty", async () => {
     let reads = 0;

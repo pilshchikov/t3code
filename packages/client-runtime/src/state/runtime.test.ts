@@ -83,6 +83,7 @@ const makeEnvironmentQueryHarness = Effect.fn("TestEnvironmentQuery.makeHarness"
   execute: Effect.Effect<A, E>,
   options: {
     readonly retainPreviousData?: boolean;
+    readonly staleTimeMs?: number;
     readonly refreshSignal?: Atom.Atom<unknown>;
     readonly refreshTrigger?: Atom.Atom<unknown>;
     readonly idleTtlMs?: number;
@@ -116,7 +117,7 @@ const makeEnvironmentQueryHarness = Effect.fn("TestEnvironmentQuery.makeHarness"
   );
   const family = createEnvironmentQueryAtomFamily(runtime, {
     label: "test.environment-query",
-    staleTimeMs: 60_000,
+    staleTimeMs: options.staleTimeMs ?? 60_000,
     ...(options?.refreshSignal === undefined
       ? {}
       : { refreshTrigger: () => options.refreshSignal! }),
@@ -817,6 +818,42 @@ describe("Atom.fn mutation semantics", () => {
 });
 
 describe("executeAtomQuery", () => {
+  it.effect("forces a fresh result through an infinitely cached environment query", () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      let reads = 0;
+      const harness = yield* makeEnvironmentQueryHarness(
+        Effect.suspend(() => {
+          reads++;
+          return reads === 1
+            ? Effect.succeed("old disk contents")
+            : Deferred.succeed(started, undefined).pipe(
+                Effect.andThen(Deferred.await(release)),
+                Effect.as("new disk contents"),
+              );
+        }),
+        { staleTimeMs: Infinity },
+      );
+      const registry = yield* mountEnvironmentQuery(harness.atom);
+      expect(yield* Effect.promise(() => executeAtomQuery(registry, harness.atom))).toMatchObject({
+        _tag: "Success",
+        value: "old disk contents",
+      });
+      const refresh = yield* Effect.promise(() =>
+        executeAtomQuery(registry, harness.atom, { refresh: true }),
+      ).pipe(Effect.forkChild);
+      yield* Deferred.await(started);
+      expect(refresh.pollUnsafe()).toBeUndefined();
+      yield* Deferred.succeed(release, undefined);
+      expect(yield* Fiber.join(refresh)).toMatchObject({
+        _tag: "Success",
+        value: "new disk contents",
+      });
+      expect(reads).toBe(2);
+    }),
+  );
+
   it("keeps concurrent query results correlated to their atoms", async () => {
     const firstLatch = Latch.makeUnsafe();
     const secondLatch = Latch.makeUnsafe();

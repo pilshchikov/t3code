@@ -11,11 +11,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { useCallback, useEffect, useRef } from "react";
-import {
-  isWorkspaceAudioPreviewPath,
-  isWorkspaceImagePreviewPath,
-  isWorkspaceVideoPreviewPath,
-} from "@t3tools/shared/filePreview";
+import { filePreviewKind } from "@t3tools/shared/filePreview";
 
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { projectEnvironment } from "~/state/projects";
@@ -23,6 +19,7 @@ import { useProjectPathSearch } from "~/state/queries";
 import { executeAtomQuery } from "@t3tools/client-runtime/state/runtime";
 
 const EMPTY_PROJECT_FILE_PATH = "";
+const FILE_REVISION_CHECK_INTERVAL_MS = 2000;
 const EMPTY_PROJECT_FILE_QUERY_ATOM = Atom.make(
   AsyncResult.initial<ProjectReadFileResult, never>(false),
 ).pipe(Atom.withLabel("project-file-query:empty"));
@@ -279,14 +276,11 @@ export function useProjectFileQuery(
   preserveOptimistic = false,
   active = true,
 ): ProjectFileQueryState {
-  const isMedia =
-    relativePath !== null &&
-    (isWorkspaceImagePreviewPath(relativePath) ||
-      isWorkspaceVideoPreviewPath(relativePath) ||
-      isWorkspaceAudioPreviewPath(relativePath));
+  const kind = relativePath === null ? null : filePreviewKind({ name: relativePath });
+  const metadataOnly = kind === "image" || kind === "video" || kind === "audio" || kind === "pdf";
   const atom =
     enabled && relativePath !== null
-      ? isMedia
+      ? metadataOnly
         ? projectEnvironment.readFile({
             environmentId,
             input: { cwd, relativePath, metadataOnly: true },
@@ -294,7 +288,8 @@ export function useProjectFileQuery(
         : getProjectFileQueryAtom(environmentId, cwd, relativePath)
       : EMPTY_PROJECT_FILE_QUERY_ATOM;
   const result = useAtomValue(atom);
-  const shouldWatch = enabled && watch && active && relativePath !== null && !isMedia;
+  const shouldValidate = enabled && active && relativePath !== null;
+  const shouldWatch = shouldValidate && watch;
   const watchAtom = shouldWatch
     ? projectEnvironment.watchFile({
         environmentId,
@@ -303,7 +298,7 @@ export function useProjectFileQuery(
     : EMPTY_PROJECT_FILE_WATCH_ATOM;
   const watchResult = useAtomValue(watchAtom);
   const watchRevision = AsyncResult.isSuccess(watchResult) ? watchResult.value.revision : null;
-  const targetKey = shouldWatch ? `${environmentId}\u0000${cwd}\u0000${relativePath}` : null;
+  const targetKey = shouldValidate ? `${environmentId}\u0000${cwd}\u0000${relativePath}` : null;
   const checkState = useRef({ generation: 0, running: false, again: false });
   useEffect(() => {
     const state = checkState.current;
@@ -314,7 +309,7 @@ export function useProjectFileQuery(
     };
   }, [atom, targetKey, preserveOptimistic]);
   const refresh = useCallback(() => {
-    if (!enabled || isMedia || relativePath === null || !active || preserveOptimistic) return;
+    if (!enabled || relativePath === null || !active || preserveOptimistic) return;
     const state = checkState.current;
     if (state.running) {
       state.again = true;
@@ -362,10 +357,27 @@ export function useProjectFileQuery(
         if (state.generation === generation) state.running = false;
       }
     })();
-  }, [active, atom, cwd, enabled, environmentId, isMedia, preserveOptimistic, relativePath]);
+  }, [active, atom, cwd, enabled, environmentId, preserveOptimistic, relativePath]);
   useEffect(() => {
-    if (shouldWatch) refresh();
-  }, [refresh, shouldWatch, watchRevision]);
+    if (shouldValidate) refresh();
+  }, [refresh, shouldValidate, watchRevision]);
+  useEffect(() => {
+    if (!shouldValidate || preserveOptimistic) return;
+    // Host watcher events are best effort (reconnects/atomic replacements can
+    // lose them). Check only disk metadata while visible; unchanged files keep
+    // their cached object and never retransmit contents or reset the editor.
+    const validateVisibleFile = () => {
+      if (typeof document === "undefined" || document.visibilityState !== "hidden") refresh();
+    };
+    const interval = setInterval(validateVisibleFile, FILE_REVISION_CHECK_INTERVAL_MS);
+    if (typeof document !== "undefined")
+      document.addEventListener("visibilitychange", validateVisibleFile);
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== "undefined")
+        document.removeEventListener("visibilitychange", validateVisibleFile);
+    };
+  }, [preserveOptimistic, refresh, shouldValidate]);
   useEffect(() => {
     if (targetKey === null || typeof window === "undefined") return;
     window.addEventListener("focus", refresh);

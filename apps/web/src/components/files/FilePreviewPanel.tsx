@@ -1600,7 +1600,7 @@ export default function FilePreviewPanel({
           threadRef={threadRef}
           absolutePath={absolutePath}
           name={relativePath}
-          workspaceMutationId={workspaceMutationId}
+          workspaceMutationId={file.data?.revision ?? workspaceMutationId}
         />
       ) : relativePath && isVideo && absolutePath ? (
         <WorkspaceVideoPreview
@@ -1610,7 +1610,7 @@ export default function FilePreviewPanel({
           absolutePath={absolutePath}
           workspaceRoot={activeCwd}
           name={relativePath}
-          workspaceMutationId={workspaceMutationId}
+          workspaceMutationId={file.data?.revision ?? workspaceMutationId}
         />
       ) : relativePath && isImage && absolutePath ? (
         <WorkspaceImagePreview
@@ -1620,7 +1620,7 @@ export default function FilePreviewPanel({
           absolutePath={absolutePath}
           workspaceRoot={activeCwd}
           alt={relativePath}
-          workspaceMutationId={workspaceMutationId}
+          workspaceMutationId={file.data?.revision ?? workspaceMutationId}
         />
       ) : relativePath && !isMedia && renderBrowserFile && absolutePath ? (
         <WorkspaceBrowserPreview
@@ -1630,7 +1630,7 @@ export default function FilePreviewPanel({
           absolutePath={absolutePath}
           workspaceRoot={activeCwd}
           title={relativePath}
-          workspaceMutationId={workspaceMutationId}
+          workspaceMutationId={file.data?.revision ?? workspaceMutationId}
         />
       ) : relativePath && file.error && file.data === null ? (
         <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-xs leading-relaxed text-destructive">

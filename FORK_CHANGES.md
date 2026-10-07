@@ -4,6 +4,31 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## File freshness recovery and fork integration audit, October 6
+
+- Visible file previews validate their disk revision every two seconds as a fallback for missed
+  filesystem events. Activation, focus, visibility restoration, watcher events and workspace
+  mutations also validate. Unchanged text keeps its cached object and editor state; only changed
+  disk revisions trigger full reads. Hidden tabs/windows do not poll, and pending local edits
+  suspend checks; stale in-flight responses cannot overwrite a newly dirty or switched file.
+  Open validation no longer depends on enabling a watcher (`projectFilesQueryState.ts`).
+- Images/audio/video/PDF use metadata-only checks and watchers; asset URLs follow the file's disk
+  revision instead of depending on an agent/VCS mutation. This avoids retransferring binary data
+  merely to check freshness (`FilePreviewPanel.tsx`). Git diff invalidation keeps its own workspace
+  mutation identity. Watcher-only freshness was not sufficient protection for an infinite cache.
+- Regression coverage exercises the infinite cache policy, same-size external changes with no
+  watcher event, unchanged-object retention, reactivation, dirty-editor protection, binary metadata,
+  the actual environment query refresh pipeline, and real filesystem reads/atomic replacement.
+  Passed 373 focused tests across 17 files, web/client-runtime typechecks and scoped lint (existing
+  preview React/style warnings). No installed-app/browser/device verification, rebuild, reinstall,
+  restart, push, or manual live-userdata changes.
+- Audited live fork callers for orb style/colors, mobile expansion, scroll recovery/live following,
+  custom chat width, project rail/status dots, per-repository Files selectors and collapse/resize
+  storage, shortcuts and multi-root links, CLI resume, preparation busy guards, memory/workspace MCP,
+  compaction/current-context usage, Claude worker effort, account usage, Never-default settlement,
+  and disabled external telemetry. These remain connected. Future merges must preserve revision
+  fallback checks as well as cache settings; mocked uncached query tests alone miss this failure mode.
+
 ## Background work remains visibly working, October 6
 
 - Thread status and the shared Working-group classifier now include all pending background
