@@ -1,5 +1,22 @@
 # Fork Changes
 
+## Upstream follow-up integration — 2026-10-07
+
+- Merged five additional upstream commits through `0678e4e23d8675ef88f9ac08e1ae90cfe7d6ef2e`
+  from fork parent `a4d289101c`. Preserved fork ancestry, disabled tracking, composer/orbs,
+  scrolling, Files freshness/root handling, workspace tools, compaction and project settings.
+- Combined overlapping Haiku additions into one model entry, adopting upstream's CLI
+  minimum `2.1.293` and ultrathink prompt injection while retaining the fork's thinking toggle
+  and medium effort default. Adopted upstream fixed 1M context for Claude 5 profiles;
+  existing 5.0 model IDs remain accessible as legacy. Kept GPT-6.1 Sol support.
+- Integrated desktop CLI installation/settings and installed-launcher setup commands,
+  plus Duo hinge/fold/orientation improvements. The CLI shim stays local; it does not
+  enable telemetry, update checking or analytics.
+- Validation: four scoped typechecks (server/web/desktop/client-runtime), changed-source
+  lint and `git diff --check`. 85 targeted model/CLI/Duo regression tests passed with canonical
+  macOS temporary directory (`TMPDIR=/private/tmp`) to avoid `/var` symlink expectation
+  mismatches. Packaging/reinstall/restart requested separately after this merge.
+
 ## Daily upstream integration — 2026-10-07
 
 - Merge target: `f570bd21663f56ce94c41829d3b7d72886e25a34` (82 upstream commits
