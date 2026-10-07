@@ -89,6 +89,7 @@ const Migration0041Combined = Migration0041.pipe(
 );
 import Migration0062 from "./Migrations/057_ScheduledTaskWebhooks.ts";
 import Migration0063 from "./Migrations/058_WebhookRelayDeliveries.ts";
+import Migration0064 from "./Migrations/059_McpAppModelContext.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -164,6 +165,7 @@ export const migrationEntries = [
   [61, "ForkWorkspaceCompatibility", Migration0061],
   [62, "ScheduledTaskWebhooks", Migration0062],
   [63, "WebhookRelayDeliveries", Migration0063],
+  [64, "McpAppModelContext", Migration0064],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

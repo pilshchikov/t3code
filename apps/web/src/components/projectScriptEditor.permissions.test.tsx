@@ -61,6 +61,7 @@ const request: ProjectScriptEditorRequest = {
   initial: {
     name: "Test",
     command: "vp test",
+    workingDirectory: null,
     icon: "test",
     runOnWorktreeCreate: false,
     waitForSetup: false,

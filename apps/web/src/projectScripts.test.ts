@@ -156,6 +156,7 @@ describe("projectScripts helpers", () => {
       id: "both",
       name: "Both",
       command: "true",
+      workingDirectory: undefined,
       icon: "play" as const,
       runOnWorktreeCreate: true,
     };
@@ -170,6 +171,7 @@ describe("projectScripts helpers", () => {
     const input = {
       name: "Next",
       command: "true",
+      workingDirectory: null,
       icon: "play",
       waitForSetup: false,
       previewUrl: null,
@@ -179,6 +181,7 @@ describe("projectScripts helpers", () => {
       id: "holder",
       name: "Holder",
       command: "true",
+      workingDirectory: undefined,
       icon: "play" as const,
       runOnWorktreeCreate: true,
       runOnSettle: true,

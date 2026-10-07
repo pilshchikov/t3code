@@ -358,7 +358,6 @@ it("transcript seeding attributes a sole-owner dir and skips shared or disabled 
     const soleDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-seed-sole-"));
     const sharedDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-seed-shared-"));
     const disabledDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-seed-disabled-"));
-    // @effect-diagnostics-next-line preferSchemaOverJson:off - fabricates one raw transcript line.
     const line = JSON.stringify({
       timestamp: "2026-08-15T10:00:00.000Z",
       payload: { rate_limits: codexPayload(37) },
@@ -427,7 +426,6 @@ it("an unconfirmed migrated row keeps its v1 shape across restarts - the ghost e
     // A v1 cache: one claude row, no instanceId.
     NodeFS.writeFileSync(
       cachePath,
-      // @effect-diagnostics-next-line preferSchemaOverJson:off - fabricates the raw cache file.
       JSON.stringify([
         {
           provider: "claude",
@@ -469,7 +467,6 @@ it("an unconfirmed migrated row keeps its v1 shape across restarts - the ghost e
           providerInstanceId: asInstanceId("codex"),
         });
       }).pipe(Effect.provide(makeLayerAt(baseDir, roster)));
-      // @effect-diagnostics-next-line preferSchemaOverJson:off - reads the raw cache file back.
       const persisted = JSON.parse(NodeFS.readFileSync(cachePath, "utf8")) as {
         provider: string;
         instanceId?: string;
@@ -513,7 +510,6 @@ it("evicts a row whose instance now runs a different driver", () =>
     // driver's display name.
     NodeFS.writeFileSync(
       NodePath.join(baseDir, "userdata", "account-limits.json"),
-      // @effect-diagnostics-next-line preferSchemaOverJson:off - fabricates the raw cache file.
       JSON.stringify([
         {
           provider: "codex",
@@ -564,7 +560,6 @@ it("seeds a codex instance homed by its environment's CODEX_HOME", () =>
     NodeFS.mkdirSync(NodePath.join(envHome, "sessions"), { recursive: true });
     NodeFS.writeFileSync(
       NodePath.join(envHome, "sessions", "rollout-1.jsonl"),
-      // @effect-diagnostics-next-line preferSchemaOverJson:off - fabricates one raw transcript line.
       `${JSON.stringify({
         timestamp: "2026-08-15T10:00:00.000Z",
         payload: { rate_limits: codexPayload(29) },

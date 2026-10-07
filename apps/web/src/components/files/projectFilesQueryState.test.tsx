@@ -266,6 +266,7 @@ describe("project query refresh", () => {
       Atom.make(AsyncResult.success(projectEntries(["t3.json"]))),
     );
     projectMocks.optimisticFile.mockReturnValue(Atom.make(null));
+    projectMocks.watchEntries.mockReturnValue(Atom.make(AsyncResult.success({ revision: 0 })));
     try {
       expect(useProjectFileQuery(environmentId, "/repo", "t3.json")).toMatchObject({
         data: null,

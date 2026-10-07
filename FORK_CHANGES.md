@@ -2,9 +2,10 @@
 
 ## Daily upstream integration — 2026-10-07
 
-- Merge target: `611132c171f3a821bd2e32f22261135cef6330ac`; fork parent:
-  `4bbe768de0aa28a71b7114b51e8583024d43c021`. This work uses a real merge and
-  preserves the fork ancestry. Validation is still pending; this entry does not claim readiness.
+- Merge target: `f570bd21663f56ce94c41829d3b7d72886e25a34` (82 upstream commits
+  since `9bd1d8009a`); fork parent: `4bbe768de0aa28a71b7114b51e8583024d43c021`.
+  Completed the saved daily integration through `611132c171`, then merged the latest
+  upstream tip, preserving both fork and upstream ancestry.
 - Integrated upstream filesystem/source-control/diagnostic grants with the fork's file editing,
   fetch/index/commit RPCs and multi-repository selectors. The file query retains selected-panel
   watcher/10-second metadata validation and dirty-editor protection, while honoring read grants
@@ -36,11 +37,28 @@
   and the mounted automatic-compaction worker/settings/project overrides remain connected.
   Multiwork and older usage/sync components remain intentionally retired/superseded as recorded
   below. Welcome and telemetry guidance now describe the fork's disabled external analytics.
-- Frozen dependency installation completed after verifying/recovering the missing Darwin arm64
-  Effect compiler archive against the lockfile integrity. Resolved-file formatting and
-  `git diff --check` passed. Scoped typechecks and changed-source lint are pending.
-  No tests were added or run; no app build, UI/browser verification, packaging, app/process
-  lifecycle operation, live-userdata write, push, PR, subagent, or other-worktree change.
+- Added Claude Haiku 5.5 to the shared model manifest: `claude-haiku-5-5`, the
+  `haiku` alias, fixed 1M context, thinking toggle and low/medium/high/xhigh/max
+  effort with medium default. Explicit Haiku 4.5 aliases remain available for old sessions.
+  Verified against [Anthropic's model documentation](https://platform.claude.com/docs/en/models/haiku-5-5/overview)
+  and [effort documentation](https://platform.claude.com/docs/en/build-with-claude/effort).
+  Actual catalog resolution of alias, API ID, context and effort passed; synthetic catalog
+  tests stay independent of mutable model names. No provider turn or CLI update was performed.
+- Kept existing fork migration IDs unchanged; new upstream MCP app context migration is
+  registered as ID 64. Shared exports retain both `threadWorkspaces` and `mcpApp`.
+  Added instrumentation labels for all fork RPCs. Bounded handler registration inference
+  into two layers while retaining one complete wire protocol, authorization and instrumentation.
+  Updated Files permission fixtures and workspace MCP test harnesses for returned tool failures;
+  rejection and absence-of-mutation assertions remain intact. Removed stale Effect diagnostics
+  suppressions made redundant by upstream's test configuration.
+- Validation: frozen dependency installation; seven scoped typechecks (server, web, mobile,
+  desktop, contracts, shared, client-runtime); changed-source lint (804 files, zero errors,
+  existing warnings remain); `git diff --check`; final targeted regression run: 24 files,
+  424 tests passed. Includes Files roots/cache/watch/grants, scrolling, keyboard shortcuts,
+  project rail, scripts, model catalog/manifest, compaction, memory/privacy, workspace MCP,
+  cleanup, usage collection and WebSocket instrumentation. Earlier migration compatibility,
+  orb and worktree selector checks also passed. No app build, UI/browser verification,
+  packaging, app restart/reinstall, live-userdata write, push or PR.
 
 This file tracks intentional fork-local changes in `pilshchikov/t3code` that may differ from the
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing

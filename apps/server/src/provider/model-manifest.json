@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-10-02T19:45:00Z",
+  "updatedAt": "2026-10-07T18:42:40Z",
   "compatibility": [
     {
       "driver": "codex",
@@ -96,7 +96,13 @@
       "gpt-daybreak-blue-latest",
       "gpt-daybreak-red-latest"
     ],
-    "claudeAgent": ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-sonnet-5"],
+    "claudeAgent": [
+      "claude-fable-5-1",
+      "claude-opus-5-5",
+      "claude-sonnet-5-5",
+      "claude-haiku-5-5",
+      "claude-sonnet-5"
+    ],
     "antigravity": ["gemini-3.8-flash-high", "gemini-3.8-flash-medium", "gemini-3.8-flash-low"]
   },
   "providers": {
@@ -666,6 +672,50 @@
             }
           }
         },
+        "haiku-5-5": {
+          "capabilities": {
+            "optionDescriptors": [
+              {
+                "id": "effort",
+                "label": "Reasoning",
+                "type": "select",
+                "options": [
+                  {
+                    "id": "low",
+                    "label": "Low"
+                  },
+                  {
+                    "id": "medium",
+                    "label": "Medium",
+                    "isDefault": true
+                  },
+                  {
+                    "id": "high",
+                    "label": "High"
+                  },
+                  {
+                    "id": "xhigh",
+                    "label": "Extra High"
+                  },
+                  {
+                    "id": "max",
+                    "label": "Max"
+                  }
+                ]
+              },
+              {
+                "id": "thinking",
+                "label": "Thinking",
+                "type": "boolean"
+              }
+            ]
+          },
+          "adapter": {
+            "claudeCode": {
+              "fixedContextWindowTokens": 1000000
+            }
+          }
+        },
         "haiku-4-5": {
           "capabilities": {
             "optionDescriptors": [
@@ -699,6 +749,14 @@
           "badge": "new",
           "profile": "sonnet-5",
           "adapter": { "claudeCode": { "minVersion": "2.1.284" } }
+        },
+        {
+          "slug": "claude-haiku-5-5",
+          "name": "Claude Haiku 5.5",
+          "aliases": ["haiku", "haiku-5.5", "claude-haiku-5.5"],
+          "status": "current",
+          "profile": "haiku-5-5",
+          "badge": "new"
         },
         {
           "slug": "claude-fable-5-1",
@@ -789,7 +847,7 @@
         {
           "slug": "claude-haiku-4-5",
           "name": "Claude Haiku 4.5",
-          "aliases": ["haiku", "haiku-4.5", "claude-haiku-4.5", "claude-haiku-4-5-20251001"],
+          "aliases": ["haiku-4.5", "claude-haiku-4.5", "claude-haiku-4-5-20251001"],
           "status": "legacy",
           "profile": "haiku-4-5"
         }

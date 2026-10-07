@@ -1,9 +1,15 @@
+import { MiddleTruncate } from "../ui/middle-truncate";
+import {
+  PULL_REQUEST_ROW_CLASS,
+  PULL_REQUEST_ROW_NUMBER_CLASS,
+  PullRequestRowGlyph,
+  PullRequestRowLines,
+  PullRequestRowAuthor,
+  PullRequestRowBranches,
+} from "./PullRequestListRow";
 import type { ProjectId, ScopedThreadRef, ThreadPullRequestLink } from "@t3tools/contracts";
 import { detectSourceControlProviderFromRemoteUrl } from "@t3tools/shared/sourceControl";
-import {
-  resolveThreadPullRequestChains,
-  visibleThreadPullRequests,
-} from "@t3tools/shared/threadPullRequests";
+import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 import {
   ArrowUpRightIcon,
   EyeIcon,
@@ -31,11 +37,8 @@ import { openLinkPullRequestDialog } from "./LinkPullRequestDialog";
 import { type PullRequestListLine } from "./pullRequestListLines";
 import { threadPullRequestsOverview } from "./threadPullRequestsOverview";
 import {
-  PullRequestActorAvatar,
-  PullRequestConflictGlyph,
   PullRequestDiffStat,
   PullRequestReviewDecisionGlyph,
-  PullRequestStateGlyph,
   pullRequestChecksStatePresentation,
 } from "./pullRequestPresentation";
 import { PullRequestGlyph } from "./pullRequestIcons";

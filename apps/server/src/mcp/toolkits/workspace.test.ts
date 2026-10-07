@@ -226,9 +226,12 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
     toolkit.handle(name, input).pipe(
       Stream.unwrap,
       Stream.runCollect,
-      Effect.map(
-        (chunk) => chunk.at(-1)!.result as Tool.Success<(typeof WorkspaceToolkit.tools)[Name]>,
-      ),
+      Effect.flatMap((chunk) => {
+        const output = chunk.at(-1)!;
+        return output.isFailure
+          ? Effect.fail(output.result as Tool.Failure<(typeof WorkspaceToolkit.tools)[Name]>)
+          : Effect.succeed(output.result as Tool.Success<(typeof WorkspaceToolkit.tools)[Name]>);
+      }),
       Effect.provideService(McpInvocationContext, {
         environmentId: scope.environmentId,
         issuedAt: scope.issuedAt,

@@ -410,6 +410,10 @@
     "./threadWorkspaces": {
       "types": "./src/threadWorkspaces.ts",
       "import": "./src/threadWorkspaces.ts"
+    },
+    "./mcpApp": {
+      "types": "./src/mcpApp.ts",
+      "import": "./src/mcpApp.ts"
     }
   },
   "scripts": {

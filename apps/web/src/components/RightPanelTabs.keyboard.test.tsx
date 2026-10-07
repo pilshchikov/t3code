@@ -81,6 +81,8 @@ async function renderPanel(overrides: Partial<ComponentProps<typeof RightPanelTa
         onAddTerminal={noop}
         onAddDiff={noop}
         onAddFiles={addFiles}
+        onAddGitHistory={noop}
+        gitHistoryAvailable={false}
         onAddPullRequest={noop}
         onAddPullRequests={noop}
         onAddDevice={noop}
