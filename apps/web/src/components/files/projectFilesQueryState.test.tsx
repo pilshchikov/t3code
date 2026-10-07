@@ -417,18 +417,22 @@ describe("project query refresh", () => {
       render();
       await vi.waitFor(() => expect(checks).toBeGreaterThan(0));
       const original = render().data;
+      const initialChecks = checks;
       await vi.advanceTimersByTimeAsync(2000);
+      expect(checks).toBe(initialChecks);
+      await vi.advanceTimersByTimeAsync(8000);
       expect(reads).toBe(1);
       expect(render().data).toBe(original);
       // Same length; no watch event and no agent/workspace signal.
       snapshot = { ...file("after!"), revision: "disk-2" };
-      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(10_000);
       await vi.waitFor(() => expect(reads).toBe(2));
       expect(render().data?.contents).toBe("after!");
       render(false);
+      expect(vi.getTimerCount()).toBe(0);
       const hiddenChecks = checks;
       snapshot = { ...file("third!"), revision: "disk-3" };
-      await vi.advanceTimersByTimeAsync(4000);
+      await vi.advanceTimersByTimeAsync(20_000);
       expect(checks).toBe(hiddenChecks);
       render();
       await vi.waitFor(() => expect(reads).toBe(3));
@@ -436,7 +440,7 @@ describe("project query refresh", () => {
       render(true, true);
       const dirtyChecks = checks;
       snapshot = { ...file("fourth"), revision: "disk-4" };
-      await vi.advanceTimersByTimeAsync(4000);
+      await vi.advanceTimersByTimeAsync(20_000);
       expect(checks).toBe(dirtyChecks);
       expect(reads).toBe(3);
       render();
@@ -478,7 +482,7 @@ describe("project query refresh", () => {
         render();
         await flushEffects();
         revision = "disk-2";
-        await vi.advanceTimersByTimeAsync(2000);
+        await vi.advanceTimersByTimeAsync(10_000);
         await vi.waitFor(() => expect(render().data?.revision).toBe("disk-2"));
         expect(render().data?.contents).toBe("");
       } finally {

@@ -51,6 +51,8 @@ export interface MarkdownFileLinkMeta {
   targetPath: string;
   displayPath: string;
   workspaceRelativePath: string | null;
+  /** Explicit absolute references must not be reinterpreted as project-directory aliases. */
+  absoluteReference?: boolean;
   basename: string;
   line?: number;
   column?: number;
@@ -566,7 +568,17 @@ export function resolveMarkdownFileLinkMeta(
   const { baseDir, workspaceRoot } = resolveMarkdownLinkDirectories(cwd, alternateDirectory);
   const targetPath = resolveMarkdownFileLinkTarget(href, cwd, baseDir);
   if (!targetPath) return null;
-  return buildFileLinkMetaFromTarget(targetPath, workspaceRoot);
+  const meta = buildFileLinkMetaFromTarget(targetPath, workspaceRoot);
+  const source = safeDecode(normalizeMarkdownLinkDestination(href ?? ""));
+  if (
+    source.startsWith("/") ||
+    WINDOWS_DRIVE_PATH_PATTERN.test(source) ||
+    WINDOWS_UNC_PATH_PATTERN.test(source) ||
+    /^file:/i.test(source)
+  ) {
+    meta.absoluteReference = true;
+  }
+  return meta;
 }
 
 function buildFileLinkMetaFromTarget(

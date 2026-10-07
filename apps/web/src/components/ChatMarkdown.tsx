@@ -2611,7 +2611,7 @@ function useChatMarkdownState({
       if (parseComposerContextHref(href)) continue;
       const normalizedHref = normalizeMarkdownLinkHrefKey(href);
       if (metaByHref.has(normalizedHref)) continue;
-      const meta = resolveMarkdownFileLinkMeta(normalizedHref, cwd, workspaceRoot);
+      const meta = resolveMarkdownFileLinkMeta(normalizedHref, workspaceRoot ?? cwd, cwd);
       if (meta) {
         metaByHref.set(normalizedHref, meta);
       }
@@ -2622,7 +2622,7 @@ function useChatMarkdownState({
     const metaByText = new Map<string, MarkdownFileLinkMeta>();
     for (const span of extractInlineCodeSpans(text)) {
       if (metaByText.has(span)) continue;
-      const meta = resolveInlineCodeFileLinkMeta(span, cwd, workspaceRoot);
+      const meta = resolveInlineCodeFileLinkMeta(span, workspaceRoot ?? cwd, cwd);
       if (meta) {
         metaByText.set(span, meta);
       }
@@ -2878,10 +2878,12 @@ function useChatMarkdownState({
         mediaMimeTypeFromExtension(
           fileLinkMeta.basename.slice(fileLinkMeta.basename.lastIndexOf(".")),
         ) !== null;
-      // Media outside the workspace keeps the expanded preview; other host
-      // files (a report in a temp dir) open read-only in the files panel.
+      // Explicit absolute links retain their host target in the file panel.
+      // Other external media references may use the expanded media preview.
       const panelPath =
-        fileLinkMeta.workspaceRelativePath ??
+        (fileLinkMeta.absoluteReference
+          ? fileLinkMeta.filePath
+          : fileLinkMeta.workspaceRelativePath) ??
         (!canPreviewMedia && isAbsolutePath(fileLinkMeta.filePath) ? fileLinkMeta.filePath : null);
 
       return (
@@ -3158,7 +3160,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
     const normalizedHref = href ? normalizeMarkdownLinkHrefKey(href) : "";
     const fileLinkMeta = normalizedHref
       ? (markdownFileLinkMetaByHref.get(normalizedHref) ??
-        resolveMarkdownFileLinkMeta(normalizedHref, cwd, workspaceRoot ?? cwd))
+        resolveMarkdownFileLinkMeta(normalizedHref, workspaceRoot ?? cwd, cwd))
       : null;
     if (!fileLinkMeta) {
       const faviconHost = resolveExternalWebLinkHost(href);
@@ -3379,7 +3381,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
       const codeText = nodeToPlainText(children);
       const fileLinkMeta =
         inlineCodeFileLinkMetaByText.get(codeText.trim()) ??
-        resolveInlineCodeFileLinkMeta(codeText, cwd, workspaceRoot ?? cwd);
+        resolveInlineCodeFileLinkMeta(codeText, workspaceRoot ?? cwd, cwd);
       if (fileLinkMeta) {
         return fileLinkChip(
           fileLinkMeta,

@@ -19,7 +19,7 @@ import { useProjectPathSearch } from "~/state/queries";
 import { executeAtomQuery } from "@t3tools/client-runtime/state/runtime";
 
 const EMPTY_PROJECT_FILE_PATH = "";
-const FILE_REVISION_CHECK_INTERVAL_MS = 2000;
+const FILE_REVISION_CHECK_INTERVAL_MS = 10_000;
 const EMPTY_PROJECT_FILE_QUERY_ATOM = Atom.make(
   AsyncResult.initial<ProjectReadFileResult, never>(false),
 ).pipe(Atom.withLabel("project-file-query:empty"));
@@ -362,7 +362,7 @@ export function useProjectFileQuery(
     if (shouldValidate) refresh();
   }, [refresh, shouldValidate, watchRevision]);
   useEffect(() => {
-    if (!shouldValidate || preserveOptimistic) return;
+    if (!shouldWatch || preserveOptimistic) return;
     // Host watcher events are best effort (reconnects/atomic replacements can
     // lose them). Check only disk metadata while visible; unchanged files keep
     // their cached object and never retransmit contents or reset the editor.
@@ -377,7 +377,7 @@ export function useProjectFileQuery(
       if (typeof document !== "undefined")
         document.removeEventListener("visibilitychange", validateVisibleFile);
     };
-  }, [preserveOptimistic, refresh, shouldValidate]);
+  }, [preserveOptimistic, refresh, shouldWatch]);
   useEffect(() => {
     if (targetKey === null || typeof window === "undefined") return;
     window.addEventListener("focus", refresh);

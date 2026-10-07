@@ -1,10 +1,17 @@
 import { workspaceRelativeFilePath } from "@t3tools/client-runtime/markdown-links";
+import { resolveMarkdownFileLinkTarget } from "~/markdown-links";
 import { isAbsolutePath } from "~/terminal-links";
 
 /** Resolve workspace links before choosing between the explorer and a file preview. */
 export function resolveFilePreviewPath(path: string | null, cwd: string): string | null {
   if (path === null) return null;
-  return path === "." || workspaceRelativeFilePath(path, cwd) === "." ? null : path;
+  const target = /^(?:\.{1,2}[\\/]|~[\\/]|file:)/i.test(path)
+    ? (resolveMarkdownFileLinkTarget(path, cwd) ?? path)
+    : path;
+  if (target === "." || workspaceRelativeFilePath(target, cwd) === ".") return null;
+  return !isAbsolutePath(path) && isAbsolutePath(target)
+    ? (workspaceRelativeFilePath(target, cwd) ?? target)
+    : target;
 }
 
 export const isMarkdownPreviewFile = (path: string): boolean => /\.(?:md|mdx)$/i.test(path);

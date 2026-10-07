@@ -362,23 +362,23 @@ export const make = Effect.gen(function* () {
   const watchFile: WorkspaceFileSystem["Service"]["watchFile"] = (input) =>
     Stream.unwrap(
       Effect.gen(function* () {
-        const target = yield* workspacePaths.resolveRelativePathWithinRoot({
-          workspaceRoot: input.cwd,
-          relativePath: input.relativePath,
-        });
+        // Use the same read-only resolution as previews, including host files
+        // and other worktrees. Relative traversal remains workspace-bound.
+        const target = yield* resolveReadTarget(input);
 
         // Reuse the read path's canonical containment checks before opening a host watcher.
         // The initial event is emitted only after the watcher exists, closing the read/watch race
         // without polling or repeatedly transferring the whole file.
         yield* readFile({ ...input, metadataOnly: true });
-        const watchedDirectory = path.dirname(target.absolutePath);
-        const watchedFile = path.basename(target.absolutePath);
-        const watchedPath = path.resolve(target.absolutePath);
-        const changes = fileSystem.watch(watchedDirectory).pipe(
+        const watchedDirectory = path.dirname(target.realTargetPath);
+        const watchedFile = path.basename(target.realTargetPath);
+        const watchedPath = path.resolve(target.realTargetPath);
+        const pullChanges = yield* Stream.toPull(fileSystem.watch(watchedDirectory));
+        const changes = Stream.fromPull(Effect.succeed(pullChanges)).pipe(
           Stream.filter(
             (event) =>
               event.path === watchedFile ||
-              event.path === target.absolutePath ||
+              event.path === watchedPath ||
               path.resolve(watchedDirectory, event.path) === watchedPath,
           ),
           Stream.debounce(Duration.millis(50)),
@@ -394,7 +394,7 @@ export const make = Effect.gen(function* () {
               new WorkspaceFileSystemOperationError({
                 workspaceRoot: input.cwd,
                 relativePath: input.relativePath,
-                resolvedPath: target.absolutePath,
+                resolvedPath: watchedPath,
                 operationPath: watchedDirectory,
                 operation: "watch",
                 cause,

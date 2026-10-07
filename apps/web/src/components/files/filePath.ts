@@ -69,6 +69,12 @@ export function parentDirectoryPath(relativePath: string): string {
 }
 
 export function workspaceDocumentDirectory(workspaceRoot: string, relativePath: string): string {
+  if (isAbsolutePath(relativePath)) {
+    const separator = Math.max(relativePath.lastIndexOf("/"), relativePath.lastIndexOf("\\"));
+    if (separator === 0) return "/";
+    if (separator === 2 && /^[A-Za-z]:/.test(relativePath)) return relativePath.slice(0, 3);
+    return relativePath.slice(0, separator);
+  }
   const parent = parentDirectoryPath(relativePath);
   if (!parent) return workspaceRoot.replace(/[\\/]+$/, "") || workspaceRoot;
   const separator = workspaceRoot.includes("\\") && !workspaceRoot.includes("/") ? "\\" : "/";

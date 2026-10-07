@@ -7,6 +7,7 @@ import { FileWorktreeToolbar } from "./FileWorktreeToolbar";
 import { Spinner } from "~/components/ui/spinner";
 import { DIFF_SURFACE_THEME_UNSAFE_CSS } from "~/lib/diffRendering";
 import type {
+  AssetResource,
   EditorId,
   EnvironmentId,
   ProjectCodeSearchMatch,
@@ -202,6 +203,23 @@ const FILE_LINK_REVEAL_UNSAFE_CSS = `
 const RENDER_TABLE_STORAGE_KEY = "t3code.renderTable";
 type FilePostRender = NonNullable<FileOptions<unknown>["onPostRender"]>;
 
+function useRevisionAssetUrl(
+  environmentId: EnvironmentId,
+  resource: AssetResource,
+  revision: string | null,
+) {
+  const state = useAssetUrlState(environmentId, resource);
+  const refresh = useAssetUrlRefresh(environmentId, resource);
+  const previous = useRef({ resource, revision });
+  useEffect(() => {
+    const changed =
+      previous.current.resource === resource && previous.current.revision !== revision;
+    previous.current = { resource, revision };
+    if (changed) void refresh().catch(() => undefined);
+  }, [refresh, resource, revision]);
+  return state;
+}
+
 function WorkspaceImagePreview(props: {
   readonly environmentId: EnvironmentId;
   readonly threadRef: ScopedThreadRef;
@@ -210,15 +228,24 @@ function WorkspaceImagePreview(props: {
   readonly alt: string;
   readonly workspaceMutationId: string | null;
 }) {
+  const insideWorkspace =
+    mediaFileReference(props.absolutePath, props.workspaceRoot).relativePath !== undefined;
   const resource = useMemo(
-    () => ({
-      _tag: "workspace-file" as const,
-      threadId: props.threadRef.threadId,
-      path: props.absolutePath,
-    }),
-    [props.threadRef.threadId, props.absolutePath],
+    () =>
+      insideWorkspace
+        ? {
+            _tag: "draft-workspace-file" as const,
+            cwd: props.workspaceRoot,
+            path: props.absolutePath,
+          }
+        : {
+            _tag: "media-file" as const,
+            threadId: props.threadRef.threadId,
+            path: props.absolutePath,
+          },
+    [insideWorkspace, props.workspaceRoot, props.threadRef.threadId, props.absolutePath],
   );
-  const assetUrl = useAssetUrlState(props.environmentId, resource);
+  const assetUrl = useRevisionAssetUrl(props.environmentId, resource, props.workspaceMutationId);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const revisionSuffix =
     props.workspaceMutationId === null
@@ -278,14 +305,21 @@ function WorkspaceBrowserPreview(props: {
   const insideWorkspace =
     mediaFileReference(props.absolutePath, props.workspaceRoot).relativePath !== undefined;
   const resource = useMemo(
-    () => ({
-      _tag: insideWorkspace ? ("workspace-file" as const) : ("media-file" as const),
-      threadId: props.threadRef.threadId,
-      path: props.absolutePath,
-    }),
-    [insideWorkspace, props.threadRef.threadId, props.absolutePath],
+    () =>
+      insideWorkspace
+        ? {
+            _tag: "draft-workspace-file" as const,
+            cwd: props.workspaceRoot,
+            path: props.absolutePath,
+          }
+        : {
+            _tag: "media-file" as const,
+            threadId: props.threadRef.threadId,
+            path: props.absolutePath,
+          },
+    [insideWorkspace, props.workspaceRoot, props.threadRef.threadId, props.absolutePath],
   );
-  const assetUrl = useAssetUrlState(props.environmentId, resource);
+  const assetUrl = useRevisionAssetUrl(props.environmentId, resource, props.workspaceMutationId);
   const revisionSuffix =
     props.workspaceMutationId === null
       ? ""
@@ -330,7 +364,7 @@ function WorkspaceVideoPreview(props: {
     }),
     [props.threadRef.threadId, props.absolutePath],
   );
-  const assetUrl = useAssetUrlState(props.environmentId, resource);
+  const assetUrl = useRevisionAssetUrl(props.environmentId, resource, props.workspaceMutationId);
   const refreshAssetUrl = useAssetUrlRefresh(props.environmentId, resource);
   useWorkspaceMutationRefresh({
     mutationId: props.workspaceMutationId,
@@ -383,7 +417,7 @@ function WorkspaceAudioPreview(props: {
     }),
     [props.threadRef.threadId, props.absolutePath],
   );
-  const assetUrl = useAssetUrlState(props.environmentId, resource);
+  const assetUrl = useRevisionAssetUrl(props.environmentId, resource, props.workspaceMutationId);
   const refreshAssetUrl = useAssetUrlRefresh(props.environmentId, resource);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   useWorkspaceMutationRefresh({

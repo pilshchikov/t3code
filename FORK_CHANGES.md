@@ -4,9 +4,33 @@ This file tracks intentional fork-local changes in `pilshchikov/t3code` that may
 upstream `pingdotgg/t3code` repository. Keep it current when adding, removing, or changing
 fork-specific behavior so future upstream syncs are easier to review.
 
+## External file paths and lower-frequency validation, October 6
+
+- Owner requested a 10-second fallback, restricted to the open right panel's selected file.
+  Periodic validation now requires an active watch; non-panel file queries do not acquire a
+  timer. `ChatView` already passes `rightPanelOpen && selectedSurface` into file activity.
+  Hidden panels/tabs and dirty editors stop validation. Watcher/focus/open checks stay immediate.
+- Explicit absolute Markdown/inline links retain their target instead of being reinterpreted as
+  a configured directory alias. Rendered host Markdown resolves relative links from its real
+  containing directory; call sites consistently distinguish that directory from the project root.
+  File previews normalize parent-relative/file-URI references without rebasing another checkout
+  into the active project (`markdown-links.ts`, `ChatMarkdown.tsx`, `filePath.ts`, `filePreviewMode.ts`).
+- File watchers now use the same read-only path resolver as file reads, so external absolute files
+  and other worktrees remain readable and refreshable. Acquire the watcher before emitting readiness
+  to close the read/watch race (`WorkspaceFileSystem.ts`). Relative traversal and writes retain
+  their containment rules; out-of-project previews remain read-only.
+- Image/browser assets use their selected filesystem root, including secondary repositories, rather
+  than the thread's primary checkout. Outside files use exact host-media assets. A changed disk
+  revision renews inode-bound signed URLs after atomic replacements (`FilePreviewPanel.tsx`).
+- Passed 156 focused tests across six files (14 selected asset cases; 22 unrelated asset cases skipped),
+  server/web typechecks, and scoped lint with existing preview/React warnings. Validation covers
+  closed/inactive polling, absolute/other-worktree/parent-relative/file-URI paths, directory alias
+  collisions, external Markdown directories, real host-file reads/watches, and media access.
+  No installed-app/browser verification, rebuild/reinstall/restart, push or manual live-userdata writes.
+
 ## File freshness recovery and fork integration audit, October 6
 
-- Visible file previews validate their disk revision every two seconds as a fallback for missed
+- Visible file previews validate their disk revision every 10 seconds as a fallback for missed
   filesystem events. Activation, focus, visibility restoration, watcher events and workspace
   mutations also validate. Unchanged text keeps its cached object and editor state; only changed
   disk revisions trigger full reads. Hidden tabs/windows do not poll, and pending local edits

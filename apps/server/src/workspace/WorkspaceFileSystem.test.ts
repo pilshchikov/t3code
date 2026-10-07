@@ -305,6 +305,36 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceFileSystemLive", (i
   });
 
   describe("watchFile", () => {
+    it.effect("watches an absolute file in another worktree without rebasing it into cwd", () =>
+      Effect.gen(function* () {
+        const workspace = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+        const path = yield* Path.Path;
+        const cwd = yield* makeTempDir;
+        const other = yield* makeTempDir;
+        yield* writeTextFile(other, "report.md", "before");
+        const absolute = path.join(other, "report.md");
+        const ready = yield* Deferred.make<void>();
+        const watching = yield* workspace.watchFile({ cwd, relativePath: absolute }).pipe(
+          Stream.tap((event) =>
+            event.revision === 0 ? Deferred.succeed(ready, undefined) : Effect.void,
+          ),
+          Stream.take(2),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        yield* Deferred.await(ready);
+        yield* writeTextFile(other, "report.md", "after!");
+        const events = yield* Fiber.join(watching).pipe(Effect.timeout(Duration.seconds(5)));
+        expect(Array.from(events)).toEqual([
+          { relativePath: absolute, revision: 0 },
+          { relativePath: absolute, revision: 1 },
+        ]);
+        expect((yield* workspace.readFile({ cwd, relativePath: absolute })).contents).toBe(
+          "after!",
+        );
+      }),
+    );
+
     it.effect("emits an invalidation when an externally-written file changes", () =>
       Effect.gen(function* () {
         const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;

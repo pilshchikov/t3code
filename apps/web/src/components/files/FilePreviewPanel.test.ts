@@ -139,6 +139,10 @@ describe("resolveFilePreviewPath", () => {
     ["/repo/project/src/main.ts", "/repo/project/src/main.ts"],
     ["src/main.ts", "src/main.ts"],
     ["/repo/project-other", "/repo/project-other"],
+    ["../other-worktree/report.md", "/repo/other-worktree/report.md"],
+    ["./src/main.ts", "src/main.ts"],
+    ["file:///tmp/report.md", "/tmp/report.md"],
+    ["/tmp/report.md", "/tmp/report.md"],
   ])("opens %s in the appropriate workspace surface", (path, expected) => {
     const relativePath = resolveFilePreviewPath(path, "/repo/project");
     expect(relativePath).toBe(expected);

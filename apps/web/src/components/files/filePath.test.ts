@@ -154,3 +154,16 @@ describe("project file navigation helpers", () => {
     expect(firstFileInDirectory(entries, "missing")).toBeNull();
   });
 });
+
+it("anchors host Markdown links to the actual host directory", () => {
+  expect(workspaceDocumentDirectory("/repo/current", "/tmp/reports/summary.md")).toBe(
+    "/tmp/reports",
+  );
+  expect(workspaceDocumentDirectory("/repo/current", "/repo/other-worktree/docs/plan.md")).toBe(
+    "/repo/other-worktree/docs",
+  );
+  expect(workspaceDocumentDirectory("/repo/current", "/report.md")).toBe("/");
+  expect(workspaceDocumentDirectory("C:\\repo\\current", "D:\\reports\\plan.md")).toBe(
+    "D:\\reports",
+  );
+});

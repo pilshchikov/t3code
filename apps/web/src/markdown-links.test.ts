@@ -649,3 +649,32 @@ it("routes the project-root code link to the workspace explorer", () => {
     filePath: cwd,
   });
 });
+
+it("does not reinterpret an explicit absolute file as a secondary-directory alias", () => {
+  const meta = resolveMarkdownFileLinkMeta("/Users/me/app/backend/report.md#L4", "/Users/me/app")!;
+  expect(meta.absoluteReference).toBe(true);
+  expect(
+    resolveMarkdownFilePanelTarget({
+      filePath: meta.filePath,
+      panelPath: meta.absoluteReference ? meta.filePath : meta.workspaceRelativePath!,
+      preferredWorkspaceRoot: "/Users/me/app",
+      workspaceRoots: [{ path: "/Users/me/app" }, { path: "/Users/me/backend", label: "backend" }],
+    }),
+  ).toEqual({ path: "backend/report.md", workspaceRoot: "/Users/me/app" });
+  expect(meta.line).toBe(4);
+});
+
+it("preserves a link to a different worktree as an absolute host file", () => {
+  const meta = resolveMarkdownFileLinkMeta(
+    "/Users/me/worktrees/other/report.md",
+    "/Users/me/worktrees/current",
+  )!;
+  expect(
+    resolveMarkdownFilePanelTarget({
+      filePath: meta.filePath,
+      panelPath: meta.filePath,
+      preferredWorkspaceRoot: "/Users/me/worktrees/current",
+      workspaceRoots: [{ path: "/Users/me/project" }],
+    }),
+  ).toEqual({ path: "/Users/me/worktrees/other/report.md" });
+});
