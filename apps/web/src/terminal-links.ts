@@ -1,7 +1,4 @@
-import {
-  formatFilePathPosition,
-  splitFilePathPosition,
-} from "@t3tools/client-runtime/markdown-links";
+import { formatFilePathPosition, splitFilePathPosition } from "@t3tools/shared/fileLinks";
 
 import { isMacPlatform } from "./lib/utils";
 

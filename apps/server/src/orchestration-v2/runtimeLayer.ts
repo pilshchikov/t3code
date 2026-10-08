@@ -184,6 +184,7 @@ const layerCheckpointRollbackServiceProvided = CheckpointRollbackService.layer.p
       IdAllocator.layer,
       ProjectionStore.layer,
       layerProviderSessionManagerProvided,
+      ThreadCommandExecutor.layer,
       layerRuntimePolicyProvided,
     ),
   ),

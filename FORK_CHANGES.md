@@ -1,5 +1,38 @@
 # Fork Changes
 
+## Upstream integration and ordinary sending — 2026-10-08
+
+- Merged 82 upstream commits through `de72286ee5` from fork parent `67c1d5a9dc`.
+  Added current-thread/diff search, richer Markdown composition, terminal navigation,
+  native Muse provider, usage filtering/loading improvements and upstream mobile/server fixes.
+- Explicit owner preference: remove **all compact-before-send proposals** from the composer.
+  Removed the wide button and upstream replacement chip, their token/history toggle plumbing,
+  and automatic `/compact` dispatch/queueing before a send (`ComposerPrimaryActions.tsx`,
+  `ChatComposer.tsx`, `ChatView.tsx`). Send/Resume/Queue/Steer use the ordinary saved-color orb
+  or Classic controls. Manual compaction and separately configured idle compaction remain.
+  Future upstream merges must preserve this behavior; never silently restore the button,
+  chip, default compact-first action, or compaction merely because a session is old.
+- Kept file-root/absolute-path resolution, read-only external previews, content-revision
+  caching and selected/open-panel 10-second metadata checks. Kept per-repository worktree
+  selectors, directory colors/guidance, Files resize/collapse state and Git history navigation.
+  Added diff search reveal to the fork's selected-file viewer rather than replacing its layout.
+  Shared path helpers coexist with the fork's multi-root Markdown routing.
+- Preserved mobile expansion/short placeholder, saved-color send/stop orbs, project rail
+  vertical status dots, ISO shortcuts, chat width settings, restore-to-latest/bottom following
+  and first assistant text outside folds. Integrated thread find without replacing these.
+- Usage keeps per-instance/source labels and colored model/account rows, hourly chronological
+  periods and Current/Trends limits while adopting provider filters and progressive loading.
+  Transcript scanning retains account identity when extracting upstream's reusable scan helper.
+  Existing migration IDs remain unchanged; new snapshot indexes register as migration 65.
+- Retained zero external analytics/OTLP export and network opt-in gates, spilshchikov naming,
+  project memory, timed compaction/settings, safe workspace handoffs and the completed-worker
+  question cleanup from `67c1d5a9dc`. Multiwork remains retired.
+- Validation: frozen dependency installation; seven scoped typechecks; changed-source lint
+  (460 files, no errors, warnings remain); two targeted regression batches (388 and 254
+  passing tests, one overlapping composer file), including an explicit no-compaction-control
+  regression. Source/document whitespace checks exclude upstream dependency patches, whose
+  whitespace is retained verbatim for patch integrity. No rebuild, reinstall, restart or push.
+
 ## Terminal delegated-worker questions — 2026-10-07
 
 - Terminal provider turns clear message-mode user-input requests belonging to subagent

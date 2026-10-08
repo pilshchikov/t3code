@@ -82,6 +82,14 @@ afterEach(() => {
 });
 
 describe("ComposerPrimaryActions", () => {
+  it("keeps the ordinary send control without a compaction button or chip", () => {
+    const markup = renderSendButton();
+    expect(markup).toContain('aria-label="Submit message"');
+    expect(markup).not.toContain("Compact and send");
+    expect(markup).not.toContain("data-chat-composer-compact-send");
+    expect(markup).not.toContain("Compact ");
+  });
+
   it("disables and labels the send button while feedback is uploading", () => {
     const markup = renderSendButton("Sending feedback");
 

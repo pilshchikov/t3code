@@ -808,6 +808,18 @@ export default function DiffPanel({
     },
     [diffTreeFiles, revealDiffFile],
   );
+  // Find can ask again before the unfolded file reaches the viewer, so this must never fold.
+  const unfoldDiffFile = useCallback((fileKey: string) => {
+    const { collapseScopeKey, defaultCollapsedDiffFileKeys } = collapseDefaultsRef.current;
+    setCollapsedDiffFiles((current) => {
+      const fileKeys =
+        current.scopeKey === collapseScopeKey ? current.fileKeys : defaultCollapsedDiffFileKeys;
+      if (!fileKeys.has(fileKey)) return current;
+      const next = new Set(fileKeys);
+      next.delete(fileKey);
+      return { scopeKey: collapseScopeKey, fileKeys: next };
+    });
+  }, []);
 
   const toggleDiffFileCollapse = useCallback(() => {
     setCodeViewRevision((current) => current + 1);
@@ -861,6 +873,7 @@ export default function DiffPanel({
       viewerRef={setCodeView}
       codeViewKey={`${codeViewMountKey}:${lazySource ? filePatchScope : (resolvedTreeFilePath ?? "all")}`}
       className="h-full min-h-0 overflow-auto"
+      onRevealSearchMatch={unfoldDiffFile}
       files={visibleCodeViewFiles}
       renderCodeViewFooter={renderLoadingBoundary}
       sectionId={reviewSectionId}

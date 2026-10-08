@@ -263,6 +263,15 @@ export function surfaceShortcutActionForKey<
     ) ?? null
   );
 }
+export function surfaceShortcutTargetsTypingContext(
+  target: { closest(selectors: string): unknown } | null,
+): boolean {
+  return (
+    target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])') !=
+    null
+  );
+}
+
 function DisabledReasonTooltip(props: { reason: string; trigger: ReactElement }) {
   return (
     <Tooltip>
@@ -415,12 +424,9 @@ function RightPanelEmptyState(props: {
       const action = surfaceShortcutActionForKey(shortcutActionsRef.current, event);
       if (!action) return;
       if (document.querySelector(LAUNCHER_SHORTCUT_BLOCKING_LAYERS)) return;
-      const target = event.target;
-      if (target instanceof HTMLElement) {
-        if (target.closest("input, textarea, select")) return;
-        const editable = target.isContentEditable ? target : target.closest("[contenteditable]");
-        if (editable) return;
-      }
+      // The composed path starts at the real target, which may sit inside a shadow root.
+      const target = event.composedPath()[0] ?? event.target;
+      if (target instanceof Element && surfaceShortcutTargetsTypingContext(target)) return;
       event.preventDefault();
       event.stopPropagation();
       action.onClick();
@@ -482,7 +488,7 @@ function RightPanelEmptyState(props: {
       aria-label="Open a surface"
       data-surface-launcher-keys={availableActions.map((action) => action.shortcut).join("")}
       className={cn(
-        "flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 outline-none",
+        "scrollbar-gutter-both flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 outline-none",
         // The panel topbar sits above this container; matching bottom padding
         // keeps the list centered against the full panel, not the leftover.
         "pb-(--workspace-topbar-height)",

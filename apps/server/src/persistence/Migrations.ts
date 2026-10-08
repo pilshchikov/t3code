@@ -90,6 +90,7 @@ const Migration0041Combined = Migration0041.pipe(
 import Migration0062 from "./Migrations/057_ScheduledTaskWebhooks.ts";
 import Migration0063 from "./Migrations/058_WebhookRelayDeliveries.ts";
 import Migration0064 from "./Migrations/059_McpAppModelContext.ts";
+import Migration0065 from "./Migrations/060_ThreadSnapshotWindowIndexes.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -166,6 +167,7 @@ export const migrationEntries = [
   [62, "ScheduledTaskWebhooks", Migration0062],
   [63, "WebhookRelayDeliveries", Migration0063],
   [64, "McpAppModelContext", Migration0064],
+  [65, "ThreadSnapshotWindowIndexes", Migration0065],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);
