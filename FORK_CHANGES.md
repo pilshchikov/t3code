@@ -1,5 +1,23 @@
 # Fork Changes
 
+## Terminal delegated-worker questions — 2026-10-07
+
+- Terminal provider turns clear message-mode user-input requests belonging to subagent
+  threads, alongside native questions. Ordinary chats keep message-mode questions after
+  a turn ends so users can answer later. SQLite and in-memory/replay projection stores
+  use the same rule (`ProjectionStore.ts`).
+- The event sink's transaction guard permits those delegated-worker cancellations while
+  still preserving answers committed after cleanup normalization (`EventSink.ts`).
+- Validation: 49 focused ingestion/projection tests passed, including completed,
+  interrupted, failed, cancelled and control terminal paths for ordinary/subagent threads;
+  targeted lint and server typecheck. No rebuild or restart performed.
+- Cleared four confirmed stale requests from completed poly/games workers through the
+  running app's `thread.user-input.dismiss` command. The app persisted normal request,
+  node and timeline updates and broadcast them to clients; historical records remain.
+  Read-only verification found no pending requests in unarchived, undeleted threads.
+  The temporary cleanup auth session was revoked. Permanent prevention requires the next
+  app update; the current running binary was left untouched.
+
 ## Upstream follow-up integration — 2026-10-07
 
 - Merged five additional upstream commits through `0678e4e23d8675ef88f9ac08e1ae90cfe7d6ef2e`

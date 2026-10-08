@@ -4181,14 +4181,18 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         .withTransaction(
           Effect.gen(function* () {
             const rows = yield* sql<PayloadRow>`
-          SELECT payload_json FROM orchestration_v2_projection_runtime_requests
-          WHERE thread_id = ${threadId} AND provider_turn_id = ${providerTurnId}
-            AND kind = 'user_input' AND status = 'pending'
+          SELECT request.payload_json FROM orchestration_v2_projection_runtime_requests request
+          JOIN orchestration_v2_projection_threads thread ON thread.thread_id = request.thread_id
+          WHERE request.thread_id = ${threadId} AND request.provider_turn_id = ${providerTurnId}
+            AND request.kind = 'user_input' AND request.status = 'pending'
+            AND (
+              json_extract(request.payload_json, '$.responseCapability.type') <> 'message'
+              OR json_extract(thread.payload_json, '$.lineage.relationshipToParent') = 'subagent'
+            )
         `;
-            const runtimeRequests = (yield* decodeRows(
-              decodeRuntimeRequestPayload,
-              threadId,
-            )(rows)).filter((request) => request.responseCapability.type !== "message");
+            // Message questions survive an ordinary turn so the user can answer later.
+            // A terminal delegated worker no longer owns an actionable question.
+            const runtimeRequests = yield* decodeRows(decodeRuntimeRequestPayload, threadId)(rows);
             if (runtimeRequests.length === 0) return { runtimeRequests, nodes: [], turnItems: [] };
             const nodeRows = yield* sql<PayloadRow>`
           SELECT payload_json FROM orchestration_v2_projection_nodes
@@ -5907,7 +5911,8 @@ export const layerMemory: Layer.Layer<ProjectionStoreV2> = Layer.effect(
               request.providerTurnId === providerTurnId &&
               request.kind === "user_input" &&
               request.status === "pending" &&
-              request.responseCapability.type !== "message",
+              (request.responseCapability.type !== "message" ||
+                projection.thread.lineage.relationshipToParent === "subagent"),
           );
           const requestIds = new Set(runtimeRequests.map((request) => request.id));
           const nodeIds = new Set(runtimeRequests.map((request) => request.nodeId));
