@@ -1,5 +1,23 @@
 # Fork Changes
 
+## Repair pre-existing worker questions during startup — 2026-10-08
+
+- The terminal-event fix did not migrate message questions left by the previous running
+  binary. Two more completed workers created stale requests before that fix was installed;
+  restart recovery previously preserved all message-mode requests indiscriminately.
+- `ProviderRuntimeRecoveryService.ts` now expires pending message-mode user-input requests
+  only when the owning thread is a subagent and its owning run is terminal. Cancels the
+  associated node/card, preserves ordinary chat questions, and performs no second write on
+  repeated reconciliation. It does not treat a live worker's question as stale.
+- `ProjectionStore.ts` recovery reads retain pending request nodes/cards and their owning
+  runs even when an owner is older than the latest run or its node is already terminal.
+  These are bounded reads through the pending-request index, without polling.
+- Validation: 72 recovery/projection/ingestion tests passed, including real SQLite reads
+  for a question owned by an older rolled-back run, restart idempotence and primary question
+  preservation; server typecheck and targeted lint passed (one test-fixture warning).
+  Cleared the two confirmed stale poly/games requests through live dismissal commands;
+  no direct SQLite editing, no model turn launched, temporary auth revoked.
+
 ## Upstream integration and ordinary sending — 2026-10-08
 
 - Merged 82 upstream commits through `de72286ee5` from fork parent `67c1d5a9dc`.
