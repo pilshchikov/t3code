@@ -6,6 +6,7 @@ import {
   COMPOSER_MENTION_DRAG_TYPE,
   composerMentionFromTreePath,
 } from "~/components/chat/composerMentionDrag";
+import { Spinner } from "~/components/ui/spinner";
 import { PierreEntryIcon } from "~/components/chat/PierreEntryIcon";
 import { cn } from "~/lib/utils";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
@@ -170,6 +171,9 @@ export function NativeProjectFileTree(props: {
   active: boolean;
   workspaceKey: string;
   entries: ReadonlyArray<ProjectEntry>;
+  loadingDirectories?: ReadonlySet<string>;
+  fileColors?: ReadonlyMap<string, string>;
+  expandAllRequestId?: number;
   query: string;
   selectedPath: string | null;
   selectedPathRevealId: number;
@@ -178,6 +182,7 @@ export function NativeProjectFileTree(props: {
   onOpenFile: (path: string) => void;
   onSelectionChange: (paths: ReadonlyArray<string>) => void;
   onDeleteSelected: () => void | Promise<void>;
+  onDeleteEntry?: (path: string) => void | Promise<void>;
   onContextMenu: (path: string, position: { x: number; y: number }) => void;
   collapseRequestId: number;
   onExpandedDirectoriesChange?: (paths: readonly string[]) => void;
@@ -241,11 +246,36 @@ export function NativeProjectFileTree(props: {
 
   // Collapse keeps the open file reachable rather than shutting the tree down to nothing,
   // which is the state you'd immediately have to click back out of.
+  const expandAllRef = useRef(false);
+  const lastExpandAllRequestRef = useRef(0);
+  useEffect(() => {
+    if (!props.active) return;
+    const requestId = props.expandAllRequestId ?? 0;
+    if (requestId !== lastExpandAllRequestRef.current) {
+      lastExpandAllRequestRef.current = requestId;
+      expandAllRef.current = true;
+    }
+    if (!expandAllRef.current) return;
+    const paths: string[] = [];
+    const visit = (entries: readonly ProjectTreeNode[]) => {
+      for (const node of entries) {
+        if (node.kind !== "directory") continue;
+        paths.push(node.path);
+        visit(node.children);
+      }
+    };
+    visit(nodes);
+    setExpanded((current) => {
+      if (paths.every((path) => current.has(path))) return current;
+      return new Set([...current, ...paths]);
+    });
+  }, [nodes, props.active, props.expandAllRequestId, setExpanded]);
   const lastCollapseRequestRef = useRef(0);
   useEffect(() => {
     if (props.collapseRequestId === 0) return;
     if (lastCollapseRequestRef.current === props.collapseRequestId) return;
     lastCollapseRequestRef.current = props.collapseRequestId;
+    expandAllRef.current = false;
     setExpanded(new Set(props.selectedPath ? ancestorDirectories(props.selectedPath) : []));
   }, [props.collapseRequestId, props.selectedPath]);
 
@@ -328,12 +358,20 @@ export function NativeProjectFileTree(props: {
           )}
           style={rowStyle}
           onClick={() => {
+            expandAllRef.current = false;
             setExpanded((current) => {
               const next = new Set(current);
               if (next.has(node.path)) next.delete(node.path);
               else next.add(node.path);
               return next;
             });
+          }}
+          onKeyDown={(event) => {
+            if ((event.key === "Delete" || event.key === "Backspace") && props.onDeleteEntry) {
+              event.preventDefault();
+              event.stopPropagation();
+              void props.onDeleteEntry(node.path);
+            }
           }}
           onContextMenu={(event) => {
             event.preventDefault();
@@ -346,7 +384,9 @@ export function NativeProjectFileTree(props: {
               isExpanded && "rotate-90",
             )}
           />
-          {isExpanded ? (
+          {isExpanded && props.loadingDirectories?.has(node.path) ? (
+            <Spinner size="sm" />
+          ) : isExpanded ? (
             <FolderOpenIcon className="size-3.5 shrink-0 text-muted-foreground" />
           ) : (
             <FolderClosedIcon className="size-3.5 shrink-0 text-muted-foreground" />
@@ -389,7 +429,10 @@ export function NativeProjectFileTree(props: {
           theme={props.resolvedTheme}
           className="size-3.5"
         />
-        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground group-hover:text-foreground">
+        <span
+          style={{ color: props.fileColors?.get(node.path) }}
+          className="min-w-0 flex-1 truncate text-xs text-muted-foreground group-hover:text-foreground"
+        >
           {node.name}
         </span>
       </button>

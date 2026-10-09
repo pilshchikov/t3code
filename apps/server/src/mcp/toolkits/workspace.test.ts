@@ -24,7 +24,10 @@ import * as ThreadWorkspaces from "../../workspace/ThreadWorkspaces.ts";
 import * as DateTime from "effect/DateTime";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { McpInvocationContext, type McpCapability } from "../McpInvocationContext.ts";
-import { setMcpProviderSession, clearMcpProviderSession } from "../McpProviderSession.ts";
+import {
+  setMcpProviderSession,
+  clearMcpProviderSession,
+} from "@t3tools/provider-core/server/mcpSession";
 import { WorkspaceHandlersLive, WorkspaceToolkit } from "./workspace.ts";
 
 const NOW_MS = Date.parse("2026-06-10T12:00:00.000Z");

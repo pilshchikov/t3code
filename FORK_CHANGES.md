@@ -1,5 +1,47 @@
 # Fork Changes
 
+## Daily upstream integration — 2026-10-09
+
+- Merge target: `a6698271a41a4c1f2c42f25ca5d69cd7d1fa9c30` (59 new upstream commits);
+  fork parent: `1bc735280b54411505861451119521a95d83a1e9`. Preserves both ancestries
+  with a real merge, including upstream provider-package extraction, Pi session-tree rollback,
+  model compatibility hints, native prompt prefill, preview profiles and layout fixes.
+- Adapted fork-only usage, workspace and MCP imports to the new `provider-core`/shared
+  modules. Managed providers use upstream's `ProviderHost` demand/settings service while
+  retaining the explicit auto-refresh opt-in. Removed the obsolete `settings.providers`
+  shape; `serverSettings.ts` still migrates legacy saved provider configuration into instances,
+  preserving Claude HOME/config-directory isolation and explicit enabled choices. Provider
+  version/manifest checks, external analytics/OTLP, updates and safe-storage network defaults
+  remain disabled unless explicitly enabled where supported.
+- Kept the mounted native Files tree, selection/delete/undo, persisted expansion and four
+  concurrent initial directory reads. Integrated upstream Open/reveal/Open with actions,
+  initial-load folder spinners and draft media previews without replacing the multi-repository
+  layout. Restored the documented staged/unstaged file colors and expand-all control to the
+  native renderer, which had lost them before this merge. Status refresh follows the active
+  tree's existing invalidations. `FileBrowserPanel.tsx`, `NativeProjectFileTree.tsx`.
+- Media previews use the exact selected checkout root for established chats as well as drafts;
+  retained host/absolute previews, revision caching, dirty-editor protection and selected-panel
+  freshness checks. Markdown keeps fork ownership/root/extensionless routing while adopting
+  upstream inline repository-qualified paths. Root links still open the explorer. Existing
+  upstream preview expectations were reconciled with exact-root behavior; no new tests added.
+  `FilePreviewPanel.tsx`, `filePreviewMode.ts`, `markdown-links.ts`.
+- Traced live callers for saved-color Arcane send/resume/queue/steer and both Stop paths;
+  Classic remains selectable. Kept ordinary sending without compact-first proposals,
+  mobile expansion for existing chats and draft heroes, keyboard/safe-area handling,
+  scroll recovery/bottom following, first assistant text outside folds, mixed-work labels and
+  stable imported-thread identities. Upstream banner/canvas padding still follows custom
+  chat width. `ComposerPrimaryActions.tsx`, `ChatComposer.tsx`, `ChatView.tsx`,
+  `MessagesTimeline.tsx`, `MessagesTimeline.logic.ts`, `ChatCanvas.tsx`.
+- Preserved mounted project rail/status dots and colors, picker/ordering/shortcuts, Files
+  per-repository selectors/collapse/resize, Git history/Structure/Commit navigation, native V2
+  session resume, primary preparation-run-only checkout binding/clearing, Claude worker effort
+  observation, account/source-specific usage and limit rows, project memory/MCP, project idle
+  compaction overrides and terminal-worker question cleanup. Upstream pooled Current/Trends
+  limits and V2 sync replace their older components intentionally; Multiwork remains retired.
+- Validation: pending scoped typechecks and changed-source lint. Frozen-lockfile dependency
+  installation in progress. Tests, app builds, runtime/UI verification, packaging, reinstall,
+  restart and push were not performed under this task's constraints.
+
 ## Repair pre-existing worker questions during startup — 2026-10-08
 
 - The terminal-event fix did not migrate message questions left by the previous running

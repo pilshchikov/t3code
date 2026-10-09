@@ -1,6 +1,6 @@
-import type { EnvironmentId, ProjectEntry } from "@t3tools/contracts";
+import type { EnvironmentId, GitFileChange, ProjectEntry } from "@t3tools/contracts";
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
-import { ChevronsDownUpIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ChevronsDownUpIcon, ChevronsUpDownIcon, Trash2Icon, XIcon } from "lucide-react";
 import {
   useCallback,
   useDeferredValue,
@@ -21,6 +21,7 @@ import { useTheme } from "~/hooks/useTheme";
 import { useWorkspaceMutationRefresh } from "~/hooks/useWorkspaceMutationRefresh";
 import { cn, isMacPlatform } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
+import { useFileContextMenu } from "~/fileContextMenu";
 import { projectEnvironment } from "~/state/projects";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useProjectPathSearch } from "~/state/queries";
@@ -29,6 +30,7 @@ import { resolvePathLinkTarget } from "~/terminal-links";
 import { NativeProjectFileTree } from "./NativeProjectFileTree";
 import { useProjectEntriesQuery } from "./projectFilesQueryState";
 import { mergeDirectoryListings } from "./directoryListings";
+import { useGitDetailedStatus } from "./gitChangesState";
 
 function ExpandedDirectory(props: {
   environmentId: EnvironmentId;
@@ -50,6 +52,30 @@ function ExpandedDirectory(props: {
     resourceKey: props.path,
     refresh: query.refresh,
   });
+  return null;
+}
+
+/** Status reads run only for the visible tree and follow its filesystem invalidations. */
+function FileTreeStatus(props: {
+  environmentId: EnvironmentId;
+  cwd: string;
+  revision: unknown;
+  mutationId: string | null;
+  refreshId: number;
+  onStatus: (files: readonly GitFileChange[]) => void;
+}) {
+  const status = useGitDetailedStatus(props.environmentId, props.cwd);
+  useEffect(() => {
+    status.refresh();
+  }, [props.revision, status.refresh]);
+  useWorkspaceMutationRefresh({
+    mutationId: `${props.refreshId}:${props.mutationId ?? ""}`,
+    resourceKey: `tree-status:${props.environmentId}:${props.cwd}`,
+    refresh: status.refresh,
+  });
+  useEffect(() => {
+    props.onStatus(status.data?.files ?? []);
+  }, [props.onStatus, status.data]);
   return null;
 }
 
@@ -164,6 +190,7 @@ export default function FileBrowserPanel({
 }: FileBrowserPanelProps) {
   const { resolvedTheme } = useTheme();
   const composerRef = useComposerHandleContext();
+  const fileContextMenu = useFileContextMenu(environmentId);
   const entriesQuery = useProjectEntriesQuery(environmentId, cwd, "", active);
   const [expandedDirectories, setExpandedDirectories] = useState<readonly string[]>([]);
   const [directoryListings, setDirectoryListings] = useState<
@@ -214,12 +241,41 @@ export default function FileBrowserPanel({
       expandedDirectories,
     ],
   );
+  const loadingDirectories = useMemo(
+    () => new Set(expandedDirectories.filter((path) => !directoryListings.has(path))),
+    [expandedDirectories, directoryListings],
+  );
+  const treeRevision = useMemo(
+    () => ({ root: entriesQuery.data, directories: directoryListings }),
+    [entriesQuery.data, directoryListings],
+  );
   const filePaths = useMemo(
     () => new Set(entries.filter((entry) => entry.kind === "file").map((entry) => entry.path)),
     [entries],
   );
   const [selectedPaths, setSelectedPaths] = useState<ReadonlyArray<string>>([]);
   const [collapseRequestId, setCollapseRequestId] = useState(0);
+  const [expandAllRequestId, setExpandAllRequestId] = useState(0);
+  const [fileChanges, setFileChanges] = useState<readonly GitFileChange[]>([]);
+  const fileColors = useMemo(
+    () =>
+      new Map(
+        fileChanges.map((file) => [
+          file.path,
+          file.untracked || file.unstaged
+            ? "#f5a3a3"
+            : file.indexStatus === "added" || file.indexStatus === "copied"
+              ? "#3fb950"
+              : file.indexStatus === "deleted"
+                ? "#f85149"
+                : file.indexStatus === "renamed"
+                  ? "#d29922"
+                  : "#4c9ffe",
+        ]),
+      ),
+    [fileChanges],
+  );
+  const pendingDirectories = expandedDirectories.filter((path) => !directoryListings.has(path));
   const [isDeleting, setIsDeleting] = useState(false);
   /**
    * Contents of the last delete, so it can be put back. Only whole text files are held: a folder
@@ -379,11 +435,13 @@ export default function FileBrowserPanel({
       if (!api) return;
       const mention = serializeComposerFileLink(relativePath);
       const absolutePath = resolvePathLinkTarget(relativePath, cwd);
-      // A folder has no mention to copy and nothing to hand the composer, so it gets the two
-      // items that do mean something for it.
+      // Folders share the environment open/reveal actions, but cannot become composer mentions.
       const isFile = filePaths.has(relativePath);
+      const fileTarget = { environmentId, filePath: relativePath, workspaceRoot: cwd };
+      const fileMenuItems = fileContextMenu.buildItems(fileTarget);
       const clicked = await api.contextMenu.show(
         [
+          ...fileMenuItems,
           ...(isFile ? [{ id: "copy-mention", label: "Copy mention" }] : []),
           { id: "copy-absolute-path", label: "Copy absolute path" },
           ...(isFile ? [{ id: "add-to-chat", label: "Add to chat" }] : []),
@@ -397,6 +455,13 @@ export default function FileBrowserPanel({
         position,
       );
       if (clicked === null) return;
+      if (clicked === "open" || clicked === "reveal-in-folder" || clicked?.startsWith("editor:")) {
+        await fileContextMenu.activate(
+          clicked as Parameters<typeof fileContextMenu.activate>[0],
+          fileTarget,
+        );
+        return;
+      }
       if (clicked === "copy-mention") {
         try {
           await writeTextToClipboard(mention);
@@ -443,7 +508,7 @@ export default function FileBrowserPanel({
         });
       }
     },
-    [composerRef, cwd, deletePaths, filePaths],
+    [composerRef, cwd, deletePaths, environmentId, fileContextMenu, filePaths],
   );
   const handleRefresh = useCallback(() => {
     setRefreshId((value) => value + 1);
@@ -507,21 +572,49 @@ export default function FileBrowserPanel({
       className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background outline-none"
       data-file-browser-panel={`${environmentId}:${cwd}`}
     >
+      {active ? (
+        <FileTreeStatus
+          environmentId={environmentId}
+          cwd={cwd}
+          revision={treeRevision}
+          mutationId={workspaceMutationId}
+          refreshId={refreshId}
+          onStatus={setFileChanges}
+        />
+      ) : null}
       {!deferredQuery.trim() &&
-        expandedDirectories.map((path) => (
-          <ExpandedDirectory
-            key={`${environmentId}:${cwd}:${path}`}
-            environmentId={environmentId}
-            active={active}
-            cwd={cwd}
-            path={path}
-            onEntries={onDirectoryEntries}
-            refreshId={refreshId}
-            workspaceMutationId={workspaceMutationId}
-          />
-        ))}
+        expandedDirectories
+          .filter((path) => directoryListings.has(path) || pendingDirectories.indexOf(path) < 4)
+          .map((path) => (
+            <ExpandedDirectory
+              key={`${environmentId}:${cwd}:${path}`}
+              environmentId={environmentId}
+              active={active}
+              cwd={cwd}
+              path={path}
+              onEntries={onDirectoryEntries}
+              refreshId={refreshId}
+              workspaceMutationId={workspaceMutationId}
+            />
+          ))}
       <div className="surface-subheader shrink-0 gap-1 px-2" data-surface-subheader>
         <RefreshFilesButton isPending={entriesQuery.isPending} onRefresh={handleRefresh} />
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Expand all folders"
+                onClick={() => setExpandAllRequestId((id) => id + 1)}
+              />
+            }
+          >
+            <ChevronsUpDownIcon />
+          </TooltipTrigger>
+          <TooltipPopup>Expand all folders</TooltipPopup>
+        </Tooltip>
         <CollapseDirectoriesButton onCollapse={() => setCollapseRequestId((value) => value + 1)} />
         <FileSearchField
           name="project-files-search"
@@ -588,6 +681,9 @@ export default function FileBrowserPanel({
           active={active}
           workspaceKey={`${encodeURIComponent(environmentId)}|${encodeURIComponent(cwd)}`}
           entries={entries}
+          loadingDirectories={loadingDirectories}
+          fileColors={fileColors}
+          expandAllRequestId={expandAllRequestId}
           query={deferredQuery}
           selectedPath={selectedPath}
           selectedPathRevealId={selectedPathRevealId}
@@ -596,6 +692,7 @@ export default function FileBrowserPanel({
           onOpenFile={onOpenFile}
           onSelectionChange={setSelectedPaths}
           onDeleteSelected={deleteSelectedFiles}
+          onDeleteEntry={(path) => deletePaths([path])}
           onContextMenu={(path, position) => void showEntryContextMenu(path, position)}
           collapseRequestId={collapseRequestId}
           onExpandedDirectoriesChange={onExpandedDirectoriesChange}

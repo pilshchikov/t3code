@@ -1,3 +1,4 @@
+import type { ScopedThreadRef } from "@t3tools/contracts";
 import { ProjectReadFileError } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
@@ -17,6 +18,7 @@ import {
   shouldRenderMarkdownPreview,
   shouldShowFileExplorer,
   writeMarkdownPreviewMode,
+  workspaceAssetResource,
 } from "./filePreviewMode";
 
 const decodeReadError = Schema.decodeSync(ProjectReadFileError);
@@ -198,5 +200,33 @@ describe("resolveFilePreviewPath", () => {
         shouldShowFileExplorer({ relativePath, explorerOpen: false, attachmentOpen: false }),
       ).toBe(true);
     }
+  });
+});
+
+describe("workspaceAssetResource", () => {
+  const input = {
+    kind: "workspace-file" as const,
+    threadRef: {
+      environmentId: "env" as ScopedThreadRef["environmentId"],
+      threadId: "thread-1" as ScopedThreadRef["threadId"],
+    },
+    workspaceRoot: "/repo",
+    absolutePath: "/repo/docs/index.html",
+  };
+
+  it("keeps the selected workspace root after the server knows the thread", () => {
+    expect(workspaceAssetResource({ ...input, draft: false })).toEqual({
+      _tag: "draft-workspace-file",
+      cwd: "/repo",
+      path: "/repo/docs/index.html",
+    });
+  });
+
+  it("names the workspace root for a draft, which the server cannot resolve from a thread", () => {
+    expect(workspaceAssetResource({ ...input, draft: true })).toEqual({
+      _tag: "draft-workspace-file",
+      cwd: "/repo",
+      path: "/repo/docs/index.html",
+    });
   });
 });

@@ -24,7 +24,7 @@ import * as Semaphore from "effect/Semaphore";
 import { GitWorkflowService } from "../git/GitWorkflowService.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
-import { readMcpProviderSession } from "../mcp/McpProviderSession.ts";
+import { readMcpProviderSession } from "@t3tools/provider-core/server/mcpSession";
 
 // MCP supplies its session id so a replaced agent cannot attach a prepared checkout.
 type Guard = { readonly providerSessionId?: string };

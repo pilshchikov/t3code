@@ -76,6 +76,7 @@ import {
   EyeIcon,
   FolderIcon,
   GitBranchIcon,
+  ListFilterIcon,
   MessageCircleQuestionIcon,
   PinIcon,
   PinOffIcon,
@@ -5188,7 +5189,7 @@ export default function Sidebar() {
                         <ProjectFavicon project={scopedProjectGroup} className="size-6 md:size-5" />
                       </span>
                     ) : (
-                      <FolderIcon className="size-6 md:size-5" />
+                      <ListFilterIcon className="size-6 md:size-5" />
                     )}
                     <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
                       {selectedProjectScopeItem.label}

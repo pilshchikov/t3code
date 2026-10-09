@@ -419,7 +419,20 @@ export function resolveInlineCodeFileLinkMeta(
   }
 
   const directories = resolveMarkdownLinkDirectories(cwd, workspaceRoot);
-  const resolved = resolveMarkdownFileLinkMeta(candidate, cwd, workspaceRoot);
+  // Repo-qualified inline paths use the repo root; explicit links and sibling
+  // names still resolve from the document's directory, including host files.
+  const inlineBase =
+    directories.baseDir &&
+    directories.workspaceRoot &&
+    !RELATIVE_PATH_PREFIX_PATTERN.test(candidate) &&
+    !candidate.startsWith("/") &&
+    !WINDOWS_DRIVE_PATH_PATTERN.test(candidate) &&
+    !WINDOWS_UNC_PATH_PATTERN.test(candidate) &&
+    candidate.replace(POSITION_SUFFIX_PATTERN, "").includes("/") &&
+    pathIsWithin(directories.baseDir, directories.workspaceRoot)
+      ? directories.workspaceRoot
+      : directories.baseDir;
+  const resolved = resolveMarkdownFileLinkMeta(candidate, directories.workspaceRoot, inlineBase);
   if (resolved) return resolved;
 
   // `Makefile:12` — conventional extensionless names fail the generic
