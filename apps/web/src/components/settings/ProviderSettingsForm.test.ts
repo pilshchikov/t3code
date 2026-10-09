@@ -19,7 +19,7 @@ describe("ProviderSettingsForm helpers", () => {
       "launchArgs",
     ]);
 
-    const claude = DRIVER_OPTION_BY_VALUE[ProviderDriverKind.make("claudeAgent")];
+    const claude = providerClients.get(ProviderDriverKind.make("claudeAgent"));
     expect(claude).toBeDefined();
     expect(deriveProviderSettingsFields(claude!).map((field) => field.key)).toEqual([
       "binaryPath",

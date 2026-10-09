@@ -2,7 +2,8 @@
 
 ## Daily upstream integration — 2026-10-09
 
-- Merge target: `a6698271a41a4c1f2c42f25ca5d69cd7d1fa9c30` (59 new upstream commits);
+- Merge target: `64972461c0` (67 new upstream commits, including the eight after the
+  saved daily integration target `a6698271a4`);
   fork parent: `1bc735280b54411505861451119521a95d83a1e9`. Preserves both ancestries
   with a real merge, including upstream provider-package extraction, Pi session-tree rollback,
   model compatibility hints, native prompt prefill, preview profiles and layout fixes.
@@ -38,9 +39,18 @@
   observation, account/source-specific usage and limit rows, project memory/MCP, project idle
   compaction overrides and terminal-worker question cleanup. Upstream pooled Current/Trends
   limits and V2 sync replace their older components intentionally; Multiwork remains retired.
-- Validation: pending scoped typechecks and changed-source lint. Frozen-lockfile dependency
-  installation in progress. Tests, app builds, runtime/UI verification, packaging, reinstall,
-  restart and push were not performed under this task's constraints.
+- Completed the new `ModelCatalog`, `ProviderLatestVersions`, `ProviderEventLoggers` and
+  `McpProviderSessions` integrations. Workspace session guards read the shared service and
+  reject replaced provider credentials. The latest-version service layer gates every provider's
+  remote lookup, including Muse release-channel requests, behind the existing default-off
+  `T3CODE_ENABLE_PROVIDER_VERSION_CHECKS` setting. Constructor/type fixture updates preserve
+  account isolation, stale-session rejection and observed worker effort assertions.
+- Validation: frozen-lockfile installation; 16 scoped typechecks (server, web, desktop,
+  mobile, contracts, shared, client-runtime, and all nine provider packages) passed. Changed
+  source lint covered 688 files; its sole new native-tooltip error was fixed and targeted
+  rechecking passed (other warnings remain). Source/document whitespace checks exclude
+  upstream dependency patch files. Tests, app builds, runtime/UI verification, packaging,
+  reinstall, restart and push were not performed.
 
 ## Repair pre-existing worker questions during startup — 2026-10-08
 

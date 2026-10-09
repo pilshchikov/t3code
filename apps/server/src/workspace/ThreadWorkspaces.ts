@@ -24,7 +24,7 @@ import * as Semaphore from "effect/Semaphore";
 import { GitWorkflowService } from "../git/GitWorkflowService.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
-import { readMcpProviderSession } from "@t3tools/provider-core/server/mcpSession";
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 
 // MCP supplies its session id so a replaced agent cannot attach a prepared checkout.
 type Guard = { readonly providerSessionId?: string };
@@ -50,6 +50,7 @@ const make = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const path = yield* Path.Path;
   const mutations = yield* Semaphore.make(1);
+  const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
   const fail = (message: string) => Effect.fail(new ThreadWorkspaceError({ message }));
   const wrap = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
@@ -65,7 +66,7 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       if (
         input.providerSessionId !== undefined &&
-        readMcpProviderSession(input.threadId)?.providerSessionId !== input.providerSessionId
+        (yield* mcpSessions.read(input.threadId))?.providerSessionId !== input.providerSessionId
       ) {
         return yield* fail(
           "This MCP session is no longer active. Retry from the current provider session.",

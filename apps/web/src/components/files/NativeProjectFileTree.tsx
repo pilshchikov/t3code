@@ -7,6 +7,7 @@ import {
   composerMentionFromTreePath,
 } from "~/components/chat/composerMentionDrag";
 import { Spinner } from "~/components/ui/spinner";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { PierreEntryIcon } from "~/components/chat/PierreEntryIcon";
 import { cn } from "~/lib/utils";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
@@ -398,44 +399,49 @@ export function NativeProjectFileTree(props: {
 
     const selected = selectedPathSet.has(node.path);
     return (
-      <button
-        key={`file:${node.path}`}
-        type="button"
-        draggable
-        data-item-path={node.path}
-        title={node.path}
-        className={cn(
-          "flex w-auto items-center gap-1.5 rounded-md pe-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
-          node.ignored && "opacity-45",
-        )}
-        style={{ ...rowStyle, paddingLeft: paddingLeft + 18 }}
-        onClick={(event) => selectFile(node.path, event)}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          props.onContextMenu(node.path, { x: event.clientX, y: event.clientY });
-        }}
-        onDragStart={(event) => {
-          const paths = selectedPathSet.has(node.path) ? props.selectedPaths : [node.path];
-          const mentions = paths.map(composerMentionFromTreePath).filter(Boolean).join(" ");
-          if (!mentions) return;
-          event.dataTransfer.effectAllowed = "move";
-          event.dataTransfer.setData(COMPOSER_MENTION_DRAG_TYPE, mentions);
-        }}
-      >
-        <PierreEntryIcon
-          pathValue={node.path}
-          kind="file"
-          theme={props.resolvedTheme}
-          className="size-3.5"
-        />
-        <span
-          style={{ color: props.fileColors?.get(node.path) }}
-          className="min-w-0 flex-1 truncate text-xs text-muted-foreground group-hover:text-foreground"
+      <Tooltip key={`file:${node.path}`}>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              draggable
+              data-item-path={node.path}
+              className={cn(
+                "flex w-auto items-center gap-1.5 rounded-md pe-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
+                node.ignored && "opacity-45",
+              )}
+              style={{ ...rowStyle, paddingLeft: paddingLeft + 18 }}
+              onClick={(event) => selectFile(node.path, event)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                props.onContextMenu(node.path, { x: event.clientX, y: event.clientY });
+              }}
+              onDragStart={(event) => {
+                const paths = selectedPathSet.has(node.path) ? props.selectedPaths : [node.path];
+                const mentions = paths.map(composerMentionFromTreePath).filter(Boolean).join(" ");
+                if (!mentions) return;
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData(COMPOSER_MENTION_DRAG_TYPE, mentions);
+              }}
+            />
+          }
         >
-          {node.name}
-        </span>
-      </button>
+          <PierreEntryIcon
+            pathValue={node.path}
+            kind="file"
+            theme={props.resolvedTheme}
+            className="size-3.5"
+          />
+          <span
+            style={{ color: props.fileColors?.get(node.path) }}
+            className="min-w-0 flex-1 truncate text-xs text-muted-foreground group-hover:text-foreground"
+          >
+            {node.name}
+          </span>
+        </TooltipTrigger>
+        <TooltipPopup side="right">{node.path}</TooltipPopup>
+      </Tooltip>
     );
   };
 

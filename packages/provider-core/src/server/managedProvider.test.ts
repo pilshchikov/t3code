@@ -14,7 +14,7 @@ import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
-import { TestClock } from "effect/testing";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as ProviderHost from "./ProviderHost.ts";
 import { makeManagedServerProvider } from "./managedProvider.ts";
@@ -361,7 +361,7 @@ describe("makeManagedServerProvider", () => {
         assert.strictEqual(yield* Ref.get(checkCalls), 1);
         assert.deepStrictEqual(yield* provider.getSnapshot, refreshedSnapshot);
       }),
-    ),
+    ).pipe(Effect.provide(layerNeverRunTest)),
   );
 
   it.effect("reruns the provider check when streamed settings change", () =>

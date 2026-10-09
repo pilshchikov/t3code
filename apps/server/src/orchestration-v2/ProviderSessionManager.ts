@@ -47,20 +47,13 @@ import {
 } from "../observability/Metrics.ts";
 import { ProviderWorkspaceMissingError } from "../provider/Errors.ts";
 import * as ProjectService from "../project/ProjectService.ts";
-import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import * as ServerSettings from "../serverSettings.ts";
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
 import * as EventSink from "./EventSink.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProviderEventIngestor from "./ProviderEventIngestor.ts";
-import {
-  ProviderAdapterEventStreamError,
-  ProviderAdapterV2RuntimePolicy,
-  type ProviderAdapterV2Error,
-  type ProviderAdapterV2Event,
-  type ProviderAdapterV2EventSubscription,
-  type ProviderAdapterV2SessionRuntime,
-} from "@t3tools/provider-core/server/ProviderAdapter";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as ProviderAdapterRegistry from "./ProviderAdapterRegistry.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 
@@ -168,14 +161,20 @@ export interface ProviderSessionManagerV2Shape {
     readonly threadId: ThreadId;
     readonly providerSessionId: ProviderSessionId;
     readonly modelSelection: ModelSelection;
-    readonly runtimePolicy: ProviderAdapterV2RuntimePolicy;
+    readonly runtimePolicy: ProviderAdapter.ProviderAdapterV2RuntimePolicy;
     readonly resumeFromSession?: OrchestrationV2ProviderSession;
     readonly initialNativeThreadId?: string;
     readonly initialProviderItemIdentityVersion?: 2;
-  }) => Effect.Effect<ProviderAdapterV2SessionRuntime, ProviderSessionManagerV2Error>;
+  }) => Effect.Effect<
+    ProviderAdapter.ProviderAdapterV2SessionRuntime,
+    ProviderSessionManagerV2Error
+  >;
   readonly get: (
     providerSessionId: ProviderSessionId,
-  ) => Effect.Effect<Option.Option<ProviderAdapterV2SessionRuntime>, ProviderSessionManagerV2Error>;
+  ) => Effect.Effect<
+    Option.Option<ProviderAdapter.ProviderAdapterV2SessionRuntime>,
+    ProviderSessionManagerV2Error
+  >;
   readonly close: (
     providerSessionId: ProviderSessionId,
   ) => Effect.Effect<void, ProviderSessionManagerV2Error>;
@@ -218,8 +217,8 @@ interface LiveSessionEntry {
    */
   readonly mcpCredentialIdByThread: ReadonlyMap<ThreadId, string>;
   readonly supportsMultipleProviderThreads: boolean;
-  readonly runtime: ProviderAdapterV2SessionRuntime;
-  readonly exposedRuntime: ProviderAdapterV2SessionRuntime;
+  readonly runtime: ProviderAdapter.ProviderAdapterV2SessionRuntime;
+  readonly exposedRuntime: ProviderAdapter.ProviderAdapterV2SessionRuntime;
   readonly eventSubscribers: Ref.Ref<
     ReadonlyMap<number, Queue.Queue<ProviderSessionEventSignal, Cause.Done>>
   >;
@@ -251,10 +250,10 @@ interface IdleThreadUnload {
 }
 
 type ProviderSessionEventSignal =
-  | { readonly type: "event"; readonly event: ProviderAdapterV2Event }
+  | { readonly type: "event"; readonly event: ProviderAdapter.ProviderAdapterV2Event }
   | {
       readonly type: "failure";
-      readonly cause: Cause.Cause<ProviderAdapterV2Error>;
+      readonly cause: Cause.Cause<ProviderAdapter.ProviderAdapterV2Error>;
     };
 
 export interface ProviderSessionManagerV2LayerOptions {
@@ -286,7 +285,9 @@ function sessionKey(providerSessionId: ProviderSessionId): string {
  * Their node and transcript item are runless too, so they bypass the normal
  * per-run subscriber and are persisted by the session event pump.
  */
-function sessionScopedRuntimeRequestThreadId(event: ProviderAdapterV2Event): ThreadId | undefined {
+function sessionScopedRuntimeRequestThreadId(
+  event: ProviderAdapter.ProviderAdapterV2Event,
+): ThreadId | undefined {
   switch (event.type) {
     case "runtime_request.updated":
       return event.runtimeRequest.providerTurnId === null ? event.threadId : undefined;
@@ -305,7 +306,9 @@ function sessionScopedRuntimeRequestThreadId(event: ProviderAdapterV2Event): Thr
 }
 
 function providerThreadRuntimeKey(
-  providerThread: Parameters<ProviderAdapterV2SessionRuntime["resumeThread"]>[0]["providerThread"],
+  providerThread: Parameters<
+    ProviderAdapter.ProviderAdapterV2SessionRuntime["resumeThread"]
+  >[0]["providerThread"],
 ): string {
   const nativeThreadRef = providerThread.nativeThreadRef;
   return nativeThreadRef === null
@@ -315,10 +318,10 @@ function providerThreadRuntimeKey(
 
 function providerThreadLoadKey(input: {
   readonly providerThread: Parameters<
-    ProviderAdapterV2SessionRuntime["resumeThread"]
+    ProviderAdapter.ProviderAdapterV2SessionRuntime["resumeThread"]
   >[0]["providerThread"];
   readonly modelSelection?: ModelSelection;
-  readonly runtimePolicy?: ProviderAdapterV2RuntimePolicy;
+  readonly runtimePolicy?: ProviderAdapter.ProviderAdapterV2RuntimePolicy;
 }): string {
   return JSON.stringify({
     providerThread: providerThreadRuntimeKey(input.providerThread),
@@ -335,6 +338,7 @@ export const layerWithOptions = (
   | EventSink.EventSinkV2
   | FileSystem.FileSystem
   | IdAllocator.IdAllocatorV2
+  | McpProviderSessions.McpProviderSessions
   | McpSessionRegistry.McpSessionRegistry
   | ProjectionStore.ProjectionStoreV2
   | ProviderEventIngestor.ProviderEventIngestorV2
@@ -346,6 +350,7 @@ export const layerWithOptions = (
       const registry = yield* ProviderAdapterRegistry.ProviderAdapterRegistryV2;
       const fileSystem = yield* FileSystem.FileSystem;
       const mcpSessionRegistry = yield* McpSessionRegistry.McpSessionRegistry;
+      const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
       /**
        * Optional so the many focused tests that assemble this layer by hand do
        * not each need a settings stub; the production composition always
@@ -477,10 +482,9 @@ export const layerWithOptions = (
         providerInstanceId: ProviderInstanceId,
       ): Effect.Effect<PreparedMcpCredential> =>
         options.configureMcp === false
-          ? Effect.sync((): PreparedMcpCredential => {
-              McpProviderSession.clearMcpProviderSession(threadId);
-              return { mcpCredentialId: undefined, issued: false };
-            })
+          ? mcpSessions
+              .clear(threadId)
+              .pipe(Effect.as<PreparedMcpCredential>({ mcpCredentialId: undefined, issued: false }))
           : mcpPrepareLock.withLock(
               threadId,
               Effect.gen(function* () {
@@ -497,7 +501,7 @@ export const layerWithOptions = (
                 >(["orchestration", "worktree", "workspace", "memory", "pull-requests"]);
                 if (browserToolsAvailable) capabilities.add("preview");
                 if (deviceToolsAvailable) capabilities.add("device");
-                const existing = McpProviderSession.readMcpProviderSession(threadId);
+                const existing = yield* mcpSessions.read(threadId);
                 if (existing !== undefined) {
                   // Reserve before the async resolve so a release cannot
                   // revoke the credential between validation and reservation.
@@ -534,7 +538,7 @@ export const layerWithOptions = (
                   browserToolsAvailable,
                   capabilities,
                 });
-                McpProviderSession.setMcpProviderSession(credential.config);
+                yield* mcpSessions.set(credential.config);
                 reserveMcpCredential(threadId, credential.config.providerSessionId);
                 return { mcpCredentialId: credential.config.providerSessionId, issued: true };
               }),
@@ -549,19 +553,12 @@ export const layerWithOptions = (
         mcpCredentialId === undefined
           ? mcpSessionRegistry
               .revokeThread(threadId)
-              .pipe(
-                Effect.tap(() =>
-                  Effect.sync(() => McpProviderSession.clearMcpProviderSession(threadId)),
-                ),
-              )
+              .pipe(Effect.tap(() => mcpSessions.clear(threadId)))
           : mcpSessionRegistry.revokeProviderSession(mcpCredentialId).pipe(
               Effect.tap(() =>
-                Effect.sync(() => {
-                  if (
-                    McpProviderSession.readMcpProviderSession(threadId)?.providerSessionId ===
-                    mcpCredentialId
-                  ) {
-                    McpProviderSession.clearMcpProviderSession(threadId);
+                Effect.gen(function* () {
+                  if ((yield* mcpSessions.read(threadId))?.providerSessionId === mcpCredentialId) {
+                    yield* mcpSessions.clear(threadId);
                   }
                 }),
               ),
@@ -583,7 +580,7 @@ export const layerWithOptions = (
 
       const failSubscribers = (entry: LiveSessionEntry, detail: string) =>
         Effect.gen(function* () {
-          const error = new ProviderAdapterEventStreamError({
+          const error = new ProviderAdapter.ProviderAdapterEventStreamError({
             driver: entry.runtime.driver,
             providerSessionId: entry.runtime.providerSessionId,
             cause: detail,
@@ -625,7 +622,7 @@ export const layerWithOptions = (
         fiber === null ? Effect.void : Fiber.interrupt(fiber).pipe(Effect.ignore);
 
       const writeProviderSessionEvents = (input: {
-        readonly runtime: ProviderAdapterV2SessionRuntime;
+        readonly runtime: ProviderAdapter.ProviderAdapterV2SessionRuntime;
         readonly threadIds: Iterable<ThreadId>;
         readonly type: "provider-session.attached" | "provider-session.updated";
         readonly payload: OrchestrationV2ProviderSession;
@@ -1234,7 +1231,7 @@ export const layerWithOptions = (
       const removeThreadAttachment = (input: {
         readonly providerSessionId: ProviderSessionId;
         readonly threadId: ThreadId;
-        readonly runtime: ProviderAdapterV2SessionRuntime;
+        readonly runtime: ProviderAdapter.ProviderAdapterV2SessionRuntime;
       }) =>
         Ref.update(sessions, (current) => {
           const key = sessionKey(input.providerSessionId);
@@ -1297,7 +1294,7 @@ export const layerWithOptions = (
         readonly providerInstanceId: ProviderInstanceId;
       }) =>
         Effect.suspend(() => {
-          let attachedTo: ProviderAdapterV2SessionRuntime | undefined;
+          let attachedTo: ProviderAdapter.ProviderAdapterV2SessionRuntime | undefined;
           let preparedForCleanup: PreparedMcpCredential | undefined;
           let reservationDropped = false;
           const dropReservation = () => {
@@ -1639,7 +1636,7 @@ export const layerWithOptions = (
         subscribers: Ref.Ref<
           ReadonlyMap<number, Queue.Queue<ProviderSessionEventSignal, Cause.Done>>
         >,
-      ): Effect.Effect<ProviderAdapterV2EventSubscription> =>
+      ): Effect.Effect<ProviderAdapter.ProviderAdapterV2EventSubscription> =>
         Effect.gen(function* () {
           const queue = yield* Queue.unbounded<ProviderSessionEventSignal, Cause.Done>();
           const subscriberId = yield* Ref.getAndUpdate(nextSubscriberId, (value) => value + 1);
@@ -1670,15 +1667,15 @@ export const layerWithOptions = (
             ),
             Stream.ensuring(close),
           );
-          return { events, close } satisfies ProviderAdapterV2EventSubscription;
+          return { events, close } satisfies ProviderAdapter.ProviderAdapterV2EventSubscription;
         });
 
       const decorateRuntime = (
-        runtime: ProviderAdapterV2SessionRuntime,
+        runtime: ProviderAdapter.ProviderAdapterV2SessionRuntime,
         eventSubscribers: Ref.Ref<
           ReadonlyMap<number, Queue.Queue<ProviderSessionEventSignal, Cause.Done>>
         >,
-      ): ProviderAdapterV2SessionRuntime => {
+      ): ProviderAdapter.ProviderAdapterV2SessionRuntime => {
         const providerSessionId = runtime.providerSessionId;
         const subscribeEvents = makeEventSubscription(eventSubscribers);
         // Every provider's turn operations pass through here, so this is where they are
@@ -1900,7 +1897,10 @@ export const layerWithOptions = (
 
       const persistProviderSessionUpdate = (
         entry: LiveSessionEntry,
-        event: Extract<ProviderAdapterV2Event, { readonly type: "provider_session.updated" }>,
+        event: Extract<
+          ProviderAdapter.ProviderAdapterV2Event,
+          { readonly type: "provider_session.updated" }
+        >,
       ) =>
         Effect.gen(function* () {
           const current = (yield* Ref.get(sessions)).get(
@@ -1973,7 +1973,7 @@ export const layerWithOptions = (
                         .pipe(
                           Effect.mapError(
                             (cause) =>
-                              new ProviderAdapterEventStreamError({
+                              new ProviderAdapter.ProviderAdapterEventStreamError({
                                 driver: entry.runtime.driver,
                                 providerSessionId: entry.runtime.providerSessionId,
                                 cause,
@@ -2010,7 +2010,7 @@ export const layerWithOptions = (
               const cause = Exit.isFailure(exit)
                 ? exit.cause
                 : Cause.fail(
-                    new ProviderAdapterEventStreamError({
+                    new ProviderAdapter.ProviderAdapterEventStreamError({
                       driver: entry.runtime.driver,
                       providerSessionId: entry.runtime.providerSessionId,
                       cause: "Provider event stream ended unexpectedly.",
@@ -2260,7 +2260,7 @@ export const layerWithOptions = (
           Effect.gen(function* () {
             const entry = (yield* Ref.get(sessions)).get(sessionKey(providerSessionId));
             if (entry === undefined) {
-              return Option.none<ProviderAdapterV2SessionRuntime>();
+              return Option.none<ProviderAdapter.ProviderAdapterV2SessionRuntime>();
             }
             yield* touchActivity(providerSessionId);
             return Option.some(entry.exposedRuntime);

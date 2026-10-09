@@ -24,10 +24,7 @@ import * as ThreadWorkspaces from "../../workspace/ThreadWorkspaces.ts";
 import * as DateTime from "effect/DateTime";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { McpInvocationContext, type McpCapability } from "../McpInvocationContext.ts";
-import {
-  setMcpProviderSession,
-  clearMcpProviderSession,
-} from "@t3tools/provider-core/server/mcpSession";
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import { WorkspaceHandlersLive, WorkspaceToolkit } from "./workspace.ts";
 
 const NOW_MS = Date.parse("2026-06-10T12:00:00.000Z");
@@ -109,19 +106,19 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
     providerInstanceId,
     issuedAt: 1,
   };
+  const sessions = yield* McpProviderSessions.McpProviderSessions;
   yield* Effect.acquireRelease(
-    Effect.sync(() =>
-      setMcpProviderSession({
-        ...scope,
-        capabilities: new Set(["workspace"]),
-        browserToolsAvailable: false,
-        endpoint: "http://test",
-        authorizationHeader: "test",
-      }),
-    ),
-    () => Effect.sync(() => clearMcpProviderSession(threadId)),
+    sessions.set({
+      ...scope,
+      capabilities: new Set(["workspace"]),
+      browserToolsAvailable: false,
+      endpoint: "http://test",
+      authorizationHeader: "test",
+    }),
+    () => sessions.clear(threadId),
   );
   const deps = Layer.mergeAll(
+    Layer.succeed(McpProviderSessions.McpProviderSessions, sessions),
     Path.layer,
     Layer.succeed(
       Crypto.Crypto,
@@ -249,8 +246,8 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
       }),
       Effect.provide(deps),
     );
-  return { call, commands, creations, captures };
-});
+  return { call, commands, creations, captures, clearSession: () => sessions.clear(threadId) };
+}, Effect.provide(McpProviderSessions.layer));
 
 describe("thread workspace MCP", () => {
   it.effect("selects each repository independently and preserves the primary checkout", () =>
@@ -343,7 +340,7 @@ describe("thread workspace MCP", () => {
       yield* h
         .call("thread_workspace_create", { mode: "worktree", branch: "task" }, [])
         .pipe(Effect.flip);
-      clearMcpProviderSession(threadId);
+      yield* h.clearSession();
       const error = yield* h
         .call("thread_workspace_create", { mode: "worktree", branch: "task" })
         .pipe(Effect.flip);
