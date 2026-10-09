@@ -1,5 +1,28 @@
 # Fork Changes
 
+## Automatically unlink finished pull requests — 2026-10-09
+
+- The existing one-minute `PullRequestSyncReactor` sweep automatically unlinks merged/closed
+  PRs two hours after the host's merge/close time, including on settled, nonarchived threads.
+  No extra polling loop or agent action is required; overdue links are handled after startup.
+- Refreshes an expired candidate's host summary before removal so a reopened PR remains linked.
+  Host failures/rate limits postpone cleanup. Stack lookup failures do not block confirmed
+  terminal-link cleanup. Providers without merge/close timestamps use a persisted first-seen
+  terminal timestamp (`ThreadPullRequestSnapshot.terminalObservedAt`), independent of later
+  metadata refreshes. Reopening clears that fallback; another close starts a new period.
+- The ordinary unlink command gains an optional `ifClosedBefore` guard, checked against the
+  current stored snapshot at dispatch. Automatic removals keep a hidden dismissal marker and
+  stop PR watches, preventing stack discovery from re-adding finished PRs. Ordinary explicit
+  unlink behavior and other linked/open PRs remain unchanged. PRs themselves are not deleted.
+- SQLite and memory projection queries include legacy single links, while an explicit empty
+  canonical link array continues to mean unlinked. No schema migration is required; the new
+  snapshot field is optional JSON metadata.
+- Source paths: `PullRequestSyncReactor.ts`, `Orchestrator.ts`, `ProjectionStore.ts`, shared
+  `threadPullRequests.ts`, contracts `threadPullRequest.ts`/`orchestrationV2.ts` and the linked
+  reviews section of `docs/user/source-control.md`.
+- Validation: scoped server/web/mobile/contracts/shared/client-runtime typechecks and targeted
+  lint. No tests were added/run, no live database editing, rebuild, reinstall or restart.
+
 ## Daily upstream integration — 2026-10-09
 
 - Merge target: `64972461c0` (67 new upstream commits, including the eight after the

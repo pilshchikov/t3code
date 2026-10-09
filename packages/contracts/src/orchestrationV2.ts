@@ -2776,6 +2776,8 @@ export const OrchestrationV2Command = Schema.Union([
     commandId: CommandId,
     threadId: ThreadId,
     ...ThreadPullRequestKey.fields,
+    /** Automatic cleanup only: recheck the current terminal timestamp before unlinking. */
+    ifClosedBefore: Schema.optional(IsoDateTime),
   }),
   Schema.Struct({
     type: Schema.Literal("thread.pull-request-link.sync"),

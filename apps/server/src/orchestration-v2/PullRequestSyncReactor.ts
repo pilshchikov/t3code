@@ -13,6 +13,7 @@ import {
   threadPullRequestKeyOf,
   normalizeThreadPullRequestKey,
   threadPullRequestKeysEqual,
+  threadPullRequestTerminalAt,
   visibleThreadPullRequests,
 } from "@t3tools/shared/threadPullRequests";
 import * as Cause from "effect/Cause";
@@ -37,6 +38,12 @@ import * as ProjectionStore from "./ProjectionStore.ts";
 import { isTerminalRunStatus } from "./ThreadManagementService.ts";
 
 const SLOW_SYNC_INTERVAL_MS = 15 * 60 * 1_000;
+const TERMINAL_LINK_RETENTION_MS = 2 * 60 * 60 * 1_000;
+
+function terminalLinkExpired(link: ThreadPullRequestLink, nowMs: number): boolean {
+  const closedAt = threadPullRequestTerminalAt(link.snapshot);
+  return closedAt !== null && nowMs - closedAt >= TERMINAL_LINK_RETENTION_MS;
+}
 /** Shell commands that can merge or close a pull request without a merge notification. */
 const PULL_REQUEST_CLOSE_COMMAND = /\b(?:gh\s+pr|glab\s+mr)\s+(?:merge|close)\b/u;
 
@@ -66,6 +73,24 @@ function snapshotFieldsOf(summary: PullRequestSummary): SnapshotFields {
     ...(summary.reviewDecision === undefined ? {} : { reviewDecision: summary.reviewDecision }),
     ...(summary.checksState === undefined ? {} : { checksState: summary.checksState }),
     ...(summary.mergeability === undefined ? {} : { mergeability: summary.mergeability }),
+  };
+}
+
+function snapshotForLink(
+  link: ThreadPullRequestLink,
+  fields: SnapshotFields,
+  nowIso: string,
+): ThreadPullRequestSnapshot {
+  const terminalObservedAt =
+    fields.state === "open"
+      ? undefined
+      : link.snapshot?.state === fields.state
+        ? (link.snapshot.terminalObservedAt ?? link.snapshot.syncedAt)
+        : nowIso;
+  return {
+    ...fields,
+    syncedAt: nowIso,
+    ...(terminalObservedAt === undefined ? {} : { terminalObservedAt }),
   };
 }
 
@@ -173,6 +198,8 @@ export const make = Effect.gen(function* () {
 
   const isDue = (key: string, entries: ReadonlyArray<LinkEntry>, nowMs: number): boolean => {
     if (requested.has(key) || retryStacks.has(key)) return true;
+    // Cleanup remains due even when every linked thread has already settled.
+    if (entries.some((entry) => terminalLinkExpired(entry.link, nowMs))) return true;
     if (entries.some((entry) => entry.link.snapshot === null)) return true;
     // Settled threads stop watching their pull requests. Unsettling one makes its links due on
     // the next sweep, since the cadence clock below kept running while it was settled.
@@ -222,14 +249,21 @@ export const make = Effect.gen(function* () {
     ) {
       const { thread, link } = entry;
       const nextStack = fetchedStack === null ? link.stack : fetchedStack.stack;
+      const snapshot = snapshotForLink(link, fields, nowIso);
+      const closedAt = threadPullRequestTerminalAt(snapshot);
+      const expired = closedAt !== null && nowMs - closedAt >= TERMINAL_LINK_RETENTION_MS;
       const changed =
         link.snapshot === null ||
         !snapshotFieldsEqual(link.snapshot, fields) ||
-        !stacksEqual(link.stack, nextStack);
+        !stacksEqual(link.stack, nextStack) ||
+        (snapshot.terminalObservedAt !== undefined &&
+          link.snapshot?.terminalObservedAt === undefined);
       // Persist discovered siblings before a terminal snapshot can trigger settlement. A settled
       // thread that shares this pull request with an active one takes the fresh snapshot, but
       // gains no links.
-      for (const layer of isUnsettled(thread) ? (fetchedStack?.stack?.layers ?? []) : []) {
+      for (const layer of !expired && isUnsettled(thread)
+        ? (fetchedStack?.stack?.layers ?? [])
+        : []) {
         const layerKey = {
           host: normalizeThreadPullRequestKey(link).host,
           repository: link.repository,
@@ -267,8 +301,20 @@ export const make = Effect.gen(function* () {
           host: normalizeThreadPullRequestKey(link).host,
           repository: link.repository,
           number: link.number,
-          snapshot: { ...fields, syncedAt: nowIso },
+          snapshot,
           stack: nextStack,
+        });
+      }
+      if (expired) {
+        const uuid = yield* crypto.randomUUIDv4;
+        yield* engine.dispatch({
+          type: "thread.pull-request.unlink",
+          commandId: CommandId.make(`server:pr-auto-unlink:${thread.id}:${uuid}`),
+          threadId: thread.id,
+          ...normalizeThreadPullRequestKey(link),
+          ifClosedBefore: DateTime.formatIso(
+            DateTime.makeUnsafe(nowMs - TERMINAL_LINK_RETENTION_MS),
+          ),
         });
       }
     });
@@ -285,19 +331,32 @@ export const make = Effect.gen(function* () {
         number: first.link.number,
       };
       const generation = requested.get(key);
-      if (generation !== undefined) yield* pullRequests.invalidate({ reference: ref });
+      if (
+        generation !== undefined ||
+        entries.some((entry) => terminalLinkExpired(entry.link, nowMs))
+      )
+        yield* pullRequests.invalidate({ reference: ref });
       const summary = yield* pullRequests.summary(ref, { recoverTransientFailure: false });
       const fields = snapshotFieldsOf(summary);
+      const allExpired = entries.every((entry) =>
+        terminalLinkExpired(
+          { ...entry.link, snapshot: snapshotForLink(entry.link, fields, nowIso) },
+          nowMs,
+        ),
+      );
+      // Terminal-link cleanup needs only the host summary; a failed stack lookup
+      // must not keep an already-finished PR attached indefinitely.
       const needsStack =
-        generation !== undefined ||
-        retryStacks.has(key) ||
-        entries.some(
-          (entry) =>
-            entry.link.snapshot === null ||
-            !snapshotFieldsEqual(entry.link.snapshot, fields) ||
-            (summary.stack !== undefined &&
-              (entry.link.stack?.number ?? null) !== (summary.stack?.number ?? null)),
-        );
+        !allExpired &&
+        (generation !== undefined ||
+          retryStacks.has(key) ||
+          entries.some(
+            (entry) =>
+              entry.link.snapshot === null ||
+              !snapshotFieldsEqual(entry.link.snapshot, fields) ||
+              (summary.stack !== undefined &&
+                (entry.link.stack?.number ?? null) !== (summary.stack?.number ?? null)),
+          ));
       // A summary that says the pull request is in no stack, for links that hold none, already
       // answers what the stack read would.
       const knownUnstacked =
@@ -326,6 +385,20 @@ export const make = Effect.gen(function* () {
       if (needsStack) {
         if (fetchedStack === null) {
           retryStacks.add(key);
+          // One PR can have different observation times on several threads.
+          // Unlink the aged copies even if newer copies still need stack data.
+          yield* Effect.forEach(
+            entries.filter((entry) =>
+              terminalLinkExpired(
+                {
+                  ...entry.link,
+                  snapshot: snapshotForLink(entry.link, fields, nowIso),
+                },
+                nowMs,
+              ),
+            ),
+            (entry) => syncEntry(entry, fields, null).pipe(persistence.withPermits(1)),
+          );
           return;
         }
         retryStacks.delete(key);

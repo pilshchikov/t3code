@@ -30,8 +30,8 @@ export const ThreadLinkedPullRequest = Schema.Struct({
 export type ThreadLinkedPullRequest = typeof ThreadLinkedPullRequest.Type;
 
 /** Who created a thread ↔ pull request link. `stack-dismissed` is a tombstone
- * for a native-stack member the user unlinked, so the sync reactor does not
- * re-add it; clients hide it. */
+ * for a dismissed stack member or an automatically expired terminal link, so
+ * discovery does not re-add it; clients hide it. */
 export const ThreadPullRequestLinkSource = Schema.Literals([
   "manual",
   "created",
@@ -54,6 +54,8 @@ export const ThreadPullRequestSnapshot = Schema.Struct({
   isDraft: Schema.Boolean,
   updatedAt: Schema.NullOr(IsoDateTime),
   syncedAt: IsoDateTime,
+  /** First observed terminal state, used when the host omits its close/merge time. */
+  terminalObservedAt: Schema.optional(IsoDateTime),
   closedAt: Schema.optional(Schema.NullOr(Schema.String)),
   mergedAt: Schema.optional(Schema.NullOr(Schema.String)),
   author: Schema.optional(Schema.NullOr(PullRequestActor)),

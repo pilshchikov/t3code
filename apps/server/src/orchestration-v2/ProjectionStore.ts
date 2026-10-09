@@ -5569,7 +5569,9 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           FROM orchestration_v2_projection_threads
           WHERE deleted_at IS NULL${threadId === undefined ? sql`` : sql` AND thread_id = ${threadId}`}
             AND json_extract(payload_json, '$.archivedAt') IS NULL
-            AND json_array_length(payload_json, '$.pullRequests') > 0
+            AND (json_array_length(payload_json, '$.pullRequests') > 0
+              OR (json_type(payload_json, '$.pullRequests') IS NULL
+                AND json_type(payload_json, '$.linkedPullRequest') = 'object'))
           ORDER BY updated_at ASC, thread_id ASC
         `;
         return yield* Effect.forEach(rows, (row) =>
@@ -5580,7 +5582,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
               lineage: thread.lineage,
               settledOverride: thread.settledOverride,
               settledAt: thread.settledAt,
-              pullRequests: thread.pullRequests ?? [],
+              pullRequests: threadPullRequestsOf(thread),
             })),
           ),
         );
@@ -6077,7 +6079,7 @@ export const layerMemory: Layer.Layer<ProjectionStoreV2> = Layer.effect(
                   (threadId === undefined || thread.id === threadId) &&
                   thread.deletedAt === null &&
                   thread.archivedAt === null &&
-                  (thread.pullRequests ?? []).length > 0,
+                  threadPullRequestsOf(thread).length > 0,
               )
               .toSorted(
                 (left, right) =>
@@ -6090,7 +6092,7 @@ export const layerMemory: Layer.Layer<ProjectionStoreV2> = Layer.effect(
                 lineage: thread.lineage,
                 settledOverride: thread.settledOverride,
                 settledAt: thread.settledAt,
-                pullRequests: thread.pullRequests ?? [],
+                pullRequests: threadPullRequestsOf(thread),
               })),
           ),
         ),

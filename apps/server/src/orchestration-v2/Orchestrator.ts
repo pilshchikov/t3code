@@ -15,6 +15,7 @@ import {
   normalizeThreadPullRequestKey,
   visibleThreadPullRequests,
   threadPullRequestKeysEqual,
+  threadPullRequestTerminalAt,
   legacyThreadPullRequestKey,
 } from "@t3tools/shared/threadPullRequests";
 import {
@@ -3107,7 +3108,12 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             ];
           } else if (command.type === "thread.pull-request.unlink") {
             if (!existing) return thread;
+            if (command.ifClosedBefore !== undefined) {
+              const closedAt = threadPullRequestTerminalAt(existing.snapshot);
+              if (closedAt === null || closedAt > Date.parse(command.ifClosedBefore)) return thread;
+            }
             const belongsToStack =
+              command.ifClosedBefore !== undefined ||
               existing.source === "stack" ||
               existing.stack !== null ||
               links.some(

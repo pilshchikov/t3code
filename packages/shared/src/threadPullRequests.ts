@@ -4,6 +4,7 @@ import type {
   ThreadLinkedPullRequest,
   ThreadPullRequestKey,
   ThreadPullRequestLink,
+  ThreadPullRequestSnapshot,
 } from "@t3tools/contracts";
 
 import { pullRequestHostOf } from "@t3tools/contracts";
@@ -74,6 +75,23 @@ export function threadPullRequestKeysEqual(
 export function threadPullRequestKeyOf(key: ThreadPullRequestKeySource): string {
   const normalized = normalizeThreadPullRequestKey(key);
   return `${normalized.host}/${normalized.repository}#${normalized.number}`;
+}
+
+/** Host close/merge time, or the first observed terminal state for hosts without it. */
+export function threadPullRequestTerminalAt(
+  snapshot: ThreadPullRequestSnapshot | null,
+): number | null {
+  if (snapshot === null || snapshot.state === "open") return null;
+  const candidates =
+    snapshot.state === "merged"
+      ? [snapshot.mergedAt, snapshot.closedAt, snapshot.terminalObservedAt, snapshot.syncedAt]
+      : [snapshot.closedAt, snapshot.terminalObservedAt, snapshot.syncedAt];
+  for (const value of candidates) {
+    if (!value) continue;
+    const timestamp = Date.parse(value);
+    if (Number.isFinite(timestamp)) return timestamp;
+  }
+  return null;
 }
 
 /** Links a user should see. Tombstoned stack members stay in the array only so the

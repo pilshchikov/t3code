@@ -296,7 +296,12 @@ separately in each repository. The overview also works in the mobile web panel.
 Unlink a review from its
 row menu. An unlinked stack layer stays out of later syncs. Open linked reviews refresh on the server;
 closed reviews refresh periodically so reopening one on the host is detected. Merged reviews refresh
-when requested. A settled thread's reviews stop refreshing until you unsettle it. With **Auto-settle merged threads** enabled, a thread can settle after every linked
+when requested. A settled thread's reviews stop refreshing until you unsettle it. Merged and closed
+reviews automatically unlink after two hours, including on settled threads, on the next server
+sync pass. The timer uses the host's merge/close time, or the first observed terminal state when
+that time is unavailable. Cleanup refreshes the review first and preserves one that has reopened;
+if the host cannot be reached, cleanup waits for a successful refresh. Automatically removed
+reviews stay out of stack discovery. With **Auto-settle merged threads** enabled, a thread can settle after every linked
 review is terminal. An open or unsynced link keeps it active.
 
 Ask the agent to watch, monitor, or babysit a pull request and it calls `watch_pull_request`. While
