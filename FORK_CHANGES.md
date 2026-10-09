@@ -1,5 +1,22 @@
 # Fork Changes
 
+## Auto-compaction waits for quota recovery and real results — 2026-10-09
+
+- `IdleCompaction.ts` blocks eligibility after a root usage-limit failure on the active
+  provider/account until a different completed root provider turn has delivered a completed
+  assistant response or tool result after the failure and its reported reset time, when known.
+  Reset clocks, reconnects, cancelled requests and synthetic completions cannot clear the block.
+  Historical failures remain the durable evidence; no new poll, timer, setting or migration.
+- Timeout age includes receipt of the current root's final assistant result. Actual execution
+  completion order selects the latest run, so a previously queued command resumed later is
+  judged by when it ran. Native background output still does not reset the allowed-background
+  timer. Compact turns (including `/compact` with arguments) do not trigger another compaction.
+- The existing dispatch-time eligibility check calls this same policy, preventing a scheduled
+  compaction from bypassing a limit state that changed before dispatch. Global/project token
+  and timeout settings, manual compaction and provider/account isolation remain intact.
+- Validation: scoped server typecheck, targeted lint and a read-only SQLite EXPLAIN check of
+  query syntax/index use. No tests were added/run, no database mutation, rebuild or restart.
+
 ## Automatically unlink finished pull requests — 2026-10-09
 
 - The existing one-minute `PullRequestSyncReactor` sweep automatically unlinks merged/closed

@@ -232,6 +232,10 @@ T3-managed delegated tasks still prevent compaction. Sessions without reported c
 archived, settled, snoozed, failed, interrupted, and native child threads are skipped. Reading
 the conversation does not reset the timer. A compaction never triggers another compaction
 without a new conversation turn. The server must remain running; the client can be closed.
+After a provider usage limit, automatic compaction waits for a new successful agent turn with
+results after the reset. The idle timeout starts from that completed work; the reset time alone
+does not trigger compaction.
+
 Compaction uses the provider's normal operation and can consume provider usage.
 
 ## Goals

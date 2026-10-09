@@ -61,12 +61,25 @@ const make = Effect.gen(function* () {
         used_tokens: number;
         idle_since: string;
         completed_at: string;
+        result_received_at: string | null;
         provider_status: string;
         roster_work: number;
         item_work: number;
         subagent_work: number;
       }>`
       SELECT t.thread_id, t.project_id, r.run_id, r.completed_at, p.status AS provider_status,
+        (SELECT max(reply.updated_at)
+          FROM orchestration_v2_projection_turn_items reply
+          JOIN orchestration_v2_projection_provider_turns reply_turn
+            ON reply_turn.provider_turn_id = reply.provider_turn_id
+            AND reply_turn.status = 'completed'
+          JOIN orchestration_v2_projection_run_attempts reply_attempt
+            ON reply_attempt.attempt_id = reply_turn.run_attempt_id
+            AND reply_attempt.run_id = r.run_id
+            AND reply_attempt.root_node_id = reply_turn.node_id
+          WHERE reply.thread_id = t.thread_id AND reply.run_id = r.run_id
+            AND reply.type = 'assistant_message' AND reply.status = 'completed'
+            AND reply_turn.provider_thread_id = p.provider_thread_id) AS result_received_at,
         COALESCE((SELECT max(CASE
           WHEN background.provider_thread_id = p.provider_thread_id
             AND json_extract(task.value, '$.kind') IN ('command', 'monitor', 'subagent')
@@ -131,7 +144,10 @@ const make = Effect.gen(function* () {
         AND p.provider_instance_id = t.provider_instance_id
       JOIN orchestration_v2_projection_runs r ON r.run_id = (
         SELECT latest.run_id FROM orchestration_v2_projection_runs latest
-        WHERE latest.thread_id = t.thread_id ORDER BY latest.ordinal DESC LIMIT 1
+        WHERE latest.thread_id = t.thread_id AND latest.status <> 'queued'
+          AND NOT (latest.status = 'cancelled' AND json_extract(latest.payload_json, '$.startedAt') IS NULL)
+        ORDER BY latest.completed_at IS NULL DESC, latest.completed_at DESC,
+          latest.ordinal DESC LIMIT 1
       ) AND r.status = 'completed'
       JOIN orchestration_v2_projection_messages m
         ON m.message_id = json_extract(r.payload_json, '$.userMessageId')
@@ -145,6 +161,45 @@ const make = Effect.gen(function* () {
         AND r.completed_at <= ${cutoff}
         AND used_tokens >= ${minTokens}
         AND lower(trim(json_extract(m.payload_json, '$.text'))) <> '/compact'
+        AND lower(trim(json_extract(m.payload_json, '$.text'))) NOT LIKE '/compact %'
+        -- A reset clock or a synthetic completed run cannot clear a quota block.
+        -- Require a different successful root turn, on the active provider, with
+        -- real results after the failure and its reported reset time (if known).
+        AND NOT EXISTS (
+          SELECT 1 FROM orchestration_v2_projection_turn_items limited
+          JOIN orchestration_v2_projection_runs limited_run ON limited_run.run_id = limited.run_id
+          WHERE limited.thread_id = t.thread_id AND limited.type = 'error'
+            AND json_extract(limited.payload_json, '$.failure.class') = 'usage_limit'
+            AND limited.node_id IS json_extract(limited_run.payload_json, '$.rootNodeId')
+            AND limited_run.provider = p.driver
+            AND COALESCE(limited_run.provider_instance_id,
+              json_extract(limited_run.payload_json, '$.providerInstanceId'),
+              json_extract(limited_run.payload_json, '$.modelSelection.instanceId'),
+              p.provider_instance_id) = p.provider_instance_id
+            AND NOT EXISTS (
+              SELECT 1 FROM orchestration_v2_projection_provider_turns recovered
+              JOIN orchestration_v2_projection_run_attempts recovered_attempt
+                ON recovered_attempt.attempt_id = recovered.run_attempt_id
+                AND recovered_attempt.root_node_id = recovered.node_id
+                AND recovered_attempt.run_id = r.run_id
+              WHERE recovered.thread_id = t.thread_id
+                AND recovered.provider_thread_id = p.provider_thread_id
+                AND recovered.status = 'completed'
+                AND r.run_id <> limited.run_id
+                AND recovered.completed_at > limited.updated_at
+                AND (json_extract(limited.payload_json, '$.failure.resetAt') IS NULL
+                  OR julianday(recovered.completed_at) >=
+                    julianday(json_extract(limited.payload_json, '$.failure.resetAt')))
+                AND EXISTS (
+                  SELECT 1 FROM orchestration_v2_projection_turn_items result
+                  WHERE result.thread_id = t.thread_id AND result.run_id = r.run_id
+                    AND result.provider_turn_id = recovered.provider_turn_id
+                    AND result.status = 'completed'
+                    AND result.type IN ('assistant_message', 'command_execution', 'dynamic_tool')
+                    AND result.updated_at > limited.updated_at
+                )
+            )
+        )
         AND NOT EXISTS (SELECT 1 FROM orchestration_v2_projection_runs busy
           WHERE busy.thread_id = t.thread_id
           AND busy.status IN ('queued', 'preparing', 'starting', 'running', 'waiting'))
@@ -160,7 +215,12 @@ const make = Effect.gen(function* () {
         if (work > (allowBackground && row.provider_status === "idle" ? 1 : 0)) return [];
         // Background output does not keep postponing compaction. A new parent
         // reply/continuation does: it creates a new run and restarts this timeout.
-        const idleSince = Date.parse(allowBackground ? row.completed_at : row.idle_since);
+        const resultReceivedAt =
+          row.result_received_at === null ? 0 : Date.parse(row.result_received_at);
+        const idleSince = Math.max(
+          Date.parse(allowBackground ? row.completed_at : row.idle_since),
+          Number.isFinite(resultReceivedAt) ? resultReceivedAt : 0,
+        );
         return policy.idleCompactionEnabled &&
           Number.isFinite(idleSince) &&
           now - idleSince >= policy.idleCompactionMinutes * 60_000 &&
