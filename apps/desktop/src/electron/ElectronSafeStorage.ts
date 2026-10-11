@@ -6,7 +6,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import * as Electron from "electron";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 
 const electronSafeStorageErrorFields = {
   cause: Schema.Defect(),
@@ -68,7 +68,7 @@ export class ElectronSafeStorage extends Context.Service<
 
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
-  const platform = yield* HostProcessPlatform;
+  const platform = yield* HostProcess.Platform;
   // Local fork builds are ad-hoc signed, so macOS treats every rebuild as a different app and asks
   // for the Safe Storage Keychain secret again. Keep OS-keychain storage off unless the process
   // explicitly opts in. Consumers already handle unavailable encryption by keeping credentials in

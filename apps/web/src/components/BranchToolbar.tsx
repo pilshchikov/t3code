@@ -1,4 +1,3 @@
-import { cn } from "~/lib/utils";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
 import { readLocalApi } from "../localApi";
 import { stackedThreadToast, toastManager } from "./ui/toast";
@@ -105,6 +104,7 @@ import { Textarea } from "./ui/textarea";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { MiddleTruncate } from "./ui/middle-truncate";
 import { useComposerMenuProps } from "./chat/composerEventScope";
+import { observeResize } from "~/lib/observeResize";
 
 export interface BranchToolbarHandle {
   openBranchPicker: () => void;
@@ -155,7 +155,7 @@ function WorkspaceBadge(props: {
       <MenuTrigger
         className={workspaceBadgeClassName(
           color,
-          `truncate rounded px-1.5 py-0.5 text-[10px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring ${props.compact ? "max-w-20" : "max-w-32"}`,
+          `truncate rounded px-1.5 py-0.5 text-[10px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${props.compact ? "max-w-20" : "max-w-32"}`,
         )}
         title={`${props.workspace.path} · Change directory color`}
       >
@@ -666,11 +666,10 @@ function useLabelsOverflow(element: HTMLDivElement | null): boolean {
 
   useEffect(() => {
     if (!element) return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
+    const stopObserving = observeResize(element, measure);
     document.fonts.addEventListener("loadingdone", measure);
     return () => {
-      observer.disconnect();
+      stopObserving();
       document.fonts.removeEventListener("loadingdone", measure);
     };
   }, [element, measure]);
@@ -1004,7 +1003,7 @@ export const BranchToolbar = memo(function BranchToolbar({
               data-composer-context-control="true"
               className={workspaceBadgeClassName(
                 resolveWorkspaceColor(root, rootIndex),
-                "flex h-7 max-w-44 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "flex h-7 max-w-44 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
               )}
               aria-label={`Directory controls for ${workspaceDisplayName(root, rootIndex)}`}
               title={root.path}

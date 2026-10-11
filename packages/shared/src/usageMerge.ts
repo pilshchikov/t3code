@@ -363,6 +363,7 @@ const PROVIDER_FALLBACK_LABEL: Record<UsageProviderKind, string> = {
   cursor: "Cursor",
   grok: "Grok",
   opencode: "OpenCode",
+  pi: "Pi",
 };
 
 /**

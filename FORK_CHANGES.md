@@ -1,5 +1,44 @@
 # Fork Changes
 
+## Daily upstream integration — 2026-10-11
+
+- Merge target: `ed0f7b908b2e7b3a22e6fd82a73794c2fe6ee06e` (224 upstream
+  commits since the common ancestor `64972461c0606a4eafdd3cd08056155b6a2fea95`);
+  fork parent: `b5b8afe6a24acb64e856d2bd36e1f007dac5de5a`. Real merge preserves
+  both ancestries. Reviewed conflicts individually and overlapping automatic merges.
+- Integrated source-control package extraction, GitCafe, review guides, file metadata,
+  server-owned setup queues, model preferences, richer account identity and usage readers.
+  Existing migration IDs 43–65 remain assigned; the new review-guide migration uses 66.
+  Bitbucket clone names keep `spilshchikov-pr-`. Files retain repository-specific selectors,
+  expansion/collapse/resize state, editing and exact-checkout navigation. Project-root
+  markdown opens the explorer, and sidebar CLI resume remains mounted with V2 native refs.
+- Traced the mounted Arcane renderer on send/resume/queue/steer and both Stop paths, with
+  saved send/stop colors and Classic available. Existing chats and draft heroes retain
+  forced mobile expansion, without scroll/focus collapse. Timeline recovery/bottom following,
+  first assistant text outside settled folds, mixed-work labels and imported identity stability
+  remain. Custom chat width and project rail/status colors remain connected to the live UI.
+  Native mobile combines upstream reserved-region insets with the fork's keyboard handling
+  and explicit composer width reset after layout changes.
+- Unified upstream persisted per-thread right-panel maximize with the fork's shortcuts,
+  toggle and clearing on hide. Kept watcher-driven file caching while seeding upstream
+  metadata after reads. Ordinary active/background work still blocks primary checkout changes;
+  only the validated initial preparing run may bind/clear it while follow-ups are queued.
+- Claude worker observations still update their own effort/model selection, never borrowing
+  unknown effort from the parent. Usage readers retain instance IDs, display names, isolated
+  Claude HOME/config directories and cached legacy-directory history. New usage fields and
+  pooled limits keep account and model rows separate. Project memory/workspace MCP and idle
+  compaction, including project overrides and quota-recovery guards, remain wired into V2.
+  Multiwork and replaced usage/sync components remain intentionally retired/superseded.
+- Analytics/OTLP exports remain disabled, including the new endpoint probe; its settings
+  section states that policy. Provider network/update and keychain behavior retain opt-in
+  gates. Restored orphaned settle-worktree and settled-thread expiry settings to the cleanup
+  service; expiry uses normal deletion with dispatch-time changed/pinned/busy/session guards.
+  Upstream cleanup reports and retention choices are integrated, defaulting to keeping ignored
+  files beyond `node_modules`; secondary repository selections continue to protect checkouts.
+- Validation: frozen-lockfile installation passed. Scoped typechecks and changed-source lint
+  are pending. No tests were added/run. No app builds, runtime/UI verification, packaging,
+  installed-app or live-data operations, process stops, push, PR or main updates were performed.
+
 ## Auto-compaction waits for quota recovery and real results — 2026-10-09
 
 - `IdleCompaction.ts` blocks eligibility after a root usage-limit failure on the active

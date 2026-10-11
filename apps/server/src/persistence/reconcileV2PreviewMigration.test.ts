@@ -69,6 +69,7 @@ describe("V2 preview upgrade", () => {
         [63, "WebhookRelayDeliveries"],
         [64, "McpAppModelContext"],
         [65, "ThreadSnapshotWindowIndexes"],
+        [66, "PullRequestReviewGuides"],
       ]);
       assert.deepStrictEqual(yield* runMigrations(), []);
       assert.deepStrictEqual(yield* sql`SELECT * FROM orchestration_v2_legacy_imports`, imports);
@@ -153,6 +154,7 @@ describe("V2 preview upgrade", () => {
         [63, "WebhookRelayDeliveries"],
         [64, "McpAppModelContext"],
         [65, "ThreadSnapshotWindowIndexes"],
+        [66, "PullRequestReviewGuides"],
       ]);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );

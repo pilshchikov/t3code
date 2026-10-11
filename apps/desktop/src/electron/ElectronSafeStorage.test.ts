@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -24,7 +24,7 @@ const makeService = (env: Readonly<Record<string, string>>) =>
   ElectronSafeStorage.make.pipe(
     Effect.provide(
       Layer.merge(
-        Layer.succeed(HostProcessPlatform, "darwin"),
+        Layer.succeed(HostProcess.Platform, "darwin"),
         ConfigProvider.layer(ConfigProvider.fromEnv({ env })),
       ),
     ),

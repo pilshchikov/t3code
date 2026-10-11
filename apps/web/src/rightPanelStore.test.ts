@@ -331,6 +331,35 @@ describe("rightPanelStore", () => {
     expect(fileSurfaceId("src/index.ts", "/repo/one")).toBe("file:%2Frepo%2Fone:src/index.ts");
   });
 
+  it("keeps a maximized panel per thread without counting it as a manual choice", () => {
+    const store = useRightPanelStore.getState();
+    store.open(refA, "preview");
+    store.open(refB, "diff");
+    const revision = store.getUserActionRevision(refA);
+    store.setMaximized(refA, true);
+    store.setMaximized(refB, true);
+    store.setMaximized(refB, false);
+
+    const { byThreadKey } = useRightPanelStore.getState();
+    expect(selectThreadRightPanelState(byThreadKey, refA).maximized).toBe(true);
+    expect(selectThreadRightPanelState(byThreadKey, refB).maximized).toBeUndefined();
+    expect(store.getUserActionRevision(refA)).toBe(revision);
+  });
+
+  it("restores a saved maximized panel during migration", () => {
+    const migrated = migratePersistedRightPanelState({
+      byThreadKey: {
+        "env-1:thread-A": {
+          isOpen: true,
+          activeSurfaceId: "browser:new",
+          surfaces: [{ id: "browser:new", kind: "preview", resourceId: null }],
+          maximized: true,
+        },
+      },
+    });
+    expect(selectThreadRightPanelState(migrated.byThreadKey, refA).maximized).toBe(true);
+  });
+
   it("drops the legacy singleton terminal surface during migration", () => {
     expect(
       migratePersistedRightPanelState({
@@ -1157,28 +1186,51 @@ describe("rightPanelStore", () => {
       ),
     ).toEqual(["terminal:term-1", "browser:tab-b", "browser:tab-c"]);
   });
+
+  it("moves a surface to a new index and keeps it there through browser reconciliation", () => {
+    const store = useRightPanelStore.getState();
+    store.openTerminal(refA, "term-1");
+    store.openBrowser(refA, "tab-a");
+    store.open(refA, "diff");
+    const revision = store.getUserActionRevision(refA);
+    const surfaceIds = () =>
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).surfaces.map(
+        (surface) => surface.id,
+      );
+
+    store.moveSurface(refA, "browser:tab-a", 0);
+    expect(surfaceIds()).toEqual(["browser:tab-a", "terminal:term-1", "diff"]);
+    store.moveSurface(refA, "browser:tab-a", 2);
+    expect(surfaceIds()).toEqual(["terminal:term-1", "diff", "browser:tab-a"]);
+    store.moveSurface(refA, "browser:tab-a", 0);
+
+    store.reconcileBrowserSurfaces(refA, ["tab-a", "tab-b"]);
+    expect(surfaceIds()).toEqual(["browser:tab-a", "terminal:term-1", "diff", "browser:tab-b"]);
+    // Reordering is not a choice about what the panel shows.
+    expect(store.getUserActionRevision(refA)).toBe(revision);
+  });
 });
 
 describe("maximized panel state", () => {
   it("reports maximized only while the panel is also open", () => {
     useRightPanelStore.getState().open(refA, "diff");
-    useRightPanelStore.getState().setMaximized(refA);
+    useRightPanelStore.getState().setMaximized(refA, true);
     expect(selectThreadRightPanelMaximized(useRightPanelStore.getState(), refA)).toBe(true);
     expect(selectThreadRightPanelMaximized(useRightPanelStore.getState(), refB)).toBe(false);
   });
 
   it("gives up the maximized state when the panel is hidden", () => {
     useRightPanelStore.getState().open(refA, "diff");
-    useRightPanelStore.getState().setMaximized(refA);
+    useRightPanelStore.getState().setMaximized(refA, true);
     useRightPanelStore.getState().close(refA);
-    expect(useRightPanelStore.getState().maximizedThreadKey).toBeNull();
+    expect(selectThreadRightPanelMaximized(useRightPanelStore.getState(), refA)).toBe(false);
   });
 
   // The blank-chat report: a panel hidden while maximized used to come back maximized, so the chat
   // column stayed at zero width until a thread switch changed the key the flag hung on.
   it("does not come back maximized after being toggled shut", () => {
     useRightPanelStore.getState().open(refA, "diff");
-    useRightPanelStore.getState().setMaximized(refA);
+    useRightPanelStore.getState().setMaximized(refA, true);
     useRightPanelStore.getState().toggleVisibility(refA);
     useRightPanelStore.getState().toggleVisibility(refA);
     expect(
@@ -1189,7 +1241,7 @@ describe("maximized panel state", () => {
 
   it("does not come back maximized after every tab was closed", () => {
     useRightPanelStore.getState().open(refA, "diff");
-    useRightPanelStore.getState().setMaximized(refA);
+    useRightPanelStore.getState().setMaximized(refA, true);
     useRightPanelStore.getState().closeAllSurfaces(refA);
     useRightPanelStore.getState().toggleVisibility(refA);
     expect(selectThreadRightPanelMaximized(useRightPanelStore.getState(), refA)).toBe(false);

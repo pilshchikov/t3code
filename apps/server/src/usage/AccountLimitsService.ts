@@ -46,7 +46,7 @@ import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
 import { ServerConfig } from "../config.ts";
 import { resolveCodexHomeLayout } from "../provider/Drivers/CodexHomeLayout.ts";
 import { deriveProviderInstanceConfigMap } from "../provider/ProviderInstanceRegistryHydration.ts";
-import { HostProcessEnvironment } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import * as ServerSettings from "../serverSettings.ts";
@@ -182,7 +182,7 @@ export const make = Effect.gen(function* () {
    * migrated row may belong to somebody else, so it is evicted rather than
    * shown as a ghost account forever.
    */
-  const hostEnvironment = yield* HostProcessEnvironment;
+  const hostEnvironment = yield* HostProcess.Environment;
   const migratedSlots = new Set<string>();
   const cachePath = path.join(config.stateDir, "account-limits.json");
   let lastCodexSeedAttemptAtMs = 0;

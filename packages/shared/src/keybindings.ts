@@ -236,7 +236,7 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   ...PROJECT_JUMP_KEYBINDING_COMMANDS.map((command, index) => ({
     key: `mod+${index + 1}`,
     command,
-    when: "isDesktop",
+    when: "!modelPickerOpen && isDesktop",
   })),
   // Control rather than mod, so filling a slot cannot be confused with using one.
   ...PROJECT_ASSIGN_KEYBINDING_COMMANDS.map((command, index) => ({

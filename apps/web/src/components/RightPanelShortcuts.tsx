@@ -87,7 +87,7 @@ export function RightPanelShortcuts() {
       // dropped key.
       if (!store.byThreadKey[`${ref.environmentId}:${ref.threadId}`]?.isOpen) {
         store.toggleVisibility(ref);
-        store.setMaximized(ref);
+        store.setMaximized(ref, true);
         return;
       }
       store.toggleMaximized(ref);
