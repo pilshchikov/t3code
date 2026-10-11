@@ -1943,8 +1943,8 @@ export function PullRequestDetailPanel({
                 size="xs"
                 variant="outline"
                 className="shrink-0 gap-1 px-1.5"
-                aria-label={openOnHostLabel(detail.provider)}
-                title={openOnHostLabel(detail.provider)}
+                aria-label={openOnHostLabel(hostClient)}
+                title={openOnHostLabel(hostClient)}
                 onClick={() => void readLocalApi()?.shell.openExternal(detail.url)}
               >
                 <ArrowUpRightIcon aria-hidden className="size-3.5" />

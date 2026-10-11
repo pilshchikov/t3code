@@ -344,8 +344,11 @@ const updateThreadStateMap = (
 ): Record<string, ThreadRightPanelState> => {
   const current = byThreadKey[threadKey] ?? EMPTY_THREAD_STATE;
   const updated = updater(current);
-  const next =
-    !updated.isOpen && updated.maximized ? { ...updated, maximized: undefined } : updated;
+  let next = updated;
+  if (!updated.isOpen && updated.maximized) {
+    const { maximized: _maximized, ...rest } = updated;
+    next = rest;
+  }
   if (
     !next.isOpen &&
     next.activeSurfaceId === null &&

@@ -40,7 +40,7 @@ export const resolveClaudeConfigDir = Effect.fn("resolveClaudeConfigDir")(functi
   const configDir = config.configDir.trim();
   if (configDir.length === 0) return undefined;
   const path = yield* Path.Path;
-  return path.resolve(expandHomePath(configDir));
+  return path.resolve(expandHomePath(configDir, yield* HostProcess.HomeDirectory));
 });
 
 export const makeClaudeEnvironment = Effect.fn("makeClaudeEnvironment")(function* (

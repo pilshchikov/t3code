@@ -2,8 +2,9 @@
 
 ## Daily upstream integration — 2026-10-11
 
-- Merge target: `ed0f7b908b2e7b3a22e6fd82a73794c2fe6ee06e` (224 upstream
-  commits since the common ancestor `64972461c0606a4eafdd3cd08056155b6a2fea95`);
+- Merge target: `f23d0084b6` (229 upstream commits since
+  `64972461c0606a4eafdd3cd08056155b6a2fea95`, including the five after the saved
+  daily integration target `ed0f7b908b`);
   fork parent: `b5b8afe6a24acb64e856d2bd36e1f007dac5de5a`. Real merge preserves
   both ancestries. Reviewed conflicts individually and overlapping automatic merges.
 - Integrated source-control package extraction, GitCafe, review guides, file metadata,
@@ -35,9 +36,18 @@
   service; expiry uses normal deletion with dispatch-time changed/pinned/busy/session guards.
   Upstream cleanup reports and retention choices are integrated, defaulting to keeping ignored
   files beyond `node_modules`; secondary repository selections continue to protect checkouts.
-- Validation: frozen-lockfile installation passed. Scoped typechecks and changed-source lint
-  are pending. No tests were added/run. No app builds, runtime/UI verification, packaging,
-  installed-app or live-data operations, process stops, push, PR or main updates were performed.
+- Completed latest per-project provider enablement with the fork's Git/conflict controls and
+  managed setup guard. Adapted account tools to `HostProcess.HomeDirectory` and transcript
+  reader result metadata without dropping account/config-directory isolation. Conditional
+  settled-thread deletion reads real active run states (including starting/waiting), retaining
+  changed/pinned/session/background safeguards. Native Git tooltips use the shared tooltip
+  components while keeping conflict actions and status colors.
+- Validation: frozen-lockfile installation; 24 scoped typechecks passed (server/web/mobile/
+  desktop, shared/contracts/client-runtime, nine provider and eight source-control packages).
+  Changed-source lint covered 1,150 files; tooltip/drag utility compatibility errors were fixed
+  and targeted rechecking passed (other warnings remain). Source/document whitespace checks
+  exclude upstream dependency patches. No tests were added/run, app builds, runtime/UI checks,
+  packaging, installed-app/live-data operations, process stops, push or PR.
 
 ## Auto-compaction waits for quota recovery and real results — 2026-10-09
 

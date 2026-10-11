@@ -402,7 +402,9 @@ export const make = Effect.gen(function* () {
           if (
             Option.isSome(decoded) &&
             !decoded.value.configDir.trim() &&
-            !instance?.environment?.CLAUDE_CONFIG_DIR?.trim() &&
+            !instance?.environment
+              ?.find((variable) => variable.name === "CLAUDE_CONFIG_DIR")
+              ?.value.trim() &&
             !hostEnvironment.CLAUDE_CONFIG_DIR?.trim() &&
             decoded.value.homePath.trim() &&
             !(yield* fileSystem.exists(directory).pipe(Effect.orElseSucceed(() => false)))
@@ -446,10 +448,10 @@ export const make = Effect.gen(function* () {
         const label =
           settings.providerInstances[instanceId]?.displayName ??
           (driver.driverKind === "claudeAgent"
-            ? instanceId === driver.driverKind
+            ? String(instanceId) === String(driver.driverKind)
               ? "Claude Personal"
               : `Claude ${instanceId}`
-            : instanceId === driver.driverKind
+            : String(instanceId) === String(driver.driverKind)
               ? driver.metadata.displayName
               : `${driver.metadata.displayName} ${instanceId}`);
         dirs.push({

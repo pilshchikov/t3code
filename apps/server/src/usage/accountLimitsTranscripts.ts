@@ -47,7 +47,7 @@ export async function readLatestCodexRateLimits(
   } catch {
     return null;
   }
-  const newestFirst = [...files].sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, MAX_FILES);
+  const newestFirst = [...files.files].sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, MAX_FILES);
   // The newest-mtime file does not necessarily hold the newest snapshot: a
   // session can keep appending non-token events after its last rate-limit
   // line. A file's snapshot can never be newer than the file's mtime, so

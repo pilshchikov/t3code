@@ -127,8 +127,10 @@ export const claudeUsageReader: ProviderUsageReader<
     if (!configured && !environment.CLAUDE_CONFIG_DIR?.trim() && config.homePath.trim()) {
       const fs = yield* FileSystem.FileSystem;
       if (
-        !(yield* fs.exists(path.join(home, "projects"))) &&
-        (yield* fs.exists(path.join(processHome, "projects")))
+        !(yield* fs.exists(path.join(home, "projects")).pipe(Effect.orElseSucceed(() => false))) &&
+        (yield* fs
+          .exists(path.join(processHome, "projects"))
+          .pipe(Effect.orElseSucceed(() => false)))
       )
         home = processHome;
     }

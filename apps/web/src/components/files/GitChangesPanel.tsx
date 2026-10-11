@@ -27,6 +27,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ProviderModelPicker } from "~/components/chat/ProviderModelPicker";
 import { toastManager } from "~/components/ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useClientSettings } from "~/hooks/useSettings";
 import { useWorkspaceMutationRefresh } from "~/hooks/useWorkspaceMutationRefresh";
 import { useThreadShell } from "~/state/entities";
@@ -174,14 +175,20 @@ function GitChangeRow({
         aria-label={file.staged ? `Unstage ${file.path}` : `Stage ${file.path}`}
         onChange={() => onToggleStage(file)}
       />
-      <span
-        className="flex size-4 shrink-0 items-center justify-center rounded-sm text-[10px] font-bold"
-        style={{ color: badge.color }}
-        title={badge.label}
-        aria-hidden="true"
-      >
-        {badge.letter}
-      </span>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span
+              className="flex size-4 shrink-0 items-center justify-center rounded-sm text-[10px] font-bold"
+              style={{ color: badge.color }}
+              aria-hidden="true"
+            />
+          }
+        >
+          {badge.letter}
+        </TooltipTrigger>
+        <TooltipPopup>{badge.label}</TooltipPopup>
+      </Tooltip>
       <button
         type="button"
         className="flex min-w-0 flex-1 items-baseline gap-1.5 text-left"
@@ -204,48 +211,76 @@ function GitChangeRow({
       </button>
       {badge.letter === "U" ? (
         <div className="flex shrink-0 items-center gap-0.5">
-          <button
-            type="button"
-            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-            disabled={busy}
-            aria-label={`Use current branch version of ${file.path}`}
-            title="Use ours"
-            onClick={() => onResolveConflict(file, "ours")}
-          >
-            <PanelLeft className="size-3" />
-          </button>
-          <button
-            type="button"
-            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-            disabled={busy}
-            aria-label={`Use incoming branch version of ${file.path}`}
-            title="Use theirs"
-            onClick={() => onResolveConflict(file, "theirs")}
-          >
-            <PanelRight className="size-3" />
-          </button>
-          <button
-            type="button"
-            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-            disabled={busy}
-            aria-label={`Mark ${file.path} resolved`}
-            title="Mark edited file resolved"
-            onClick={() => onResolveConflict(file, "mark_resolved")}
-          >
-            <Check className="size-3" />
-          </button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  disabled={busy}
+                  aria-label={`Use current branch version of ${file.path}`}
+
+                  onClick={() => onResolveConflict(file, "ours")}
+                />
+              }
+            >
+              <PanelLeft className="size-3" />
+            </TooltipTrigger>
+            <TooltipPopup>{"Use ours"}</TooltipPopup>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  disabled={busy}
+                  aria-label={`Use incoming branch version of ${file.path}`}
+
+                  onClick={() => onResolveConflict(file, "theirs")}
+                />
+              }
+            >
+              <PanelRight className="size-3" />
+            </TooltipTrigger>
+            <TooltipPopup>{"Use theirs"}</TooltipPopup>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  disabled={busy}
+                  aria-label={`Mark ${file.path} resolved`}
+
+                  onClick={() => onResolveConflict(file, "mark_resolved")}
+                />
+              }
+            >
+              <Check className="size-3" />
+            </TooltipTrigger>
+            <TooltipPopup>{"Mark edited file resolved"}</TooltipPopup>
+          </Tooltip>
         </div>
       ) : null}
-      <button
-        type="button"
-        className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-        disabled={busy}
-        aria-label={`Discard changes to ${file.path}`}
-        title="Discard changes"
-        onClick={() => onDiscard(file)}
-      >
-        <RotateCcw className="size-3" />
-      </button>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              disabled={busy}
+              aria-label={`Discard changes to ${file.path}`}
+
+              onClick={() => onDiscard(file)}
+            />
+          }
+        >
+          <RotateCcw className="size-3" />
+        </TooltipTrigger>
+        <TooltipPopup>{"Discard changes"}</TooltipPopup>
+      </Tooltip>
     </div>
   );
 }
@@ -357,10 +392,11 @@ export default function GitChangesPanel({
             applyProviderInstanceSettings(
               deriveProviderInstanceEntries(serverConfig.providers),
               unifiedSettings!,
+              activeThread?.projectId ?? null,
             ),
           )
         : [],
-    [serverConfig, unifiedSettings],
+    [serverConfig, unifiedSettings, activeThread?.projectId],
   );
   const modelOptionsByInstance = useMemo(
     () =>
@@ -602,35 +638,45 @@ export default function GitChangesPanel({
                 {conflicts.length.toLocaleString()} merge{" "}
                 {conflicts.length === 1 ? "conflict" : "conflicts"}
               </div>
-              <button
-                type="button"
-                className={cn(
-                  "inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium",
-                  activeThread && effectiveConflictModelSelection
-                    ? "bg-accent text-foreground hover:bg-accent/80"
-                    : "cursor-not-allowed text-muted-foreground",
-                )}
-                disabled={
-                  !activeThread || !effectiveConflictModelSelection || startingConflictResolution
-                }
-                title={
-                  activeThread
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium",
+                        activeThread && effectiveConflictModelSelection
+                          ? "bg-accent text-foreground hover:bg-accent/80"
+                          : "cursor-not-allowed text-muted-foreground",
+                      )}
+                      disabled={
+                        !activeThread ||
+                        !effectiveConflictModelSelection ||
+                        startingConflictResolution
+                      }
+
+                      onClick={resolveConflictsWithAgent}
+                    />
+                  }
+                >
+                  {startingConflictResolution ? (
+                    <RefreshCw className="size-3 animate-spin" />
+                  ) : (
+                    <WandSparkles className="size-3" />
+                  )}
+                  Resolve with AI
+                </TooltipTrigger>
+                <TooltipPopup>
+                  {activeThread
                     ? "Ask the selected coding model to resolve and stage all conflicted files"
-                    : "Start the thread before using AI conflict resolution"
-                }
-                onClick={resolveConflictsWithAgent}
-              >
-                {startingConflictResolution ? (
-                  <RefreshCw className="size-3 animate-spin" />
-                ) : (
-                  <WandSparkles className="size-3" />
-                )}
-                Resolve with AI
-              </button>
+                    : "Start the thread before using AI conflict resolution"}
+                </TooltipPopup>
+              </Tooltip>
             </div>
             {effectiveConflictModelSelection && modelInstanceEntries.length > 0 ? (
               <div className="flex min-w-0 items-center gap-2">
                 <ProviderModelPicker
+                  environmentId={environmentId}
                   size="sm"
                   activeInstanceId={effectiveConflictModelSelection.instanceId}
                   model={effectiveConflictModelSelection.model}
@@ -719,25 +765,32 @@ export default function GitChangesPanel({
               Amend last commit
             </label>
             <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                className={cn(
-                  "rounded p-1.5",
-                  canGenerate
-                    ? "text-foreground hover:bg-accent"
-                    : "cursor-not-allowed text-muted-foreground",
-                )}
-                disabled={!canGenerate}
-                aria-label="Generate commit message"
-                title="Generate commit message"
-                onClick={generate}
-              >
-                {generating ? (
-                  <RefreshCw className="size-3.5 animate-spin" />
-                ) : (
-                  <Sparkles className="size-3.5" />
-                )}
-              </button>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      className={cn(
+                        "rounded p-1.5",
+                        canGenerate
+                          ? "text-foreground hover:bg-accent"
+                          : "cursor-not-allowed text-muted-foreground",
+                      )}
+                      disabled={!canGenerate}
+                      aria-label="Generate commit message"
+
+                      onClick={generate}
+                    />
+                  }
+                >
+                  {generating ? (
+                    <RefreshCw className="size-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="size-3.5" />
+                  )}
+                </TooltipTrigger>
+                <TooltipPopup>{"Generate commit message"}</TooltipPopup>
+              </Tooltip>
               <button
                 type="button"
                 className={cn(

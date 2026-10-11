@@ -387,7 +387,7 @@ export const make = Effect.gen(function* () {
           ? envOverride || hostEnvironment["CODEX_HOME"]?.trim() || ""
           : "";
       if (envHome !== "") {
-        sessionsParent = expandHomePath(envHome);
+        sessionsParent = expandHomePath(envHome, yield* HostProcess.HomeDirectory);
       } else {
         const layout = yield* resolveCodexHomeLayout(codexSettings).pipe(
           Effect.provideService(Path.Path, path),

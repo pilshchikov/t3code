@@ -604,7 +604,7 @@ export function BranchToolbarBranchSelector({
   // A started thread's server is creating its worktree and records the branch
   // itself; defaulting it here would reset the thread to the base checkout and
   // detach the agent that just started.
-  const threadStarted = serverSession !== null;
+  const threadStarted = serverThread?.latestRun != null;
   useEffect(() => {
     if (
       threadStarted ||

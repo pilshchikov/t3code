@@ -3124,3 +3124,7 @@ code {
     }
   }
 }
+
+@utility no-drag {
+  -webkit-app-region: no-drag;
+}
