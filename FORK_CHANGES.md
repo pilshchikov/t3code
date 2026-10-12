@@ -1,5 +1,24 @@
 # Fork Changes
 
+## Compact provider-grouped usage trends — 2026-10-11
+
+- Usage → Limits → Trends uses the selected compact design: separate Claude/Codex provider
+  sections, one row per account, and short graphs for the main quota windows. Narrow web views
+  put the account above the window columns. Account colors and sensitive-name redaction remain.
+- Different accounts retain their own windows and measurements. Missing windows show no
+  measurements; additional/model-specific limits keep their own expandable graphs. Graphs keep
+  reset jumps, dashed gaps, local-day guides, exact-time inspection, and day-grouped measurement
+  tables. Keyboard and touch inspection work as well as pointer hover. SVG strokes do not shrink
+  with narrower columns, and date labels use regular text so they remain legible on phones.
+- Trend rendering is in `apps/web/src/components/usage/UsageLimitTrendRows.tsx`; the existing
+  `UsageLimitTrends.tsx` keeps environment queries, period controls, refresh, and empty/error states.
+  Fetch cadence and history storage are unchanged. Web and desktop use this view; native mobile
+  still has no usage-history screen.
+- Validation: web typecheck and scoped lint passed. Browser checks mounted the actual components
+  with isolated sample history at 1440, 768, 390 and 320 pixels, covering period controls,
+  missing windows, additional limits, measurement tables, redaction, keyboard/touch inspection,
+  empty history and horizontal overflow. Before/after screenshots stay outside the worktree.
+
 ## Daily upstream integration — 2026-10-11
 
 - Merge target: `f23d0084b6` (229 upstream commits since
