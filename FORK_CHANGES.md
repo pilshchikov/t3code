@@ -12,6 +12,9 @@
   handling and upstream sheet-mounted trigger guard. Rail and sidebar keep one persisted scope
   while resolving upstream scratch-project grouping consistently. Numbered slots, colors and
   simultaneous vertical status dots remain mounted; native CLI resume remains available.
+- Saved numbered slots resolve their old physical scratch scope through the same grouping
+  policy for both keyboard recall and menu number badges. Stored assignments are retained;
+  the final shortcut audit and scoped web typecheck/lint cover this integration correction.
 - Integrated upstream end-follow persistence and held-timeline protection with the fork's latest
   fallback and restored reading positions. Kept `spilshchikov/` generated branch/worktree naming
   while adopting collision handling that suffixes the blocked namespace component. Updated

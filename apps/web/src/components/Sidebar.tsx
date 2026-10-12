@@ -2681,7 +2681,24 @@ export default function Sidebar() {
   );
   const [projectRailVisible, setProjectRailVisible] = useProjectRailVisible();
   const projectAccentColorByKey = useAccentColorStore((state) => state.projectColors);
-  const projectSlots = useProjectSlotStore((state) => state.slots);
+  const persistedProjectSlots = useProjectSlotStore((state) => state.slots);
+  const projectSlots = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(persistedProjectSlots).map(
+          ([slot, key]) =>
+            [
+              slot,
+              resolveSidebarProjectScopeKey({
+                groups: projectGroups,
+                key,
+                settings: projectGroupingSettings,
+              }) ?? key,
+            ] as const,
+        ),
+      ),
+    [persistedProjectSlots, projectGroups, projectGroupingSettings],
+  );
   const projectAssignHintLabel = useMemo(
     () => shortcutLabelForCommand(keybindings, "project.assign.1"),
     [keybindings],
@@ -5102,7 +5119,11 @@ export default function Sidebar() {
       }
       const projectIndex = projectJumpIndexFromCommand(command ?? "");
       if (projectIndex !== null) {
-        const targetProjectKey = useProjectSlotStore.getState().slots[projectIndex] ?? null;
+        const targetProjectKey = resolveSidebarProjectScopeKey({
+          groups: projectGroupsRef.current,
+          key: useProjectSlotStore.getState().slots[projectIndex] ?? null,
+          settings: projectGroupingSettings,
+        });
         if (targetProjectKey === null) return;
         event.preventDefault();
         event.stopPropagation();
@@ -5136,6 +5157,7 @@ export default function Sidebar() {
   }, [
     assignProjectSlot,
     keybindings,
+    projectGroupingSettings,
     navigateToThread,
     orderedThreadKeys,
     routeTerminalOpen,
