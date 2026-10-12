@@ -303,6 +303,7 @@ export function showContextMenuFallback<T extends string>(
       menu.dataset.level = String(level);
 
       const inner = document.createElement("div");
+      // Fit the visible app viewport, retaining mobile keyboard viewport handling.
       inner.className = "min-w-0 max-w-sm overflow-y-auto overflow-x-hidden p-1";
       inner.style.cssText =
         "max-height:calc(var(--app-viewport-height,100dvh) - 8px);min-width:0;max-width:24rem;overflow-x:hidden;overflow-y:auto;padding:0.25rem;";

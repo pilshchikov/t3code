@@ -62,6 +62,7 @@ export function useSidebarProjectGroups(options?: {
       buildSidebarProjectSnapshots({
         projects: sidebarProjectSortOrder === "manual" ? orderedProjects : projects,
         settings: projectGroupingSettings,
+        groupScratchProjects: true,
         primaryEnvironmentId,
         resolveEnvironmentLabel: (environmentId) => environmentLabelById.get(environmentId) ?? null,
       }),

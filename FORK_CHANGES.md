@@ -1,5 +1,38 @@
 # Fork Changes
 
+## Upstream integration — 2026-10-12
+
+- Merged all 92 upstream commits through `701fc83169611473139c441bc27d5ded9612dc8d`
+  from fork parent `ffae452744ec5d6be1dbc3f0cf0e0b82dd860932`, preserving both histories.
+  Includes native mobile PR review/offline views and Enriched Markdown, prompt links, terminal
+  colors, bounded restart continuations, live-follow recovery, fuller context menus, and updates
+  across connected machines/providers. Accepted tsc-rs and its matching Effect tooling.
+- Resolved eight conflicts individually and reviewed overlapping automatic merges. Sidebar
+  controls retain the separate project rail and macOS inset, plus the mobile swipe/viewport
+  handling and upstream sheet-mounted trigger guard. Rail and sidebar keep one persisted scope
+  while resolving upstream scratch-project grouping consistently. Numbered slots, colors and
+  simultaneous vertical status dots remain mounted; native CLI resume remains available.
+- Integrated upstream end-follow persistence and held-timeline protection with the fork's latest
+  fallback and restored reading positions. Kept `spilshchikov/` generated branch/worktree naming
+  while adopting collision handling that suffixes the blocked namespace component. Updated
+  imported expectations and the query harness to retain fork behavior alongside upstream cases;
+  no tests were added independently or run.
+- The new npm-publication check runs only after the user requests an update, with no mounted
+  sidebar probe or recurring registry request. External analytics/OTLP stay disabled; existing
+  provider/version/manifest, desktop update and keychain opt-ins remain. Schema-declared secrets
+  integrate without replacing fork provider HOME/config-directory isolation.
+- Arcane send/stop renderers and saved colors, forced expanded mobile composer, custom chat
+  widths, Files multi-root/worktree selectors and guarded 10-second freshness checks, absolute
+  file previews, global panel shortcuts, compact per-provider usage trends, idle compaction and
+  quota-recovery guards, two-hour terminal-PR unlinking, worker question cleanup and Claude worker
+  effort hooks remain connected. Existing database migration assignments are unchanged.
+- Validation: frozen-lockfile dependency install; 17 scoped typechecks passed (web, server,
+  mobile, desktop, client-runtime, contracts, shared, five provider and five source-control
+  packages). Changed-source lint checked 493 files with zero errors (471 warnings remain);
+  the new Effect checker also reports non-failing suggestions. Audited unchanged fork renderer,
+  usage, Files, workspace, panel, compaction, PR cleanup and projection paths against the parent.
+  No runtime/UI checks, app build, packaging, reinstall, restart, live-data writes, push or PR.
+
 ## Compact provider-grouped usage trends — 2026-10-11
 
 - Usage → Limits → Trends uses the selected compact design: separate Claude/Codex provider

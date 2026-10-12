@@ -88,7 +88,7 @@ function readInitialThreadSidebarWidth(): number {
 function SidebarControl() {
   const usagePageOpen = useLocation({ select: (location) => location.pathname === "/usage" });
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
-  const { toggleSidebar, isMobile, openMobile, setOpenMobile } = useSidebar();
+  const { toggleSidebar, isMobile, openMobile, setOpenMobile, mobileSheetMounted } = useSidebar();
   useEffect(() => {
     if (!isMobile) return;
     return installSidebarSwipe(document, { open: openMobile, onOpenChange: setOpenMobile });
@@ -147,8 +147,12 @@ function SidebarControl() {
     // The right-side layout controls carry mr-px (border compensation inside
     // the panel), so the trigger mirrors it: both clusters sit one extra pixel
     // off their edge and the titlebar reads symmetric.
+    // The sheet owns its trigger until its closing transition unmounts it.
     <div
-      className="pointer-events-none fixed left-[calc(var(--workspace-controls-left)+var(--project-rail-width,0px))] top-[var(--workspace-controls-top)] z-50 ml-px flex h-[var(--workspace-topbar-height)] items-center"
+      className={cn(
+        "pointer-events-none fixed left-[calc(var(--workspace-controls-left)+var(--project-rail-width,0px))] top-[var(--workspace-controls-top)] z-50 ml-px flex h-[var(--workspace-topbar-height)] items-center",
+        isMobile && mobileSheetMounted && "hidden",
+      )}
       data-sidebar-control=""
     >
       <Tooltip>
@@ -274,18 +278,17 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       ? getWindowFullscreenState()
       : false;
   });
+  const windowControlsInsetStyle = (
+    isMacosDesktop && !isWindowFullscreen
+      ? { "--workspace-controls-left": MACOS_TRAFFIC_LIGHTS_LEFT_INSET }
+      : {}
+  ) as CSSProperties;
   const sidebarProviderStyle = {
     "--sidebar-width": `${clampThreadSidebarWidth(sidebarWidth, sidebarMinimumWidth, sidebarMaximumWidth)}px`,
     "--project-rail-width": projectRailVisible && !isMobile ? PROJECT_RAIL_WIDTH : "0px",
     "--panel-animation-duration": `${panelAnimationDurationMs}ms`,
-    ...(isMacosDesktop && !isWindowFullscreen
-      ? {
-          "--workspace-controls-left": MACOS_TRAFFIC_LIGHTS_LEFT_INSET,
-          // The traffic lights sit over the rail's top, so its first project
-          // starts below them.
-          "--project-rail-top-inset": "2.5rem",
-        }
-      : {}),
+    ...windowControlsInsetStyle,
+    ...(isMacosDesktop && !isWindowFullscreen ? { "--project-rail-top-inset": "2.5rem" } : {}),
   } as CSSProperties;
 
   useEffect(() => {
@@ -351,6 +354,8 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
             storageKey: THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
             onResize: setSidebarWidth,
           }}
+          // The narrow-window sidebar is a sheet, portaled outside the provider's styles.
+          style={windowControlsInsetStyle}
         >
           {isOnSettings ? (
             <>

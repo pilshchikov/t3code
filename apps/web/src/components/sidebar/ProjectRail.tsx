@@ -16,7 +16,12 @@ import { LayersIcon, PanelLeftCloseIcon, PlusIcon } from "lucide-react";
 import { openCommandPalette } from "../../commandPaletteBus";
 import { useIsMobile } from "../../hooks/useMediaQuery";
 import { useSidebarProjectScope } from "../../hooks/useSidebarProjectScope";
-import type { SidebarProjectSnapshot } from "../../sidebarProjectGrouping";
+import {
+  resolveSidebarProjectScopeKey,
+  type SidebarProjectSnapshot,
+} from "../../sidebarProjectGrouping";
+import { useClientSettings } from "../../hooks/useSettings";
+import { selectProjectGroupingSettings } from "../../logicalProject";
 import { useThreadShells } from "../../state/entities";
 import { useUiStateStore } from "../../uiStateStore";
 import { cn } from "~/lib/utils";
@@ -106,7 +111,17 @@ export const ProjectRail = memo(function ProjectRail() {
   const [visible, setVisible] = useProjectRailVisible();
   const { projectGroups, orderedProjectKeys } = useSidebarProjectGroups({ sortOrder: "manual" });
   const threads = useThreadShells();
-  const [projectScopeKey, setProjectScopeKey] = useSidebarProjectScope();
+  const [persistedProjectScopeKey, setProjectScopeKey] = useSidebarProjectScope();
+  const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
+  const projectScopeKey = useMemo(
+    () =>
+      resolveSidebarProjectScopeKey({
+        groups: projectGroups,
+        key: persistedProjectScopeKey,
+        settings: projectGroupingSettings,
+      }),
+    [persistedProjectScopeKey, projectGroups, projectGroupingSettings],
+  );
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
   const router = useRouter();
   const pathname = useLocation({ select: (location) => location.pathname });
