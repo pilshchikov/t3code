@@ -1,5 +1,29 @@
 # Fork Changes
 
+## Persistent connections without Keychain prompts — 2026-10-12
+
+- The owner chose persistent local encryption after SSH connection registration failed because
+  the fork disables Keychain access. `DesktopConnectionCatalogStore.ts` now falls back to
+  AES-256-GCM in `connection-catalog.local.json`, with a randomly generated owner-only key under
+  `local-secrets/connection-catalog.key`. Keychain access stays disabled by default.
+- Key publication uses a completed private temporary file and a non-replacing hard link, so
+  concurrent instances use one complete key. Catalog writes remain atomic and owner-only.
+  Missing/invalid keys and authentication failures fail closed; saving does not silently
+  regenerate a lost key or overwrite a catalog whose key is missing or invalid. No plaintext
+  fallback or network call.
+- Existing Keychain-encrypted catalogs remain untouched. A newer local catalog remains
+  authoritative if the Keychain opt-in changes, avoiding a rollback to older connection data.
+  Explicit catalog clearing removes both catalog files. The desktop IPC and wire format stay
+  compatible; encryption helpers live in `app/localCatalogEncryption.ts`.
+- SSH already honors per-host `ProxyCommand`, including secondary userspace Tailscale sockets.
+  The owner's secondary-tailnet alias was configured and verified locally outside this repo;
+  automatic Tailscale discovery still reads the default daemon. Remote-access guidance covers
+  multiple SSH routes and backing up the local key with connection data.
+- Validation: all 17 focused tests passed across the catalog store and encryption helper,
+  covering reopening, authentication failures, missing keys, legacy preservation, concurrent
+  key creation, clearing and file permissions. Desktop typecheck and scoped source/test lint
+  passed. Checks used temporary data; no live-data writes, app build, reinstall or restart.
+
 ## Upstream integration — 2026-10-12
 
 - Merged all 92 upstream commits through `701fc83169611473139c441bc27d5ded9612dc8d`
@@ -1444,8 +1468,9 @@ fork-specific behavior so future upstream syncs are easier to review.
     "Safe Storage" key on every launch/reinstall (the app's signature changes each rebuild, so even
     "Always Allow" never sticks). To avoid that prompt, `ElectronSafeStorage.isEncryptionAvailable`
     reports `false` without calling Electron; every consumer already degrades gracefully, so no
-    Keychain access happens at all. The trade-off is that secrets for saved remote environments
-    (bearer tokens, connection catalog) are not persisted.
+    Keychain access happens at all. The October 12 connection-catalog fix adds persistent local
+    encryption without Keychain prompts; legacy credential consumers may still keep secrets
+    only in memory.
   - Opt back into real Keychain encryption with `T3CODE_ENABLE_SAFE_STORAGE_KEYCHAIN=true`.
   - Source: `apps/desktop/src/electron/ElectronSafeStorage.ts`.
 - Validation performed on the installed macOS build showed a clean startup using only loopback

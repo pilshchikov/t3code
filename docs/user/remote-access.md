@@ -164,6 +164,18 @@ In the desktop app, open **Settings → Connections → Add environment**, choos
 or reuses a server there and opens the port forward for you. Projects, provider
 credentials, and agent work stay on the remote machine.
 
+For several Tailscale daemons or tailnets, use a separate SSH config alias for each
+route. T3 Code uses the alias for both commands and port forwarding, including its
+`ProxyCommand`. A userspace Tailscale daemon can carry SSH through
+`ProxyCommand /absolute/path/to/tailscale --socket=/path/to/tailscaled.sock nc %h %p`.
+Shell aliases such as `ts2` do not configure an SSH host; put the route in your
+SSH config, then select that host in T3 Code.
+
+This fork saves desktop connections with local encryption when Keychain storage
+is disabled. The local key stays in the T3 data directory with owner-only access.
+Back up the complete data directory, including `local-secrets`, to restore saved
+connections later. Existing Keychain-encrypted connection data is retained.
+
 The remote host must be Linux or an Apple Silicon Mac with `curl` or `wget`,
 `tar`, `sha256sum` or `shasum`, and [provider setup](./install.md#providers).
 The first launch downloads T3 Code's server to `~/.t3/runtime` on the host, so

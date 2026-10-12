@@ -71,8 +71,8 @@ export const make = Effect.gen(function* () {
   const platform = yield* HostProcess.Platform;
   // Local fork builds are ad-hoc signed, so macOS treats every rebuild as a different app and asks
   // for the Safe Storage Keychain secret again. Keep OS-keychain storage off unless the process
-  // explicitly opts in. Consumers already handle unavailable encryption by keeping credentials in
-  // memory only.
+  // explicitly opts in. The connection catalog has its own local-file encryption fallback;
+  // legacy credential consumers may keep secrets in memory only.
   const keychainSecretStorageEnabled = yield* Config.Boolean(
     "T3CODE_ENABLE_SAFE_STORAGE_KEYCHAIN",
   ).pipe(
