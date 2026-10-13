@@ -150,6 +150,12 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.pullRequestsLabelCandidates]: AuthOrchestrationReadScope,
   [WS_METHODS.sourceControlLookupRepository]: AuthOrchestrationReadScope,
   [WS_METHODS.subscribeProjectClones]: AuthOrchestrationReadScope,
+  [WS_METHODS.peerFilesList]: AuthFilesystemReadScope,
+  [WS_METHODS.peerFilesRead]: AuthFilesystemReadScope,
+  [WS_METHODS.peerFilesWrite]: AuthFilesystemWriteScope,
+  // A relay answers agents' requests and receives the files they send out.
+  [WS_METHODS.peerRelayConnect]: AuthFilesystemWriteScope,
+  [WS_METHODS.peerRelayRespond]: AuthFilesystemWriteScope,
   [WS_METHODS.projectsListEntries]: AuthFilesystemReadScope,
   [WS_METHODS.projectsReadFile]: AuthFilesystemReadScope,
   [WS_METHODS.projectsSearchContents]: AuthFilesystemReadScope,

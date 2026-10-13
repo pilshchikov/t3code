@@ -1,5 +1,6 @@
 import { MemoryToolkit, MemoryHandlersLive } from "./toolkits/memory.ts";
 import { WorkspaceToolkit, WorkspaceHandlersLive } from "./toolkits/workspace.ts";
+import { PeersToolkit, PeersHandlersLive } from "./toolkits/peers.ts";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -871,6 +872,7 @@ export const layerMcpTransport = McpServer.layerHttp({
 export const layer = Layer.mergeAll(
   toolkitRegistration(MemoryToolkit, MemoryHandlersLive),
   toolkitRegistration(WorkspaceToolkit, WorkspaceHandlersLive),
+  toolkitRegistration(PeersToolkit, PeersHandlersLive),
   layerPreviewToolkit,
   layerOrchestratorToolkit,
   layerThreadToolkit,

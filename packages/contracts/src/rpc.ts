@@ -412,6 +412,17 @@ import {
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
+import {
+  PeerFilesError,
+  PeerFilesListInput,
+  PeerFilesListResult,
+  PeerFilesReadInput,
+  PeerFilesReadResult,
+  PeerFilesWriteInput,
+  PeerFilesWriteResult,
+  PeerRelayRequest,
+  PeerRelayRespondInput,
+} from "./peers.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
 
 export const WS_METHODS = {
@@ -641,6 +652,13 @@ export const WS_METHODS = {
   projectCloneCancel: "projectClone.cancel",
   projectCloneRetry: "projectClone.retry",
   subscribeProjectClones: "subscribeProjectClones",
+
+  // Peer file methods
+  peerFilesList: "peerFiles.list",
+  peerFilesRead: "peerFiles.read",
+  peerFilesWrite: "peerFiles.write",
+  peerRelayConnect: "peerRelay.connect",
+  peerRelayRespond: "peerRelay.respond",
 
   // Streaming subscriptions
   subscribeVcsStatus: "subscribeVcsStatus",
@@ -1275,6 +1293,36 @@ const WsProjectCloneRetryRpc = Rpc.make(WS_METHODS.projectCloneRetry, {
   payload: ProjectCloneActionInput,
   success: ProjectCloneActionResult,
   error: Schema.Union([SourceControlRepositoryError, EnvironmentAuthorizationError]),
+});
+
+const WsPeerFilesListRpc = Rpc.make(WS_METHODS.peerFilesList, {
+  payload: PeerFilesListInput,
+  success: PeerFilesListResult,
+  error: Schema.Union([PeerFilesError, EnvironmentAuthorizationError]),
+});
+
+const WsPeerFilesReadRpc = Rpc.make(WS_METHODS.peerFilesRead, {
+  payload: PeerFilesReadInput,
+  success: PeerFilesReadResult,
+  error: Schema.Union([PeerFilesError, EnvironmentAuthorizationError]),
+});
+
+const WsPeerFilesWriteRpc = Rpc.make(WS_METHODS.peerFilesWrite, {
+  payload: PeerFilesWriteInput,
+  success: PeerFilesWriteResult,
+  error: Schema.Union([PeerFilesError, EnvironmentAuthorizationError]),
+});
+
+const WsPeerRelayConnectRpc = Rpc.make(WS_METHODS.peerRelayConnect, {
+  payload: Schema.Struct({}),
+  success: PeerRelayRequest,
+  error: EnvironmentAuthorizationError,
+  stream: true,
+});
+
+const WsPeerRelayRespondRpc = Rpc.make(WS_METHODS.peerRelayRespond, {
+  payload: PeerRelayRespondInput,
+  error: EnvironmentAuthorizationError,
 });
 
 const WsSubscribeProjectClonesRpc = Rpc.make(WS_METHODS.subscribeProjectClones, {
@@ -2204,6 +2252,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectCloneCancelRpc,
   WsProjectCloneRetryRpc,
   WsSubscribeProjectClonesRpc,
+  WsPeerFilesListRpc,
+  WsPeerFilesReadRpc,
+  WsPeerFilesWriteRpc,
+  WsPeerRelayConnectRpc,
+  WsPeerRelayRespondRpc,
   WsProjectsListEntriesRpc,
   WsProjectsWatchEntriesRpc,
   WsProjectsReadFileRpc,

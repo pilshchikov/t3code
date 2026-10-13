@@ -150,6 +150,18 @@ threads and settings, and nothing is copied between machines. Once attached, a n
 machine menu lists every machine that has a folder for the project. Mobile does not show
 hand-made attachments.
 
+### Files Git does not carry
+
+Git moves tracked work between machines. For the rest, such as `.env` files, large files and
+ignored data, ask an agent in one of the project's threads: "copy `.env` to the Mac mini", or
+"check what the mini has that this machine is missing". The agent sees your other machines and
+the project's folder on each, lists and compares files there, and copies files or folders either
+way.
+
+Agents reach only project folders and thread worktrees, never delete, and need a **Full access**
+thread to copy. The app carries the files, so the desktop or web app has to be open and connected
+to both machines. Mobile does not carry files.
+
 ## Project memory
 
 Select a project in Settings → Projects and open Project memory. Add an entry with a short name,

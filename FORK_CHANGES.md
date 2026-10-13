@@ -1,5 +1,34 @@
 # Fork Changes
 
+## Agent tools for files on other environments — 2026-10-12
+
+- The owner asked for agent-driven file exchange between environments, with no UI: Git moves
+  tracked work, and agents copy the rest (`.env`, large or ignored files) and check what a
+  machine is missing. This is not the removed machine sync. Nothing runs unless an agent calls
+  a tool.
+- MCP tools `t3_peers_list`, `t3_peer_files_list`, `t3_peer_file_read` and `t3_peer_copy`
+  (`apps/server/src/mcp/toolkits/peers.ts`). The agent prompt names them in the
+  `<other-machines>` block of `apps/server/src/project/ThreadWorkspaceInstructions.ts`, which
+  reaches every provider.
+- Servers never connect to each other, so a client connected to both relays. `Peers`
+  (`apps/server/src/peers/Peers.ts`) queues each request for a connected relay over
+  `peerRelay.connect` and takes the answer from `peerRelay.respond`. The web app answers in
+  `apps/web/src/lib/peerRelayHost.ts` by calling `peerFiles.list`, `peerFiles.read` and
+  `peerFiles.write` on the other environment. `sameProject` follows the device's grouping,
+  hand-made links included (`apps/web/src/peerProjects.ts`). Contracts are in
+  `packages/contracts/src/peers.ts`.
+- `PeerFiles` (`apps/server/src/peers/PeerFiles.ts`) accepts only paths that resolve inside a
+  project folder or thread worktree of its environment, symlinks included. Writes collect in a
+  temporary file and rename over the destination, and every copied file is verified by sha256.
+  There is no delete and no command execution. Copying needs a full-access caller. The relay
+  RPCs need the `filesystem:write` scope, the list and read RPCs `filesystem:read`.
+- Limits: files move in 512 KB chunks through the app, a listing stops at 2,000 entries, folder
+  copies skip `.git` and `node_modules`, and mobile does not relay. An environment running an
+  older server answers `peer_unreachable`.
+- Validation: full typecheck passed. `apps/server/src/peers/Peers.test.ts` covers folder and
+  file copies both ways, overwrite, path limits and the untracked listing. Not exercised between
+  two real machines yet.
+
 ## Attach a folder to an existing project — 2026-10-12
 
 - Projects group across machines by Git remote only, so a folder without one always became a

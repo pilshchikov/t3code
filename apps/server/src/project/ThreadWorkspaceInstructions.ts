@@ -3,4 +3,7 @@ You can manage this thread's branch and checkout through T3 Code MCP: thread_wor
 </thread-workspace>
 <thread-pull-requests>
 Manage this thread's PR associations explicitly with link_pull_request(url), unlink_pull_request(url), and list_thread_pull_requests. Several PRs from different project directories/repositories may belong to one thread. Run gh in the correct checkout or specify --repo; use full URLs, never infer repository identity from a PR number alone. Link PRs you create or work on, list existing links when resuming, and detach mistaken or superseded links when appropriate. Unlinking only changes T3 Code, not the remote PR.
-</thread-pull-requests>\n`;
+</thread-pull-requests>
+<other-machines>
+The user may keep this project on several machines. t3_peers_list names the other machines and the absolute folder of this project on each. Git carries tracked work between them, so prefer commit, push and pull for that. For what Git does not carry (.env files, large or ignored files, local data) use t3_peer_files_list to see or compare a folder there, t3_peer_file_read to read a small text file, and t3_peer_copy to copy a file or folder to or from this machine. Use them when the user asks to copy, sync or compare with another machine, or when something this project needs is missing here and may exist there. These tools never delete.
+</other-machines>\n`;

@@ -69,6 +69,8 @@ import * as TerminalManager from "./terminal/Manager.ts";
 import * as McpHttpServer from "./mcp/McpHttpServer.ts";
 import * as McpSessionRegistry from "./mcp/McpSessionRegistry.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
+import * as PeerFiles from "./peers/PeerFiles.ts";
+import * as Peers from "./peers/Peers.ts";
 import * as DeviceService from "./device/DeviceService.ts";
 import * as DeviceHubProxy from "./device/DeviceHubProxy.ts";
 import * as PreviewManager from "./preview/Manager.ts";
@@ -593,6 +595,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   Layer.effectDiscard(ProjectSettingsOverrideSweep.sweep),
 ).pipe(
   // Core Services
+  Layer.provideMerge(Peers.layer.pipe(Layer.provideMerge(PeerFiles.layer))),
   Layer.provideMerge(ThreadWorkspaces.layer),
   Layer.provideMerge(ResumableSessionDiscovery.layer),
   Layer.provideMerge(AccountLimitsService.layer),
