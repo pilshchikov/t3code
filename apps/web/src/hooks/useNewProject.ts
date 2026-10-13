@@ -12,6 +12,7 @@ import { useCallback } from "react";
 
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { waitForProject } from "~/state/entities";
+import { linkProjects } from "~/projectLinks";
 import { projectEnvironment } from "~/state/projects";
 import { sourceControlEnvironment } from "~/state/sourceControl";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -82,6 +83,7 @@ export function useNewProject() {
       readonly environmentId: EnvironmentId;
       readonly name: string;
       readonly publishTo: NewProjectPublishTarget | null;
+      readonly attachToProjectKey?: string | null;
     }): Promise<boolean> => {
       const result = await createNew({
         environmentId: input.environmentId,
@@ -135,6 +137,7 @@ export function useNewProject() {
         return null;
       });
       if (project === null) return true;
+      if (input.attachToProjectKey) await linkProjects([project], input.attachToProjectKey);
       await handleNewThread(projectRef).catch((error: unknown) => {
         toastManager.add(
           stackedThreadToast({

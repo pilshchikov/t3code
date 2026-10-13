@@ -134,6 +134,22 @@ Project names, icons, removal, and importing actions from a checkout remain proj
 When there are several checkouts, the checkout picker selects which actions, grouping, and project
 memories to edit.
 
+## One project on several machines
+
+A project shows every folder that belongs to it, on any connected machine. Folders that share a
+Git remote are matched by default. A folder without a Git remote has nothing to match by, so
+attach it by hand.
+
+To add a folder as part of a project you already have, choose **Add project**, pick the machine,
+then pick the project under **Part of an existing project** before choosing the folder or
+repository. To attach a project you already added, open **Settings → Projects**, select it, and
+use **Show under another project** in **Grouping**. **Detach** in the same place undoes it.
+
+Attaching changes only how this device groups the projects. Each folder keeps its own files,
+threads and settings, and nothing is copied between machines. Once attached, a new thread's
+machine menu lists every machine that has a folder for the project. Mobile does not show
+hand-made attachments.
+
 ## Project memory
 
 Select a project in Settings → Projects and open Project memory. Add an entry with a short name,

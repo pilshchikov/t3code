@@ -1,5 +1,22 @@
 # Fork Changes
 
+## Attach a folder to an existing project — 2026-10-12
+
+- Projects group across machines by Git remote only, so a folder without one always became a
+  separate project. The client setting `sidebarProjectLinks` (physical project key to logical
+  project key) now records a hand-made attachment and outranks repository matching in
+  `deriveLogicalProjectKeyFromSettings` and `buildProjectGroups`
+  (`packages/client-runtime/src/state/projectGrouping.ts`, `packages/contracts/src/settings.ts`).
+- **Add project** asks, after the machine, whether the folder is its own project or part of an
+  existing one, then shows the usual sources (`apps/web/src/components/CommandPalette.tsx`,
+  `apps/web/src/hooks/useNewProject.ts`, `apps/web/src/projectLinks.ts`). **Settings → Projects →
+  Grouping** attaches an existing project to another and detaches it
+  (`apps/web/src/components/settings/ProjectSettingsPanel.tsx`).
+- The link is per device, like the existing grouping overrides. Nothing is copied between
+  machines. Mobile ignores links.
+- Validation: full typecheck and `projectGrouping.test.ts` passed. `vp check` reports the same 13
+  lint errors as before.
+
 ## Machine sync removed — 2026-10-12
 
 - The fork briefly had a feature that copied a project's repository between connected machines

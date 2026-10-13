@@ -133,6 +133,7 @@ import { useNewProject } from "../hooks/useNewProject";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 import { useProjects, useServerConfigs, useThreadShells, waitForProject } from "../state/entities";
+import { linkProjects } from "../projectLinks";
 import { useThreadSearch } from "../state/queries";
 import { resolveThreadActionProjectRef, startNewThreadFromContext } from "../lib/chatThreadActions";
 import {
@@ -820,6 +821,10 @@ function OpenCommandPaletteDialog(props: {
   const [addProjectEnvironmentId, setAddProjectEnvironmentId] = useState<EnvironmentId | null>(
     null,
   );
+  const [addProjectAttachTarget, setAddProjectAttachTarget] = useState<{
+    readonly projectKey: string;
+    readonly label: string;
+  } | null>(null);
   const [isPickingProjectFolder, setIsPickingProjectFolder] = useState(false);
   const [addProjectCloneFlow, setAddProjectCloneFlow] = useState<AddProjectCloneFlow | null>(null);
   // The name step of New project: while set, the palette input is the name.
@@ -1486,6 +1491,7 @@ function OpenCommandPaletteDialog(props: {
     setNewProjectFlow(null);
     if (viewStack.length <= 1) {
       setAddProjectEnvironmentId(null);
+      setAddProjectAttachTarget(null);
     } else if (newProjectFlow?.sourcesEnvironmentId) {
       // The machine switcher may have moved off the sources view's machine.
       setAddProjectEnvironmentId(newProjectFlow.sourcesEnvironmentId);
@@ -1710,9 +1716,19 @@ function OpenCommandPaletteDialog(props: {
         });
       }
 
-      return [{ value: `sources:${environmentId}`, label: "Sources", items: sourceItems }];
+      return [
+        {
+          value: `sources:${environmentId}`,
+          label:
+            addProjectAttachTarget === null
+              ? "Sources"
+              : `Sources for ${addProjectAttachTarget.label}`,
+          items: sourceItems,
+        },
+      ];
     },
     [
+      addProjectAttachTarget,
       newProjectsRootFor,
       openSourceControlSettings,
       startAddProjectBrowse,
@@ -1757,6 +1773,75 @@ function OpenCommandPaletteDialog(props: {
     ],
   );
 
+  const startAddProjectTargetSelection = useCallback(
+    (environmentId: EnvironmentId): void => {
+      const attachable = projectGroups.filter((group) => !group.isScratch);
+      if (attachable.length === 0) {
+        setAddProjectAttachTarget(null);
+        startAddProjectSourceSelection(environmentId);
+        return;
+      }
+      const chevron = (
+        <ChevronRightIcon className="-me-0.5 ms-auto size-4 shrink-0 text-muted-foreground/70" />
+      );
+      pushPaletteView({
+        addonIcon: <FolderPlusIcon className={ADDON_ICON_CLASS} />,
+        groups: [
+          {
+            value: `add-project-target:${environmentId}`,
+            label: "Add as",
+            items: [
+              {
+                kind: "action",
+                value: `action:add-project:${environmentId}:separate`,
+                searchTerms: ["new", "separate", "own", "project"],
+                title: "A project of its own",
+                description: "Git repositories with the same remote still share one project",
+                icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
+                titleTrailingContent: chevron,
+                keepOpen: true,
+                run: async () => {
+                  setAddProjectAttachTarget(null);
+                  startAddProjectSourceSelection(environmentId);
+                },
+              },
+            ],
+          },
+          {
+            value: `add-project-attach:${environmentId}`,
+            label: "Part of an existing project",
+            items: attachable.map((group) => ({
+              kind: "action" as const,
+              value: `action:add-project:${environmentId}:attach:${group.projectKey}`,
+              searchTerms: [
+                group.displayName,
+                ...group.memberProjects.map((member) => member.workspaceRoot),
+              ],
+              title: group.displayName,
+              description: group.memberProjects
+                .map(
+                  (member) =>
+                    `${member.environmentLabel ?? "Environment"} · ${member.workspaceRoot}`,
+                )
+                .join(", "),
+              icon: projectFaviconIcon(group),
+              titleTrailingContent: chevron,
+              keepOpen: true,
+              run: async () => {
+                setAddProjectAttachTarget({
+                  projectKey: group.projectKey,
+                  label: group.displayName,
+                });
+                startAddProjectSourceSelection(environmentId);
+              },
+            })),
+          },
+        ],
+      });
+    },
+    [projectGroups, pushPaletteView, startAddProjectSourceSelection],
+  );
+
   const buildEnvironmentItem = (
     option: AddProjectEnvironmentOption,
     value: string,
@@ -1782,7 +1867,7 @@ function OpenCommandPaletteDialog(props: {
     buildEnvironmentItem(
       option,
       `action:add-project:environment:${option.environmentId}`,
-      startAddProjectSourceSelection,
+      startAddProjectTargetSelection,
     ),
   );
   const newProjectEnvironmentOptions = addProjectEnvironmentOptions.filter(
@@ -1817,7 +1902,7 @@ function OpenCommandPaletteDialog(props: {
       return;
     }
 
-    void startAddProjectSourceSelection(defaultAddProjectEnvironmentId);
+    startAddProjectTargetSelection(defaultAddProjectEnvironmentId);
   }, [
     addProjectEnvironmentGroups,
     addProjectEnvironmentOptions.length,
@@ -1825,7 +1910,7 @@ function OpenCommandPaletteDialog(props: {
     navigate,
     pushPaletteView,
     setOpen,
-    startAddProjectSourceSelection,
+    startAddProjectTargetSelection,
   ]);
 
   // New project starts on this device (options list it first); the name step
@@ -2451,6 +2536,9 @@ function OpenCommandPaletteDialog(props: {
         cwd,
       );
       if (existing) {
+        if (addProjectAttachTarget !== null) {
+          await linkProjects([existing], addProjectAttachTarget.projectKey);
+        }
         const latestThread = getLatestThreadForProject(
           threads.filter((thread) => thread.environmentId === existing.environmentId),
           existing.id,
@@ -2518,9 +2606,13 @@ function OpenCommandPaletteDialog(props: {
         return;
       }
 
-      const navigationResult = await settlePromise(() =>
-        handleNewThread(scopeProjectRef(input.environmentId, projectId)),
-      );
+      const createdRef = scopeProjectRef(input.environmentId, projectId);
+      if (addProjectAttachTarget !== null) {
+        // The link has to exist before the draft opens, which keys off the logical project.
+        const created = await waitForProject(createdRef, 5_000).catch(() => null);
+        if (created !== null) await linkProjects([created], addProjectAttachTarget.projectKey);
+      }
+      const navigationResult = await settlePromise(() => handleNewThread(createdRef));
       if (navigationResult._tag === "Failure") {
         const error = squashAtomCommandFailure(navigationResult);
         toastManager.add(
@@ -2535,6 +2627,7 @@ function OpenCommandPaletteDialog(props: {
       setOpen(false);
     },
     [
+      addProjectAttachTarget,
       handleNewThread,
       createProject,
       environments,
@@ -2601,6 +2694,7 @@ function OpenCommandPaletteDialog(props: {
         environmentId: newProjectFlow.environmentId,
         name: newProjectName,
         publishTo: newProjectPublishes ? newProjectPublishTarget : null,
+        attachToProjectKey: addProjectAttachTarget?.projectKey ?? null,
       });
       if (created) setOpen(false);
     } finally {
@@ -2804,7 +2898,10 @@ function OpenCommandPaletteDialog(props: {
     // The create event usually lands before this call returns; give the shell
     // stream a moment so the draft opens with its project resolved instead of
     // flashing the project picker.
-    await waitForProject(projectRef, 3_000).catch(() => null);
+    const cloned = await waitForProject(projectRef, 3_000).catch(() => null);
+    if (cloned !== null && addProjectAttachTarget !== null) {
+      await linkProjects([cloned], addProjectAttachTarget.projectKey);
+    }
     const navigationResult = await settlePromise(() => handleNewThread(projectRef));
     if (navigationResult._tag === "Failure") {
       const error = squashAtomCommandFailure(navigationResult);
@@ -2920,7 +3017,7 @@ function OpenCommandPaletteDialog(props: {
       setViewStack((previousViews) => previousViews.slice(0, -1));
     }
     popView();
-    startAddProjectSourceSelection(environmentId);
+    startAddProjectTargetSelection(environmentId);
   };
   // Switching machines keeps the typed name; the GitHub option follows the
   // machine because source control discovery reads addProjectEnvironmentId.

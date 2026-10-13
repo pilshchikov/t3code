@@ -36,6 +36,8 @@ import {
 } from "../../sidebarProjectGrouping";
 import { useEnvironments, usePrimaryEnvironmentId } from "../../state/environments";
 import { useThreadShells } from "../../state/entities";
+import { useClientSettings } from "../../hooks/useSettings";
+import { linkProjects } from "../../projectLinks";
 import { projectEnvironment } from "../../state/projects";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { Alert, AlertDescription } from "../ui/alert";
@@ -198,6 +200,23 @@ function ProjectDetail({
       (member) => environmentById.get(member.environmentId)?.serverConfig != null,
     ) ?? group.memberProjects[0]!;
   const threads = useThreadShells();
+  const allGroups = useSettingsProjectGroups();
+  const projectLinks = useClientSettings((settings) => settings.sidebarProjectLinks);
+  const attachChoices = allGroups.filter(
+    (candidate) => !candidate.isScratch && candidate.projectKey !== group.projectKey,
+  );
+  const linkedMembers = group.memberProjects.filter(
+    (member) => projectLinks[member.physicalProjectKey] !== undefined,
+  );
+  const attachGroupTo = (projectKey: string) => {
+    void linkProjects(group.memberProjects, projectKey).then(() =>
+      navigate({
+        to: "/settings/projects",
+        search: { project: projectKey, machine: undefined },
+        hashScrollIntoView: false,
+      }),
+    );
+  };
   const updateProject = useOrchestrationCommand(projectEnvironment.update, {
     reportFailure: false,
   });
@@ -755,6 +774,54 @@ function ProjectDetail({
           environmentId={representative.environmentId}
           projectId={representative.id}
         />
+        {group.isScratch ? null : (
+          <SettingsSection title="Grouping">
+            <SettingsRow
+              title="Show under another project"
+              description="Makes these checkouts part of another project on this device. Use it for folders that have no Git remote to match by. Files and threads stay where they are."
+              control={
+                attachChoices.length === 0 ? (
+                  <span className="text-sm text-secondary-label">No other projects</span>
+                ) : (
+                  <Select
+                    value={null}
+                    onValueChange={(value) => {
+                      if (typeof value === "string") attachGroupTo(value);
+                    }}
+                  >
+                    <SelectTrigger size="sm" aria-label="Show under another project">
+                      <SelectValue placeholder="Choose a project" />
+                    </SelectTrigger>
+                    <SelectPopup align="end" alignItemWithTrigger={false}>
+                      {attachChoices.map((candidate) => (
+                        <SelectItem key={candidate.projectKey} value={candidate.projectKey}>
+                          {candidate.displayName}
+                        </SelectItem>
+                      ))}
+                    </SelectPopup>
+                  </Select>
+                )
+              }
+            />
+            {linkedMembers.map((member) => (
+              <SettingsRow
+                key={member.physicalProjectKey}
+                title={`Attached by hand on ${member.environmentLabel ?? "Environment"}`}
+                description={member.workspaceRoot}
+                control={
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void linkProjects([member], null)}
+                    aria-label={`Detach ${member.workspaceRoot}`}
+                  >
+                    Detach
+                  </Button>
+                }
+              />
+            ))}
+          </SettingsSection>
+        )}
         <SettingsSection title="Danger">
           <SettingsRow
             title={

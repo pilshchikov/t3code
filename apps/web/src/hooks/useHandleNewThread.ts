@@ -39,7 +39,7 @@ import { readT3ProjectFile } from "../lib/t3ProjectFileDefaults";
 import { environmentServerConfigsAtom } from "../state/server";
 import { resolveThreadRouteTarget } from "../threadRoutes";
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
-import { useClientSettings } from "./useSettings";
+import { getClientSettings, useClientSettings } from "./useSettings";
 import { toastManager } from "../components/ui/toast";
 
 interface NewThreadWorkspaceOptions {
@@ -206,8 +206,12 @@ export function useNewThreadHandler() {
           ),
         });
       };
+      // Read at call time: a link made just before this call is not in the hook's snapshot yet.
       const logicalProjectKey = project
-        ? deriveLogicalProjectKeyFromSettings(project, projectGroupingSettings)
+        ? deriveLogicalProjectKeyFromSettings(
+            project,
+            selectProjectGroupingSettings(getClientSettings()),
+          )
         : scopedProjectKey(projectRef);
       const hasBranchOption = options?.branch !== undefined;
       const hasWorktreePathOption = options?.worktreePath !== undefined;
