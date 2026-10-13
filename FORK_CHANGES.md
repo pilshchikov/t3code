@@ -1,5 +1,61 @@
 # Fork Changes
 
+## Sync a project and its threads to another machine — 2026-10-12
+
+- The owner works on a MacBook and a Mac mini and wanted one project to move between them, not
+  two unrelated environments. The thread header now has a machine menu
+  (`apps/web/src/components/chat/EnvironmentSyncMenu.tsx`). For each other connected machine it
+  offers **Continue this thread there**, **New thread there**, **Sync project there**, and
+  **Update this machine from**. The first sync of a project asks for a folder, prefilled from the
+  new `environmentSyncDirectory` server setting (Settings → Storage → Synced projects folder,
+  default `~/t3-sync`).
+- Servers never contact each other. The client relays: the target reports the commits and thread
+  heads it has (`environmentSync.prepare`), the source exports the difference
+  (`environmentSync.export`), and the client copies the parts over
+  `/api/environment-sync/<session>/<part>` in 4 MiB chunks. The session id is the credential and
+  those URLs stay out of traces. The import runs in a server-owned fiber after
+  `environmentSync.commit`, so a dropped client does not stop it, and the client polls
+  `environmentSync.status`. Service: `apps/server/src/environmentSync/EnvironmentSync.ts`. Shared
+  client logic: `packages/client-runtime/src/state/environmentSync.ts`.
+- Threads travel as their orchestration events (gzip NDJSON) and keep their ids, so the copy
+  replays into the same timeline. A thread only moves forward: the target imports when its copy is
+  a prefix of the source's, skips a thread that is newer on the target, and changes neither copy
+  when both have events the other lacks. Threads with running or queued work are skipped.
+  `EnvironmentSyncTransform.ts` rewrites only what names a place or process on the source: the
+  project id, workspace paths, live provider sessions, and pull request watches. Source turn-item
+  ordinals are kept. Attachments are copied under their original ids.
+- A native provider session cannot move. The import records `environmentSync` on the thread
+  (optional field on `OrchestrationV2AppThread` and the shell, no migration). In
+  `ProviderTurnStartService.ts`, a provider thread whose native id came from the other host skips
+  the resume and takes the existing fresh-session path with a `full_thread_summary` handoff. The
+  first turn after a move also carries a note naming both machines and saying that files Git
+  ignores were not copied (`orchestration-v2/EnvironmentSyncNote.ts`). Claude needs this because
+  its `resumeThread` never fails by itself.
+- The repository moves as a `git bundle` limited to what the target lacks, plus a checkpoint
+  commit of each checkout, so uncommitted and untracked files arrive uncommitted
+  (`EnvironmentSyncGit.ts`). The owner asked that a sync never destroy existing work, with a way
+  back. The receiving side creates or fast-forwards branches and never rewinds one. A checkout
+  whose branch is ahead or diverged is left alone, and a diverged source branch is saved as
+  `t3-sync/<machine>/<branch>`. Before a checkout is replaced, its state is saved under
+  `refs/t3-sync/restore/<id>` with metadata in
+  `<stateDir>/environment-sync/restore-points/<project>/`. `environmentSync.undo` puts checkouts
+  and fast-forwarded branches back, and is itself undoable. The last 10 restore points are kept.
+  `refs/t3-sync/synced/<key>` holds the snapshot each checkout last sent or received, which tells
+  local changes from synced ones and keeps a repeat sync from resending untracked files.
+- Both ends advertise the `environmentSync` capability, and the menu marks a machine that lacks
+  it. Not built: a mobile UI, command palette entries, copying files Git ignores, additional
+  project directories, and moving pull request watches or scheduled automations.
+- User guide: `docs/user/machine-sync.md`. The ownership rule in `docs/internals/remote.md` now
+  mentions the copy.
+- Validation: four integration tests run two real environments (separate SQLite databases and
+  Git repositories) through first sync, round trip with undo, divergence, and a target branch
+  that is ahead (`EnvironmentSync.test.ts`). Unit tests cover the event transform, the agent
+  note, and the client helpers. A one-off run against a copy of real data synced four threads
+  with their subagents, about 20,000 events and a 100 MB bundle, and matched messages, turn
+  items, runs, and visible items on both sides. A repeat sync sent 2 KB. Full typecheck passed.
+  `vp check` reports 13 lint errors in files this change does not touch. Not verified in a
+  running app before the first build.
+
 ## Persistent connections without Keychain prompts — 2026-10-12
 
 - The owner chose persistent local encryption after SSH connection registration failed because

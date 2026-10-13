@@ -32,6 +32,13 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.projectCloneStart]: AuthSourceControlWriteScope,
   [WS_METHODS.projectCloneCancel]: AuthSourceControlWriteScope,
   [WS_METHODS.projectCloneRetry]: AuthSourceControlWriteScope,
+  // Exporting writes hidden refs and temporary files. Importing changes the checkout and threads.
+  [WS_METHODS.environmentSyncPrepare]: AuthOrchestrationOperateScope,
+  [WS_METHODS.environmentSyncExport]: AuthOrchestrationOperateScope,
+  [WS_METHODS.environmentSyncAccept]: AuthOrchestrationOperateScope,
+  [WS_METHODS.environmentSyncCommit]: AuthOrchestrationOperateScope,
+  [WS_METHODS.environmentSyncRelease]: AuthOrchestrationOperateScope,
+  [WS_METHODS.environmentSyncUndo]: AuthOrchestrationOperateScope,
   [WS_METHODS.vcsFetch]: AuthSourceControlWriteScope,
   [WS_METHODS.gitStageFiles]: AuthSourceControlWriteScope,
   [WS_METHODS.gitUnstageFiles]: AuthSourceControlWriteScope,

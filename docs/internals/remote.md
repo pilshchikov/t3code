@@ -17,6 +17,17 @@ features target the repository a fork tracks. A fork also reports its own
 `origin`, and clients group and label by that, so a fork never collapses into a
 checkout of its upstream.
 
+[Environment sync](../../apps/server/src/environmentSync/EnvironmentSync.ts) copies
+a project and its threads to another environment without changing ownership. The
+copy is a second project with its own threads that share ids with the originals.
+Servers never contact each other, so the client relays the transfer. Threads
+travel as their orchestration events and only move forward. A target takes
+events when its copy is a prefix of the source's, and leaves both copies alone
+when each has events the other lacks. A native provider session stays on the
+host that created it, so the first turn after a move starts a fresh session with
+a text handoff. The receiving repository never rewinds a branch, and saves a
+checkout before replacing it. See [the user guide](../user/machine-sync.md).
+
 [Environment ID initialization](../../apps/server/src/environment/ServerEnvironment.ts)
 must publish a complete ID atomically. Repair of an empty ID file retains a
 recovery file so concurrent or delayed initializers choose the same winner.

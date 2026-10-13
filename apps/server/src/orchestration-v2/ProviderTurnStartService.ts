@@ -49,6 +49,7 @@ import {
   pendingRestartCancelledBackgroundWork,
   restartCancelledBackgroundWorkNote,
 } from "./RestartBackgroundNote.ts";
+import { hasStaleNativeSession, pendingEnvironmentSyncNote } from "./EnvironmentSyncNote.ts";
 
 export class ProviderTurnStartError extends Schema.TaggedError<ProviderTurnStartError>()(
   "ProviderTurnStartError",
@@ -665,15 +666,18 @@ export const layer: Layer.Layer<
             handoff.delivery?.nativeThreadId === providerThread.nativeThreadRef?.nativeId &&
             handoff.delivery?.status === "pending",
         );
+        const staleNativeSession = hasStaleNativeSession(projection.thread, providerThread);
         const resumed = yield* Effect.result(
-          uncertainDelivery
+          uncertainDelivery || staleNativeSession
             ? Effect.fail(
                 new ProviderAdapter.ProviderAdapterTurnStartError({
                   driver: session.driver,
                   threadId: projection.thread.id,
                   providerThreadId: providerThread.id,
                   runId,
-                  cause: "Uncertain native history injection",
+                  cause: staleNativeSession
+                    ? "Native session belongs to another environment"
+                    : "Uncertain native history injection",
                 }),
               )
             : session.resumeThread({
@@ -691,7 +695,11 @@ export const layer: Layer.Layer<
           driver: session.driver,
           providerThreadId: providerThread.id,
           runId,
-          reason: uncertainDelivery ? "uncertain_history_delivery" : "resume_failed",
+          reason: staleNativeSession
+            ? "environment_changed"
+            : uncertainDelivery
+              ? "uncertain_history_delivery"
+              : "resume_failed",
           errorTag: resumed.failure._tag,
         });
         const replacement = yield* loadFromProvider(
@@ -974,10 +982,24 @@ export const layer: Layer.Layer<
         run,
         attempts: projection.attempts,
       });
-      const restartNote =
+      // Also carries the environment sync note. Both ride with the user text.
+      const restartNote = [
         restartCancelledWork.length === 0
           ? ""
-          : restartCancelledBackgroundWorkNote(restartCancelledWork);
+          : restartCancelledBackgroundWorkNote(restartCancelledWork),
+        pendingEnvironmentSyncNote({
+          thread: projection.thread,
+          run,
+          runs: projection.runs,
+          attempts: projection.attempts,
+          providerTurns: projection.providerTurns,
+          isCompaction:
+            message.attachments.length === 0 && message.text.trim().toLowerCase() === "/compact",
+          cwd: resolvedRuntimePolicy.cwd,
+        }),
+      ]
+        .filter((part) => part !== "")
+        .join("\n\n");
       const tokenCap = yield* handoffTokenCapConfig.pipe(
         Effect.orElseSucceed(() => DEFAULT_HANDOFF_TOKEN_CAP),
       );

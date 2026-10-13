@@ -256,6 +256,7 @@ import {
 } from "@t3tools/shared/usageLimits";
 import * as AgentSessionScanner from "./project/AgentSessionScanner.ts";
 import * as AgentSessionImporter from "./project/AgentSessionImporter.ts";
+import * as EnvironmentSync from "./environmentSync/EnvironmentSync.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
 
 const CONFIG_DISCOVERY_TIMEOUT = Duration.seconds(5);
@@ -1310,6 +1311,7 @@ const makeWsHandlers = (
     const repositoryIdentityResolver = yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
     const agentSessionScanner = yield* AgentSessionScanner.AgentSessionScanner;
     const agentSessionImporter = yield* AgentSessionImporter.AgentSessionImporter;
+    const environmentSync = yield* EnvironmentSync.EnvironmentSync;
     const checkpointDiffQuery = yield* CheckpointDiffQuery.CheckpointDiffQuery;
     const keybindings = yield* Keybindings.Keybindings;
     const environmentTheme = yield* EnvironmentTheme.EnvironmentThemeService;
@@ -2768,6 +2770,15 @@ const makeWsHandlers = (
       [WS_METHODS.agentSessionsScan]: () => agentSessionScanner.scan,
       [WS_METHODS.agentSessionsImport]: (input) =>
         agentSessionImporter.importRecentAgentThreads(input),
+      [WS_METHODS.environmentSyncPrepare]: (input) => environmentSync.prepare(input),
+      [WS_METHODS.environmentSyncExport]: (input) => environmentSync.export(input),
+      [WS_METHODS.environmentSyncAccept]: (input) => environmentSync.accept(input),
+      [WS_METHODS.environmentSyncCommit]: (input) =>
+        environmentSync.commit(input.sessionId).pipe(Effect.as({ started: true })),
+      [WS_METHODS.environmentSyncStatus]: (input) => environmentSync.status(input.sessionId),
+      [WS_METHODS.environmentSyncRelease]: (input) =>
+        environmentSync.release(input.sessionId).pipe(Effect.map((released) => ({ released }))),
+      [WS_METHODS.environmentSyncUndo]: (input) => environmentSync.undo(input),
       [WS_METHODS.assetsCreateUrl]: (input) =>
         Effect.gen(function* () {
           const path = yield* Path.Path;
