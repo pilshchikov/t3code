@@ -183,6 +183,48 @@ export const makeMigrationLoader = (throughId?: number) =>
     ),
   );
 
+// Released fork databases begin V2 at 59; earlier ids retain their original names.
+const FIRST_V2_MIGRATION_ID = 59;
+
+/**
+ * Fail before migrating when the migrator would skip one of V2's own
+ * migrations. It skips every id up to the highest recorded one, whatever name
+ * was recorded, so a database that took a V2 id for another migration would
+ * start without V2's schema and fail on first use. Earlier ids keep the
+ * warning below: databases with a site-local migration there still work.
+ */
+const assertV2MigrationsCanRun = Effect.fn("assertV2MigrationsCanRun")(function* (
+  throughId?: number,
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const tables = yield* sql`
+    SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'effect_sql_migrations'
+  `;
+  if (tables.length === 0) return;
+  const recorded = yield* sql<{
+    readonly migration_id: number;
+    readonly name: string;
+  }>`SELECT migration_id, name FROM effect_sql_migrations`;
+  const latestRecordedId = Math.max(0, ...recorded.map((row) => row.migration_id));
+  const recordedNames = new Map(recorded.map((row) => [row.migration_id, row.name]));
+  const skipped = migrationEntries.flatMap(([id, name]) => {
+    if (
+      id < FIRST_V2_MIGRATION_ID ||
+      id > latestRecordedId ||
+      (throughId !== undefined && id > throughId)
+    )
+      return [];
+    const recordedName = recordedNames.get(id);
+    if (recordedName === name) return [];
+    return [`${id}_${name} (recorded: ${recordedName ?? "nothing"})`];
+  });
+  if (skipped.length === 0) return;
+  return yield* new Migrator.MigrationError({
+    kind: "BadState",
+    message: `This database's migration history would skip required schema migrations: ${skipped.join(", ")}. The migrator skips every id up to the highest recorded id (${latestRecordedId}), regardless of name. It was probably written by a different build. Start the build that wrote it, or report this migration history so an upgrade path can be added.`,
+  });
+});
+
 /**
  * Migrator run function - no schema dumping needed
  * Uses the base Migrator.make without platform dependencies
@@ -210,7 +252,7 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
   return yield* sql.withTransaction(
     Effect.gen(function* () {
       const previewMigrations =
-        toMigrationInclusive === undefined || toMigrationInclusive >= 59
+        toMigrationInclusive === undefined || toMigrationInclusive >= FIRST_V2_MIGRATION_ID
           ? yield* reconcileV2PreviewMigration()
           : [];
       if (previewMigrations.length > 0) {
@@ -249,6 +291,9 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
           }),
         );
       }
+      if (toMigrationInclusive === undefined || toMigrationInclusive >= FIRST_V2_MIGRATION_ID) {
+        yield* assertV2MigrationsCanRun(toMigrationInclusive);
+      }
       const migrated = yield* run({ loader: makeMigrationLoader(toMigrationInclusive) });
       const executedMigrations = [
         ...previewMigrations.map(([, name]) => {
@@ -261,6 +306,23 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
       yield* migrations.length === 0
         ? Effect.logDebug("Database schema is current")
         : Effect.log("Migrations ran successfully").pipe(Effect.annotateLogs({ migrations }));
+      const recorded = yield* sql<{ readonly migration_id: number; readonly name: string }>`
+        SELECT migration_id, name FROM effect_sql_migrations
+      `;
+      const manifestNames = new Map<number, string>(migrationManifest);
+      const divergent = recorded.flatMap((row) => {
+        const expected = manifestNames.get(row.migration_id);
+        if (expected === undefined)
+          return [`${row.migration_id}:${row.name} (unknown to this build)`];
+        return expected === row.name
+          ? []
+          : [`${row.migration_id}:${row.name} (this build: ${expected})`];
+      });
+      if (divergent.length > 0) {
+        yield* Effect.logWarning(
+          "Database migration history diverges from this build; recorded migration ids are skipped, not reconciled by name.",
+        ).pipe(Effect.annotateLogs({ divergent }));
+      }
       return executedMigrations;
     }),
   );

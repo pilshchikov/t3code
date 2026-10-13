@@ -15,6 +15,10 @@ export function isNpmReleasePublished(version: string): Promise<boolean> {
       return typeof body === "object" && body !== null && "version" in body
         ? body.version === version
         : false;
-    }).pipe(Effect.provide(FetchHttpClient.layer)),
+    }).pipe(
+      // Tracing headers would make the browser send a CORS preflight, which npm rejects.
+      Effect.provideService(HttpClient.TracerPropagationEnabled, false),
+      Effect.provide(FetchHttpClient.layer),
+    ),
   );
 }

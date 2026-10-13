@@ -1,5 +1,67 @@
 # Fork Changes
 
+## Daily upstream integration — 2026-10-13
+
+- Merged all 19 upstream commits through
+  `42160f2925daa3c0d4ef2b95f68a87858972e6a3` from fork parent
+  `7f6ab7d7b22c4f2e4778cace3ee65224dcd15d2d` with a real merge. Includes
+  tunnel reconnect recovery, native attachment caching and offline PR fallback,
+  cached branch-PR Git reads, downgrade replay, migration startup diagnostics,
+  Codex lightweight text-generation isolation, HTML link routing and web layout fixes.
+- Resolved three conflicts individually. `persistence/Migrations.ts` retains released
+  fork IDs, compatibility repairs and atomic upstream-preview translation. Upstream's
+  required-V2-history guard runs after that translation, inside the transaction, using
+  the fork's V2 boundary at 59. Earlier divergences and unknown later IDs retain warnings;
+  no released migration was renamed or renumbered. Adapted incoming migration expectations
+  and migration guidance to that boundary without adding independent tests.
+- `files/FilePreviewPanel.tsx` keeps its resizable multi-repository preview/explorer,
+  Files/Structure/Commit controls, exact-checkout and external-file handling. The actual
+  attachment preview passes its thread reference to upstream's HTML link handler, so PR
+  links can open beside that chat. Markdown root links still resolve to the explorer.
+  `state/npmRelease.ts` retains a user-requested publication check, with upstream's
+  tracing-header suppression; no sidebar-mounted or recurring npm request is restored.
+  Adapted the incoming npm expectations to the existing one-shot API.
+- Reviewed all upstream source changes and the automatic merges. Ten of the thirteen
+  overlapping files retain identical fork added/removed lines against upstream; the other
+  three are the resolutions above. Claude thinking remains a Thought while actual first
+  assistant text stays outside settled folds. Tool collection uses push/reverse with its
+  existing order and mixed-work labels; stable imported-thread grouping and independent
+  one-second position recovery/end following remain live. Git PR caching confirms terminal
+  results against fresh Git state and discovery requests fresh state before persisting;
+  fork Never-default settlement and two-hour finished-link removal remain connected.
+- Traced `ChatComposer` into `ComposerPrimaryActions`: Arcane mounts with saved send color
+  for Send/Resume/Queue/Steer and saved stop color through the shared ordinary and
+  pending-input Stop renderer. Classic remains available. `ChatView` keeps forced mobile
+  expansion for existing chats and draft heroes, disabled scroll/focus collapse, ordinary
+  sending without compact-first actions, custom chat width and mobile viewport handling.
+  Native attachment caching does not replace keyboard/composer layout handling.
+- Live callers retain project rail/status dots/colors, project slots/grouping/attachments,
+  ordering and picker size; per-repository Files/worktree controls and stored collapse,
+  expansion and resize state; fresh-file checks/dirty-editor protection, deletion/undo,
+  editor navigation/history, global panel shortcuts and right-click tab closing; Git
+  history and staged-only commit context; and sidebar CLI resume with V2 native refs.
+  Initial checkout binding/clearing still requires the validated preparing run with only
+  queued follow-ups, no provider session, question or background work. Ordinary active
+  work remains protected. Claude worker hooks and child effort ingestion remain connected.
+- Account/source-specific usage model rows, colored pooled limits and compact per-provider
+  trends remain mounted. Upstream changes only pace-label alignment, not account aggregation.
+  Project notes/workspace MCP, peer file tools/client relay, project compaction overrides,
+  quota-recovery eligibility, worker-question recovery, cleanup preferences and stable desktop
+  storage/local catalog encryption remain connected. External analytics/OTLP stay disabled;
+  provider refresh/version/manifest, auto-update and Keychain remain opt-in. Lightweight
+  Codex generation disables MCP/plugins/apps without changing actual agent MCP access.
+  Multiwork and machine sync remain explicitly retired; older usage/sync components remain
+  superseded rather than restored.
+- Validation: frozen-lockfile installation and eight scoped typechecks passed (server, web,
+  mobile, desktop, contracts, shared, client-runtime and source-control-bitbucket). Changed-file
+  lint covered 57 files with zero errors and 116 warnings (unused symbols, React hooks/ref/
+  memoization rules and styling). Typechecks also report non-failing Effect suggestions.
+  Formatting and source/document whitespace checks passed. These are static checks; runtime/UI
+  behavior and the imported/adapted upstream tests were not exercised.
+  No tests added independently or run, app builds, packaging, runtime/UI verification, dev
+  servers, installed-app/live-data operations, process stops, push, PR, external messages,
+  other-worktree/main edits or schedule changes.
+
 ## Agent tools for files on other environments — 2026-10-12
 
 - The owner asked for agent-driven file exchange between environments, with no UI: Git moves
