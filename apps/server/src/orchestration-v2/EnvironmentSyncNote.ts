@@ -1,75 +1,107 @@
-import type {
-  OrchestrationV2AppThread,
-  OrchestrationV2ProviderThread,
-  OrchestrationV2ProviderTurn,
-  OrchestrationV2Run,
-  OrchestrationV2RunAttempt,
-  ThreadEnvironmentSync,
-} from "@t3tools/contracts";
+import type { OrchestrationV2ProviderTurn, ProjectId, ThreadId } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import type * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+
+import type * as ProjectService from "../project/ProjectService.ts";
 
 /**
- * A provider thread whose native session was created on the host the thread
- * came from. Resuming it here would look up a session this machine never had,
- * so the turn starts a fresh session and hands the history over as text.
+ * What the last environment sync into a repository brought, kept inside its
+ * `.git` directory. The first thread to start a turn afterwards claims it and
+ * tells its agent, so one conversation learns the checkout came from another
+ * machine and later ones are not told again.
  */
-export function hasStaleNativeSession(
-  thread: Pick<OrchestrationV2AppThread, "environmentSync">,
-  providerThread: Pick<OrchestrationV2ProviderThread, "nativeThreadRef">,
-): boolean {
-  const nativeId = providerThread.nativeThreadRef?.nativeId;
-  return (
-    nativeId !== null &&
-    nativeId !== undefined &&
-    (thread.environmentSync?.staleNativeThreadIds.includes(nativeId) ?? false)
-  );
+const EnvironmentSyncNoteRecord = Schema.Struct({
+  originLabel: Schema.String,
+  hostLabel: Schema.String,
+  originWorkspaceRoot: Schema.String,
+  syncedAt: Schema.String,
+  checkouts: Schema.Array(
+    Schema.Struct({
+      path: Schema.String,
+      originPath: Schema.String,
+      notes: Schema.Array(Schema.String),
+    }),
+  ),
+  claimedByThreadId: Schema.optional(Schema.String),
+});
+type EnvironmentSyncNoteRecord = typeof EnvironmentSyncNoteRecord.Type;
+
+const decodeRecord = Schema.decodeUnknownEffect(Schema.fromJsonString(EnvironmentSyncNoteRecord));
+const encodeRecord = Schema.encodeEffect(Schema.fromJsonString(EnvironmentSyncNoteRecord));
+
+function recordPath(workspaceRoot: string): string {
+  const separator = workspaceRoot.includes("\\") && !workspaceRoot.includes("/") ? "\\" : "/";
+  return [workspaceRoot.replace(/[/\\]+$/, ""), ".git", "t3-environment-sync.json"].join(separator);
 }
 
-/** Provider-facing text telling the agent which machine it now works on. */
-export function environmentSyncNote(sync: ThreadEnvironmentSync, cwd: string | null): string {
+/** Replaces the record after a sync. A repository whose `.git` is not a directory keeps none. */
+export const writeEnvironmentSyncNote = (
+  fileSystem: FileSystem.FileSystem,
+  workspaceRoot: string,
+  record: EnvironmentSyncNoteRecord,
+) =>
+  encodeRecord(record).pipe(
+    Effect.flatMap((json) => fileSystem.writeFileString(recordPath(workspaceRoot), json)),
+    Effect.ignore,
+  );
+
+/** Provider-facing text telling the agent where its checkout came from. */
+function environmentSyncNote(record: EnvironmentSyncNoteRecord, cwd: string | null): string {
+  const checkout = record.checkouts.find((candidate) => candidate.path === cwd);
   return [
-    `Note: this conversation moved to another machine. It ran on "${sync.origin.label}" in ${sync.originWorkspacePath}. It now runs on "${sync.host.label}"${cwd === null ? "" : ` in ${cwd}`}.`,
+    `Note: this project was synced to "${record.hostLabel}" from another machine, "${record.originLabel}", on ${record.syncedAt}. There it lives in ${checkout?.originPath ?? record.originWorkspaceRoot}.`,
     "Git history, branches, and uncommitted changes were copied. Files Git ignores were not: installed dependencies, build output, and local config such as .env files.",
-    `Paths in the earlier conversation refer to "${sync.origin.label}". If something you expect is missing here, it may still exist there. Reinstall or rebuild it, or ask the user to copy it over.`,
-    ...sync.notes,
+    `If something you expect is missing here, it may still exist on "${record.originLabel}". Reinstall or rebuild it, or ask the user to copy it over.`,
+    ...(checkout?.notes ?? []),
   ].join("\n");
 }
 
 /**
- * The note for a run when no provider turn has completed since the thread
- * arrived. Delivery is derived, like the restart note. A completed turn in a
- * run that started here proves the agent was told. Compactions carry no text
- * of their own, and a restart continuation resumes or re-prompts its source.
+ * The note for this turn, or an empty string. The thread that asks first
+ * claims the record, and keeps getting the note until one of its turns
+ * completes after the sync, which proves the agent was told.
  */
-export function pendingEnvironmentSyncNote(input: {
-  readonly thread: Pick<OrchestrationV2AppThread, "environmentSync">;
-  readonly run: Pick<OrchestrationV2Run, "id" | "ordinal" | "restartContinuationOfRunId">;
-  readonly runs: ReadonlyArray<Pick<OrchestrationV2Run, "id" | "ordinal">>;
-  readonly attempts: ReadonlyArray<Pick<OrchestrationV2RunAttempt, "id" | "runId">>;
-  readonly providerTurns: ReadonlyArray<
-    Pick<OrchestrationV2ProviderTurn, "runAttemptId" | "status">
-  >;
-  readonly isCompaction: boolean;
-  readonly cwd: string | null;
-}): string {
-  const sync = input.thread.environmentSync;
-  if (
-    sync === undefined ||
-    input.isCompaction ||
-    input.run.restartContinuationOfRunId !== undefined ||
-    input.run.ordinal <= sync.afterRunOrdinal
-  ) {
-    return "";
-  }
-  const runsHere = new Set(
-    input.runs.filter((run) => run.ordinal > sync.afterRunOrdinal).map((run) => run.id),
-  );
-  const deliveredAttempts = new Set(
-    input.providerTurns
-      .filter((turn) => turn.status === "completed")
-      .map((turn) => turn.runAttemptId),
-  );
-  const delivered = input.attempts.some(
-    (attempt) => runsHere.has(attempt.runId) && deliveredAttempts.has(attempt.id),
-  );
-  return delivered ? "" : environmentSyncNote(sync, input.cwd);
-}
+export const pendingEnvironmentSyncNote = Effect.fn("pendingEnvironmentSyncNote")(
+  function* (input: {
+    readonly fileSystem: FileSystem.FileSystem;
+    readonly projects: Pick<ProjectService.ProjectService["Service"], "getById">;
+    readonly projectId: ProjectId;
+    readonly threadId: ThreadId;
+    readonly providerTurns: ReadonlyArray<
+      Pick<OrchestrationV2ProviderTurn, "status" | "completedAt">
+    >;
+    /** Compactions and restart continuations carry no text of their own. */
+    readonly carriesText: boolean;
+    readonly cwd: string | null;
+  }) {
+    if (!input.carriesText) return "";
+    const project = yield* input.projects.getById(input.projectId);
+    if (Option.isNone(project)) return "";
+    const file = recordPath(project.value.workspaceRoot);
+    const record = yield* input.fileSystem.readFileString(file).pipe(Effect.flatMap(decodeRecord));
+    if (record.claimedByThreadId !== undefined && record.claimedByThreadId !== input.threadId) {
+      return "";
+    }
+    const syncedAt = Date.parse(record.syncedAt);
+    const told = input.providerTurns.some(
+      (turn) =>
+        turn.status === "completed" &&
+        turn.completedAt !== null &&
+        DateTime.toEpochMillis(turn.completedAt) > syncedAt,
+    );
+    if (told) return "";
+    if (record.claimedByThreadId === undefined) {
+      yield* input.fileSystem.writeFileString(
+        file,
+        yield* encodeRecord({ ...record, claimedByThreadId: input.threadId }),
+      );
+    }
+    return environmentSyncNote(record, input.cwd);
+  },
+  // A note is never worth a failed turn, whatever went wrong reading it.
+  Effect.orElseSucceed(() => ""),
+  Effect.catchDefect(() => Effect.succeed("")),
+);

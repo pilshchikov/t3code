@@ -1,78 +1,118 @@
 import { assert, it } from "@effect/vitest";
-import { EnvironmentId, RunAttemptId, RunId, type ThreadEnvironmentSync } from "@t3tools/contracts";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { ProjectId, ThreadId } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 
-import { hasStaleNativeSession, pendingEnvironmentSyncNote } from "./EnvironmentSyncNote.ts";
+import { pendingEnvironmentSyncNote, writeEnvironmentSyncNote } from "./EnvironmentSyncNote.ts";
 
-const environmentSync: ThreadEnvironmentSync = {
-  origin: { environmentId: EnvironmentId.make("laptop"), label: "Laptop" },
-  originWorkspacePath: "/Users/a/code/app",
-  host: { environmentId: EnvironmentId.make("mini"), label: "Mini" },
-  syncedAt: "2026-10-12T10:00:00.000Z",
-  afterRunOrdinal: 2,
-  staleNativeThreadIds: ["native-from-laptop"],
-  notes: [],
-};
-const thread = { environmentSync };
-const run = (ordinal: number) => ({ id: RunId.make(`run:${ordinal}`), ordinal });
-const attempt = (ordinal: number) => ({
-  id: RunAttemptId.make(`attempt:${ordinal}`),
-  runId: RunId.make(`run:${ordinal}`),
-});
-const turn = (ordinal: number, status: "completed" | "failed") => ({
-  runAttemptId: RunAttemptId.make(`attempt:${ordinal}`),
+const projectId = ProjectId.make("project:note");
+const syncedAt = "2026-10-12T10:00:00.000Z";
+const turn = (status: "completed" | "failed", completedAt: string) => ({
   status,
-});
-const base = { thread, isCompaction: false, cwd: "/Users/b/work/app" };
-
-it("tells the agent about the move on the first turn after the thread arrived", () => {
-  const note = pendingEnvironmentSyncNote({
-    ...base,
-    run: run(3),
-    runs: [run(1), run(2), run(3)],
-    attempts: [attempt(1), attempt(2), attempt(3)],
-    providerTurns: [turn(1, "completed"), turn(2, "completed")],
-  });
-  assert.include(note, 'It ran on "Laptop" in /Users/a/code/app');
-  assert.include(note, 'It now runs on "Mini" in /Users/b/work/app');
+  completedAt: DateTime.makeUnsafe(completedAt),
 });
 
-it("repeats the note until a turn completes here, then stops", () => {
-  const afterFailedTurn = pendingEnvironmentSyncNote({
-    ...base,
-    run: run(4),
-    runs: [run(3), run(4)],
-    attempts: [attempt(3), attempt(4)],
-    providerTurns: [turn(3, "failed")],
-  });
-  assert.notEqual(afterFailedTurn, "");
-  const afterCompletedTurn = pendingEnvironmentSyncNote({
-    ...base,
-    run: run(4),
-    runs: [run(3), run(4)],
-    attempts: [attempt(3), attempt(4)],
-    providerTurns: [turn(3, "completed")],
-  });
-  assert.equal(afterCompletedTurn, "");
-});
+const withRepository = <A, E>(
+  body: (
+    ask: (input: {
+      readonly threadId: string;
+      readonly providerTurns?: ReadonlyArray<ReturnType<typeof turn>>;
+      readonly carriesText?: boolean;
+      readonly cwd?: string;
+    }) => Effect.Effect<string>,
+    root: string,
+  ) => Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>,
+) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-sync-note-" });
+    yield* fileSystem.makeDirectory(path.join(root, ".git"));
+    yield* writeEnvironmentSyncNote(fileSystem, root, {
+      originLabel: "Laptop",
+      hostLabel: "Mini",
+      originWorkspaceRoot: "/Users/a/code/app",
+      syncedAt,
+      checkouts: [
+        { path: root, originPath: "/Users/a/code/app", notes: [] },
+        {
+          path: "/worktrees/app/feature",
+          originPath: "/Users/a/trees/feature",
+          notes: ["Branch feature is ahead here."],
+        },
+      ],
+    });
+    const projects = {
+      getById: () => Effect.succeed(Option.some({ workspaceRoot: root } as never)),
+    };
+    return yield* body(
+      (input) =>
+        pendingEnvironmentSyncNote({
+          fileSystem,
+          projects,
+          projectId,
+          threadId: ThreadId.make(input.threadId),
+          providerTurns: input.providerTurns ?? [],
+          carriesText: input.carriesText ?? true,
+          cwd: input.cwd ?? root,
+        }),
+      root,
+    );
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 
-it("stays silent for compactions and for threads that never moved", () => {
-  const input = {
-    run: run(3),
-    runs: [run(3)],
-    attempts: [attempt(3)],
-    providerTurns: [],
-    cwd: null,
-  };
-  assert.equal(pendingEnvironmentSyncNote({ ...input, thread, isCompaction: true }), "");
-  assert.equal(pendingEnvironmentSyncNote({ ...input, thread: {}, isCompaction: false }), "");
-});
+it.effect("tells the first thread after a sync where its checkout came from", () =>
+  withRepository((ask) =>
+    Effect.gen(function* () {
+      const note = yield* ask({ threadId: "first", cwd: "/worktrees/app/feature" });
+      assert.include(note, 'synced to "Mini" from another machine, "Laptop"');
+      assert.include(note, "There it lives in /Users/a/trees/feature.");
+      assert.include(note, "Branch feature is ahead here.");
+      // Another thread is not told again, and the first keeps the note while its turn retries.
+      assert.equal(yield* ask({ threadId: "second" }), "");
+      assert.notEqual(yield* ask({ threadId: "first" }), "");
+    }),
+  ),
+);
 
-it("treats only sessions created on the other host as stale", () => {
-  const ref = (nativeId: string) => ({
-    nativeThreadRef: { driver: "codex" as never, nativeId, strength: "strong" as const },
-  });
-  assert.isTrue(hasStaleNativeSession(thread, ref("native-from-laptop")));
-  assert.isFalse(hasStaleNativeSession(thread, ref("native-from-mini")));
-  assert.isFalse(hasStaleNativeSession(thread, { nativeThreadRef: null }));
-  assert.isFalse(hasStaleNativeSession({}, ref("native-from-laptop")));
-});
+it.effect("stops once a turn completed after the sync", () =>
+  withRepository((ask) =>
+    Effect.gen(function* () {
+      const before = [turn("completed", "2026-10-12T09:00:00.000Z")];
+      assert.notEqual(yield* ask({ threadId: "old", providerTurns: before }), "");
+      const failed = [...before, turn("failed", "2026-10-12T11:00:00.000Z")];
+      assert.notEqual(yield* ask({ threadId: "old", providerTurns: failed }), "");
+      const done = [...failed, turn("completed", "2026-10-12T12:00:00.000Z")];
+      assert.equal(yield* ask({ threadId: "old", providerTurns: done }), "");
+    }),
+  ),
+);
+
+it.effect("leaves the note unclaimed for turns that carry no text", () =>
+  withRepository((ask) =>
+    Effect.gen(function* () {
+      assert.equal(yield* ask({ threadId: "compacting", carriesText: false }), "");
+      assert.notEqual(yield* ask({ threadId: "next" }), "");
+    }),
+  ),
+);
+
+it.effect("says nothing in a project that never received a sync", () =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const root = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-sync-note-" });
+    const note = yield* pendingEnvironmentSyncNote({
+      fileSystem,
+      projects: { getById: () => Effect.succeed(Option.some({ workspaceRoot: root } as never)) },
+      projectId,
+      threadId: ThreadId.make("thread"),
+      providerTurns: [],
+      carriesText: true,
+      cwd: root,
+    });
+    assert.equal(note, "");
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);

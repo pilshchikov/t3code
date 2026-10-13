@@ -9,7 +9,6 @@ import {
   type EnvironmentSyncExportInput,
   type EnvironmentSyncExportResult,
   type EnvironmentSyncImportResult,
-  type EnvironmentSyncImportStage,
   type EnvironmentSyncManifest,
   type EnvironmentSyncPeer,
   type EnvironmentSyncPrepareInput,
@@ -18,7 +17,6 @@ import {
   type EnvironmentSyncStatusResult,
   type ProjectId,
   type RepositoryIdentity,
-  type ThreadId,
 } from "@t3tools/contracts";
 import type { Atom, AtomRegistry } from "effect/reactivity";
 
@@ -97,12 +95,7 @@ export type EnvironmentSyncProgress =
       readonly transferredBytes: number;
       readonly totalBytes: number;
     }
-  | {
-      readonly stage: "importing";
-      readonly step: EnvironmentSyncImportStage;
-      readonly completed: number;
-      readonly total: number;
-    };
+  | { readonly stage: "importing" };
 
 export type EnvironmentSyncOutcome =
   | {
@@ -134,10 +127,10 @@ const wait = (milliseconds: number) =>
   });
 
 /**
- * Copies a project and the given threads from one environment to another.
- * Neither server can reach the other, so the bytes pass through this client:
- * the target says what it already has, the source exports the difference, and
- * the parts are relayed chunk by chunk.
+ * Copies a project's repository from one environment to another. Neither
+ * server can reach the other, so the bytes pass through this client. The target
+ * says which commits it has, the source exports the difference, and the parts
+ * are relayed chunk by chunk.
  */
 export async function runEnvironmentSync(input: {
   readonly registry: AtomRegistry.AtomRegistry;
@@ -185,10 +178,8 @@ export async function runEnvironmentSync(input: {
       environmentId: source.environmentId,
       input: {
         projectId: input.sourceProjectId,
-        rootThreadIds: input.prepare.rootThreadIds,
         target,
         gitHaves: prepared.value.gitHaves,
-        threadHeads: prepared.value.threadHeads,
       },
     },
     quiet,
@@ -301,14 +292,7 @@ export async function runEnvironmentSync(input: {
         release(target.environmentId, transferId);
         return failed("import", value.message);
       }
-      if (value.phase === "importing") {
-        input.onProgress?.({
-          stage: "importing",
-          step: value.stage,
-          completed: value.completed,
-          total: value.total,
-        });
-      }
+      if (value.phase === "importing") input.onProgress?.({ stage: "importing" });
     }
     await wait(input.statusPollMs ?? STATUS_POLL_MS);
   }
@@ -345,43 +329,4 @@ export function findEnvironmentSyncTargetProject<
         repositoryGroupingKeyOf(project.repositoryIdentity) === key,
     ) ?? null
   );
-}
-
-/**
- * Threads a project sync carries: the one in view, and every other thread
- * still in play. Finished threads stay where they are until someone opens one
- * and syncs it. Child threads travel with their root.
- */
-export function selectEnvironmentSyncThreadIds<
-  Thread extends {
-    readonly id: ThreadId;
-    readonly projectId: ProjectId;
-    readonly archivedAt: string | null;
-    readonly deletedAt: string | null;
-    readonly settledAt: string | null;
-    readonly settledOverride: "settled" | "active" | null;
-    readonly lineage: { readonly parentThreadId: ThreadId | null };
-  },
->(input: {
-  readonly projectId: ProjectId;
-  readonly threads: ReadonlyArray<Thread>;
-  readonly currentThreadId: ThreadId | null;
-}): ReadonlyArray<ThreadId> {
-  const selected = new Set<ThreadId>();
-  if (input.currentThreadId !== null) selected.add(input.currentThreadId);
-  for (const thread of input.threads) {
-    const settled =
-      thread.settledOverride === "settled" ||
-      (thread.settledAt !== null && thread.settledOverride !== "active");
-    if (
-      thread.projectId === input.projectId &&
-      thread.lineage.parentThreadId === null &&
-      thread.archivedAt === null &&
-      thread.deletedAt === null &&
-      !settled
-    ) {
-      selected.add(thread.id);
-    }
-  }
-  return [...selected];
 }

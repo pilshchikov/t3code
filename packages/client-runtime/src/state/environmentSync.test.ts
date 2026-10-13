@@ -2,7 +2,6 @@ import {
   ENVIRONMENT_SYNC_CHUNK_BYTES,
   EnvironmentId,
   ProjectId,
-  ThreadId,
   type EnvironmentSyncImportResult,
   type EnvironmentSyncManifest,
   type EnvironmentSyncStatusResult,
@@ -15,7 +14,6 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   findEnvironmentSyncTargetProject,
   runEnvironmentSync,
-  selectEnvironmentSyncThreadIds,
   type EnvironmentSyncCommands,
   type EnvironmentSyncProgress,
 } from "./environmentSync.ts";
@@ -80,37 +78,6 @@ describe("findEnvironmentSyncTargetProject", () => {
   });
 });
 
-describe("selectEnvironmentSyncThreadIds", () => {
-  const projectId = ProjectId.make("project:app");
-  const thread = (id: string, overrides: Record<string, unknown> = {}) => ({
-    id: ThreadId.make(id),
-    projectId,
-    archivedAt: null,
-    deletedAt: null,
-    settledAt: null,
-    settledOverride: null,
-    lineage: { parentThreadId: null },
-    ...overrides,
-  });
-
-  it("carries the thread in view and the ones still in play", () => {
-    const selected = selectEnvironmentSyncThreadIds({
-      projectId,
-      currentThreadId: ThreadId.make("settled-but-open"),
-      threads: [
-        thread("active"),
-        thread("settled-but-open", { settledAt: "2026-10-01T00:00:00.000Z" }),
-        thread("settled", { settledOverride: "settled" }),
-        thread("reopened", { settledAt: "2026-10-01T00:00:00.000Z", settledOverride: "active" }),
-        thread("archived", { archivedAt: "2026-10-01T00:00:00.000Z" }),
-        thread("child", { lineage: { parentThreadId: ThreadId.make("active") } }),
-        thread("other-project", { projectId: ProjectId.make("project:other") }),
-      ],
-    });
-    expect([...selected].toSorted()).toEqual(["active", "reopened", "settled-but-open"]);
-  });
-});
-
 describe("runEnvironmentSync", () => {
   const projectId = ProjectId.make("project:app");
   const source = { environmentId: laptop, label: "Laptop" };
@@ -120,33 +87,26 @@ describe("runEnvironmentSync", () => {
     (_, index) => index % 251,
   );
   const manifest: EnvironmentSyncManifest = {
-    formatVersion: 1,
+    formatVersion: 2,
     exportId: "export-session",
     createdAt: "2026-10-12T10:00:00.000Z",
-    source: { ...source, serverVersion: "1.0.0", orchestrationProtocolVersion: 2 },
+    source,
     project: { projectId, title: "App", workspaceRoot: "/Users/a/app" },
-    git: null,
-    threads: [],
+    git: { remotes: [], refs: [], workspaces: [], bundlePartId: "repository" },
     parts: [
-      { id: "events", kind: "events", sizeBytes: payload.byteLength, sha256: "x" },
-      {
-        id: "attachment.skip",
-        kind: "attachment",
-        sizeBytes: 9,
-        sha256: "y",
-        fileName: "skip.png",
-      },
+      { id: "repository", sizeBytes: payload.byteLength, sha256: "x" },
+      { id: "not-asked-for", sizeBytes: 9, sha256: "y" },
     ],
   };
   const result: EnvironmentSyncImportResult = {
     projectId,
     workspaceRoot: "/Users/b/app",
     projectCreated: true,
-    threads: [],
+    syncedCheckouts: 1,
     warnings: [],
     restorePointId: null,
   };
-  const prepare = { project: { projectId, title: "App", folderName: "app" }, rootThreadIds: [] };
+  const prepare = { project: { projectId, title: "App", folderName: "app" } };
 
   /** Two fake environments. Commands record their calls, and fetch moves real bytes. */
   const harness = (options: { readonly rejectUploads?: boolean } = {}) => {
@@ -154,7 +114,7 @@ describe("runEnvironmentSync", () => {
     const received = new Uint8Array(payload.byteLength);
     let receivedBytes = 0;
     const statuses: Array<EnvironmentSyncStatusResult> = [
-      { phase: "importing", stage: "threads", completed: 1, total: 2 },
+      { phase: "importing" },
       { phase: "done", result },
     ];
     const command = <Result>(name: string, respond: () => Result) => ({
@@ -172,13 +132,11 @@ describe("runEnvironmentSync", () => {
         transferId: "import-session",
         project: { projectId, workspaceRoot: "/Users/b/app", exists: false },
         gitHaves: [],
-        threadHeads: [],
       })),
       export: command("export", () => ({ manifest, downloadPath: "/api/environment-sync/out" })),
       accept: command("accept", () => ({
-        neededPartIds: ["events"],
+        neededPartIds: ["repository"],
         uploadPath: "/api/environment-sync/in",
-        threads: [],
       })),
       commit: command("commit", () => ({ started: true })),
       status: command("status", () => statuses.shift() ?? { phase: "done" as const, result }),
@@ -232,12 +190,7 @@ describe("runEnvironmentSync", () => {
       "status@mini",
       "release@mini",
     ]);
-    expect(progress.at(-1)).toEqual({
-      stage: "importing",
-      step: "threads",
-      completed: 1,
-      total: 2,
-    });
+    expect(progress.at(-1)).toEqual({ stage: "importing" });
     expect(progress).toContainEqual({
       stage: "transferring",
       transferredBytes: payload.byteLength,

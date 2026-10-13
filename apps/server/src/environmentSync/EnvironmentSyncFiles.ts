@@ -2,78 +2,9 @@
 import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
-import * as NodeReadline from "node:readline";
 import * as NodeStreamPromises from "node:stream/promises";
-import * as NodeZlib from "node:zlib";
 
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
-
-/** Appends lines to a gzip file. Close the scope to finish the file. */
-export const openGzipLineWriter = (filePath: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      const gzip = NodeZlib.createGzip();
-      const file = NodeFS.createWriteStream(filePath);
-      const finished = NodeStreamPromises.pipeline(gzip, file);
-      // The failure is reported when the writer closes.
-      finished.catch(() => undefined);
-      return { gzip, finished };
-    }),
-    ({ gzip, finished }) =>
-      Effect.promise(async () => {
-        gzip.end();
-        await finished.catch(() => undefined);
-      }),
-  ).pipe(
-    Effect.map(({ gzip, finished }) => ({
-      write: (line: string) =>
-        Effect.tryPromise(async () => {
-          if (!gzip.write(`${line}\n`)) {
-            await new Promise((resolve) => gzip.once("drain", resolve));
-          }
-        }),
-      /** Flushes and reports any write failure. */
-      finish: Effect.tryPromise(async () => {
-        gzip.end();
-        await finished;
-      }),
-    })),
-  );
-
-/** Lines of a gzip file, read without loading the file into memory. */
-export const readGzipLines = (filePath: string): Stream.Stream<string, Error> =>
-  Stream.suspend(() => {
-    const source = NodeFS.createReadStream(filePath);
-    const gunzip = NodeZlib.createGunzip();
-    let failure: Error | undefined;
-    const fail = (cause: Error) => {
-      failure ??= cause;
-      gunzip.destroy();
-    };
-    source.on("error", fail);
-    gunzip.on("error", (cause) => {
-      failure ??= cause;
-    });
-    const lines = NodeReadline.createInterface({
-      input: source.pipe(gunzip),
-      crlfDelay: Infinity,
-    });
-    return Stream.fromAsyncIterable(lines, (cause) =>
-      cause instanceof Error ? cause : new Error("Could not read the events file."),
-    ).pipe(
-      Stream.concat(
-        Stream.suspend(() => (failure === undefined ? Stream.empty : Stream.fail(failure))),
-      ),
-      Stream.ensuring(
-        Effect.sync(() => {
-          lines.close();
-          source.destroy();
-          gunzip.destroy();
-        }),
-      ),
-    );
-  });
 
 export const sha256File = (filePath: string) =>
   Effect.tryPromise(async () => {

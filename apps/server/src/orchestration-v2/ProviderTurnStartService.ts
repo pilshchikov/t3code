@@ -49,7 +49,7 @@ import {
   pendingRestartCancelledBackgroundWork,
   restartCancelledBackgroundWorkNote,
 } from "./RestartBackgroundNote.ts";
-import { hasStaleNativeSession, pendingEnvironmentSyncNote } from "./EnvironmentSyncNote.ts";
+import { pendingEnvironmentSyncNote } from "./EnvironmentSyncNote.ts";
 
 export class ProviderTurnStartError extends Schema.TaggedError<ProviderTurnStartError>()(
   "ProviderTurnStartError",
@@ -666,18 +666,15 @@ export const layer: Layer.Layer<
             handoff.delivery?.nativeThreadId === providerThread.nativeThreadRef?.nativeId &&
             handoff.delivery?.status === "pending",
         );
-        const staleNativeSession = hasStaleNativeSession(projection.thread, providerThread);
         const resumed = yield* Effect.result(
-          uncertainDelivery || staleNativeSession
+          uncertainDelivery
             ? Effect.fail(
                 new ProviderAdapter.ProviderAdapterTurnStartError({
                   driver: session.driver,
                   threadId: projection.thread.id,
                   providerThreadId: providerThread.id,
                   runId,
-                  cause: staleNativeSession
-                    ? "Native session belongs to another environment"
-                    : "Uncertain native history injection",
+                  cause: "Uncertain native history injection",
                 }),
               )
             : session.resumeThread({
@@ -695,11 +692,7 @@ export const layer: Layer.Layer<
           driver: session.driver,
           providerThreadId: providerThread.id,
           runId,
-          reason: staleNativeSession
-            ? "environment_changed"
-            : uncertainDelivery
-              ? "uncertain_history_delivery"
-              : "resume_failed",
+          reason: uncertainDelivery ? "uncertain_history_delivery" : "resume_failed",
           errorTag: resumed.failure._tag,
         });
         const replacement = yield* loadFromProvider(
@@ -987,14 +980,15 @@ export const layer: Layer.Layer<
         restartCancelledWork.length === 0
           ? ""
           : restartCancelledBackgroundWorkNote(restartCancelledWork),
-        pendingEnvironmentSyncNote({
-          thread: projection.thread,
-          run,
-          runs: projection.runs,
-          attempts: projection.attempts,
+        yield* pendingEnvironmentSyncNote({
+          fileSystem,
+          projects,
+          projectId: projection.thread.projectId,
+          threadId: projection.thread.id,
           providerTurns: projection.providerTurns,
-          isCompaction:
-            message.attachments.length === 0 && message.text.trim().toLowerCase() === "/compact",
+          carriesText:
+            run.restartContinuationOfRunId === undefined &&
+            !(message.attachments.length === 0 && message.text.trim().toLowerCase() === "/compact"),
           cwd: resolvedRuntimePolicy.cwd,
         }),
       ]

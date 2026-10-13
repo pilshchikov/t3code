@@ -1,24 +1,27 @@
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
 import {
+  findEnvironmentSyncTargetProject,
   runEnvironmentSync,
   type EnvironmentSyncOutcome,
   type EnvironmentSyncProgress,
 } from "@t3tools/client-runtime/state/environment-sync";
+import type { EnvironmentProject } from "@t3tools/client-runtime/state/models";
 import type {
+  EnvironmentId,
   EnvironmentSyncImportResult,
   EnvironmentSyncPeer,
   ProjectId,
-  ThreadId,
 } from "@t3tools/contracts";
 
 import { toastManager } from "../components/ui/toast";
 import { hiddenToastActionProps, stackedThreadToast } from "../components/ui/toastHelpers";
 import { appAtomRegistry } from "../rpc/atomRegistry";
+import { readProjects, waitForProject } from "../state/entities";
 import { environmentSyncEnvironment } from "../state/environmentSync";
 import { readPreparedConnection } from "../state/session";
 import { formatBytes } from "./formatBytes";
 
-export interface EnvironmentSyncRequest {
+interface EnvironmentSyncRequest {
   readonly source: EnvironmentSyncPeer;
   readonly target: EnvironmentSyncPeer;
   readonly project: {
@@ -30,14 +33,23 @@ export interface EnvironmentSyncRequest {
   readonly targetProjectId: ProjectId | null;
   /** Folder for a project the target does not have yet. Null uses the target's synced projects folder. */
   readonly destinationPath: string | null;
-  readonly rootThreadIds: ReadonlyArray<ThreadId>;
-  /** Also bring the project folder's checkout when no synced thread works in it. */
-  readonly includeProjectCheckout: boolean;
-  /** Shown as the toast's button once the sync succeeds. */
-  readonly followUp?: {
-    readonly label: string;
-    readonly run: (result: EnvironmentSyncImportResult) => void;
-  };
+}
+
+/** An environment as the sync needs it: where it is, what it is called, and whether it can sync. */
+export interface SyncEnvironment {
+  readonly environmentId: EnvironmentId;
+  readonly label: string;
+  readonly connection: { readonly phase: string };
+  readonly serverConfig: {
+    readonly environment: { readonly capabilities: { readonly environmentSync?: boolean } };
+  } | null;
+}
+
+export function canEnvironmentSync(environment: SyncEnvironment | null | undefined): boolean {
+  return (
+    environment?.connection.phase === "connected" &&
+    environment.serverConfig?.environment.capabilities.environmentSync === true
+  );
 }
 
 /** One sync per project and target at a time. A second would race the first one's checkout. */
@@ -62,62 +74,42 @@ function progressDescription(
         ? "Nothing new to copy"
         : `Copying ${formatBytes(progress.transferredBytes)} of ${formatBytes(progress.totalBytes)}`;
     case "importing":
-      switch (progress.step) {
-        case "threads":
-          return progress.total === 0
-            ? `Updating threads on ${request.target.label}`
-            : `Updating threads on ${request.target.label} · ${Math.round((progress.completed / progress.total) * 100)}%`;
-        case "attachments":
-          return `Storing attachments on ${request.target.label}`;
-        case "waiting":
-        case "repository":
-        case "workspaces":
-          return `Updating the checkout on ${request.target.label}`;
-      }
+      return `Updating the checkouts on ${request.target.label}`;
   }
 }
 
-/** What a finished sync did, in the order a user cares about it. */
-export function describeEnvironmentSyncResult(
-  result: EnvironmentSyncImportResult,
-  targetLabel: string,
-): { readonly summary: string; readonly problems: ReadonlyArray<string> } {
-  const roots = result.threads.filter((thread) => thread.threadId === thread.rootThreadId);
-  const count = (action: (typeof roots)[number]["action"]) =>
-    roots.filter((thread) => thread.action === action).length;
-  const updated = roots.filter(
-    (thread) => thread.action === "import" && thread.importedEventCount > 0,
-  ).length;
-  const plural = (value: number, noun: string) => `${value} ${noun}${value === 1 ? "" : "s"}`;
-  const summary =
-    updated > 0
-      ? `${plural(updated, "thread")} updated`
-      : result.projectCreated
-        ? `Created in ${result.workspaceRoot}`
-        : "Already up to date";
-  const problems = [
-    ...(count("diverged") > 0
-      ? [`${plural(count("diverged"), "thread")} changed on both machines and stayed as they are.`]
-      : []),
-    ...(count("busy") > 0 ? [`${plural(count("busy"), "thread")} still working and skipped.`] : []),
-    ...(count("target_ahead") > 0
-      ? [`${plural(count("target_ahead"), "thread")} already newer on ${targetLabel}.`]
-      : []),
-    ...result.warnings,
-  ];
-  return { summary, problems };
+/** What a finished sync did, in one line, and what the user should look at. */
+function describeEnvironmentSyncResult(result: EnvironmentSyncImportResult): {
+  readonly summary: string;
+  readonly problems: ReadonlyArray<string>;
+} {
+  const checkouts = `${result.syncedCheckouts} checkout${result.syncedCheckouts === 1 ? "" : "s"}`;
+  return {
+    summary: result.projectCreated
+      ? `Created in ${result.workspaceRoot} with ${checkouts}`
+      : `${checkouts} match the source`,
+    problems: result.warnings,
+  };
 }
 
 /**
  * Runs a sync with one toast that follows it from start to finish. The toast
- * outlives the menu that started it, so progress stays visible while the user
- * keeps working. Returns null when the same sync is already running.
+ * outlives whatever started it, so progress stays visible while the user keeps
+ * working. Returns null when the same sync is already running.
  */
-export async function startEnvironmentSync(
+async function startEnvironmentSync(
   request: EnvironmentSyncRequest,
 ): Promise<EnvironmentSyncOutcome | null> {
   const key = `${request.target.environmentId}:${request.project.projectId}`;
-  if (running.has(key)) return null;
+  if (running.has(key)) {
+    toastManager.add(
+      stackedThreadToast({
+        type: "info",
+        title: `Already syncing ${request.project.title} to ${request.target.label}`,
+      }),
+    );
+    return null;
+  }
   running.add(key);
   const title = `Syncing ${request.project.title} to ${request.target.label}`;
   const loading = (description: string) =>
@@ -146,8 +138,6 @@ export async function startEnvironmentSync(
         },
         ...(request.targetProjectId === null ? {} : { targetProjectId: request.targetProjectId }),
         ...(request.destinationPath === null ? {} : { destinationPath: request.destinationPath }),
-        rootThreadIds: request.rootThreadIds,
-        includeProjectCheckout: request.includeProjectCheckout,
       },
       resolveUrl: (environmentId, relativePath) => {
         const connection = readPreparedConnection(environmentId);
@@ -175,28 +165,15 @@ export async function startEnvironmentSync(
       return outcome;
     }
 
-    const { summary, problems } = describeEnvironmentSyncResult(
-      outcome.result,
-      request.target.label,
-    );
-    const followUp = request.followUp;
+    const { summary, problems } = describeEnvironmentSyncResult(outcome.result);
     toastManager.update(
       toastId,
       stackedThreadToast({
         type: problems.length > 0 ? "warning" : "success",
         title: `Synced ${request.project.title} to ${request.target.label}`,
         description: problems.length === 0 ? summary : `${summary}. ${problems.join(" ")}`,
-        timeout: problems.length > 0 ? 0 : 6_000,
-        actionProps:
-          followUp === undefined
-            ? hiddenToastActionProps
-            : {
-                children: followUp.label,
-                onClick: () => {
-                  toastManager.close(toastId);
-                  followUp.run(outcome.result);
-                },
-              },
+        timeout: problems.length > 0 ? 0 : 5_000,
+        actionProps: hiddenToastActionProps,
         data: { hideCopyButton: problems.length === 0 },
       }),
     );
@@ -204,4 +181,37 @@ export async function startEnvironmentSync(
   } finally {
     running.delete(key);
   }
+}
+
+/**
+ * Brings `project` to `target` as it stands on `source`, and returns the
+ * project there once the client has it. Null when the sync did not finish.
+ */
+export async function syncProjectToEnvironment(input: {
+  readonly source: SyncEnvironment;
+  readonly target: SyncEnvironment;
+  readonly project: EnvironmentProject;
+  readonly destinationPath?: string | null;
+}): Promise<EnvironmentProject | null> {
+  const existing = findEnvironmentSyncTargetProject({
+    sourceProject: input.project,
+    targetEnvironmentId: input.target.environmentId,
+    projects: readProjects(),
+  });
+  const outcome = await startEnvironmentSync({
+    source: { environmentId: input.source.environmentId, label: input.source.label },
+    target: { environmentId: input.target.environmentId, label: input.target.label },
+    project: {
+      projectId: input.project.id,
+      title: input.project.title,
+      workspaceRoot: input.project.workspaceRoot,
+    },
+    targetProjectId: existing?.id ?? null,
+    destinationPath: input.destinationPath ?? null,
+  });
+  if (outcome?.status !== "synced") return null;
+  return waitForProject({
+    environmentId: input.target.environmentId,
+    projectId: outcome.result.projectId,
+  }).catch(() => null);
 }

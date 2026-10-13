@@ -437,11 +437,7 @@ export const ChatHeader = memo(function ChatHeader({
           )}
         </WorkspaceBreadcrumbItem>
       </WorkspaceBreadcrumb>
-      <EnvironmentSyncMenu
-        environmentId={activeThreadEnvironmentId}
-        threadId={isServerThread ? activeThreadId : null}
-        project={activeProject}
-      />
+      <EnvironmentSyncMenu environmentId={activeThreadEnvironmentId} project={activeProject} />
     </div>
   );
 });

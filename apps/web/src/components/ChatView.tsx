@@ -27,6 +27,8 @@ import {
 } from "./ChatView.logic";
 import { useLoadBalancedEnvironment } from "../hooks/useLoadBalancedEnvironment";
 import { useScratchProject } from "../hooks/useScratchProject";
+import { canEnvironmentSync, syncProjectToEnvironment } from "../lib/environmentSyncRunner";
+import { findEnvironmentSyncTargetProject } from "@t3tools/client-runtime/state/environment-sync";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 import {
@@ -2823,6 +2825,22 @@ export default function ChatView(props: ChatViewProps) {
         seen.add(p.environmentId);
         pushEnvironment(p.environmentId, p.id);
       }
+      // A machine without this project can still be chosen. Picking it syncs the project there.
+      if (canEnvironmentSync(environmentById.get(activeProject.environmentId))) {
+        for (const environment of environments) {
+          if (!seen.has(environment.environmentId) && canEnvironmentSync(environment)) {
+            // A repository without a remote does not group, so an earlier sync is found by id.
+            pushEnvironment(
+              environment.environmentId,
+              findEnvironmentSyncTargetProject({
+                sourceProject: activeProject,
+                targetEnvironmentId: environment.environmentId,
+                projects: allProjects,
+              })?.id ?? null,
+            );
+          }
+        }
+      }
     }
     // Sort: primary first, then alphabetical
     envs.sort((a, b) => {
@@ -2844,7 +2862,9 @@ export default function ChatView(props: ChatViewProps) {
   const hasMultipleEnvironments = logicalProjectEnvironments.length > 1;
   // Auto balance retargets to an existing project; a machine's "No project"
   // folder may not exist until it is picked.
-  const canAutoBalanceEnvironments = hasMultipleEnvironments && !activeProjectIsScratch;
+  const canAutoBalanceEnvironments =
+    !activeProjectIsScratch &&
+    logicalProjectEnvironments.filter((environment) => environment.projectId !== null).length > 1;
   const activeEnvironmentOption =
     logicalProjectEnvironments.find(
       (environment) => environment.environmentId === activeThread?.environmentId,
@@ -4361,6 +4381,7 @@ export default function ChatView(props: ChatViewProps) {
             .filter((candidate) => {
               const environment = environmentById.get(candidate.environmentId);
               return (
+                candidate.projectId !== null &&
                 environment?.connection.phase === "connected" &&
                 (loadBalancingSettings.loadBalancingWeights[candidate.environmentId] ?? 50) > 0 &&
                 environment.serverConfig?.providers.some(
@@ -4490,14 +4511,14 @@ export default function ChatView(props: ChatViewProps) {
         )
           return;
         const projectRef = scopeProjectRef(target.environmentId, project.id);
-        if (activeProjectIsScratch) {
-          // Scratch projects are machine-local, so move their logical mapping too.
-          setLogicalProjectDraftThreadId(
-            deriveLogicalProjectKeyFromSettings(project, projectGroupingSettings),
-            projectRef,
-            draftId,
-            { environmentSelection: "manual", loadBalancedEnvironmentId: null },
-          );
+        const logicalKey = deriveLogicalProjectKeyFromSettings(project, projectGroupingSettings);
+        if (activeProjectIsScratch || logicalKey !== originalDraft.logicalProjectKey) {
+          // Scratch projects are machine-local, and so is a synced project whose repository
+          // has no remote to group by, so move their logical mapping too.
+          setLogicalProjectDraftThreadId(logicalKey, projectRef, draftId, {
+            environmentSelection: "manual",
+            loadBalancedEnvironmentId: null,
+          });
         } else {
           setDraftThreadContext(draftId, {
             projectRef,
@@ -4512,12 +4533,36 @@ export default function ChatView(props: ChatViewProps) {
           setIsEnvironmentChanging(false);
         }
       };
-      if (target.projectId !== null) {
-        const project = allProjects.find(
-          (project) =>
-            project.environmentId === target.environmentId && project.id === target.projectId,
-        );
-        if (project) retarget(project);
+      const existingProject =
+        target.projectId === null
+          ? undefined
+          : allProjects.find(
+              (project) =>
+                project.environmentId === target.environmentId && project.id === target.projectId,
+            );
+      const source = environmentById.get(originalDraft.environmentId);
+      const destination = environmentById.get(target.environmentId);
+      // Choosing another machine for a new thread brings the project there as it stands here.
+      // A failed sync still switches when that machine already has the project.
+      if (
+        !activeProjectIsScratch &&
+        activeProject?.environmentId === originalDraft.environmentId &&
+        source !== undefined &&
+        destination !== undefined &&
+        canEnvironmentSync(source) &&
+        canEnvironmentSync(destination)
+      ) {
+        setIsEnvironmentChanging(true);
+        void syncProjectToEnvironment({ source, target: destination, project: activeProject })
+          .then((synced) => {
+            const project = synced ?? existingProject;
+            if (project) retarget(project);
+          })
+          .finally(finish);
+        return;
+      }
+      if (target.projectId !== null || !activeProjectIsScratch) {
+        if (existingProject) retarget(existingProject);
         finish();
         return;
       }
@@ -4530,9 +4575,11 @@ export default function ChatView(props: ChatViewProps) {
         .finally(finish);
     },
     [
+      activeProject,
       activeProjectIsScratch,
       allProjects,
       draftId,
+      environmentById,
       envLocked,
       getDraftSession,
       logicalProjectEnvironments,

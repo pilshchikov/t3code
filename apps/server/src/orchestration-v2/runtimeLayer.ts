@@ -354,16 +354,7 @@ export const layer = Layer.mergeAll(
 );
 
 const layerEnvironmentSyncProvided = EnvironmentSync.layer.pipe(
-  Layer.provide(
-    Layer.mergeAll(
-      EnvironmentSyncGit.layer,
-      layerProjectService,
-      layerStores,
-      layerEventSinkProvided,
-      layerLegacyV1ThreadImporterProvided,
-      ThreadCommandExecutor.layer,
-    ),
-  ),
+  Layer.provide(Layer.mergeAll(EnvironmentSyncGit.layer, layerProjectService)),
 );
 
 export const layerProduction = Layer.mergeAll(

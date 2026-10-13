@@ -15,7 +15,6 @@ import {
   type EnvironmentSyncGitRef,
   type EnvironmentSyncWorkspace,
   type ProjectId,
-  type ThreadId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -28,7 +27,7 @@ import * as Schema from "effect/Schema";
 import * as CheckpointStore from "../checkpointing/CheckpointStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
-import { worktreeFolderNameForBranch } from "./EnvironmentSyncTransform.ts";
+import { writeEnvironmentSyncNote } from "../orchestration-v2/EnvironmentSyncNote.ts";
 
 const GIT_TIMEOUT_MS = 60_000;
 const GIT_TRANSFER_TIMEOUT_MS = 30 * 60_000;
@@ -43,7 +42,6 @@ const RESTORE_REF_PREFIX = "refs/t3-sync/restore";
  * the other side does not send untracked files again.
  */
 const SYNCED_REF_PREFIX = "refs/t3-sync/synced";
-const CHECKPOINT_REF_PREFIX = "refs/t3/orchestration-v2/checkpoints";
 /** Branches an import creates for a source branch that diverged from the target's. */
 const DIVERGED_BRANCH_PREFIX = "t3-sync/";
 
@@ -79,12 +77,6 @@ type MutableRestorePoint = {
 const decodeRestorePoint = Schema.decodeUnknownEffect(Schema.fromJsonString(RestorePoint));
 const encodeRestorePoint = Schema.encodeEffect(Schema.fromJsonString(RestorePoint));
 
-export interface ExportCheckout {
-  readonly kind: "root" | "worktree";
-  readonly path: string;
-  readonly threadIds: ReadonlyArray<ThreadId>;
-}
-
 export interface PlannedCheckout {
   readonly workspace: EnvironmentSyncWorkspace;
   readonly targetPath: string;
@@ -94,8 +86,7 @@ export interface PlannedCheckout {
 
 export interface ApplyRepositoryResult {
   readonly warnings: ReadonlyArray<string>;
-  /** Agent-facing notes per target checkout path. */
-  readonly notes: ReadonlyMap<string, ReadonlyArray<string>>;
+  readonly syncedCheckouts: number;
   readonly restorePointId: string | null;
 }
 
@@ -114,22 +105,17 @@ export class EnvironmentSyncGit extends Context.Service<
       workspaceRoot: string,
     ) => Effect.Effect<ReadonlyArray<string>, EnvironmentSyncError>;
     /**
-     * Snapshots every checkout and writes a bundle of what the target lacks.
-     * `git` is null when the folder is not the root of a repository with a commit.
+     * Snapshots the project folder and every worktree, and writes a bundle of
+     * what the target lacks. Fails when the folder is not the root of a
+     * repository with a commit.
      */
     readonly exportRepository: (input: {
       readonly workspaceRoot: string;
-      readonly checkouts: ReadonlyArray<ExportCheckout>;
       readonly haves: ReadonlyArray<string>;
-      readonly checkpointRefs: ReadonlySet<string>;
       readonly bundlePath: string;
       readonly exportId: string;
     }) => Effect.Effect<
-      {
-        readonly git: EnvironmentSyncGitExport | null;
-        readonly bundleCreated: boolean;
-        readonly warnings: ReadonlyArray<string>;
-      },
+      { readonly git: EnvironmentSyncGitExport; readonly bundleCreated: boolean },
       EnvironmentSyncError
     >;
     readonly releaseExport: (input: {
@@ -145,6 +131,7 @@ export class EnvironmentSyncGit extends Context.Service<
     readonly applyRepository: (input: {
       readonly projectId: ProjectId;
       readonly workspaceRoot: string;
+      readonly sourceWorkspaceRoot: string;
       readonly sourceLabel: string;
       readonly hostLabel: string;
       readonly git: EnvironmentSyncGitExport;
@@ -174,6 +161,11 @@ function checkoutKey(checkoutPath: string): string {
     second = (Math.imul(second, 33) + code) | 0;
   }
   return `${(first >>> 0).toString(16).padStart(8, "0")}${(second >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+/** Folder name `git worktree add` uses for a branch here, matching GitVcsDriver.createWorktree. */
+function worktreeFolderNameForBranch(branch: string): string {
+  return branch.replace(/\//g, "-");
 }
 
 function branchSlug(label: string): string {
@@ -483,28 +475,34 @@ const make = Effect.gen(function* () {
   const exportRepository: EnvironmentSyncGit["Service"]["exportRepository"] = Effect.fn(
     "EnvironmentSyncGit.exportRepository",
   )(function* (input) {
-    const notExported = (warning: string) => ({
-      git: null,
-      bundleCreated: false,
-      warnings: [warning],
-    });
     const root = input.workspaceRoot;
     if (!(yield* isRepository(root))) {
-      return notExported("This project is not a Git repository, so its files were not copied.");
+      return yield* repositoryError(
+        "This project is not a Git repository, so it cannot be synced.",
+      );
     }
     const toplevel = (yield* ok(root, ["rev-parse", "--show-toplevel"])).trim();
     if ((yield* realPath(toplevel)) !== (yield* realPath(root))) {
-      return notExported(
-        "This project is a folder inside a larger Git repository, so its files were not copied.",
+      return yield* repositoryError(
+        "This project is a folder inside a larger Git repository, so it cannot be synced.",
       );
     }
     if ((yield* resolveSha(root, "HEAD")) === null) {
-      return notExported("This repository has no commits yet, so its files were not copied.");
+      return yield* repositoryError("This repository has no commits yet, so it cannot be synced.");
     }
 
     const workspaces: Array<EnvironmentSyncWorkspace> = [];
-    const warnings: Array<string> = [];
-    for (const [index, entry] of input.checkouts.entries()) {
+    const realRoot = yield* realPath(root);
+    const checkouts: Array<{ readonly kind: "root" | "worktree"; readonly path: string }> = [
+      { kind: "root", path: root },
+    ];
+    for (const worktree of yield* listWorktrees(root)) {
+      if ((yield* realPath(worktree.path)) !== realRoot) {
+        checkouts.push({ kind: "worktree", path: worktree.path });
+      }
+    }
+    for (const [index, entry] of checkouts.entries()) {
+      // A worktree whose folder was deleted is still listed until it is pruned.
       if (!(yield* isRepository(entry.path))) continue;
       const state = yield* inspect(entry.path);
       if (state.head === null) continue;
@@ -513,7 +511,6 @@ const make = Effect.gen(function* () {
       workspaces.push({
         kind: entry.kind,
         sourcePath: entry.path,
-        threadIds: entry.threadIds,
         branch: state.branch,
         head: state.head,
         snapshotRef,
@@ -528,11 +525,6 @@ const make = Effect.gen(function* () {
     ])) {
       if (name.startsWith(`refs/heads/${DIVERGED_BRANCH_PREFIX}`)) continue;
       refs.push({ name, sha });
-    }
-    if (input.checkpointRefs.size > 0) {
-      for (const [name, sha] of yield* readRefs(root, [CHECKPOINT_REF_PREFIX])) {
-        if (input.checkpointRefs.has(name)) refs.push({ name, sha });
-      }
     }
 
     const remotes = new Map<string, string>();
@@ -567,7 +559,6 @@ const make = Effect.gen(function* () {
         bundlePartId: null,
       },
       bundleCreated: !empty,
-      warnings,
     };
   });
 
@@ -669,6 +660,7 @@ const make = Effect.gen(function* () {
     const notes = new Map<string, Array<string>>();
     const addNote = (targetPath: string, note: string) =>
       notes.set(targetPath, [...(notes.get(targetPath) ?? []), note]);
+    let syncedCheckouts = 0;
     const point = yield* emptyRestorePoint({
       id: yield* newRestorePointId(input.projectId),
       kind: "sync",
@@ -801,6 +793,7 @@ const make = Effect.gen(function* () {
         }
         yield* restore(targetPath, workspace.snapshotRef);
         yield* recordSynced(root, targetPath, workspace.snapshotRef);
+        syncedCheckouts += 1;
         continue;
       }
 
@@ -825,6 +818,7 @@ const make = Effect.gen(function* () {
         ) {
           yield* updateRefs(root, [`delete ${snapshotRef}`]);
           yield* recordSynced(root, targetPath, workspace.snapshotRef);
+          syncedCheckouts += 1;
           continue;
         }
         restoreRefsWritten = true;
@@ -861,14 +855,26 @@ const make = Effect.gen(function* () {
       yield* checkout(targetPath, workspace.branch, workspace.head);
       yield* restore(targetPath, workspace.snapshotRef);
       yield* recordSynced(root, targetPath, workspace.snapshotRef);
+      syncedCheckouts += 1;
     }
 
+    yield* writeEnvironmentSyncNote(fileSystem, root, {
+      originLabel: input.sourceLabel,
+      hostLabel: input.hostLabel,
+      originWorkspaceRoot: input.sourceWorkspaceRoot,
+      syncedAt: DateTime.formatIso(yield* DateTime.now),
+      checkouts: input.checkouts.map((plan) => ({
+        path: plan.targetPath,
+        originPath: plan.workspace.sourcePath,
+        notes: notes.get(plan.targetPath) ?? [],
+      })),
+    });
     yield* deleteRefsUnder(root, `${EXPORT_REF_PREFIX}/${input.exportId}`).pipe(Effect.ignore);
     const recorded = point.checkouts.length > 0 || point.branches.length > 0 || restoreRefsWritten;
     if (recorded) yield* saveRestorePoint(input.projectId, point);
     return {
       warnings,
-      notes,
+      syncedCheckouts,
       restorePointId: point.checkouts.length > 0 || point.branches.length > 0 ? point.id : null,
     };
   });
