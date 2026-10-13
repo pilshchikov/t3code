@@ -1,5 +1,27 @@
 # Fork Changes
 
+## Upstream integration through df26ef9985 — 2026-10-12
+
+- Merged all 16 upstream commits through `df26ef9985` from fork parent `701fc83169`, preserving
+  both histories. Includes renaming built-in models from provider settings, confirmed Claude
+  subagent outcomes, Git actions that follow the selected thread, dropped threads attached to
+  pending answers, running setup terminals reused by the drawer, updater failure causes in
+  diagnostics, and Bitbucket/GitLab head commit fixes.
+- The owner asked for the Muse model integration. Upstream has no Muse change in this range.
+  `packages/provider-muse` already matched upstream before the merge (native provider, child
+  threads for subagents, Muse 1.4.6), and Muse models come from the CLI's own catalog. The
+  model renaming above applies to them. Muse usage limits are still open upstream pull requests.
+- No conflicts. The fork's delta against upstream is line-for-line identical before and after
+  the merge in all 21 files both sides changed, including `ChatView.tsx`, `ChatComposer.tsx`,
+  `Sidebar.tsx`, `MessagesTimeline.tsx`, `GitManager.ts` and `GitVcsDriverCore.ts`. The upstream
+  delta adds no compact-before-send path, telemetry or new network call.
+- Validation: full typecheck passed. Every test file the merge touched passed in web, desktop,
+  client-runtime, shared, provider-core, Bitbucket and GitLab, plus the environment sync tests.
+  Server files `GitManager.test.ts`, `GitVcsDriverCore.test.ts` and `ClaudeAdapterV2.test.ts`
+  fail the same 10 tests on the pre-merge tree, four of them upstream branch-name expectations
+  that the `spilshchikov/` prefix changes. `vp check` reports the same 13 lint errors as before.
+  No app build, reinstall or restart.
+
 ## Sync a project to another machine for new threads — 2026-10-12
 
 - The owner works on a MacBook and a Mac mini and wanted to start a thread on either one against
