@@ -1,5 +1,16 @@
 # Fork Changes
 
+## Machine sync removed — 2026-10-12
+
+- The fork briefly had a feature that copied a project's repository between connected machines
+  (`environmentSync.*` RPCs, a header machine menu, a synced projects folder setting). The owner
+  removed it the same day because Git already moves work between machines and the feature added
+  too much to maintain. Do not rebuild it.
+- Removed by reverting `29b66086b5` and `141b674f41`. Every file they touched now equals its
+  earlier state plus upstream's later changes. The upstream **Run on** picker is unchanged. A new
+  thread can target any connected machine that already has the same repository as a project.
+- Validation: full typecheck and the `ProviderTurnStartService` tests passed. No app restart.
+
 ## Upstream integration through df26ef9985 — 2026-10-12
 
 - Merged all 16 upstream commits through `df26ef9985` from fork parent `701fc83169`, preserving
@@ -16,58 +27,11 @@
   `Sidebar.tsx`, `MessagesTimeline.tsx`, `GitManager.ts` and `GitVcsDriverCore.ts`. The upstream
   delta adds no compact-before-send path, telemetry or new network call.
 - Validation: full typecheck passed. Every test file the merge touched passed in web, desktop,
-  client-runtime, shared, provider-core, Bitbucket and GitLab, plus the environment sync tests.
+  client-runtime, shared, provider-core, Bitbucket and GitLab.
   Server files `GitManager.test.ts`, `GitVcsDriverCore.test.ts` and `ClaudeAdapterV2.test.ts`
   fail the same 10 tests on the pre-merge tree, four of them upstream branch-name expectations
   that the `spilshchikov/` prefix changes. `vp check` reports the same 13 lint errors as before.
   No app build, reinstall or restart.
-
-## Sync a project to another machine for new threads — 2026-10-12
-
-- The owner works on a MacBook and a Mac mini and wanted to start a thread on either one against
-  the same files. In a new thread, the **Run on** picker now lists every connected machine that
-  supports sync, including ones without the project. Choosing a machine syncs the project there
-  from the machine the draft was on, then retargets the draft (`ChatView.tsx`,
-  `apps/web/src/lib/environmentSyncRunner.ts`). Auto balance still only considers machines that
-  already have the project.
-- A first version also copied threads between machines. The owner did not want thread copies, so
-  that part was removed. Sync moves the repository only.
-- The thread header has a machine menu (`apps/web/src/components/chat/EnvironmentSyncMenu.tsx`)
-  to send files to a machine, get files from it, sync and open a new thread there, and undo the
-  last sync. Its first sync of a project asks for a folder. The picker uses the new
-  `environmentSyncDirectory` server setting without asking (Settings → Storage → Synced projects
-  folder, default `~/t3-sync`).
-- Servers never contact each other. The client relays: the target reports the commits it has
-  (`environmentSync.prepare`), the source exports the difference (`environmentSync.export`), and
-  the client copies the bundle over `/api/environment-sync/<session>/<part>` in 4 MiB chunks. The
-  session id is the credential and those URLs stay out of traces. The import runs in a
-  server-owned fiber after `environmentSync.commit`, so a dropped client does not stop it, and the
-  client polls `environmentSync.status`. Service: `apps/server/src/environmentSync/`. Shared
-  client logic: `packages/client-runtime/src/state/environmentSync.ts`.
-- The repository moves as a `git bundle` limited to what the target lacks, plus a checkpoint
-  commit of the project folder and of every worktree, so uncommitted and untracked files arrive
-  uncommitted (`EnvironmentSyncGit.ts`). Worktrees land under the target's worktree location.
-- The owner asked that a sync never destroy existing work, with a way back. The receiving side
-  creates or fast-forwards branches and never rewinds one. A checkout whose branch is ahead or
-  diverged is left alone, and a diverged source branch is saved as `t3-sync/<machine>/<branch>`.
-  A checkout with a running turn is left alone. Before a checkout is replaced, its state is saved
-  under `refs/t3-sync/restore/<id>` with metadata in
-  `<stateDir>/environment-sync/restore-points/<project>/`. `environmentSync.undo` puts checkouts
-  and fast-forwarded branches back, and is itself undoable. The last 10 restore points are kept.
-  `refs/t3-sync/synced/<key>` holds the snapshot each checkout last sent or received, which tells
-  local changes from synced ones and keeps a repeat sync from resending untracked files.
-- Each import writes `.git/t3-environment-sync.json` in the receiving repository. The first
-  thread to start a turn afterwards claims it, and `ProviderTurnStartService.ts` adds a note to
-  that turn naming the source machine and saying that files Git ignores were not copied
-  (`orchestration-v2/EnvironmentSyncNote.ts`). No database or contract change carries this.
-- Both ends advertise the `environmentSync` capability. Not built: a mobile UI, command palette
-  entries, copying files Git ignores, and additional project directories.
-- User guide: `docs/user/machine-sync.md`. `docs/internals/remote.md` mentions the copy.
-- Validation: three integration tests run two real environments (separate SQLite databases and
-  Git repositories) through first sync with a worktree, a round trip with undo, and a target
-  branch that is ahead and then diverged (`EnvironmentSync.test.ts`). Unit tests cover the agent
-  note and the client relay. Full typecheck passed. `vp check` reports 13 lint errors in files
-  this change does not touch. The picker and the menu were not exercised in a running app.
 
 ## Persistent connections without Keychain prompts — 2026-10-12
 

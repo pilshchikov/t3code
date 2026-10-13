@@ -402,21 +402,6 @@ import {
   ProjectCloneSubscribeInput,
 } from "./projectClone.ts";
 import {
-  EnvironmentSyncAcceptInput,
-  EnvironmentSyncAcceptResult,
-  EnvironmentSyncCommitResult,
-  EnvironmentSyncError,
-  EnvironmentSyncExportInput,
-  EnvironmentSyncExportResult,
-  EnvironmentSyncPrepareInput,
-  EnvironmentSyncPrepareResult,
-  EnvironmentSyncReleaseResult,
-  EnvironmentSyncSessionInput,
-  EnvironmentSyncStatusResult,
-  EnvironmentSyncUndoInput,
-  EnvironmentSyncUndoResult,
-} from "./environmentSync.ts";
-import {
   SourceControlCloneRepositoryInput,
   SourceControlCloneRepositoryResult,
   SourceControlDiscoveryResult,
@@ -656,15 +641,6 @@ export const WS_METHODS = {
   projectCloneCancel: "projectClone.cancel",
   projectCloneRetry: "projectClone.retry",
   subscribeProjectClones: "subscribeProjectClones",
-
-  // Environment sync methods
-  environmentSyncPrepare: "environmentSync.prepare",
-  environmentSyncExport: "environmentSync.export",
-  environmentSyncAccept: "environmentSync.accept",
-  environmentSyncCommit: "environmentSync.commit",
-  environmentSyncStatus: "environmentSync.status",
-  environmentSyncRelease: "environmentSync.release",
-  environmentSyncUndo: "environmentSync.undo",
 
   // Streaming subscriptions
   subscribeVcsStatus: "subscribeVcsStatus",
@@ -1306,50 +1282,6 @@ const WsSubscribeProjectClonesRpc = Rpc.make(WS_METHODS.subscribeProjectClones, 
   success: ProjectCloneListEvent,
   error: EnvironmentAuthorizationError,
   stream: true,
-});
-
-const environmentSyncRpcError = Schema.Union([EnvironmentSyncError, EnvironmentAuthorizationError]);
-
-const WsEnvironmentSyncPrepareRpc = Rpc.make(WS_METHODS.environmentSyncPrepare, {
-  payload: EnvironmentSyncPrepareInput,
-  success: EnvironmentSyncPrepareResult,
-  error: environmentSyncRpcError,
-});
-
-const WsEnvironmentSyncExportRpc = Rpc.make(WS_METHODS.environmentSyncExport, {
-  payload: EnvironmentSyncExportInput,
-  success: EnvironmentSyncExportResult,
-  error: environmentSyncRpcError,
-});
-
-const WsEnvironmentSyncAcceptRpc = Rpc.make(WS_METHODS.environmentSyncAccept, {
-  payload: EnvironmentSyncAcceptInput,
-  success: EnvironmentSyncAcceptResult,
-  error: environmentSyncRpcError,
-});
-
-const WsEnvironmentSyncCommitRpc = Rpc.make(WS_METHODS.environmentSyncCommit, {
-  payload: EnvironmentSyncSessionInput,
-  success: EnvironmentSyncCommitResult,
-  error: environmentSyncRpcError,
-});
-
-const WsEnvironmentSyncStatusRpc = Rpc.make(WS_METHODS.environmentSyncStatus, {
-  payload: EnvironmentSyncSessionInput,
-  success: EnvironmentSyncStatusResult,
-  error: environmentSyncRpcError,
-});
-
-const WsEnvironmentSyncReleaseRpc = Rpc.make(WS_METHODS.environmentSyncRelease, {
-  payload: EnvironmentSyncSessionInput,
-  success: EnvironmentSyncReleaseResult,
-  error: EnvironmentAuthorizationError,
-});
-
-const WsEnvironmentSyncUndoRpc = Rpc.make(WS_METHODS.environmentSyncUndo, {
-  payload: EnvironmentSyncUndoInput,
-  success: EnvironmentSyncUndoResult,
-  error: environmentSyncRpcError,
 });
 
 const WsSourceControlPublishRepositoryRpc = Rpc.make(WS_METHODS.sourceControlPublishRepository, {
@@ -2272,13 +2204,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectCloneCancelRpc,
   WsProjectCloneRetryRpc,
   WsSubscribeProjectClonesRpc,
-  WsEnvironmentSyncPrepareRpc,
-  WsEnvironmentSyncExportRpc,
-  WsEnvironmentSyncAcceptRpc,
-  WsEnvironmentSyncCommitRpc,
-  WsEnvironmentSyncStatusRpc,
-  WsEnvironmentSyncReleaseRpc,
-  WsEnvironmentSyncUndoRpc,
   WsProjectsListEntriesRpc,
   WsProjectsWatchEntriesRpc,
   WsProjectsReadFileRpc,

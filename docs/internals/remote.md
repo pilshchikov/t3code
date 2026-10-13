@@ -17,13 +17,6 @@ features target the repository a fork tracks. A fork also reports its own
 `origin`, and clients group and label by that, so a fork never collapses into a
 checkout of its upstream.
 
-[Environment sync](../../apps/server/src/environmentSync/EnvironmentSync.ts) copies
-a project's repository to another environment so a new thread can start there.
-It does not change ownership. The copy is a second project, and threads are
-never copied. Servers never contact each other, so the client relays the
-transfer. The receiving repository never rewinds a branch, and saves a checkout
-before replacing it. See [the user guide](../user/machine-sync.md).
-
 [Environment ID initialization](../../apps/server/src/environment/ServerEnvironment.ts)
 must publish a complete ID atomically. Repair of an empty ID file retains a
 recovery file so concurrent or delayed initializers choose the same winner.

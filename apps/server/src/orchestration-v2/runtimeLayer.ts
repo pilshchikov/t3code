@@ -11,8 +11,6 @@ import * as ProviderSessionRuntime from "../persistence/ProviderSessionRuntime.t
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import * as ProviderAuthService from "../provider/ProviderAuthService.ts";
 import * as AgentSessionImporter from "../project/AgentSessionImporter.ts";
-import * as EnvironmentSync from "../environmentSync/EnvironmentSync.ts";
-import * as EnvironmentSyncGit from "../environmentSync/EnvironmentSyncGit.ts";
 import * as AgentSessionScanner from "../project/AgentSessionScanner.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
@@ -353,15 +351,10 @@ export const layer = Layer.mergeAll(
   layerLegacyV1ThreadImporterProvided,
 );
 
-const layerEnvironmentSyncProvided = EnvironmentSync.layer.pipe(
-  Layer.provide(Layer.mergeAll(EnvironmentSyncGit.layer, layerProjectService)),
-);
-
 export const layerProduction = Layer.mergeAll(
   layer.pipe(Layer.provide(layerProjectService)),
   layerProjectService,
   layerManagedProjectFoldersProvided,
-  layerEnvironmentSyncProvided,
   layerThreadLaunchProvided,
   layerThreadLifecycleProvided,
   layerScheduledTaskProvided,

@@ -198,13 +198,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["worktree location folder directory path drive external disk"],
   },
   {
-    id: "storage-synced-projects-location",
-    title: "Synced projects folder",
-    to: "/settings/storage",
-    scope: "environment-defaults",
-    searchTerms: ["sync synced projects folder directory path machine host environment copy"],
-  },
-  {
     id: "storage-artifacts",
     title: "Artifacts and logs",
     to: "/settings/storage",

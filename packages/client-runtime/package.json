@@ -131,10 +131,6 @@
       "types": "./src/state/attachments.ts",
       "default": "./src/state/attachments.ts"
     },
-    "./state/environment-sync": {
-      "types": "./src/state/environmentSync.ts",
-      "default": "./src/state/environmentSync.ts"
-    },
     "./text-paste": {
       "types": "./src/textPaste.ts",
       "default": "./src/textPaste.ts"

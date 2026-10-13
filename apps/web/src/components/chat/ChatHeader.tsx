@@ -30,7 +30,6 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
 import { ProjectFavicon } from "../ProjectFavicon";
-import { EnvironmentSyncMenu } from "./EnvironmentSyncMenu";
 import {
   WorkspaceBreadcrumb,
   WorkspaceBreadcrumbItem,
@@ -437,7 +436,6 @@ export const ChatHeader = memo(function ChatHeader({
           )}
         </WorkspaceBreadcrumbItem>
       </WorkspaceBreadcrumb>
-      <EnvironmentSyncMenu environmentId={activeThreadEnvironmentId} project={activeProject} />
     </div>
   );
 });

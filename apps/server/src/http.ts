@@ -2,7 +2,6 @@ import * as Mime from "effect/http/Mime";
 import {
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
-  ENVIRONMENT_SYNC_ROUTE_PREFIX,
   EnvironmentHttpApi,
 } from "@t3tools/contracts";
 import { isDevProxiedPath } from "@t3tools/shared/devProxy";
@@ -411,12 +410,7 @@ const layerUntracedRequests = Layer.succeed(HttpMiddleware.TracerDisabledWhen)((
   const queryIndex = request.url.indexOf("?");
   const path = queryIndex === -1 ? request.url : request.url.slice(0, queryIndex);
   // Webhook URLs carry their secret token in the path, so they never reach a trace.
-  // Environment sync part URLs carry their session id the same way.
-  return (
-    UNTRACED_REQUEST_PATHS.has(path) ||
-    path.startsWith(`${WEBHOOK_ROUTE_PREFIX}/`) ||
-    path.startsWith(`${ENVIRONMENT_SYNC_ROUTE_PREFIX}/`)
-  );
+  return UNTRACED_REQUEST_PATHS.has(path) || path.startsWith(`${WEBHOOK_ROUTE_PREFIX}/`);
 });
 
 export const withUntracedRequests = Layer.provide(layerUntracedRequests);

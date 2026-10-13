@@ -217,9 +217,6 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
       Absent on older servers, where clients must clone with the blocking
       `sourceControl.cloneRepository` call instead. */
   projectCloneTracking: Schema.optionalKey(Schema.Boolean),
-  /** Server can export a project with its threads to another environment and
-      import one (`environmentSync.*`). Both ends need it. */
-  environmentSync: Schema.optionalKey(Schema.Boolean),
   /** Server detects `platform.machine` and persists the `environmentIcon`
       setting. Older servers drop the key on write, so clients show the
       picker inert rather than offering a choice that would never stick. */

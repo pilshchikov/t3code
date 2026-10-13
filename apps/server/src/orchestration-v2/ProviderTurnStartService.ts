@@ -49,7 +49,6 @@ import {
   pendingRestartCancelledBackgroundWork,
   restartCancelledBackgroundWorkNote,
 } from "./RestartBackgroundNote.ts";
-import { pendingEnvironmentSyncNote } from "./EnvironmentSyncNote.ts";
 
 export class ProviderTurnStartError extends Schema.TaggedError<ProviderTurnStartError>()(
   "ProviderTurnStartError",
@@ -975,25 +974,10 @@ export const layer: Layer.Layer<
         run,
         attempts: projection.attempts,
       });
-      // Also carries the environment sync note. Both ride with the user text.
-      const restartNote = [
+      const restartNote =
         restartCancelledWork.length === 0
           ? ""
-          : restartCancelledBackgroundWorkNote(restartCancelledWork),
-        yield* pendingEnvironmentSyncNote({
-          fileSystem,
-          projects,
-          projectId: projection.thread.projectId,
-          threadId: projection.thread.id,
-          providerTurns: projection.providerTurns,
-          carriesText:
-            run.restartContinuationOfRunId === undefined &&
-            !(message.attachments.length === 0 && message.text.trim().toLowerCase() === "/compact"),
-          cwd: resolvedRuntimePolicy.cwd,
-        }),
-      ]
-        .filter((part) => part !== "")
-        .join("\n\n");
+          : restartCancelledBackgroundWorkNote(restartCancelledWork);
       const tokenCap = yield* handoffTokenCapConfig.pipe(
         Effect.orElseSucceed(() => DEFAULT_HANDOFF_TOKEN_CAP),
       );

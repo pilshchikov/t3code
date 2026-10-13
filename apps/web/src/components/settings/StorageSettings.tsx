@@ -102,61 +102,6 @@ function WorktreesDirectoryRow() {
   );
 }
 
-function SyncedProjectsDirectoryRow() {
-  const { connectedEnvironments, targets } = useSettingsScope();
-  const settings = useScopedSettings();
-  const updateSettings = useUpdateScopedSettings();
-  const mixed = useScopedSettingsMixed(["environmentSyncDirectory"]);
-  const edited = useRef(false);
-  if (
-    connectedEnvironments.some(
-      (environment) => environment.serverConfig?.environment.capabilities.environmentSync !== true,
-    )
-  )
-    return null;
-  const scopeKey = targets.map((target) => target.environmentId).join(",");
-
-  return (
-    <SettingsSection id="storage-synced-projects" title="Synced projects">
-      <SettingsRow
-        {...searchableSetting("storage-synced-projects-location")}
-        description={
-          "Folder on this machine that receives projects synced from another machine, such as ~/workspace. Each project gets its own subfolder. Projects already synced stay where they are. Leave empty to use ~/t3-sync."
-        }
-        serverScoped
-        settingKeys={["environmentSyncDirectory"]}
-        resetAction={
-          mixed || settings.environmentSyncDirectory !== "" ? (
-            <SettingResetButton
-              label="synced projects folder"
-              onClick={() => updateSettings({ environmentSyncDirectory: "" })}
-            />
-          ) : null
-        }
-        control={
-          <Input
-            key={`${scopeKey}:${mixed}:${settings.environmentSyncDirectory}`}
-            aria-label="Synced projects folder"
-            autoCapitalize="none"
-            spellCheck={false}
-            placeholder={mixed ? "Mixed" : "Default"}
-            defaultValue={mixed ? "" : settings.environmentSyncDirectory}
-            onChange={() => {
-              edited.current = true;
-            }}
-            onBlur={(event) => {
-              const value = event.target.value.trim();
-              if (edited.current && (mixed || value !== settings.environmentSyncDirectory))
-                updateSettings({ environmentSyncDirectory: value });
-              edited.current = false;
-            }}
-          />
-        }
-      />
-    </SettingsSection>
-  );
-}
-
 function RetentionControl({
   label,
   value,
@@ -678,8 +623,6 @@ export function StorageSettingsPanel() {
           </>
         )}
       </SettingsSection>
-
-      {!isProjectScope && <SyncedProjectsDirectoryRow />}
 
       {!isProjectScope && (
         <SettingsSection id="storage-threads" title="Settled threads">
