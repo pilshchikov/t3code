@@ -15,9 +15,13 @@
   `T3CODE_MOBILE_UPDATES_ENABLED=0` to keep official OTA updates off the fork. With no Clerk/relay
   keys, T3 Connect is compiled out; pair directly with the Mac over Tailscale using an
   `http://<tailnet-ip>:<port>` pairing link. See `apps/mobile/README.md`.
+- `apps/mobile/modules/t3-native-controls/ios/T3LayoutMetricsView.swift` gates the iOS 27.1 hinge
+  and reserved-region APIs on `canImport(UIKit, _version: 9127.1)` instead of
+  `compiler(>=6.4)`: Xcode 27.0 ships Swift 6.4 with the 27.0 SDK (UIKit 9127.0.x), which lacks
+  them. Older SDKs build without fold metrics.
 - Validation: previously verified `APP_VARIANT=production npx expo config --type introspect`
   leaves only `keychain-access-groups` in entitlements. Scoped four-file `vp check` and mobile
-  typecheck passed.
+  typecheck passed. A device Release build with Xcode 27.0 compiled; signing needs an unlocked keychain.
 
 ## Agent tools for files on other environments — 2026-10-12
 
