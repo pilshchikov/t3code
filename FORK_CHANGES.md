@@ -1,5 +1,24 @@
 # Fork Changes
 
+## Personal Team iPhone builds over Tailscale — 2026-10-12
+
+- `apps/mobile/app.config.ts` reads `T3CODE_IOS_PERSONAL_TEAM_ID` through `loadRepoEnv`
+  from root `.env` / `.env.local`, selecting the owner's signing team for Personal Team builds
+  instead of T3 Tools' `ARK85ZXQ4Z`.
+- Register `apps/mobile/plugins/withoutIosPersonalTeamCapabilities.cjs` first: Expo runs
+  same-type mods last-registered-first, so it now strips push entitlements after
+  `expo-notifications` adds them.
+- Also strip associated domains, which Personal Teams cannot sign; `clerk.t3.codes` only
+  trusts T3 Tools' bundle IDs. Widget/share extensions and native Sign in with Apple stay omitted.
+- Local iPhone setup uses root `.env.local`: `T3CODE_IOS_PERSONAL_TEAM=1`, the owner's team ID,
+  `T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID=com.pilshchikov.t3code`, and
+  `T3CODE_MOBILE_UPDATES_ENABLED=0` to keep official OTA updates off the fork. With no Clerk/relay
+  keys, T3 Connect is compiled out; pair directly with the Mac over Tailscale using an
+  `http://<tailnet-ip>:<port>` pairing link. See `apps/mobile/README.md`.
+- Validation: previously verified `APP_VARIANT=production npx expo config --type introspect`
+  leaves only `keychain-access-groups` in entitlements. Scoped four-file `vp check` and mobile
+  typecheck passed.
+
 ## Agent tools for files on other environments — 2026-10-12
 
 - The owner asked for agent-driven file exchange between environments, with no UI: Git moves
