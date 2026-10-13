@@ -976,7 +976,7 @@ describe("resolveSidebarThreadStatus", () => {
         ...idle,
         runtime: { ...runtime, status: "idle" as const, lastError: "persisted" },
       }),
-    ).toBe("waiting");
+    ).toBe("ready");
   });
 
   it("defaults to ready with no runtime", () => {
@@ -2153,7 +2153,7 @@ describe("Working shelf (beta)", () => {
     latestRun: makeLatestRun(),
     runtime: null,
   };
-  // Stopped with background tasks still open: V2's "waiting" sidebar status.
+  // The session is idle, but its background roster still names active work.
   const waiting = {
     ...idle,
     runtime: { ...runtime, status: "idle" as const },

@@ -943,11 +943,10 @@ export function resolveThreadRowClassName(input: {
 // Six visual states, three colors: color is reserved for "act now"
 // (approval), "in motion" (working), and "broken" (failed). Ready is the
 // unlabeled resting state — the agent stopped and is waiting on the user,
-// whether it finished, asked a question, or proposed a plan. Waiting
-// (runtime status "idle") is the agent stopped with background work that will
-// wake it (subagents, monitors): not the user's turn yet, so it renders grey
-// like working, not as a false Done. Commands it left running, such as a dev
-// server, do not hold the thread; it reads as ready.
+// whether it finished, asked a question, or proposed a plan. An idle session
+// alone is ready: imported child threads retain one after their work ends.
+// Pending commands, monitors, children and watches keep the thread working;
+// the background roster distinguishes those from an empty idle session.
 // Unread completion is tracked separately: it describes whether a ready
 // thread needs attention, not what the thread is currently doing.
 export type SidebarThreadStatus =
@@ -997,9 +996,6 @@ export function resolveSidebarThreadStatus(thread: SidebarThreadStatusInput): Si
   // that wake it later. Display those as working without making the run active.
   if (thread.runtime?.status !== "failed" && (thread.pendingBackgroundTasks?.length ?? 0) > 0) {
     return "working";
-  }
-  if (thread.runtime?.status === "idle") {
-    return "waiting";
   }
   if (thread.runtime?.status === "failed") {
     return thread.runtime.lastErrorClass === "usage_limit" ? "limited" : "failed";

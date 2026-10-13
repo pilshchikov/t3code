@@ -21,9 +21,7 @@ export function projectRailStatuses(
     const status = projects.get(key) ?? { running: false, completed: false, input: false };
     const threadStatus = resolveSidebarThreadStatus(thread);
     status.running ||=
-      threadStatus === "working" ||
-      threadStatus === "waiting" ||
-      (thread.pendingBackgroundTasks?.length ?? 0) > 0;
+      threadStatus === "working" || (thread.pendingBackgroundTasks?.length ?? 0) > 0;
     status.input ||= threadStatus === "approval" || threadStatus === "input";
     status.completed ||= hasUnseenCompletion({
       ...thread,

@@ -1,5 +1,23 @@
 # Fork Changes
 
+## Idle sessions do not count as running work — 2026-10-13
+
+- Read-only diagnosis found empty idle Codex child sessions in local poly and remote rotor.
+  Their retained provider-thread references produced an idle runtime; the sidebar interpreted
+  that as background waiting and the grouped project rail showed a running dot.
+- Web/desktop and native mobile status classifiers now require an active run or a nonempty
+  pending-background roster for Working. Empty idle sessions are Ready; the shared Working
+  group also leaves them in the inbox. Project-rail aggregation no longer treats the old
+  idle-to-Waiting fallback as running (`Sidebar.logic.ts`, `sidebar/projectRail.logic.ts`,
+  `threadListV2.ts`, client-runtime `state/threadInbox.ts`).
+- Preserve the October 6 fork behavior: real pending commands, monitors, subagents and PR
+  watches still show work, including simultaneous running/input project dots. Stored provider
+  references, queued-run holds, background rosters, completion markers and remote grouping
+  retain their existing behavior. No database cleanup or polling is needed.
+- Validation: scoped web, native mobile and client-runtime typechecks passed; lint passed with
+  eight existing warnings. Updated the existing empty-idle expectation to Ready. No tests added
+  or run, UI checks, live-data writes, app builds, reinstalls or restarts.
+
 ## Daily upstream integration — 2026-10-13
 
 - Merged all 19 upstream commits through

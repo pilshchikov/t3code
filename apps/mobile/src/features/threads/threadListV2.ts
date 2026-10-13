@@ -70,11 +70,9 @@ export function resolveThreadListV2ProviderDrivers(
  * (apps/web/src/components/Sidebar.logic.ts + SidebarV2.tsx).
  *
  * Six visual states. Color distinguishes approval, input, active work, and
- * failures. Ready is the unlabeled resting state; waiting (runtime status "idle") is the agent
- * parked on open background tasks, grey like working rather than a false Done.
- * The orchestrator v2 presentation bridge parks runtime at idle when the
- * post-settlement background roster holds the run's completion (subagents,
- * monitors); commands left running, such as a dev server, read as ready.
+ * failures. Ready is the unlabeled resting state. An idle session alone is
+ * ready, including imported child threads whose work ended. A nonempty
+ * background roster keeps commands, monitors, children and watches working.
  */
 export type ThreadListV2Status =
   | "approval"
@@ -200,9 +198,6 @@ export function resolveThreadListV2Status(
   }
   if (thread.runtime?.status !== "failed" && (thread.pendingBackgroundTasks?.length ?? 0) > 0) {
     return "working";
-  }
-  if (thread.runtime?.status === "idle") {
-    return "waiting";
   }
   if (thread.runtime?.status === "failed") {
     return thread.runtime.lastErrorClass === "usage_limit" ? "limited" : "failed";
