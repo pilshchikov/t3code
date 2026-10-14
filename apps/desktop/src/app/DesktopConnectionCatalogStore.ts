@@ -443,7 +443,7 @@ export const make = Effect.gen(function* () {
       });
     }
     const key = yield* crypto.randomBytes(32);
-    const suffix = yield* crypto.randomUUIDv4;
+    const suffix = yield* crypto.randomUUIDv4();
     const temporary = path.join(keyDirectory, `${suffix}.tmp`);
     return yield* Effect.gen(function* () {
       yield* Effect.scoped(
@@ -497,7 +497,7 @@ export const make = Effect.gen(function* () {
             }),
         }),
       );
-      const suffix = yield* crypto.randomUUIDv4.pipe(
+      const suffix = yield* crypto.randomUUIDv4().pipe(
         Effect.mapError(
           (cause) =>
             new DesktopConnectionCatalogStoreWriteError({
@@ -532,7 +532,7 @@ export const make = Effect.gen(function* () {
         ),
       ),
     );
-    const suffix = (yield* crypto.randomUUIDv4.pipe(
+    const suffix = (yield* crypto.randomUUIDv4().pipe(
       Effect.mapError(
         (cause) =>
           new DesktopConnectionCatalogStoreWriteError({

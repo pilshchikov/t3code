@@ -1,5 +1,71 @@
 # Fork Changes
 
+## Daily upstream integration — 2026-10-14
+
+- Merged all 91 upstream commits through
+  `7ac952c630ef8a60d14ca8f6a0c7adce33db4bae` from fork parent
+  `6b1454c646bb2e42324fa8d1c441eb37620af0a5` with a real merge. Includes SQLite
+  reader/checkpoint workers, smaller event/projection writes, notification-history paging,
+  connection/relink recovery, live Claude selection changes and steered token accounting,
+  attachment sizing, HTML reply zoom/shortcuts and coordinated update reporting.
+- Resolved seven conflicts individually and reviewed the 78 overlapping files, including
+  automatic merges. `storageCleanup.ts` adopts reader-worker snapshots, lightweight ownership
+  rechecks and coalesced automatic sweeps while retaining archived-thread cleanup/expiry,
+  settle-triggered removal, fresh settlement checks and secondary-repository ownership guards.
+  `ProjectionStore.ts` adds opt-in archived ownership paths to both SQLite and memory stores;
+  secondary selections are read as paths rather than loading every thread's history per worktree.
+  Adapted incoming snapshot-count expectations for active/archive cleanup and expiry reads;
+  no independent test cases were added.
+- Analytics remains an unconditional no-op. `ws.ts` keeps the split typed handler registration
+  and all fork RPCs, adapting UUID generation to Effect 4.0.4. Updated four additional fork-only
+  UUID calls in encrypted connection storage, workspace commands and terminal-PR cleanup.
+  `ProjectSettingsPanel.tsx` combines confirmed removal with device-local project attachments.
+  Imported action-shortcut fixtures retain the fork's required working-directory field.
+  `useUpdateEverything.ts` retains a publication check only after the user requests an update,
+  alongside upstream progress, error summaries and relaunch recovery; no mounted npm probe.
+  Shared query finality stops terminal-PR refreshes without replacing file reads' waiting-state
+  wrapper, disk revisions, selected-panel 10-second validation or dirty-editor protection.
+- The new HTML shortcut bridge includes numbered project recall/assignment and editor/Structure
+  navigation, plus the root-owned ISO panel shortcuts and Shift+§ alias. It retains upstream
+  source/focus/user-activation checks, blocked-command matching and thread-mutation exclusions
+  (`files/BrowserDocumentFrame.tsx`). No provider or thread mutation is added to the allowlist.
+- Traced `ChatComposer` into the mounted `ComposerPrimaryActions`/`ComposerActionOrb`: saved
+  send color covers Send/Resume/Queue/Steer and saved stop color covers normal and pending-input
+  Stop; Classic stays available. Existing chats and draft heroes keep forced mobile expansion,
+  no scroll/focus collapse, one-line prompt minimum, ordinary sending without compact-first
+  proposals, custom chat widths and viewport/keyboard handling. Upstream streamed reasoning
+  follows within its own work-log scroller. Timeline recovery/end following, first assistant
+  text outside settled folds and mixed-work labels coexist with resumed-subagent/imported folds.
+- Live callers retain project rail/status dots and colors, grouping/attachments, slots/order,
+  picker sizing and app accents; per-repository Files/worktree selectors, persisted collapse,
+  expansion/resize, navigation/history, deletion/undo, staged-only commit context and Git History;
+  root/multi-root Markdown explorer routing; and mounted CLI resume using V2 native refs.
+  Initial checkout binding/clearing still requires the validated preparing run, only queued
+  follow-ups, no provider session and no pending question/background work. Ordinary active and
+  background work remain protected. Live Claude effort changes retain worker observation hooks
+  and child-specific model/effort ingestion. Account/model usage rows, isolated HOME/config dirs,
+  pooled account colors, compact provider trends and history/polling remain connected.
+- Project memory/workspace/peer MCP registration, relay hosting and durable response watches
+  remain connected. Narrow projection patches and single-PR events preserve fork thread metadata
+  and the two-hour terminal-link cleanup. Provider-session release clears only process-owned
+  background tasks; peer watches remain independent pending monitors. Idle compaction stays
+  opt-in with project overrides, current native-context usage and quota-recovery eligibility;
+  terminal-worker question recovery and Never-default settlement remain. Stable desktop storage,
+  local catalog encryption, disabled external analytics/OTLP and provider-refresh/version/manifest,
+  auto-update/Keychain opt-in gates remain. Multiwork and machine sync stay explicitly retired;
+  older usage/sync components remain superseded.
+- Validation: frozen-lockfile installation and 20 scoped typechecks passed: server, web, native
+  mobile, desktop, relay, contracts, shared, client-runtime, six provider packages, three
+  source-control packages, SSH, Tailscale and scripts. Initial server/web compatibility errors
+  were corrected and both checks rerun successfully. Changed-file lint covered 358 files with
+  zero errors and 380 warnings (React hooks/refs/memoization, unused symbols and styling among
+  others); final lint of four integration files passed without warnings. Typechecks retain
+  non-failing Effect suggestions. Integration formatting and source/document whitespace checks
+  passed. Runtime/UI behavior and imported/adapted upstream tests were not exercised.
+  No tests added independently or run, app builds, packaging, runtime/UI checks, dev servers,
+  installed-app/live-data operations, process stops, push, PR, external messages, subagents,
+  other-worktree/main edits or schedule changes.
+
 ## Agent conversation messages and response watches — 2026-10-14
 
 - Added `t3_peer_threads_list`, `t3_peer_thread_read`, `t3_peer_thread_send`,

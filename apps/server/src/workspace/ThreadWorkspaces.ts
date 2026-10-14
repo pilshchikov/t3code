@@ -137,7 +137,7 @@ const make = Effect.gen(function* () {
     yield* engine.dispatch({
       type: "thread.metadata.update",
       commandId: CommandId.make(
-        `server:workspace:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+        `server:workspace:${yield* crypto.randomUUIDv4().pipe(Effect.orDie)}`,
       ),
       threadId: ctx.thread.id,
       ...(ctx.workspace.primary
