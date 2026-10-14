@@ -1,5 +1,24 @@
 # Fork Changes
 
+## Foreground Working and background Monitoring — 2026-10-14
+
+- Shared `resolveThreadWorkPhase` distinguishes active foreground turns from completed/idle
+  turns with commands, monitors, child work, PR watches or peer watches. Background-only
+  work uses internal `waiting`, displayed as **Monitoring** on web/desktop and native mobile.
+  Checkpoint-only waiting remains Working; foreground turns outrank lingering rosters;
+  approvals/input and usage limits/errors retain their existing priority.
+- Sidebar rows, legacy/status-indicator pills and mobile rows agree. Monitoring has no
+  working timer or pill pulse. Working-shelf inclusion and pending-work tracking remain intact;
+  project dots continue showing pending processes; separate running/monitoring flags give
+  accurate tooltips, including projects with both kinds of activity.
+- Read the live database read-only: yb-stress-test's "Triage and Repro Newly Failed Stress Tests"
+  had a completed root run plus a command "Wait for the three verification runs", confirming
+  the presentation bug. No database changes or runtime process control.
+- Validation: 321 user-authorized focused tests passed in six files (shared execution,
+  web sidebar, mobile thread list, mobile emphasis, project rail and inbox tracking).
+  Scoped web/mobile/client-runtime typechecks and changed-file lint passed with existing
+  warnings; whitespace check passed. No browser/native UI checks, build, install or restart.
+
 ## Automatic usage-limit recovery default — 2026-10-14
 
 - The existing server-scoped **Auto-resume limited threads** toggle now defaults to On

@@ -1,3 +1,4 @@
+import { resolveThreadWorkPhase } from "@t3tools/client-runtime/state/thread-execution";
 import { resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
 import * as React from "react";
@@ -629,7 +630,7 @@ export interface ThreadStatusPill {
     | "Completed"
     | "Pending Approval"
     | "Awaiting Input"
-    | "Waiting"
+    | "Monitoring"
     | "Plan Ready";
   colorClass: string;
   dotClass: string;
@@ -641,7 +642,7 @@ const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
   "Awaiting Input": 4,
   Working: 3,
   Connecting: 3,
-  Waiting: 2.5,
+  Monitoring: 2.5,
   "Plan Ready": 2,
   Completed: 1,
 };
@@ -945,8 +946,8 @@ export function resolveThreadRowClassName(input: {
 // unlabeled resting state — the agent stopped and is waiting on the user,
 // whether it finished, asked a question, or proposed a plan. An idle session
 // alone is ready: imported child threads retain one after their work ends.
-// Pending commands, monitors, children and watches keep the thread working;
-// the background roster distinguishes those from an empty idle session.
+// Pending commands, monitors, children and watches show Monitoring (internal waiting);
+// foreground model turns show Working. Both stay in the Working shelf.
 // Unread completion is tracked separately: it describes whether a ready
 // thread needs attention, not what the thread is currently doing.
 export type SidebarThreadStatus =
@@ -986,17 +987,8 @@ export function resolveSidebarThreadStatus(thread: SidebarThreadStatusInput): Si
   if (thread.hasPendingUserInput) {
     return "input";
   }
-  if (
-    thread.runtime !== null &&
-    ["preparing", "queued", "starting", "running", "waiting"].includes(thread.runtime.status)
-  ) {
-    return "working";
-  }
-  // A settled parent can still have commands, monitors, children or watches
-  // that wake it later. Display those as working without making the run active.
-  if (thread.runtime?.status !== "failed" && (thread.pendingBackgroundTasks?.length ?? 0) > 0) {
-    return "working";
-  }
+  const workPhase = resolveThreadWorkPhase(thread);
+  if (workPhase !== null) return workPhase;
   if (thread.runtime?.status === "failed") {
     return thread.runtime.lastErrorClass === "usage_limit" ? "limited" : "failed";
   }
@@ -1200,6 +1192,15 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
+  if (resolveThreadWorkPhase(thread) === "waiting") {
+    return {
+      label: "Monitoring",
+      colorClass: "text-sky-600 dark:text-sky-300/80",
+      dotClass: "bg-sky-500 dark:bg-sky-300/80",
+      pulse: false,
+    };
+  }
+
   if (thread.runtime?.status === "running" || thread.runtime?.status === "waiting") {
     return {
       label: "Working",
@@ -1216,15 +1217,6 @@ export function resolveThreadStatusPill(input: {
   ) {
     return {
       label: "Connecting",
-      colorClass: "text-sky-600 dark:text-sky-300/80",
-      dotClass: "bg-sky-500 dark:bg-sky-300/80",
-      pulse: true,
-    };
-  }
-
-  if (thread.runtime?.status !== "failed" && (thread.pendingBackgroundTasks?.length ?? 0) > 0) {
-    return {
-      label: "Working",
       colorClass: "text-sky-600 dark:text-sky-300/80",
       dotClass: "bg-sky-500 dark:bg-sky-300/80",
       pulse: true,

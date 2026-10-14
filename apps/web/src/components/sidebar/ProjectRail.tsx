@@ -57,6 +57,7 @@ function ProjectRailItem({
   });
   const statusLabel = [
     status.running && "Agent working",
+    status.monitoring && "Monitoring background work",
     status.completed && "Unread completion",
     status.input && "Input or approval needed",
   ]
@@ -85,7 +86,9 @@ function ProjectRailItem({
               aria-hidden="true"
               className="absolute end-0.5 top-1/2 flex -translate-y-1/2 flex-col gap-0.5"
             >
-              {status.running ? <span className="size-1.5 rounded-full bg-primary" /> : null}
+              {status.running || status.monitoring ? (
+                <span className="size-1.5 rounded-full bg-primary" />
+              ) : null}
               {status.completed ? <span className="size-1.5 rounded-full bg-success" /> : null}
               {status.input ? <span className="size-1.5 rounded-full bg-agent-input" /> : null}
             </span>
@@ -206,11 +209,12 @@ export const ProjectRail = memo(function ProjectRail() {
                     const status = statuses.get(`${member.environmentId}:${member.id}`);
                     return {
                       running: combined.running || !!status?.running,
+                      monitoring: combined.monitoring || !!status?.monitoring,
                       completed: combined.completed || !!status?.completed,
                       input: combined.input || !!status?.input,
                     };
                   },
-                  { running: false, completed: false, input: false },
+                  { running: false, monitoring: false, completed: false, input: false },
                 )}
                 onSelect={() => selectScope(group.projectKey)}
               />

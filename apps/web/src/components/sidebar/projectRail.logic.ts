@@ -6,6 +6,7 @@ import { hasUnseenCompletion, resolveSidebarThreadStatus } from "../Sidebar.logi
 
 export interface ProjectRailStatus {
   running: boolean;
+  monitoring: boolean;
   completed: boolean;
   input: boolean;
 }
@@ -18,10 +19,16 @@ export function projectRailStatuses(
   for (const thread of threads) {
     if (thread.archivedAt != null) continue;
     const key = `${thread.environmentId}:${thread.projectId}`;
-    const status = projects.get(key) ?? { running: false, completed: false, input: false };
+    const status = projects.get(key) ?? {
+      running: false,
+      monitoring: false,
+      completed: false,
+      input: false,
+    };
     const threadStatus = resolveSidebarThreadStatus(thread);
-    status.running ||=
-      threadStatus === "working" || (thread.pendingBackgroundTasks?.length ?? 0) > 0;
+    status.running ||= threadStatus === "working";
+    status.monitoring ||=
+      threadStatus !== "working" && (thread.pendingBackgroundTasks?.length ?? 0) > 0;
     status.input ||= threadStatus === "approval" || threadStatus === "input";
     status.completed ||= hasUnseenCompletion({
       ...thread,

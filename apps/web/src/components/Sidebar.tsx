@@ -1350,7 +1350,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
         ? {
             // Waiting is calm background presence (post-settle background
             // roster), not active progress, so the label keeps full strength.
-            label: "Waiting",
+            label: "Monitoring",
             icon: null,
             className: "text-muted-foreground",
           }

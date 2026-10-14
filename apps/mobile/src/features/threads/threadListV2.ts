@@ -1,3 +1,4 @@
+import { resolveThreadWorkPhase } from "@t3tools/client-runtime/state/thread-execution";
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
 import {
   canSnooze,
@@ -72,7 +73,7 @@ export function resolveThreadListV2ProviderDrivers(
  * Six visual states. Color distinguishes approval, input, active work, and
  * failures. Ready is the unlabeled resting state. An idle session alone is
  * ready, including imported child threads whose work ended. A nonempty
- * background roster keeps commands, monitors, children and watches working.
+ * background roster shows Monitoring while the model is idle. Both remain in the Working shelf.
  */
 export type ThreadListV2Status =
   | "approval"
@@ -190,15 +191,8 @@ export function resolveThreadListV2Status(
   if (thread.hasPendingUserInput) {
     return "input";
   }
-  if (
-    thread.runtime !== null &&
-    ["preparing", "queued", "starting", "running", "waiting"].includes(thread.runtime.status)
-  ) {
-    return "working";
-  }
-  if (thread.runtime?.status !== "failed" && (thread.pendingBackgroundTasks?.length ?? 0) > 0) {
-    return "working";
-  }
+  const workPhase = resolveThreadWorkPhase(thread);
+  if (workPhase !== null) return workPhase;
   if (thread.runtime?.status === "failed") {
     return thread.runtime.lastErrorClass === "usage_limit" ? "limited" : "failed";
   }

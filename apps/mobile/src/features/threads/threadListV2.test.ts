@@ -157,7 +157,7 @@ describe("resolveThreadListV2Status", () => {
     expect(resolveThreadListV2Status(thread)).toBe("approval");
   });
 
-  it("reports working when presentation parks runtime idle for background tasks", () => {
+  it("reports monitoring when presentation parks runtime idle for background tasks", () => {
     expect(
       resolveThreadListV2Status(
         makeThread({
@@ -174,14 +174,14 @@ describe("resolveThreadListV2Status", () => {
           },
         }),
       ),
-    ).toBe("working");
+    ).toBe("waiting");
   });
 
   it.each([
-    { kind: "command", status: "working" },
-    { kind: "monitor", status: "working" },
-    { kind: "subagent", status: "working" },
-    { kind: "background_task", status: "working" },
+    { kind: "command", status: "waiting" },
+    { kind: "monitor", status: "waiting" },
+    { kind: "subagent", status: "waiting" },
+    { kind: "background_task", status: "waiting" },
   ] as const)(
     "presents an unseen completion with a $kind roster as $status",
     ({ kind, status }) => {
@@ -200,6 +200,33 @@ describe("resolveThreadListV2Status", () => {
       expect(threadHasUnseenCompletion(thread)).toBe(true);
     },
   );
+
+  it("preserves approval, input and failure priority while background work remains", () => {
+    const thread = makeThread({
+      id: ThreadId.make("monitoring-priority"),
+      title: "Monitoring",
+      pendingBackgroundTasks: [{ taskId: "verification", kind: "command" }],
+      runtime: {
+        status: "idle",
+        activeRunId: null,
+        providerInstanceId: ProviderInstanceId.make("codex"),
+        providerName: "Codex",
+        lastError: null,
+        updatedAt: NOW,
+      },
+    });
+    expect(resolveThreadListV2Status({ ...thread, hasPendingApprovals: true })).toBe("approval");
+    expect(resolveThreadListV2Status({ ...thread, hasPendingUserInput: true })).toBe("input");
+    expect(
+      resolveThreadListV2Status({ ...thread, runtime: { ...thread.runtime!, status: "failed" } }),
+    ).toBe("failed");
+    expect(
+      resolveThreadListV2Status({
+        ...thread,
+        runtime: { ...thread.runtime!, status: "failed", lastErrorClass: "usage_limit" },
+      }),
+    ).toBe("limited");
+  });
 
   it("resolves ready for quiescent threads", () => {
     expect(resolveThreadListV2Status(makeThread({ id: ThreadId.make("t"), title: "t" }))).toBe(
