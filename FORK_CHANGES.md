@@ -61,7 +61,9 @@
   zero errors and 380 warnings (React hooks/refs/memoization, unused symbols and styling among
   others); final lint of four integration files passed without warnings. Typechecks retain
   non-failing Effect suggestions. Integration formatting and source/document whitespace checks
-  passed. Runtime/UI behavior and imported/adapted upstream tests were not exercised.
+  passed. Git's rename-disabled tree whitespace check flags four required blank-context lines
+  in upstream's renamed `patches/@effect__vitest@4.0.4.patch`; kept verbatim for patch integrity.
+  Runtime/UI behavior and imported/adapted upstream tests were not exercised.
   No tests added independently or run, app builds, packaging, runtime/UI checks, dev servers,
   installed-app/live-data operations, process stops, push, PR, external messages, subagents,
   other-worktree/main edits or schedule changes.
