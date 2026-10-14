@@ -194,6 +194,7 @@ function AutoSettleSettingsRows() {
           <SettingsSwitchRow
             icon="clock"
             label="Auto-resume limited threads"
+            subtitle="On by default. Continue at the provider’s reported reset time while the environment stays running, even with the app closed. Cancel in the thread; retry manually if no reset time is reported."
             value={uniformMobileSetting(displayTargets, "autoResumeLimitedThreads")}
             disabled={disabled}
             onValueChange={(value) => writeToAll({ autoResumeLimitedThreads: value })}

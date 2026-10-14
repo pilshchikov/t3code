@@ -2615,7 +2615,7 @@ export function GeneralSettingsPanel() {
         <SettingsRow
           serverScoped
           {...searchableSetting("auto-resume-limited-threads")}
-          description="Resume usage-limit stops at the reported reset time. Each thread can cancel its scheduled continuation."
+          description="Automatically continue work when the provider’s reported usage limit resets, even with the app closed. On by default; cancel a scheduled continuation in its thread. The environment must stay running. Without a reset time, retry manually."
           settingKeys={["autoResumeLimitedThreads"]}
           control={
             <ScopedSwitch

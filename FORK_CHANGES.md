@@ -1,5 +1,19 @@
 # Fork Changes
 
+## Automatic usage-limit recovery default — 2026-10-14
+
+- The existing server-scoped **Auto-resume limited threads** toggle now defaults to On
+  when no saved preference exists. Saved opt-outs remain Off. General settings on web/desktop
+  and Thread behavior on native mobile explain reset tracking and per-thread cancellation.
+- Reuses the durable recovery worker and the reported root-run usage-limit reset; no new
+  timer or provider/account polling. Main-thread recovery survives server restarts, needs no
+  connected client and retains stable delivery IDs, current-run/account validation, held queues,
+  Stop/manual retry/cancel/archive/settlement guards and expired-reset loop protection. Providers
+  without a reset time remain manual. Idle compaction's quota-recovery guard is unchanged.
+- This changes the settings default, not installed/live preferences or runtime state.
+  Validation: scoped server/web/mobile/contracts typechecks and changed-file lint passed;
+  whitespace check passed. No tests added or run, build, install or restart.
+
 ## Upstream integration — 2026-10-14 (bf8ffe81a6)
 
 - Merged seven new commits through `bf8ffe81a6` after `7ac952c630`: PR filters follow
