@@ -180,6 +180,9 @@ mode. Work in progress, pending questions or approvals, and live agent backgroun
 work prevent automatic settlement. An old closed or merged pull request does not
 settle work you resumed after it closed. Only your own messages count as resuming;
 automatic background turns and pull request watches do not.
+Enable **Keep threads with a PR** to also exclude threads with closed or merged
+pull requests from inactivity settlement. PR-based settlement still follows the
+selected automatic settlement mode.
 
 To keep one thread out of the settled shelf no matter how long it sits idle, open its menu,
 choose **Auto-settle behavior**, and pick **Disabled**. The current option is checked. Pick

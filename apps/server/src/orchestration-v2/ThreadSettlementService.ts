@@ -204,6 +204,7 @@ export function resolveAutoSettlementAt(input: {
   readonly autoSettleAfterDays: number | null;
   readonly autoSettleOnMerge: boolean;
   readonly autoSettleMode?: SidebarAutoSettleMode;
+  readonly autoSettleKeepPullRequests?: boolean;
 }): DateTime.Utc | null {
   const { thread } = input;
   if (input.autoSettleMode === "never") return null;
@@ -244,6 +245,9 @@ export function resolveAutoSettlementAt(input: {
     return activityAtMs === null ? thread.createdAt : DateTime.makeUnsafe(activityAtMs);
   }
   if (input.autoSettleMode === "change-request" || pullRequest?.state === "open") return null;
+  const hasPullRequest =
+    pullRequest !== null || thread.linkedPullRequest != null || thread.branchPullRequest != null;
+  if (input.autoSettleKeepPullRequests === true && hasPullRequest) return null;
   if (input.autoSettleAfterDays === null || activityAtMs === null) return null;
   // A passed wake timer restarts inactivity. An earlier wake can only delay settlement.
   const snoozedUntilMs = toMillis(thread.snoozedUntil);
@@ -284,6 +288,7 @@ export function autoSettlementSettingsKey(
     settings.sidebarAutoSettleMode,
     settings.sidebarAutoSettleOnMerge,
     settings.sidebarAutoSettleAfterDays,
+    settings.sidebarAutoSettleKeepPullRequests,
     // Only entries that touch settlement, in a stable order, so a project
     // override on an unrelated key does not queue a sweep. JSON drops
     // undefined, so inherit (absent) and never (null) need distinct marks.
@@ -292,7 +297,8 @@ export function autoSettlementSettingsKey(
         ([, entry]) =>
           entry.sidebarAutoSettleMode !== undefined ||
           entry.sidebarAutoSettleOnMerge !== undefined ||
-          entry.sidebarAutoSettleAfterDays !== undefined,
+          entry.sidebarAutoSettleAfterDays !== undefined ||
+          entry.sidebarAutoSettleKeepPullRequests !== undefined,
       )
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([projectId, entry]) => [
@@ -302,6 +308,7 @@ export function autoSettlementSettingsKey(
         entry.sidebarAutoSettleAfterDays === undefined
           ? "inherit"
           : entry.sidebarAutoSettleAfterDays,
+        entry.sidebarAutoSettleKeepPullRequests ?? "inherit",
       ]),
   ]);
 }
@@ -355,6 +362,7 @@ export const make = Effect.gen(function* () {
           autoSettleAfterDays: currentSettings.sidebarAutoSettleAfterDays,
           autoSettleOnMerge: currentSettings.sidebarAutoSettleOnMerge,
           autoSettleMode: currentSettings.sidebarAutoSettleMode,
+          autoSettleKeepPullRequests: currentSettings.sidebarAutoSettleKeepPullRequests,
         });
         if (settledAt === null) return thread;
         const uuid = yield* crypto.randomUUIDv4();
@@ -458,6 +466,7 @@ export const make = Effect.gen(function* () {
             autoSettleAfterDays: settings.sidebarAutoSettleAfterDays,
             autoSettleOnMerge: settings.sidebarAutoSettleOnMerge,
             autoSettleMode: settings.sidebarAutoSettleMode,
+            autoSettleKeepPullRequests: settings.sidebarAutoSettleKeepPullRequests,
           }) !== null
         );
       });

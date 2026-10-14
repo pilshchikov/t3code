@@ -602,6 +602,10 @@ export function useSettingsRestore(onRestored?: () => void) {
       DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays
         ? ["Auto-settle inactive threads"]
         : []),
+      ...(settings.sidebarAutoSettleKeepPullRequests !==
+      DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleKeepPullRequests
+        ? ["Keep threads with a PR"]
+        : []),
       ...(settings.sidebarAutoSettleOnMerge !== DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge
         ? ["Auto-settle merged threads"]
         : []),
@@ -729,6 +733,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.enableProviderUpdateChecks,
       settings.continueThreadsAfterServerUpdate,
       settings.sidebarAutoSettleAfterDays,
+      settings.sidebarAutoSettleKeepPullRequests,
       settings.sidebarAutoSettleOnMerge,
       settings.autoResumeLimitedThreads,
       settings.snoozeLimitedThreads,
@@ -840,6 +845,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarProjectSortOrder: DEFAULT_UNIFIED_SETTINGS.sidebarProjectSortOrder,
       sidebarWorkingShelfEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled,
       sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
+      sidebarAutoSettleKeepPullRequests: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleKeepPullRequests,
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
       autoResumeLimitedThreads: DEFAULT_UNIFIED_SETTINGS.autoResumeLimitedThreads,
       snoozeLimitedThreads: DEFAULT_UNIFIED_SETTINGS.snoozeLimitedThreads,
@@ -2439,6 +2445,9 @@ export function GeneralSettingsPanel() {
     connectedEnvironments.every(
       (target) => target.serverConfig?.environment.capabilities.threadAutoSettlement === true,
     );
+  const supportsAutoSettlementScope = connectedEnvironments.every(
+    (target) => target.serverConfig?.environment.capabilities.threadAutoSettlementScope === true,
+  );
   const supportsRestartContinuation =
     connectedEnvironments.length > 0 &&
     connectedEnvironments.every(
@@ -2727,6 +2736,24 @@ export function GeneralSettingsPanel() {
                   <AutoSettleDaysInput
                     value={settings.sidebarAutoSettleAfterDays ?? AUTO_SETTLE_DEFAULT_DAYS}
                     onCommit={(days) => updateSettings({ sidebarAutoSettleAfterDays: days })}
+                  />
+                }
+              />
+            ) : null}
+            {settings.sidebarAutoSettleMode === "inactivity" && supportsAutoSettlementScope ? (
+              <SettingsRow
+                serverScoped
+                settingKeys={["sidebarAutoSettleKeepPullRequests"]}
+                title="Keep threads with a PR"
+                description="Also keep threads with closed or merged pull requests from settling after inactivity. Open PR threads always stay active."
+                control={
+                  <ScopedSwitch
+                    settingKeys={["sidebarAutoSettleKeepPullRequests"]}
+                    checked={settings.sidebarAutoSettleKeepPullRequests}
+                    onCheckedChange={(checked) =>
+                      updateSettings({ sidebarAutoSettleKeepPullRequests: checked })
+                    }
+                    aria-label="Keep threads with a PR"
                   />
                 }
               />

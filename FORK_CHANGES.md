@@ -1,5 +1,21 @@
 # Fork Changes
 
+## Upstream integration — 2026-10-14 (bf8ffe81a6)
+
+- Merged seven new commits through `bf8ffe81a6` after `7ac952c630`: PR filters follow
+  sidebar order and exclude Scratch, synchronized PR state, review wording, subagent
+  punctuation, Claude progress-text classification and the optional PR inactivity guard.
+- Resolved six conflicting files individually. Kept Never-default, exclusive settlement
+  modes and open/unknown PR protection; the new guard can additionally keep terminal PR
+  threads active in inactivity mode. Kept fork project attachments and legacy project ordering
+  while adopting the shared sidebar grouping hook. Preserved both independent test suites.
+- Reviewed all 25 incoming paths. Composer animation/mobile expansion/scrolling, status dots,
+  Files freshness/worktrees, branch naming, compaction quota guards, encrypted connections,
+  disabled tracking and cross-environment agent messaging are retained. No dependency changes.
+- Validation: frozen-lockfile dependency alignment, scoped server/web/mobile/contracts/client-runtime
+  typechecks and changed-file lint passed (warnings remain); staged whitespace check passed.
+  No runtime tests, build, install or restart.
+
 ## Daily upstream integration — 2026-10-14
 
 - Merged all 91 upstream commits through

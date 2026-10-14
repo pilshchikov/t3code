@@ -9,6 +9,7 @@ import {
   derivePhysicalProjectKey,
   resolveScratchProjectScopeKey,
   withProjectLink,
+  sortProjectsByGroupOrder,
   type ProjectGroupingSettings,
 } from "./projectGrouping.ts";
 
@@ -486,5 +487,42 @@ describe("hand-made project links", () => {
   it("stores no link for a checkout that already belongs to the project", () => {
     const first = makeProject("first", "/work/t3code");
     expect(withProjectLink(first, repositoryIdentity.canonicalKey, base)).toEqual({});
+  });
+});
+
+describe("sortProjectsByGroupOrder", () => {
+  const remote = EnvironmentId.make("remote");
+  const ref = (projectId: string, env = environmentId) => ({
+    environmentId: env,
+    projectId: ProjectId.make(projectId),
+  });
+  const project = (id: string, env: string = environmentId) => ({ id, environmentId: env });
+
+  it("follows the group order, keeping ungrouped projects last in their own order", () => {
+    const sorted = sortProjectsByGroupOrder(
+      [
+        project("alpha"),
+        project("zeta"),
+        project("orphan-b"),
+        project("beta"),
+        project("orphan-a"),
+      ],
+      [{ memberProjectRefs: [ref("zeta")] }, { memberProjectRefs: [ref("beta"), ref("alpha")] }],
+    );
+    expect(sorted.map((entry) => entry.id)).toEqual([
+      "zeta",
+      "alpha",
+      "beta",
+      "orphan-b",
+      "orphan-a",
+    ]);
+  });
+
+  it("tells the same project id on two environments apart", () => {
+    const sorted = sortProjectsByGroupOrder(
+      [project("shared"), project("shared", remote)],
+      [{ memberProjectRefs: [ref("shared", remote)] }, { memberProjectRefs: [ref("shared")] }],
+    );
+    expect(sorted.map((entry) => entry.environmentId)).toEqual([remote, environmentId]);
   });
 });

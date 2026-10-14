@@ -133,9 +133,8 @@ import { isMacPlatform } from "~/lib/utils";
 import { useOpenPrLink } from "../lib/openPullRequestLink";
 import { readLocalApi } from "../localApi";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
-import { getProjectOrderKey, selectProjectGroupingSettings } from "../logicalProject";
+import { selectProjectGroupingSettings } from "../logicalProject";
 import {
-  buildSidebarProjectSnapshots,
   projectGroupsSpanEnvironments,
   resolveSidebarProjectScopeKey,
   getSidebarProjectSettingsKey,
@@ -149,6 +148,7 @@ import {
 } from "../threadSelectionStore";
 import { useAcknowledgeThreadWoke, useThreadActions } from "../hooks/useThreadActions";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useSidebarProjectGroups } from "../hooks/useSidebarProjectGroups";
 import { useTerminalFocus } from "../hooks/useTerminalFocus";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { registerSettleAndAdvance } from "../settleAndAdvance";
@@ -228,7 +228,6 @@ import {
   sidebarThreadKeyAtY,
   sortInboxThreadsByReturn,
   sortPinnedThreadsForSidebar,
-  sortSidebarV2ProjectGroups,
   sortThreadsForSidebar,
   sortWorkingThreadsBySend,
   useThreadJumpHintVisibility,
@@ -303,7 +302,6 @@ import { applySidebarThreadOrder, useSidebarThreadOrderStore } from "../sidebarT
 import { useSidebarOrderMigration } from "../hooks/useSidebarOrderMigration";
 import { useSidebarProjectScope } from "../hooks/useSidebarProjectScope";
 import { useProjectRailVisible } from "./sidebar/projectRailVisibility";
-import { useSidebarProjectGroups } from "./sidebar/useSidebarProjectGroups";
 import { projectSlotNumber, useProjectSlotStore } from "../projectSlotStore";
 import { Kbd } from "./ui/kbd";
 import {
@@ -2588,41 +2586,7 @@ export default function Sidebar() {
     [environments],
   );
   const environmentMachineById = useEnvironmentMachines();
-  const orderedProjects = useMemo(
-    () =>
-      orderItemsByPreferredIds({
-        items: projects,
-        preferredIds: projectOrder,
-        getId: getProjectOrderKey,
-        getPreferenceIds: (project) => [
-          getProjectOrderKey(project),
-          legacyProjectCwdPreferenceKey(project.workspaceRoot),
-        ],
-      }),
-    [projectOrder, projects],
-  );
-  const unsortedProjectGroups = useMemo(
-    () =>
-      buildSidebarProjectSnapshots({
-        projects: sidebarProjectSortOrder === "manual" ? orderedProjects : projects,
-        groupScratchProjects: true,
-        settings: projectGroupingSettings,
-        primaryEnvironmentId,
-        resolveEnvironmentLabel: (environmentId) => environmentLabelById.get(environmentId) ?? null,
-      }),
-    [
-      environmentLabelById,
-      orderedProjects,
-      primaryEnvironmentId,
-      projectGroupingSettings,
-      projects,
-      sidebarProjectSortOrder,
-    ],
-  );
-  const projectGroups = useMemo(
-    () => sortSidebarV2ProjectGroups(unsortedProjectGroups, threads, sidebarProjectSortOrder),
-    [sidebarProjectSortOrder, threads, unsortedProjectGroups],
-  );
+  const projectGroups = useSidebarProjectGroups();
   const projectGroupsRef = useRef(projectGroups);
   projectGroupsRef.current = projectGroups;
   // Threads on non-primary environments (T3 Connect, hosted) resolve their
