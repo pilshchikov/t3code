@@ -3,6 +3,7 @@ import { request, subscribe } from "@t3tools/client-runtime/rpc";
 import {
   type EnvironmentId,
   PeerFilesError,
+  OrchestratorMcpFailure,
   type PeerRelayOperation,
   type PeerRelayReply,
   type ProjectId,
@@ -14,8 +15,10 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import * as Semaphore from "effect/Semaphore";
 
 const isPeerFilesError = Schema.is(PeerFilesError);
+const isThreadError = Schema.is(OrchestratorMcpFailure);
 
 const unreachable = (message: string): PeerRelayReply => ({
   type: "failed",
@@ -24,14 +27,14 @@ const unreachable = (message: string): PeerRelayReply => ({
 });
 
 /**
- * Environments never connect to each other, so this app relays for them: an agent's request to
- * look at or copy files on another environment arrives here from its own server, and this app
- * runs it against the other one. See `packages/contracts/src/peers.ts`.
+ * Environments never connect to each other, so this app relays file and conversation requests
+ * from the agent's server through the user's existing connection to the destination. See `packages/contracts/src/peers.ts`.
  */
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
     const relays = yield* FiberMap.make<EnvironmentId>();
+    const fileSlots = yield* Semaphore.make(4);
 
     const describe = Effect.fn("web.peerRelay.describe")(function* (
       source: EnvironmentId,
@@ -80,26 +83,48 @@ export const layer = Layer.effectDiscard(
       switch (operation.type) {
         case "describe":
           return describe(source, operation.projectId);
+        case "threads-list":
+        case "thread-read":
+        case "thread-send":
+        case "thread-wait":
+          return Effect.promise(() => import("../rpc/peerThreads")).pipe(
+            Effect.flatMap((rpc) => rpc.perform(operation.environmentId, operation)),
+            Effect.catch((error) =>
+              Effect.succeed<PeerRelayReply>(
+                isThreadError(error)
+                  ? { type: "failed", code: error.code, message: error.message }
+                  : unreachable(
+                      "The destination app/server could not accept the thread request. Connect both environments with matching versions.",
+                    ),
+              ),
+            ),
+          );
         case "list":
-          return onPeer(
-            source,
-            operation.environmentId,
-            request(WS_METHODS.peerFilesList, operation.input),
-            (result) => ({ type: "listed", result }),
+          return fileSlots.withPermits(1)(
+            onPeer(
+              source,
+              operation.environmentId,
+              request(WS_METHODS.peerFilesList, operation.input),
+              (result) => ({ type: "listed", result }),
+            ),
           );
         case "read":
-          return onPeer(
-            source,
-            operation.environmentId,
-            request(WS_METHODS.peerFilesRead, operation.input),
-            (result) => ({ type: "read", result }),
+          return fileSlots.withPermits(1)(
+            onPeer(
+              source,
+              operation.environmentId,
+              request(WS_METHODS.peerFilesRead, operation.input),
+              (result) => ({ type: "read", result }),
+            ),
           );
         case "write":
-          return onPeer(
-            source,
-            operation.environmentId,
-            request(WS_METHODS.peerFilesWrite, operation.input),
-            (result) => ({ type: "written", result }),
+          return fileSlots.withPermits(1)(
+            onPeer(
+              source,
+              operation.environmentId,
+              request(WS_METHODS.peerFilesWrite, operation.input),
+              (result) => ({ type: "written", result }),
+            ),
           );
       }
     };
@@ -115,7 +140,7 @@ export const layer = Layer.effectDiscard(
               ),
               Effect.catchCause(() => Effect.void),
             ),
-          { concurrency: 4, unordered: true },
+          { concurrency: 32, unordered: true },
         ),
         Stream.runDrain,
         Effect.catchCause(() => Effect.void),

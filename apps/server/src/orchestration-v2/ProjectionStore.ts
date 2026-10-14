@@ -1457,12 +1457,14 @@ export function threadShellFromProjection(
     activeProviderThreadId: projection.thread.activeProviderThreadId,
     runs: projection.runs,
     pullRequests: projection.thread.pullRequests,
+    peerThreadWatches: projection.thread.peerThreadWatches,
   });
   return {
     createdBy: projection.thread.createdBy,
     creationSource: projection.thread.creationSource,
     id: projection.thread.id,
     projectId: projection.thread.projectId,
+    peerThreadWatches: projection.thread.peerThreadWatches,
     title: projection.thread.title,
     providerInstanceId: projection.thread.providerInstanceId,
     modelSelection: projection.thread.modelSelection,
@@ -1732,6 +1734,7 @@ function shellFromState(input: {
     creationSource: input.state.thread.creationSource,
     id: input.state.thread.id,
     projectId: input.state.thread.projectId,
+    peerThreadWatches: input.state.thread.peerThreadWatches,
     title: input.state.thread.title,
     providerInstanceId: input.state.thread.providerInstanceId,
     modelSelection: input.state.thread.modelSelection,
@@ -5597,6 +5600,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                     activeProviderThreadId: thread.activeProviderThreadId,
                     hasActiveRun: false,
                     pullRequests: thread.pullRequests,
+                    peerThreadWatches: thread.peerThreadWatches,
                   }),
                 } satisfies ProjectionSettlementCandidate;
               }),
@@ -5723,6 +5727,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             activeProviderThreadId: thread.activeProviderThreadId,
             hasActiveRun: row.active_run_id !== null,
             pullRequests: thread.pullRequests,
+            peerThreadWatches: thread.peerThreadWatches,
           }),
         ];
         return {

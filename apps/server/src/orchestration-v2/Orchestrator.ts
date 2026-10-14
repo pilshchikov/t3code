@@ -1,5 +1,6 @@
 import * as IdleCompaction from "./IdleCompaction.ts";
 import type {
+  PeerThreadWatch,
   OrchestrationV2SearchThreadInput,
   OrchestrationV2SearchThreadResult,
   OrchestrationV2ThreadHistoryPage,
@@ -464,6 +465,8 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "thread.pull-request-link.sync":
     case "thread.pull-request.watch":
     case "thread.pull-request-watch.sync":
+    case "thread.peer-watch.configure":
+    case "thread.peer-watch.sync":
     case "thread.pull-request.sync":
     case "thread.title.regeneration.complete":
     case "thread.runtime-mode.set":
@@ -2357,6 +2360,97 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     });
   });
 
+  const dispatchPeerWatch = Effect.fn("orchestrationV2.dispatch.peerWatch")(function* (
+    command: Extract<
+      OrchestrationV2ServerCommand,
+      { type: "thread.peer-watch.configure" | "thread.peer-watch.sync" }
+    >,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+    effects: Ref.Ref<Array<PendingOrchestrationEffectV2>>,
+  ) {
+    const thread = yield* projectionStore
+      .getThread(command.threadId)
+      .pipe(mapDispatchError(command));
+    const watches = thread.peerThreadWatches ?? [];
+    const existing = watches.find((watch) => watch.id === command.watchId);
+    const inactive =
+      thread.archivedAt !== null ||
+      thread.deletedAt !== null ||
+      thread.settledAt !== null ||
+      thread.settledOverride === "settled" ||
+      isProviderNativeSubagentThread(thread);
+    if (command.type === "thread.peer-watch.sync") {
+      if (
+        inactive ||
+        existing?.afterSequence !== command.expectedSequence ||
+        command.afterSequence <= command.expectedSequence
+      )
+        return;
+    } else if (
+      command.watch !== null &&
+      (inactive || command.watch.id !== command.watchId || (!existing && watches.length >= 16))
+    ) {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: "The thread cannot start this peer response watch.",
+      });
+    }
+    let next: PeerThreadWatch | null;
+    if (command.type === "thread.peer-watch.configure") next = command.watch;
+    else {
+      if (existing === undefined) return;
+      const { runId: _watchedRunId, ...continuation } = existing;
+      next =
+        existing.mode === "once" || command.end === true
+          ? null
+          : { ...continuation, afterSequence: command.afterSequence };
+    }
+    const updated = {
+      ...thread,
+      peerThreadWatches: [
+        ...watches.filter((watch) => watch.id !== command.watchId),
+        ...(next === null ? [] : [next]),
+      ],
+    };
+    yield* emit(
+      events,
+      command,
+    )({
+      type: "thread.metadata-updated",
+      threadId: thread.id,
+      providerInstanceId: thread.providerInstanceId,
+      occurredAt: yield* DateTime.now,
+      payload: updated,
+    });
+    if (command.type === "thread.peer-watch.sync") {
+      // A completed run can be updated again (usage, recovery, or checkpoint metadata).
+      // Advance the event cursor, but each watch delivers a run's result only once.
+      const delivered = yield* projectionStore
+        .getThreadRecords(thread.id, ["messages"], {
+          messageIds: [command.wake.messageId],
+        })
+        .pipe(mapDispatchError(command));
+      if (delivered.messages.length > 0) return;
+      yield* dispatchMessage(
+        {
+          type: "message.dispatch",
+          commandId: command.commandId,
+          threadId: thread.id,
+          messageId: command.wake.messageId,
+          text: command.wake.text,
+          notification: command.wake.notification,
+          attachments: [],
+          dispatchMode: { type: "queue_after_active" },
+          createdBy: "agent",
+          creationSource: "server",
+        },
+        events,
+        effects,
+      );
+    }
+  });
+
   // Checked under the thread lock: the watch or the thread can change while the host is read.
   // The watch is recorded first so the wake's own thread events carry it.
   const dispatchPullRequestWatchSync = Effect.fn("orchestrationV2.dispatch.pullRequestWatchSync")(
@@ -2923,6 +3017,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             ...thread,
             archivedAt: now,
             titleRegeneration: null,
+            peerThreadWatches: [],
             pullRequests: thread.pullRequests?.map((link) => withPullRequestWatch(link, undefined)),
             updatedAt: now,
           };
@@ -2937,6 +3032,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           return {
             ...thread,
             settledOverride: "settled",
+            peerThreadWatches: [],
             settledAt: alreadySettled ? thread.settledAt : (command.settledAt ?? now),
             pullRequests: thread.pullRequests?.map((link) => withPullRequestWatch(link, undefined)),
             unsettledAt: null,
@@ -8997,7 +9093,10 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         });
       }
       const pullRequests = thread.pullRequests ?? [];
-      if (pullRequests.some((link) => link.watch !== undefined)) {
+      if (
+        pullRequests.some((link) => link.watch !== undefined) ||
+        (thread.peerThreadWatches?.length ?? 0) > 0
+      ) {
         yield* emitEvent({
           type: "thread.pull-request-synced",
           threadId: thread.id,
@@ -9006,6 +9105,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           payload: {
             ...thread,
             pullRequests: pullRequests.map((link) => withPullRequestWatch(link, undefined)),
+            peerThreadWatches: [],
           },
         });
       }
@@ -10946,6 +11046,10 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         break;
       case "thread.pull-request-watch.sync":
         yield* dispatchPullRequestWatchSync(command, events, effects);
+        break;
+      case "thread.peer-watch.configure":
+      case "thread.peer-watch.sync":
+        yield* dispatchPeerWatch(command, events, effects);
         break;
       case "provider-session.detach":
         yield* dispatchProviderSessionDetach(command, events, effects);

@@ -8,6 +8,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { vi } from "vite-plus/test";
 import {
   AuthOrchestrationOperateScope,
+  AuthOrchestrationReadScope,
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
   ThreadId,
@@ -59,6 +60,50 @@ const setup = Effect.gen(function* () {
 });
 
 describe("command permissions", () => {
+  it.effect("authorizes peer reads and sends using the destination's distinct grants", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const registry = yield* setup;
+        const peer = createCommandPermissions(runtime, WS_METHODS.peerThreadsRequest);
+        const threadId = ThreadId.make("recorder");
+        const read = { type: "thread-read", environmentId: env, input: { threadId } };
+        const send = {
+          type: "thread-send",
+          environmentId: env,
+          input: {
+            threadId,
+            message: "Hello",
+            sender: {
+              environmentId: other,
+              environmentLabel: "MacBook",
+              threadId,
+              threadTitle: "Lead",
+              runtimeMode: "full-access",
+              interactionMode: "default",
+            },
+          },
+        };
+        registry.set(
+          sessions(env),
+          AsyncResult.success({
+            ...grant(false),
+            scopes: [AuthOrchestrationReadScope],
+            permissions: [AuthOrchestrationReadScope],
+          }),
+        );
+        expect(registry.get(peer.permissionAtom(env, read))).toBe(true);
+        yield* peer.authorize(registry, env, read);
+        expect(registry.get(peer.permissionAtom(env, send))).toBe(false);
+        expect(
+          (yield* peer.authorize(registry, env, send).pipe(Effect.flip)).requiredPermission,
+        ).toBe(AuthOrchestrationOperateScope);
+        registry.set(sessions(env), AsyncResult.success(grant(true)));
+        yield* peer.authorize(registry, env, send);
+        registry.set(sessions(other), AsyncResult.success(grant(false)));
+        expect(registry.get(peer.permissionAtom(other, send))).toBe(false);
+      }),
+    ),
+  );
   it.effect("requires the destination settings grant to run storage cleanup", () =>
     Effect.scoped(
       Effect.gen(function* () {

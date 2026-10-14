@@ -3,6 +3,24 @@
 Connect a phone, browser, or another desktop app to T3 Code running on a different
 machine. That machine must stay running and reachable while you work.
 
+## Let agents coordinate across machines
+
+Keep the desktop or web app connected to both environments. Ask your agent to find the other
+conversation, send it a message, and watch for its reply. Direct SSH connections work; T3 Connect
+is optional. Both servers and the relaying app need a version that supports peer thread messaging.
+Messages appear in the receiving conversation with the sending machine and thread identified.
+
+The sending agent can choose one reply notification, continue watching subsequent replies, or send
+without watching. Ask it to list or stop its watches whenever needed. Stop, archive, and settlement
+clear that thread's watches. Stopping a watch leaves the recipient's work running; Stop retains
+its usual behavior for child tasks owned by that thread. Watches resume after a
+disconnect, and retries with the same request ID do not send duplicate messages.
+
+T3-managed subagents can use the same tools to communicate with siblings and their parent on one
+machine. The parent can read and join those exchanges. Provider-native subagents use their provider's
+messaging tools; Claude workers need distinct names to address one another. Their imported T3
+conversations remain readable but do not accept ordinary T3 turns.
+
 ## T3 Connect
 
 T3 Connect makes an environment available to your other devices without setting

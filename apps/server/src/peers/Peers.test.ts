@@ -85,6 +85,15 @@ const startRelay = Effect.gen(function* () {
     switch (operation.type) {
       case "describe":
         return Effect.succeed({ type: "described", peers: [] });
+      case "threads-list":
+      case "thread-read":
+      case "thread-send":
+      case "thread-wait":
+        return Effect.succeed({
+          type: "failed",
+          code: "peer_unreachable",
+          message: "This file-only relay does not handle threads.",
+        });
       case "list":
         return files.list(operation.input).pipe(
           Effect.map((result): PeerRelayReply => ({ type: "listed", result })),

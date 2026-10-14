@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { OrchestrationV2PendingBackgroundTask } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ThreadId,
+  type OrchestrationV2PendingBackgroundTask,
+} from "@t3tools/contracts";
 import {
   backgroundWorkHoldsCompletion,
   derivePendingBackgroundWork,
@@ -41,6 +45,36 @@ describe("backgroundWorkHoldsCompletion", () => {
 });
 
 describe("derivePendingBackgroundWork", () => {
+  it("shows a durable peer watch as a monitor after a reply and clears it when unwatched", () => {
+    const input = {
+      latestRun: { id: "run-1" as never, ordinal: 1, status: "completed" as const },
+      providerThreads: [],
+      turnItems: [],
+    };
+    expect(
+      derivePendingBackgroundWork({
+        ...input,
+        peerThreadWatches: [
+          {
+            id: "watch",
+            environmentId: EnvironmentId.make("mini"),
+            environmentLabel: "Mac Mini",
+            threadId: ThreadId.make("recorder"),
+            threadTitle: "Recorder",
+            mode: "once",
+            afterSequence: 10,
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        taskId: "peer-thread-watch:watch",
+        kind: "monitor",
+        description: "Waiting for Mac Mini: Recorder",
+      },
+    ]);
+    expect(derivePendingBackgroundWork({ ...input, peerThreadWatches: [] })).toEqual([]);
+  });
   it("returns empty while the latest run is not settled", () => {
     const tasks = derivePendingBackgroundWork({
       latestRun: { id: "run-1" as never, ordinal: 1, status: "running" },

@@ -2,15 +2,18 @@ import * as Schema from "effect/Schema";
 import { GitPreparePullRequestThreadInput } from "./git.ts";
 import {
   AuthOrchestrationOperateScope,
+  AuthOrchestrationReadScope,
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
   type AuthEnvironmentScope,
 } from "./auth.ts";
 import { ORCHESTRATION_V2_WS_METHODS } from "./orchestrationV2.ts";
 import { WS_METHODS } from "./rpc.ts";
+import { PeerThreadOperation } from "./peers.ts";
 
 /** Incremental client enforcement; the server still authorizes every request. */
 export const CLIENT_GUARDED_RPC_SCOPES = {
+  [WS_METHODS.peerThreadsRequest]: AuthOrchestrationOperateScope,
   [WS_METHODS.serverRunStorageCleanup]: AuthSettingsWriteScope,
   // Endpoint checks exist to configure exports, so they need the same grant as saving them.
   [WS_METHODS.serverCheckOtlpEndpoint]: AuthSettingsWriteScope,
@@ -58,11 +61,19 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 
 const decodePrepareThread = Schema.decodeUnknownSync(GitPreparePullRequestThreadInput);
+const decodePeerThreadOperation = Schema.decodeUnknownSync(PeerThreadOperation);
 
 export function clientRpcRequiredScopes(
   method: string,
   input: unknown,
 ): readonly AuthEnvironmentScope[] {
+  if (method === WS_METHODS.peerThreadsRequest && input !== undefined) {
+    return [
+      decodePeerThreadOperation(input).type === "thread-send"
+        ? AuthOrchestrationOperateScope
+        : AuthOrchestrationReadScope,
+    ];
+  }
   if (method === WS_METHODS.gitPreparePullRequestThread && input !== undefined) {
     const payload = decodePrepareThread(input);
     if (payload.mode === "worktree" && payload.threadId !== undefined)

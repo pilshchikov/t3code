@@ -1,5 +1,40 @@
 # Fork Changes
 
+## Agent conversation messages and response watches — 2026-10-14
+
+- Added `t3_peer_threads_list`, `t3_peer_thread_read`, `t3_peer_thread_send`,
+  `t3_peer_thread_watch`, `t3_peer_thread_watches`, and `t3_peer_thread_unwatch`.
+  Agents can discover and coordinate across environments, including existing direct SSH routes,
+  and T3-managed child/sibling agents can use the same paths on their own machine. Parent agents
+  can read and join their exchanges. Native subagents retain their provider messaging tools
+  (Claude `SendMessage`, Codex `send_input`) and readable imported conversations.
+- Reused the existing app relay and normal thread dispatch, with source machine/thread attribution,
+  destination permission checks, sender mode ceilings checked under the command lock, stable
+  delivery receipts and replay cursors. No shared-file polling or new internet service. The app
+  must stay connected to both environments; mobile does not host this relay.
+- Agents explicitly choose no watch, one reply, or continuous replies. Watches persist as thread
+  metadata, resume after restart/reconnect, and atomically advance their cursor with each notification.
+  Stop, archive, settlement and unwatch clear them; forks and newly spawned children do not inherit
+  them. A deleted recipient ends the watch with an explanation. Watches count as real pending monitors without restoring the
+  empty-idle/session-reference fallback. Bounded long polls leave relay capacity for sends and files.
+- Services: `apps/server/src/peers/PeerThreads.ts`, `PeerThreadMessaging.ts`, the existing `Peers`
+  transport and MCP peers toolkit; contracts in `packages/contracts/src/peers.ts` and
+  `orchestrationV2.ts`. Web/desktop relays invoke the destination through a guarded environment
+  command in `apps/web/src/rpc/peerThreads.ts`. Shared/server projections carry the watch roster
+  to all clients. Relay connections now require filesystem write and orchestration read/operate
+  grants because they can carry conversation requests.
+- Isolated integration coverage exercises cross-environment send/read, retry deduplication and
+  cursor preservation, replies completed before watch registration, repeated continuous replies
+  without duplicate wakes for updates to an already completed run, watch cleanup, recipient deletion, sender permission limits, and local sibling/parent exchanges
+  without a relay. No real providers are launched. Focused authorization, client permission,
+  pending-work, fork, file relay and MCP registration checks cover the surrounding paths.
+  Validation: 99 focused tests passed; all eight affected/client package typechecks passed; targeted
+  lint passed with seven pre-existing warnings. Formatting and whitespace checks passed.
+- The requested communication interface remains a prototype outside the repository: a button
+  beside the subagent list in the thread details panel opens a dialog, with alternative layouts.
+  No production layout was selected after the accidental choice was withdrawn. No app build,
+  reinstall/restart, remote deployment, live-data write, push or PR was performed.
+
 ## Upstream integration — 2026-10-13, manual merge
 
 - Merged all 19 upstream commits through `aef0e9ca401acb40057a286a19de8768809db960`

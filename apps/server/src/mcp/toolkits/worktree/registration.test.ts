@@ -35,10 +35,12 @@ import * as GitVcsDriver from "../../../vcs/GitVcsDriver.ts";
 import * as McpHttpServer from "../../McpHttpServer.ts";
 import * as McpSessionRegistry from "../../McpSessionRegistry.ts";
 import * as Peers from "../../../peers/Peers.ts";
+import * as PeerThreadMessaging from "../../../peers/PeerThreadMessaging.ts";
 import * as PreviewAutomationBroker from "../../PreviewAutomationBroker.ts";
 import * as PreviewBrowser from "../../../preview/PreviewBrowser.ts";
 
 const layerStubServices = Layer.mergeAll(
+  Layer.mock(PeerThreadMessaging.PeerThreadMessaging)({}),
   Layer.mock(ThreadWorkspaces.ThreadWorkspaces)({}),
   SqlitePersistence.layerMemory,
   Layer.mock(Orchestrator.OrchestratorV2)({}),

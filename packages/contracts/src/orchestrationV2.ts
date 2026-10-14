@@ -11,6 +11,7 @@ import {
   CheckpointRef,
   CheckpointScopeId,
   CommandId,
+  EnvironmentId,
   ContextHandoffId,
   ContextTransferId,
   EventId,
@@ -362,6 +363,18 @@ export const OrchestrationV2LimitRecoveryUpdate = Schema.Struct({
 );
 export type OrchestrationV2LimitRecoveryUpdate = typeof OrchestrationV2LimitRecoveryUpdate.Type;
 
+export const PeerThreadWatch = Schema.Struct({
+  runId: Schema.optionalKey(RunId),
+  id: TrimmedNonEmptyString,
+  environmentId: EnvironmentId,
+  environmentLabel: Schema.String,
+  threadId: ThreadId,
+  threadTitle: Schema.String,
+  afterSequence: NonNegativeInt,
+  mode: Schema.Literals(["once", "continuous"]),
+});
+export type PeerThreadWatch = typeof PeerThreadWatch.Type;
+
 export const OrchestrationV2AppThread = Schema.Struct({
   ...OrchestrationV2CreationFields,
   id: ThreadId,
@@ -374,6 +387,7 @@ export const OrchestrationV2AppThread = Schema.Struct({
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   workspaceSelections: Schema.optional(Schema.Array(ThreadWorkspaceSelection)),
+  peerThreadWatches: Schema.optional(Schema.Array(PeerThreadWatch).check(Schema.isMaxLength(16))),
   /** Pull request the user linked to this thread (#8160); optional so
       pre-linking servers still decode. */
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
@@ -1929,6 +1943,7 @@ export type OrchestrationV2LatestVisibleMessageSummary =
   typeof OrchestrationV2LatestVisibleMessageSummary.Type;
 
 export const OrchestrationV2ThreadShell = Schema.Struct({
+  peerThreadWatches: Schema.optional(Schema.Array(PeerThreadWatch)),
   ...OrchestrationV2CreationFields,
   id: ThreadId,
   projectId: ProjectId,
@@ -3179,6 +3194,27 @@ export type OrchestrationV2Command = typeof OrchestrationV2Command.Type;
  * send them.
  */
 const OrchestrationV2InternalCommand = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("thread.peer-watch.configure"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    watchId: TrimmedNonEmptyString,
+    watch: Schema.NullOr(PeerThreadWatch),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("thread.peer-watch.sync"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    watchId: TrimmedNonEmptyString,
+    expectedSequence: NonNegativeInt,
+    afterSequence: NonNegativeInt,
+    end: Schema.optionalKey(Schema.Boolean),
+    wake: Schema.Struct({
+      messageId: MessageId,
+      text: Schema.String,
+      notification: OrchestrationV2Notification,
+    }),
+  }),
   /**
    * Records what a pull request watch saw, and wakes the agent in the same transaction when
    * `wake` is set. Rejected once the watch started at `startedAt` has ended, and a wake is

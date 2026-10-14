@@ -205,6 +205,7 @@ import * as PortScanner from "./preview/PortScanner.ts";
 import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as PeerFiles from "./peers/PeerFiles.ts";
 import * as Peers from "./peers/Peers.ts";
+import * as PeerThreads from "./peers/PeerThreads.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
 import { readWorkflowScript } from "./orchestration-v2/workflowScriptQuery.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
@@ -1365,6 +1366,7 @@ const makeWsHandlers = (
     const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
     const peerFiles = yield* PeerFiles.PeerFiles;
     const peers = yield* Peers.Peers;
+    const peerThreads = yield* PeerThreads.PeerThreads;
     const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
     const backgroundPolicy = yield* BackgroundPolicy.BackgroundPolicy;
     const rpcClientIds = yield* Ref.make(new Set<RpcClientId>());
@@ -2774,6 +2776,7 @@ const makeWsHandlers = (
       [WS_METHODS.peerFilesWrite]: (input) => peerFiles.write(input),
       [WS_METHODS.peerRelayConnect]: () => peers.connect,
       [WS_METHODS.peerRelayRespond]: (input) => peers.respond(input),
+      [WS_METHODS.peerThreadsRequest]: (input) => peerThreads.perform(input),
       [WS_METHODS.shellOpenInEditor]: (input) => externalLauncher.launchEditor(input),
       [WS_METHODS.filesystemGetMetadata]: (input) => workspaceFileSystem.getMetadata(input),
       [WS_METHODS.filesystemBrowse]: (input) =>

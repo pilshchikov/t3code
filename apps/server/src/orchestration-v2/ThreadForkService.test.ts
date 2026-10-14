@@ -1,6 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import {
   ContextTransferId,
+  EnvironmentId,
   MessageId,
   type ModelSelection,
   type OrchestrationV2AppThread,
@@ -32,6 +33,17 @@ const forkCreatedAt = DateTime.makeUnsafe("2026-07-24T09:10:00.000Z");
 
 function makeSourceThread(): OrchestrationV2AppThread {
   return {
+    peerThreadWatches: [
+      {
+        id: "source-watch",
+        environmentId: EnvironmentId.make("mini"),
+        environmentLabel: "Mac Mini",
+        threadId: targetThreadId,
+        threadTitle: "Recorder",
+        mode: "once",
+        afterSequence: 12,
+      },
+    ],
     createdBy: "user",
     creationSource: "web",
     id: sourceThreadId,
@@ -147,6 +159,7 @@ it.effect("keeps a fork awake when its source thread is snoozed", () =>
 
     assert.isNull(result.targetThread.snoozedUntil);
     assert.isNull(result.targetThread.snoozedAt);
+    assert.deepEqual(result.targetThread.peerThreadWatches, []);
     assert.equal(result.targetThread.projectId, sourceThread.projectId);
     assert.equal(result.targetThread.providerInstanceId, sourceThread.providerInstanceId);
     assert.deepEqual(result.targetThread.modelSelection, sourceThread.modelSelection);

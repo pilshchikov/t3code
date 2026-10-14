@@ -12,6 +12,9 @@ import * as Semaphore from "effect/Semaphore";
 import * as StorageCleanup from "./storageCleanup.ts";
 import * as PullRequestSyncReactor from "./orchestration-v2/PullRequestSyncReactor.ts";
 import * as PullRequestWatchReactor from "./orchestration-v2/PullRequestWatchReactor.ts";
+import * as PeerThreads from "./peers/PeerThreads.ts";
+import * as OrchestratorMcpService from "./mcp/OrchestratorMcpService.ts";
+import * as PeerThreadMessaging from "./peers/PeerThreadMessaging.ts";
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeHttp from "node:http";
 
@@ -557,6 +560,12 @@ const layerProviderInstallationRefresh = Layer.effectDiscard(
 
 const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   AgentAwarenessRelay.layer,
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      const messaging = yield* PeerThreadMessaging.PeerThreadMessaging;
+      yield* messaging.start();
+    }),
+  ),
   // Asks T3 Connect to deliver webhooks it held while this environment was offline.
   HeldHooksWaker.layer,
   layerThreadSettlementWorker,
@@ -595,6 +604,13 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   Layer.effectDiscard(ProjectSettingsOverrideSweep.sweep),
 ).pipe(
   // Core Services
+  Layer.provideMerge(PeerThreadMessaging.layer),
+  Layer.provideMerge(
+    PeerThreads.layer.pipe(
+      Layer.provide(OrchestratorMcpService.layer),
+      Layer.provide(ProviderAdapterRegistry.layerFromProviderInstanceRegistry),
+    ),
+  ),
   Layer.provideMerge(Peers.layer.pipe(Layer.provideMerge(PeerFiles.layer))),
   Layer.provideMerge(ThreadWorkspaces.layer),
   Layer.provideMerge(ResumableSessionDiscovery.layer),

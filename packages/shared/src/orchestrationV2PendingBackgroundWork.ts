@@ -5,6 +5,7 @@ import type {
   OrchestrationV2TurnItem,
   ThreadId,
   ThreadPullRequestLink,
+  PeerThreadWatch,
 } from "@t3tools/contracts";
 import { isOrchestrationV2WorkActive } from "@t3tools/contracts";
 
@@ -233,6 +234,7 @@ export function derivePendingBackgroundWork(input: {
    */
   readonly runs?: ReadonlyArray<PendingBackgroundWorkRun>;
   readonly pullRequests?: ReadonlyArray<PendingBackgroundWorkPullRequest> | undefined;
+  readonly peerThreadWatches?: ReadonlyArray<PeerThreadWatch> | undefined;
 }): ReadonlyArray<PendingBackgroundWorkTask> {
   const hasActiveRun =
     input.hasActiveRun ??
@@ -245,7 +247,10 @@ export function derivePendingBackgroundWork(input: {
   }
   // A thread that never ran waits on nothing else, but a watch started on it still wakes it.
   if (input.latestRun == null) {
-    return pullRequestWatchTasks(input.pullRequests);
+    return [
+      ...pullRequestWatchTasks(input.pullRequests),
+      ...peerWatchTasks(input.peerThreadWatches),
+    ];
   }
   if (!isLatestRunSettledForBackgroundWait(input.latestRun)) {
     return [];
@@ -282,8 +287,19 @@ export function derivePendingBackgroundWork(input: {
   }
 
   for (const task of pullRequestWatchTasks(input.pullRequests)) byTaskId.set(task.taskId, task);
+  for (const task of peerWatchTasks(input.peerThreadWatches)) byTaskId.set(task.taskId, task);
 
   return Array.from(byTaskId.values());
+}
+
+function peerWatchTasks(
+  watches: ReadonlyArray<PeerThreadWatch> | undefined,
+): Array<PendingBackgroundWorkTask> {
+  return (watches ?? []).map((watch) => ({
+    taskId: `peer-thread-watch:${watch.id}`,
+    kind: "monitor",
+    description: `Waiting for ${watch.environmentLabel}: ${watch.threadTitle}`,
+  }));
 }
 
 function pullRequestWatchTasks(

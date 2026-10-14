@@ -286,6 +286,9 @@ const requiredScopesForRpcCall = (
   method: string,
   payload: unknown,
 ): ReadonlyArray<AuthEnvironmentScope> => {
+  if (method === WS_METHODS.peerRelayConnect || method === WS_METHODS.peerRelayRespond) {
+    return [AuthFilesystemWriteScope, AuthOrchestrationReadScope, AuthOrchestrationOperateScope];
+  }
   if (method === WS_METHODS.serverRetryResourceTelemetry) {
     return [AuthEnvironmentMaintainScope, AuthDiagnosticsReadScope];
   }

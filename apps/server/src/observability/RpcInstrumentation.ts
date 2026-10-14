@@ -233,6 +233,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.deviceClose]: "device",
   [WS_METHODS.deviceShutdown]: "device",
   [WS_METHODS.deviceDetail]: "device",
+  [WS_METHODS.peerThreadsRequest]: "peers",
   [WS_METHODS.deviceAction]: "device",
   [WS_METHODS.subscribeDeviceState]: "device",
   [WS_METHODS.subscribeServerConfig]: "server",

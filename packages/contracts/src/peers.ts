@@ -5,8 +5,91 @@ import {
   NonNegativeInt,
   PositiveInt,
   ProjectId,
+  ThreadId,
+  RunId,
   TrimmedNonEmptyString,
 } from "./baseSchemas.ts";
+import { RuntimeMode, ProviderInteractionMode } from "./providerPolicy.ts";
+import {
+  OrchestratorMcpFailure,
+  OrchestratorMcpThreadListInput,
+  OrchestratorMcpThreadListResult,
+  OrchestratorMcpThreadReadInput,
+  OrchestratorMcpThreadReadResult,
+  OrchestratorMcpThreadSendInput,
+  OrchestratorMcpThreadSendResult,
+} from "./orchestratorMcp.ts";
+
+export const PeerThreadSender = Schema.Struct({
+  environmentId: EnvironmentId,
+  environmentLabel: Schema.String.check(Schema.isMaxLength(256)),
+  threadId: ThreadId,
+  threadTitle: Schema.String.check(Schema.isMaxLength(256)),
+  runtimeMode: RuntimeMode,
+  interactionMode: ProviderInteractionMode,
+});
+export type PeerThreadSender = typeof PeerThreadSender.Type;
+export const PeerThreadsListInput = OrchestratorMcpThreadListInput;
+export type PeerThreadsListInput = typeof PeerThreadsListInput.Type;
+export const PeerThreadsListResult = OrchestratorMcpThreadListResult;
+export type PeerThreadsListResult = typeof PeerThreadsListResult.Type;
+export const PeerThreadReadInput = OrchestratorMcpThreadReadInput;
+export type PeerThreadReadInput = typeof PeerThreadReadInput.Type;
+export const PeerThreadReadResult = Schema.Struct({
+  ...OrchestratorMcpThreadReadResult.fields,
+  sequence: NonNegativeInt,
+});
+export type PeerThreadReadResult = typeof PeerThreadReadResult.Type;
+export const PeerThreadSendInput = Schema.Struct({
+  ...OrchestratorMcpThreadSendInput.fields,
+  sender: PeerThreadSender,
+});
+export type PeerThreadSendInput = typeof PeerThreadSendInput.Type;
+export const PeerThreadSendResult = Schema.Struct({
+  ...OrchestratorMcpThreadSendResult.fields,
+  afterSequence: NonNegativeInt,
+});
+export type PeerThreadSendResult = typeof PeerThreadSendResult.Type;
+export const PeerThreadWaitInput = Schema.Struct({
+  threadId: ThreadId,
+  runId: Schema.optionalKey(RunId),
+  afterSequence: NonNegativeInt,
+  timeoutMs: PositiveInt.check(Schema.isLessThanOrEqualTo(30_000)),
+});
+export type PeerThreadWaitInput = typeof PeerThreadWaitInput.Type;
+export const PeerThreadReply = Schema.Struct({
+  threadId: ThreadId,
+  runId: RunId,
+  sequence: NonNegativeInt,
+  status: Schema.Literals(["completed", "failed", "cancelled", "interrupted", "rolled_back"]),
+  text: Schema.String,
+  truncated: Schema.Boolean,
+});
+export type PeerThreadReply = typeof PeerThreadReply.Type;
+export const PeerThreadWaitResult = Schema.Struct({ reply: Schema.NullOr(PeerThreadReply) });
+export type PeerThreadWaitResult = typeof PeerThreadWaitResult.Type;
+
+export const PeerThreadWatchMode = Schema.Literals(["once", "continuous"]);
+export const PeerThreadWatchInput = Schema.Struct({
+  environmentId: EnvironmentId,
+  threadId: ThreadId,
+  mode: Schema.optionalKey(PeerThreadWatchMode),
+  afterSequence: Schema.optionalKey(NonNegativeInt),
+  clientRequestId: TrimmedNonEmptyString.check(Schema.isMaxLength(128)),
+});
+export type PeerThreadWatchInput = typeof PeerThreadWatchInput.Type;
+export const PeerThreadMessageInput = Schema.Struct({
+  ...OrchestratorMcpThreadSendInput.fields,
+  environmentId: EnvironmentId,
+  clientRequestId: PeerThreadWatchInput.fields.clientRequestId,
+  watch: Schema.optionalKey(Schema.Literals(["none", "once", "continuous"])),
+});
+export type PeerThreadMessageInput = typeof PeerThreadMessageInput.Type;
+export const PeerThreadMessageResult = Schema.Struct({
+  ...PeerThreadSendResult.fields,
+  watchId: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type PeerThreadMessageResult = typeof PeerThreadMessageResult.Type;
 
 /**
  * Files moved between environments for agents. Servers never reach each other: a client connected
@@ -116,7 +199,32 @@ export const PeerEnvironment = Schema.Struct({
 });
 export type PeerEnvironment = typeof PeerEnvironment.Type;
 
+export const PeerThreadOperation = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("threads-list"),
+    environmentId: EnvironmentId,
+    input: PeerThreadsListInput,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("thread-read"),
+    environmentId: EnvironmentId,
+    input: PeerThreadReadInput,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("thread-send"),
+    environmentId: EnvironmentId,
+    input: PeerThreadSendInput,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("thread-wait"),
+    environmentId: EnvironmentId,
+    input: PeerThreadWaitInput,
+  }),
+]);
+export type PeerThreadOperation = typeof PeerThreadOperation.Type;
+
 export const PeerRelayOperation = Schema.Union([
+  PeerThreadOperation,
   Schema.Struct({ type: Schema.Literal("describe"), projectId: Schema.NullOr(ProjectId) }),
   Schema.Struct({
     type: Schema.Literal("list"),
@@ -143,13 +251,21 @@ export const PeerRelayRequest = Schema.Struct({
 export type PeerRelayRequest = typeof PeerRelayRequest.Type;
 
 export const PeerRelayReply = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("threads-listed"), result: PeerThreadsListResult }),
+  Schema.Struct({ type: Schema.Literal("thread-read"), result: PeerThreadReadResult }),
+  Schema.Struct({ type: Schema.Literal("thread-sent"), result: PeerThreadSendResult }),
+  Schema.Struct({ type: Schema.Literal("thread-waited"), result: PeerThreadWaitResult }),
   Schema.Struct({ type: Schema.Literal("described"), peers: Schema.Array(PeerEnvironment) }),
   Schema.Struct({ type: Schema.Literal("listed"), result: PeerFilesListResult }),
   Schema.Struct({ type: Schema.Literal("read"), result: PeerFilesReadResult }),
   Schema.Struct({ type: Schema.Literal("written"), result: PeerFilesWriteResult }),
   Schema.Struct({
     type: Schema.Literal("failed"),
-    code: Schema.Union([PeerFilesFailureCode, Schema.Literal("peer_unreachable")]),
+    code: Schema.Union([
+      PeerFilesFailureCode,
+      OrchestratorMcpFailure.fields.code,
+      Schema.Literal("peer_unreachable"),
+    ]),
     message: Schema.String,
   }),
 ]);

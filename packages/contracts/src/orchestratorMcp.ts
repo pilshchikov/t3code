@@ -438,6 +438,8 @@ export const OrchestratorMcpThreadSendInput = Schema.Struct({
 export type OrchestratorMcpThreadSendInput = typeof OrchestratorMcpThreadSendInput.Type;
 
 export const OrchestratorMcpThreadSendResult = Schema.Struct({
+  /** Cursor immediately before the original delivery, preserved on retries. */
+  afterSequence: Schema.optional(NonNegativeInt),
   threadId: ThreadId,
   messageId: MessageId,
   runId: RunId,

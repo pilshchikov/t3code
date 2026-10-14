@@ -2,6 +2,8 @@ import {
   AuthEnvironmentMaintainScope,
   AuthDiagnosticsReadScope,
   AuthFilesystemReadScope,
+  AuthFilesystemWriteScope,
+  EnvironmentId,
   AuthProvidersManageScope,
   AuthSettingsWriteScope,
   DEFAULT_SERVER_SETTINGS,
@@ -29,9 +31,39 @@ import {
   requiredScopeForRpcMethod,
   requiredScopeForDeviceList,
 } from "./RpcAuthorization.ts";
+import { clientRpcRequiredScopes } from "@t3tools/contracts";
 import * as RpcAuthorization from "./RpcAuthorization.ts";
 
 describe("RPC authorization scopes", () => {
+  it("checks destination read and send permissions separately", () => {
+    const environmentId = EnvironmentId.make("mini");
+    const threadId = ThreadId.make("recording");
+    expect(
+      clientRpcRequiredScopes(WS_METHODS.peerThreadsRequest, {
+        type: "thread-read",
+        environmentId,
+        input: { threadId },
+      }),
+    ).toEqual([AuthOrchestrationReadScope]);
+    expect(
+      clientRpcRequiredScopes(WS_METHODS.peerThreadsRequest, {
+        type: "thread-send",
+        environmentId,
+        input: {
+          threadId,
+          message: "Hello",
+          sender: {
+            environmentId,
+            environmentLabel: "MacBook",
+            threadId,
+            threadTitle: "Lead",
+            runtimeMode: "full-access",
+            interactionMode: "default",
+          },
+        },
+      }),
+    ).toEqual([AuthOrchestrationOperateScope]);
+  });
   it("declares exactly one scope for every RPC in the server group", () => {
     expect(new Set(Object.keys(RPC_REQUIRED_SCOPES))).toEqual(new Set(WsRpcGroup.requests.keys()));
   });
@@ -217,6 +249,105 @@ it("requires operate permission for tool updates even alongside a read-only chec
 });
 
 describe("RPC scope middleware", () => {
+  it.effect("a filesystem-only relay cannot receive or answer conversation requests", () =>
+    Effect.gen(function* () {
+      const group = WsRpcGroup.omit(
+        ...Object.keys(RPC_REQUIRED_SCOPES).filter(
+          (
+            method,
+          ): method is Exclude<
+            keyof typeof RPC_REQUIRED_SCOPES,
+            typeof WS_METHODS.peerRelayRespond
+          > => method !== WS_METHODS.peerRelayRespond,
+        ),
+      );
+      const handled: string[] = [];
+      const client = yield* RpcTest.makeClient(group).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            group.toLayerHandler(WS_METHODS.peerRelayRespond, () =>
+              Effect.sync(() => {
+                handled.push("respond");
+              }),
+            ),
+            RpcAuthorization.layer([AuthFilesystemWriteScope]),
+          ),
+        ),
+      );
+      const error = yield* client[WS_METHODS.peerRelayRespond]({
+        requestId: "request",
+        reply: { type: "described", peers: [] },
+      }).pipe(Effect.flip);
+      expect(error).toMatchObject({
+        _tag: "EnvironmentAuthorizationError",
+        requiredPermission: AuthOrchestrationReadScope,
+      });
+      expect(handled).toEqual([]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("read-only destination grants read a conversation but reject sending", () =>
+    Effect.gen(function* () {
+      const group = WsRpcGroup.omit(
+        ...Object.keys(RPC_REQUIRED_SCOPES).filter(
+          (
+            method,
+          ): method is Exclude<
+            keyof typeof RPC_REQUIRED_SCOPES,
+            typeof WS_METHODS.peerThreadsRequest
+          > => method !== WS_METHODS.peerThreadsRequest,
+        ),
+      );
+      const handled: string[] = [];
+      const client = yield* RpcTest.makeClient(group).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            group.toLayerHandler(WS_METHODS.peerThreadsRequest, (input) =>
+              Effect.sync(() => {
+                handled.push(input.type);
+                return {
+                  type: "failed" as const,
+                  code: "thread_not_found" as const,
+                  message: "Test fixture",
+                };
+              }),
+            ),
+            RpcAuthorization.layer([AuthOrchestrationReadScope]),
+          ),
+        ),
+      );
+      const environmentId = EnvironmentId.make("mini");
+      const threadId = ThreadId.make("recorder");
+      expect(
+        (yield* client[WS_METHODS.peerThreadsRequest]({
+          type: "thread-read",
+          environmentId,
+          input: { threadId },
+        })).type,
+      ).toBe("failed");
+      const error = yield* client[WS_METHODS.peerThreadsRequest]({
+        type: "thread-send",
+        environmentId,
+        input: {
+          threadId,
+          message: "Hello",
+          sender: {
+            environmentId,
+            environmentLabel: "MacBook",
+            threadId,
+            threadTitle: "Lead",
+            runtimeMode: "full-access",
+            interactionMode: "default",
+          },
+        },
+      }).pipe(Effect.flip);
+      expect(error).toMatchObject({
+        _tag: "EnvironmentAuthorizationError",
+        requiredPermission: AuthOrchestrationOperateScope,
+      });
+      expect(handled).toEqual(["thread-read"]);
+    }).pipe(Effect.scoped),
+  );
   const tested = [WS_METHODS.serverProbe, WS_METHODS.serverRetryResourceTelemetry] as const;
   const group = WsRpcGroup.omit(
     ...[...WsRpcGroup.requests.keys()].filter(

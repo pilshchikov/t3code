@@ -2623,6 +2623,10 @@ const make = Effect.gen(function* () {
             : { taskId: result.run.delegatedTaskId }),
           status: result.run.status,
           delivery: result.delivery,
+          afterSequence: Math.max(
+            0,
+            Math.min(...result.dispatch.storedEvents.map((event) => event.sequence)) - 1,
+          ),
         } satisfies OrchestratorMcpThreadSendResult;
       }),
     waitForThread: (scope, input) =>

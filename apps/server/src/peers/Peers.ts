@@ -1,7 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off
 /**
- * What an agent here can do with the user's other environments: see them, look at their files
- * and copy files either way. This server cannot reach another one, so every request goes to a
+ * What an agent here can do with the user's other environments: discover them, exchange files
+ * and relay conversation requests. This server cannot reach another one, so every request goes to a
  * client connected to both (a relay), which answers through `respond`.
  *
  * @module Peers
@@ -14,6 +14,7 @@ import {
   PEER_FILE_CHUNK_BYTES,
   type PeerEnvironment,
   PeerFilesFailureCode,
+  OrchestratorMcpFailure,
   type PeerFilesListInput,
   type PeerFilesListResult,
   type PeerRelayOperation,
@@ -38,6 +39,7 @@ const READ_TEXT_MAX_BYTES = 256 * 1024;
 export class PeersError extends Schema.TaggedError<PeersError>()("PeersError", {
   code: Schema.Union([
     PeerFilesFailureCode,
+    OrchestratorMcpFailure.fields.code,
     Schema.Literals(["peer_unreachable", "no_relay", "checksum_mismatch"]),
   ]),
   message: Schema.String,
@@ -64,6 +66,7 @@ export class Peers extends Context.Service<
     /** One relaying client: the requests it must answer through `respond`. */
     readonly connect: Stream.Stream<PeerRelayRequest>;
     readonly respond: (input: PeerRelayRespondInput) => Effect.Effect<void>;
+    readonly request: (operation: PeerRelayOperation) => Effect.Effect<PeerRelayReply, PeersError>;
     /** The other environments, and where `projectId` lives on each. */
     readonly describe: (
       projectId: ProjectId | null,
@@ -292,7 +295,7 @@ const make = Effect.gen(function* () {
     return { files: copied, bytes, skipped };
   });
 
-  return Peers.of({ connect, respond, describe, list, readText, copy });
+  return Peers.of({ connect, respond, request: invoke, describe, list, readText, copy });
 });
 
 export const layer = Layer.effect(Peers, make);
