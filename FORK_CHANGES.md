@@ -1,5 +1,39 @@
 # Fork Changes
 
+## Agent communication viewer and status colors — 2026-10-14
+
+- Added the production **Agent communication** button to every saved thread's details panel,
+  including compact presentations. It opens task conversations with a selectable connection
+  map. Native mobile exposes the same viewer from the Agents sheet. Existing threads need no
+  setting or migration. This replaces the earlier prototype-only UI gap.
+- Shared extraction reads recorded task prompts/results, Claude teammate messages, Codex
+  inputs, T3 thread sends and cross-environment deliveries/replies. Native recipient IDs are
+  scoped to their parent/environment; outgoing/received receipts deduplicate. Sibling views
+  retain parent messages joining their exchange. Ordinary narrative claims are not deliveries.
+- Viewer subscriptions exist only while open, and additional task histories load only when
+  selected. Existing bounded detail streams supply live updates and earlier-history loading;
+  no polling, agent commands, process control or database writes are added. Unavailable remote
+  histories show errors alongside available records.
+- Monitoring labels now use slightly dimmer Working blue on web/desktop and native mobile,
+  including background status above the composer. Communication statuses use blue for
+  activity, green for completion, red for failure, amber for attention and indigo for input.
+  No continuously animating status indicator is added.
+- Sources: `packages/client-runtime/src/state/threadCommunication.ts`,
+  `apps/web/src/components/chat/AgentCommunicationControl.tsx`,
+  `apps/web/src/components/chat/AgentCommunicationDialog.tsx`,
+  `apps/web/src/components/chat/AgentCommunicationView.tsx`,
+  `apps/web/src/components/chat/ThreadDetailsPanel.tsx`,
+  `apps/web/src/components/chat/ThreadDetailsCard.tsx`,
+  `apps/mobile/src/features/threads/ThreadCommunicationSheet.tsx`,
+  `apps/mobile/src/features/threads/ThreadAgentsSheet.tsx`, `apps/mobile/src/Stack.tsx`,
+  `apps/web/src/components/Sidebar.tsx`, `apps/web/src/components/ChatView.tsx`,
+  `apps/mobile/src/features/threads/thread-list-v2-items.tsx`, and
+  `apps/mobile/src/features/threads/floating-working-control.tsx`.
+- Validation: 13 user-authorized focused extraction and DOM interaction tests, scoped client-runtime,
+  web/mobile typechecks and changed-file lint. Authorized headless Chromium layout checks use
+  real viewer components with isolated fixture data at desktop, phone and short-phone sizes;
+  native mobile is typechecked, not exercised on a device. Live app data and processes are untouched.
+
 ## Foreground Working and background Monitoring — 2026-10-14
 
 - Shared `resolveThreadWorkPhase` distinguishes active foreground turns from completed/idle

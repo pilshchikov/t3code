@@ -21,6 +21,14 @@ machine. The parent can read and join those exchanges. Provider-native subagents
 messaging tools; Claude workers need distinct names to address one another. Their imported T3
 conversations remain readable but do not accept ordinary T3 turns.
 
+To read these exchanges, open the thread details panel and choose **Agent communication**.
+Select a task or a connection in the map to read its conversation, including parent messages
+addressed to those agents. On the native mobile app, open the Agents list and choose
+**Agent communication**. No setting is required, and viewing does not send messages or start work.
+Only recorded communication appears: task instructions, returned results, and supported agent
+messages. Load earlier history when needed; claims written in ordinary replies or shared files
+are not evidence that a message was delivered.
+
 ## T3 Connect
 
 T3 Connect makes an environment available to your other devices without setting

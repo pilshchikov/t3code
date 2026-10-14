@@ -66,6 +66,7 @@ import { GitCommitSheet } from "./features/threads/git/GitCommitSheet";
 import { GitConfirmSheet } from "./features/threads/git/GitConfirmSheet";
 import { GitOverviewSheet } from "./features/threads/git/GitOverviewSheet";
 import { ThreadAgentsSheet } from "./features/threads/ThreadAgentsSheet";
+import { ThreadCommunicationSheet } from "./features/threads/ThreadCommunicationSheet";
 import { ThreadQueueSheet } from "./features/threads/ThreadQueueControl";
 import { ThreadRouteScreen } from "./features/threads/ThreadRouteScreen";
 import { McpAppFullscreenScreen } from "./features/threads/McpAppFullscreenScreen";
@@ -583,6 +584,7 @@ const WORKSPACE_OVERLAY_ROUTES = new Set([
   "SettingsLegal",
   "SettingsSheet",
   "ThreadAgents",
+  "ThreadCommunication",
   "ThreadQueue",
   "ThreadReviewComment",
   "ThreadDevicePreview",
@@ -888,6 +890,15 @@ const RootStackConfig = createWorkspaceStackNavigator({
         ...FORM_SHEET_PRESENTATION_OPTIONS,
         headerShown: false,
         sheetAllowedDetents: [0.65, 0.95],
+        sheetGrabberVisible: true,
+      },
+    }),
+    ThreadCommunication: createNativeStackScreen({
+      screen: ThreadCommunicationSheet,
+      options: {
+        ...FORM_SHEET_PRESENTATION_OPTIONS,
+        title: "Agent communication",
+        sheetAllowedDetents: [0.95],
         sheetGrabberVisible: true,
       },
     }),

@@ -428,10 +428,13 @@ function FloatingStatusLabel(props: {
         <SymbolView
           name={props.status.waiting ? { ios: "bolt", android: "bolt" } : "terminal"}
           size={13}
-          tintColorClassName="foreground"
+          tintColorClassName="accent-adaptive-sky-600-400"
           type="monochrome"
         />
-        <Text className="shrink font-t3-medium text-xs text-foreground" numberOfLines={1}>
+        <Text
+          className="shrink font-t3-medium text-xs text-adaptive-sky-600-400 opacity-80"
+          numberOfLines={1}
+        >
           {props.status.label}
         </Text>
       </StatusLabelRow>

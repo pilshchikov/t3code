@@ -418,6 +418,10 @@
     "./pull-request-markdown": {
       "types": "./src/pullRequestMarkdown.ts",
       "default": "./src/pullRequestMarkdown.ts"
+    },
+    "./state/thread-communication": {
+      "types": "./src/state/threadCommunication.ts",
+      "default": "./src/state/threadCommunication.ts"
     }
   },
   "scripts": {

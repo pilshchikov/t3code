@@ -21,6 +21,7 @@ import { OpenInPicker } from "./OpenInPicker";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
+import { AgentCommunicationControl } from "./AgentCommunicationControl";
 
 const GitActionsControl = memo(BaseGitActionsControl);
 
@@ -169,6 +170,20 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                   />
                 ) : null}
               </div>
+            </ThreadDetailsSection>
+          ) : null}
+
+          {!props.draftId ? (
+            <ThreadDetailsSection
+              headingId="thread-details-communication-heading"
+              title="Agent communication"
+              showHeading={false}
+            >
+              <AgentCommunicationControl
+                key={`${props.environmentId}:${props.threadId}`}
+                environmentId={props.environmentId}
+                threadId={props.threadId}
+              />
             </ThreadDetailsSection>
           ) : null}
 
