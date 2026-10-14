@@ -1,5 +1,33 @@
 # Fork Changes
 
+## Upstream integration — 2026-10-13, manual merge
+
+- Merged all 19 upstream commits through `aef0e9ca401acb40057a286a19de8768809db960`
+  from fork parent `b8eb79e35d`, preserving both histories. Includes delegated-task worktree
+  isolation, Haiku 5.5 for background text generation, context-handoff previews, slash skill
+  search inside messages, Pi completion-gateway tools, snoozed automatic wakes, startup error
+  diagnostics, whitespace-preserving Git file paths and database planner improvements.
+- Resolved the migration runner and preview expectations by retaining every released fork ID
+  and registering upstream's new failure-lookup index as migration 67. Kept the fork's V2
+  boundary, compatibility repairs, preview translation and migration-history guards. Adapted
+  incoming migration expectations to the fork's 67-entry ledger, without adding new cases.
+- Reviewed all production diffs and the 20 overlapping files: original fork added/removed
+  lines remain preserved against the new upstream. Delegated worktree preparation uses the
+  existing `spilshchikov/` naming and preparation safeguards. Mobile composer expansion and
+  keyboard handling, custom chat lanes, scroll recovery/live following, Arcane send/stop
+  renderers, Files freshness and per-root selectors, peer tools, idle compaction/quota guards,
+  two-hour PR unlinking and encrypted connection storage remain. External analytics/OTLP stay
+  disabled; provider refresh, desktop update and Keychain access retain their opt-in gates.
+  The idle-session status fix from `b8eb79e35d` is unchanged across rail, web, shared and mobile.
+- Dependency installation used the frozen lockfile; accepted upstream's tsc-rs 0.6.0 update.
+  Ten scoped typechecks passed (server, web, mobile, desktop, client-runtime, contracts, shared,
+  provider-core, provider-pi and provider-opencode). Lint checked 71 changed source/test files:
+  zero errors and 217 warnings. Non-failing Effect suggestions remain. Formatting and whitespace
+  checks passed. Reports are outside the worktree under `merge-reports/2026-10-13-manual`.
+- No tests run, independent tests added, app builds, packaging, reinstall/restart, remote
+  deployment, live-data writes, push or PR. The installed local and remote apps retain their
+  current builds until the owner requests an update.
+
 ## Idle sessions do not count as running work — 2026-10-13
 
 - Read-only diagnosis found empty idle Codex child sessions in local poly and remote rotor.
