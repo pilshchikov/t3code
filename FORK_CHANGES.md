@@ -1,5 +1,16 @@
 # Fork Changes
 
+## Neutral activity above the composer — 2026-10-15
+
+- Restored neutral text and icons for command/monitoring activity above the prompt on
+  web/desktop and native mobile. The thread-list Monitoring status keeps its dim blue color.
+  This corrects the scope of the earlier status-color change; activity tracking and status
+  priority are unchanged.
+- Sources: `apps/web/src/components/ChatView.tsx` and
+  `apps/mobile/src/features/threads/floating-working-control.tsx`.
+- Validation: reviewed against the original color-change diff and ran targeted lint and
+  formatting checks. No tests, browser checks, rebuild, install or restart.
+
 ## Editable client permissions and shared host environments — 2026-10-15
 
 - Authorized clients have an **Edit permissions** dialog in Connections, with Read only,
@@ -144,8 +155,8 @@
   selected. Existing bounded detail streams supply live updates and earlier-history loading;
   no polling, agent commands, process control or database writes are added. Unavailable remote
   histories show errors alongside available records.
-- Monitoring labels now use slightly dimmer Working blue on web/desktop and native mobile,
-  including background status above the composer. Communication statuses use blue for
+- Thread-list Monitoring labels use slightly dimmer Working blue on web/desktop and native
+  mobile. Background status above the composer stays neutral. Communication statuses use blue for
   activity, green for completion, red for failure, amber for attention and indigo for input.
   No continuously animating status indicator is added.
 - Sources: `packages/client-runtime/src/state/threadCommunication.ts`,

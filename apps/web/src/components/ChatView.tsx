@@ -7453,13 +7453,13 @@ export default function ChatView(props: ChatViewProps) {
       icon: (
         <span
           className={cn(
-            "size-1.5 rounded-full bg-info/80",
+            "size-1.5 rounded-full bg-foreground",
             presentation.waiting && "animate-status-pulse",
           )}
           aria-hidden="true"
         />
       ),
-      title: <span className="text-info/80">{presentation.title}</span>,
+      title: presentation.title,
       // A single named item is already in the title.
       description:
         presentation.items.length === 1 && presentation.items[0]?.childThreadId === undefined
