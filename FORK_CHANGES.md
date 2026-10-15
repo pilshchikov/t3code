@@ -1,5 +1,29 @@
 # Fork Changes
 
+## Upstream follow-up integration — 2026-10-15 (c079503d07)
+
+- Merged 16 additional commits from upstream `main` through
+  `c079503d07` after this morning's `42da166d13` sync, preserving the fork parent
+  `a8ac335060`. Reviewed all nine paths modified by both fork and upstream; Git
+  merged them without textual conflicts.
+- Includes explicit failure when a provider stream ends without a terminal event,
+  shutdown interruptions left to restart recovery, Node 26 HTTP/2 disconnect protection,
+  bounded PR refresh counts, fewer hosting-CLI probes for unknown hosts, faster native
+  workspace search, Windows provider installation fixes and mobile media/list/thread fixes.
+- Preserved per-turn multi-repository selections, project guidance/memory and agent MCP
+  capabilities in `ProviderSessionManager.ts`. The context-ID helpers moved to the shared
+  package without changing fork composer behavior. Minimap text-selection fixes leave
+  conversation restoration and bottom following in place. The native Agents sheet retains
+  the communication button alongside upstream's guarded new-thread subscriptions.
+- The fork's orb buttons, expanded mobile composer, short placeholder, custom widths,
+  Monitoring blue, communication viewer, file freshness/worktree selectors, project dots,
+  compaction/quota guards, encrypted connections and disabled telemetry remain intact.
+  Recovery branch: `spilshchikov/pre-upstream-merge-20261015-c079503d`.
+- Validation: frozen-lockfile dependency installation and ten scoped typechecks passed
+  (server, web, native mobile, shared, ACP registry, Cursor and four source-control packages).
+  Changed-file lint passed with existing warnings; whitespace checks passed. Imported
+  upstream tests were retained but not run. No app rebuild, install or restart.
+
 ## Daily upstream integration — 2026-10-15
 
 - Merged all 32 upstream commits through
