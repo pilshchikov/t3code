@@ -9,6 +9,7 @@ type WorkingThreadInput = Pick<
   | "hasActionableProposedPlan"
   | "hasPendingApprovals"
   | "hasPendingUserInput"
+  | "pendingSubagentRequest"
   | "interactionMode"
   | "latestRun"
   | "runtime"
@@ -16,9 +17,11 @@ type WorkingThreadInput = Pick<
   Partial<Pick<EnvironmentThreadShell, "pendingBackgroundTasks">>;
 
 /** Threads busy with work that does not need the user fold into the Working
-    section: a running run, or one with pending background operations. Approvals, questions, plan prompts, and failures stay in the inbox. */
+    section: a running run, or one with pending background operations. Approvals,
+    questions (its own or a subagent’s), plan prompts, and failures stay in the inbox. */
 export function isThreadWorking(thread: WorkingThreadInput): boolean {
   if (thread.hasPendingApprovals || thread.hasPendingUserInput) return false;
+  if (thread.pendingSubagentRequest != null) return false;
   if (thread.runtime?.status === "failed") return false;
   if (!threadRuntimeIsActive(thread.runtime) && (thread.pendingBackgroundTasks?.length ?? 0) === 0)
     return false;

@@ -1,5 +1,78 @@
 # Fork Changes
 
+## Daily upstream integration — 2026-10-15
+
+- Merged all 32 upstream commits through
+  `42da166d131017335a1158d0b379dd68b8985796` from fork parent
+  `edb003b02856ffaf44b00e3c39539ab7c13d336b` with a real merge. Includes
+  delegated-question delivery and parent attention, subagents surviving steering,
+  smaller command reads, cross-environment dropped-thread snapshots, worktree retention,
+  PR-link preferences/branch deletion, cheaper text-generation fallback, update progress,
+  bounded usage scans and desktop certificate environment fixes.
+- Resolved 12 conflicting files individually and compared all 54 overlapping paths against
+  both parents, including automatic merges. Chat callback factories/stable handlers retain
+  multi-root file surface identities and dirty-file state, script working directories,
+  retained file surfaces and Git History, and shared maximize toggling. The fork's context
+  strip setter also uses the stable event-handler boundary. Ordinary sends still have no
+  compact-first chip, proposal, queue or dispatch; manual and configured idle compaction remain.
+- Monitoring keeps its dim blue label without a timer, alongside upstream's new status icon.
+  Child questions/approvals reach parent rows, notifications, snooze gates and project dots;
+  real pending background work still earns Monitoring/Working inclusion, while empty idle
+  sessions remain Ready. The communication viewer remains mounted in saved-thread details
+  at every density and in the native Agents sheet, using bounded on-demand histories.
+- Cleanup combines the new optional `worktreeSettledAfterDays` with the fork's existing
+  `worktreeOnSettle`: the enabled settle-now rule takes precedence over a delay. Retains
+  archived ownership/expiry, secondary-repository selections, active/background/question,
+  dirty/ignored-file, branch and terminal guards. Adopts settle-script grace, fresh settlement
+  equality checks, live-session checks and workspace leases for restart/rollback. Defaults
+  remain settle-now enabled, 14-day thread expiry and protection of ignored files beyond
+  `node_modules`. Settings and user guidance explain the precedence and actual defaults;
+  manual cleanup availability also includes the fork's settle and expiry rules. Incoming
+  retention fixtures explicitly disable settle-now when testing the delayed rule; no
+  independent tests were added.
+- Traced `ChatComposer` into mounted `ComposerPrimaryActions`/`ComposerActionOrb`: saved send
+  color covers Send/Resume/Queue/Steer and saved stop color covers both normal and pending-input
+  Stop. Classic remains selectable. Existing chats and draft heroes retain forced mobile
+  expansion, disabled scroll/focus collapse, one-line minimum, short mobile placeholder,
+  viewport/keyboard handling and custom message/composer width. Timeline restoration keeps
+  its independent one-second recovery and bottom following; first assistant text, mixed-work
+  labels and stable imported-thread folds remain connected.
+- Live callers retain the project rail and simultaneous status dots/colors, project grouping/
+  attachments/slots/order and picker height; per-repository Files/worktree selectors and saved
+  collapse/expansion/resize, exact-root previews, guarded ten-second revision validation,
+  deletion/undo, editor navigation/history/Structure/Commit, staged-only commit generation,
+  global panel shortcuts, right-click tab closing and root/multi-root Markdown explorer routing.
+  Sidebar CLI resume remains mounted with V2 native references. Initial checkout binding and
+  clearing still require the validated preparing run, only queued follow-ups, no provider
+  session and no pending question/background work; ordinary busy work stays protected.
+- Claude worker effort hooks and child-specific model/effort ingestion remain connected through
+  upstream steering changes. Account/source/model rows, isolated HOME/config directories,
+  pooled colors and compact provider trends remain separate while new scan pacing is accepted.
+  Project notes/workspace/peer MCP registration and relay hosting, durable peer response watches,
+  idle-compaction project overrides/current native usage/quota guards, terminal-worker question
+  recovery and two-hour terminal-PR unlinking remain live. Multiwork and machine sync stay
+  explicitly retired; replaced usage/sync components remain superseded.
+- External analytics and OTLP remain disabled. Desktop keeps local tracing without the incoming
+  exporter metadata path; server export metadata does not enable its unset collector URLs.
+  Provider version/manifest/refresh, auto-update and Keychain opt-ins, stable desktop storage
+  and encrypted local connection catalogs remain. New PR actions use the existing permission
+  and service paths; branch deletion is explicit, host-side and does not remove local worktrees.
+- Integration sources: `apps/web/src/components/ChatView.tsx`,
+  `apps/web/src/components/chat/ChatComposer.tsx`, `apps/web/src/components/Sidebar.tsx`,
+  `apps/web/src/components/Sidebar.logic.ts`, `apps/mobile/src/features/threads/threadListV2.ts`,
+  `packages/client-runtime/src/state/threadInbox.ts`, `apps/server/src/server.ts`,
+  `apps/server/src/storageCleanup.ts`, `apps/web/src/components/settings/StorageSettings.tsx`,
+  and `apps/desktop/src/app/DesktopObservability.ts`.
+- Validation: frozen-lockfile installation and all 14 scoped typechecks passed: server, web,
+  native mobile, desktop, client-runtime, contracts, shared, provider-core, provider-muse,
+  provider-opencode, source-control-azure-devops, source-control-bitbucket, source-control-github
+  and source-control-gitlab. Changed-file lint covered 168 TypeScript files with zero errors
+  and 313 warnings (React hooks/refs/state/memoization, unused symbols, styling and other rules).
+  Non-failing Effect suggestions remain. Integration formatting and whitespace checks passed.
+  These are static checks; runtime/UI behavior and imported/adapted upstream tests were not
+  exercised. No tests run, app builds, packaging, dev servers, installed-app/live-data operations,
+  process stops, push, PR, external messages, subagents, other-worktree/main edits or schedule changes.
+
 ## Agent communication viewer and status colors — 2026-10-14
 
 - Added the production **Agent communication** button to every saved thread's details panel,
