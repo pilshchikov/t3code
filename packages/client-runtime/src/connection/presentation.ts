@@ -3,7 +3,12 @@ import * as Option from "effect/Option";
 
 import type { ConnectionCatalogEntry } from "./catalog.ts";
 import type { ConnectionTarget, SupervisorConnectionState } from "./model.ts";
-import { connectionRouteId, connectionRoutes, routeHttpBaseUrl } from "./routes.ts";
+import {
+  connectionRouteId,
+  connectionRoutes,
+  routeHttpBaseUrl,
+  isSharedHostConnectionTarget,
+} from "./routes.ts";
 
 export type EnvironmentConnectionPhase =
   | "available"
@@ -105,6 +110,7 @@ export function environmentMcpUrl(input: {
   readonly relayHttpBaseUrl?: string | undefined;
   readonly connectedTarget?: ConnectionTarget | null | undefined;
 }): string | null {
+  if (isSharedHostConnectionTarget(input.entry.target)) return null;
   const connectedRouteId = input.connectedTarget ? connectionRouteId(input.connectedTarget) : null;
   const routes = connectionRoutes(input.entry);
   const connectedRoute = routes.find(

@@ -1,3 +1,4 @@
+import { isHostPrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
 import { SettingsGroup } from "./SettingsGroup";
 import { RefreshIcon } from "~/components/ui/refresh-icon";
 import {
@@ -178,7 +179,7 @@ function ProviderLastChecked({ lastCheckedAt }: { lastCheckedAt: string | null }
 }
 
 function providerEnvironmentDetail(environment: EnvironmentPresentation): string {
-  if (environment.entry.target._tag === "PrimaryConnectionTarget") return "Primary device";
+  if (isHostPrimaryConnectionTarget(environment.entry.target)) return "Primary device";
   if (environment.relayManaged) return "T3 Connect";
   if (environment.entry.target._tag === "SshConnectionTarget") return "SSH";
   if (isDesktopLocalConnectionTarget(environment.entry.target)) return "Local device";
@@ -374,7 +375,9 @@ function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
     target.scoped,
   ]);
   const onlyPrimaryDevice =
-    options.length === 1 && options[0]?.entry.target._tag === "PrimaryConnectionTarget";
+    options.length === 1 &&
+    options[0] !== undefined &&
+    isHostPrimaryConnectionTarget(options[0].entry.target);
   const deviceTabs =
     !target.scoped && !onlyPrimaryDevice && options.length > 0 ? (
       <ScrollArea radius="none" hideScrollbars scrollFade className="h-11 min-w-0 flex-1">

@@ -388,3 +388,30 @@ history, and saved connections are kept, and you keep working through pairing, T
 
 Switch **Local environment** back on in the same place to restart with your previous local
 settings.
+
+## See the desktop's environments in a phone browser
+
+In this fork, open the Mac desktop host's usual web address on your phone (for example over
+Tailscale). After pairing with that host, the browser also discovers environments connected in
+the desktop app, including SSH connections. Keep the desktop app open and connected. No SSH
+setup, remote pairing link, or separate T3 Connect subscription is needed on the phone.
+
+Both the host and remote server need a fork build supporting shared environment access.
+Discovery takes up to ten seconds. The browser uses the host's existing authenticated route;
+remote SSH tunnels and credentials stay on the Mac. Shared entries are temporary and do not
+copy the desktop's connection secrets into browser storage. If the host disconnects, its shared
+environments stay listed as unavailable until it reconnects. Disabling/removing an environment
+in the desktop app removes it from the shared catalog. A remote server upgrade uses the usual
+SSH-managed fork installation; the gateway does not download upstream over the fork.
+
+Open **Settings → Connections → Authorized clients → Edit permissions** on an administrative
+client to change an existing phone's permissions. Enable **View environment** and **View relay
+and shared environments** to see shared environments. Other selected permissions, such as
+operating tasks or writing files, apply there too, limited by the host's remote credential.
+Changes reconnect existing clients without re-pairing. You cannot edit your own current client;
+use another administrative client to avoid removing your own access accidentally.
+
+Shared SSH and direct bearer connections work through the host over your existing network.
+Proof-authenticated T3 Connect routes are shown as unavailable through this gateway; they still
+work through their usual direct T3 Connect connection. The native mobile app keeps its existing
+connection setup; this automatic host view applies to the host's web UI in a browser.

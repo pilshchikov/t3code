@@ -1,5 +1,7 @@
 "use client";
 
+import { isHostPrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
+
 import { useLocation } from "@tanstack/react-router";
 import { searchSettings, SETTINGS_SECTION_LABELS } from "./settings/settingsSearch";
 import { useAvailableSettingsSearchItems } from "./settings/useAvailableSettingsSearchItems";
@@ -861,7 +863,7 @@ function OpenCommandPaletteDialog(props: {
     () =>
       new Map(
         environments.map((environment) => {
-          const isPrimary = environment.entry.target._tag === "PrimaryConnectionTarget";
+          const isPrimary = isHostPrimaryConnectionTarget(environment.entry.target);
           const isLocal = isPrimary || isDesktopLocalConnectionTarget(environment.entry.target);
           return [
             environment.environmentId,
@@ -959,7 +961,7 @@ function OpenCommandPaletteDialog(props: {
     const options = environments
       .filter((environment) => canCreateProjectInEnvironment(environment.connection.phase))
       .map((environment): AddProjectEnvironmentOption => {
-        const isPrimary = environment.entry.target._tag === "PrimaryConnectionTarget";
+        const isPrimary = isHostPrimaryConnectionTarget(environment.entry.target);
         return {
           environmentId: environment.environmentId,
           label: resolveEnvironmentOptionLabel({

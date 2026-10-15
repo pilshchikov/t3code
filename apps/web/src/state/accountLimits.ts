@@ -1,3 +1,4 @@
+import { isHostPrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
 /**
  * Multi-environment account-limits state.
  *
@@ -57,7 +58,7 @@ const accountLimitsAtom = Atom.make((get): readonly EnvironmentLimitsStatus[] =>
     statuses.push({
       environmentId,
       environmentLabel: presentation.entry.target.label ?? null,
-      environmentIsPrimary: presentation.entry.target._tag === "PrimaryConnectionTarget",
+      environmentIsPrimary: isHostPrimaryConnectionTarget(presentation.entry.target),
       providers: presentation.serverConfig?.providers ?? null,
       isPending: result.waiting,
       snapshots:

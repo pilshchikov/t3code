@@ -1,3 +1,4 @@
+import { environmentGatewayPath } from "@t3tools/shared/environmentGateway";
 import {
   isLocalLoopbackHost,
   isPrivateNetworkHost,
@@ -29,6 +30,17 @@ export type ConnectionRouteKind =
   | "vpn"
   | "public"
   | "ssh";
+
+/** Same-origin authentication can also reach environments shared by the host. */
+export function isSharedHostConnectionTarget(target: ConnectionTarget): boolean {
+  return (
+    target._tag === "PrimaryConnectionTarget" && environmentGatewayPath(target.httpBaseUrl) !== ""
+  );
+}
+
+export function isHostPrimaryConnectionTarget(target: ConnectionTarget): boolean {
+  return target._tag === "PrimaryConnectionTarget" && !isSharedHostConnectionTarget(target);
+}
 
 /** An environment has at most one T3 Connect route, so it needs no per-route id. */
 export const RELAY_ROUTE_ID = "relay";

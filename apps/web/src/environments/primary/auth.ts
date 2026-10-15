@@ -31,6 +31,7 @@ const PrimaryEnvironmentRequestOperation = Schema.Literals([
   "revoke-pairing-link",
   "list-client-sessions",
   "revoke-client-session",
+  "update-client-scopes",
   "revoke-other-client-sessions",
 ]);
 type PrimaryEnvironmentRequestOperation = typeof PrimaryEnvironmentRequestOperation.Type;
@@ -392,6 +393,29 @@ export async function revokeServerPairingLink(id: string): Promise<void> {
       operation: "revoke-pairing-link",
       pairingLinkId: id,
       cause: error,
+    });
+  }
+}
+
+export async function updateServerClientScopes(
+  sessionId: AuthSessionId,
+  scopes: ReadonlyArray<AuthGrantScope>,
+): Promise<void> {
+  try {
+    const result = await runPrimaryHttp(
+      PrimaryEnvironmentHttpClient.pipe(
+        Effect.flatMap((client) =>
+          client.auth.updateClientScopes({ headers: {}, payload: { sessionId, scopes } }),
+        ),
+      ),
+    );
+    if (!result.updated)
+      throw new Error("This client session has expired or was revoked. Refresh the client list.");
+  } catch (cause) {
+    throw PrimaryEnvironmentRequestError.fromCause({
+      operation: "update-client-scopes",
+      sessionId,
+      cause,
     });
   }
 }

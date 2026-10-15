@@ -74,6 +74,13 @@ export const ListActiveAuthSessionsInput = Schema.Struct({
 });
 export type ListActiveAuthSessionsInput = typeof ListActiveAuthSessionsInput.Type;
 
+export const UpdateAuthSessionScopesInput = Schema.Struct({
+  sessionId: AuthSessionId,
+  scopes: AuthEnvironmentScopes,
+  now: Schema.DateTimeUtcFromString,
+});
+export type UpdateAuthSessionScopesInput = typeof UpdateAuthSessionScopesInput.Type;
+
 export const RevokeAuthSessionInput = Schema.Struct({
   sessionId: AuthSessionId,
   revokedAt: Schema.DateTimeUtcFromString,
@@ -117,6 +124,9 @@ export class AuthSessionRepository extends Context.Service<
     readonly listActive: (
       input: ListActiveAuthSessionsInput,
     ) => Effect.Effect<ReadonlyArray<AuthSessionRecord>, AuthSessionRepositoryError>;
+    readonly updateScopes: (
+      input: UpdateAuthSessionScopesInput,
+    ) => Effect.Effect<boolean, AuthSessionRepositoryError>;
     readonly revoke: (
       input: RevokeAuthSessionInput,
     ) => Effect.Effect<boolean, AuthSessionRepositoryError>;
@@ -345,6 +355,16 @@ export const make = Effect.gen(function* () {
       `,
   });
 
+  const updateScopesRows = SqlSchema.findAll({
+    Request: UpdateAuthSessionScopesInput,
+    Result: Schema.Struct({ sessionId: AuthSessionId }),
+    execute: ({ sessionId, scopes, now }) => sql`
+      UPDATE auth_sessions SET scopes = ${JSON.stringify(scopes)}
+      WHERE session_id = ${sessionId} AND revoked_at IS NULL AND expires_at > ${now}
+      RETURNING session_id AS "sessionId"
+    `,
+  });
+
   const revokeSessionRows = SqlSchema.findAll({
     Request: RevokeAuthSessionInput,
     Result: Schema.Struct({ sessionId: AuthSessionId }),
@@ -467,6 +487,18 @@ export const make = Effect.gen(function* () {
       ),
     );
 
+  const updateScopes: AuthSessionRepository["Service"]["updateScopes"] = (input) =>
+    updateScopesRows(input).pipe(
+      Effect.mapError(
+        toPersistenceSqlOrDecodeError(
+          "AuthSessionRepository.updateScopes:query",
+          "AuthSessionRepository.updateScopes:decodeRows",
+          { sessionId: input.sessionId },
+        ),
+      ),
+      Effect.map((rows) => rows.length > 0),
+    );
+
   const revoke: AuthSessionRepository["Service"]["revoke"] = (input) =>
     revokeSessionRows(input).pipe(
       Effect.mapError(
@@ -519,6 +551,7 @@ export const make = Effect.gen(function* () {
     createIfAbsent,
     getById,
     listActive,
+    updateScopes,
     revoke,
     revokeAllExcept,
     setLastConnectedAt,

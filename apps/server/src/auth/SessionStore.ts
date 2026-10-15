@@ -347,6 +347,18 @@ export class OtherSessionsRevocationError extends Schema.TaggedError<OtherSessio
   }
 }
 
+export class SessionScopesUpdateError extends Schema.TaggedError<SessionScopesUpdateError>()(
+  "SessionScopesUpdateError",
+  {
+    sessionId: AuthSessionId,
+    ...sessionCredentialInternalErrorContext,
+  },
+) {
+  override get message(): string {
+    return "Failed to update session permissions.";
+  }
+}
+
 export const SessionCredentialInternalError = Schema.Union([
   SessionClaimsEncodingError,
   SessionCredentialIssueError,
@@ -356,6 +368,7 @@ export const SessionCredentialInternalError = Schema.Union([
   ActiveSessionsListError,
   SessionRevocationError,
   OtherSessionsRevocationError,
+  SessionScopesUpdateError,
 ]);
 export type SessionCredentialInternalError = typeof SessionCredentialInternalError.Type;
 
@@ -407,8 +420,13 @@ export class SessionStore extends Context.Service<
       SessionCredentialInternalError
     >;
     readonly streamChanges: Stream.Stream<SessionCredentialChange>;
+    readonly updateScopes: (
+      sessionId: AuthSessionId,
+      scopes: ReadonlyArray<AuthEnvironmentScope>,
+    ) => Effect.Effect<boolean, SessionCredentialInternalError>;
     readonly awaitInvalidation: (
       sessionId: AuthSessionId,
+      expectedScopes?: ReadonlyArray<AuthEnvironmentScope>,
     ) => Effect.Effect<void, SessionCredentialVerificationError>;
     readonly revoke: (
       sessionId: AuthSessionId,
@@ -498,6 +516,7 @@ export const make = Effect.gen(function* () {
   const signingSecret = yield* secretStore.getOrCreateRandom(SIGNING_SECRET_NAME, 32);
   const connectedSessionsRef = yield* Ref.make(new Map<AuthSessionId, number>());
   const changesPubSub = yield* PubSub.unbounded<SessionCredentialChange>();
+  const scopeChanges = yield* PubSub.unbounded<AuthSessionId>();
   const cookieInput = {
     mode: serverConfig.mode,
     port: serverConfig.port,
@@ -855,7 +874,8 @@ export const make = Effect.gen(function* () {
         client: toClientMetadata(row.value.client),
         expiresAt: expiresAt.value,
         subject: claims.sub,
-        scopes: claims.scopes,
+        // Signed credentials identify a session; its persisted grant can be edited.
+        scopes: row.value.scopes,
         ...(claims.jkt ? { proofKeyThumbprint: claims.jkt } : {}),
         ...(claims.rtc ? { runtimeModeCeiling: claims.rtc } : {}),
       } satisfies VerifiedSession;
@@ -995,6 +1015,26 @@ export const make = Effect.gen(function* () {
     Effect.mapError((cause) => new ActiveSessionsListError({ cause })),
   );
 
+  const updateScopes: SessionStore["Service"]["updateScopes"] = Effect.fn(
+    "SessionStore.updateScopes",
+  )(
+    function* (sessionId, scopes) {
+      const updated = yield* authSessions.updateScopes({
+        sessionId,
+        scopes,
+        now: yield* DateTime.now,
+      });
+      if (!updated) return false;
+      // Reconnect existing sockets to discard their captured authorization context.
+      yield* PubSub.publish(scopeChanges, sessionId);
+      const active = yield* loadActiveSession(sessionId);
+      if (Option.isSome(active)) yield* emitUpsert(active.value);
+      return true;
+    },
+    (effect, sessionId) =>
+      effect.pipe(Effect.mapError((cause) => new SessionScopesUpdateError({ sessionId, cause }))),
+  );
+
   const revoke: SessionStore["Service"]["revoke"] = Effect.fn("SessionStore.revoke")(
     function* (sessionId) {
       const revokedAt = yield* DateTime.now;
@@ -1050,11 +1090,15 @@ export const make = Effect.gen(function* () {
     return revokedSessionIds.length;
   });
 
-  const awaitInvalidation = Effect.fn(function* (sessionId: AuthSessionId) {
+  const awaitInvalidation = Effect.fn(function* (
+    sessionId: AuthSessionId,
+    expectedScopes?: ReadonlyArray<AuthEnvironmentScope>,
+  ) {
     return yield* Effect.scoped(
       Effect.gen(function* () {
         // Subscribe before reading: revocation can race with the WebSocket upgrade.
         const subscription = yield* PubSub.subscribe(changesPubSub);
+        const scopeSubscription = yield* PubSub.subscribe(scopeChanges);
         const row = yield* authSessions
           .getById({ sessionId })
           .pipe(
@@ -1063,6 +1107,13 @@ export const make = Effect.gen(function* () {
             ),
           );
         if (Option.isNone(row) || row.value.revokedAt !== null) return;
+        // A grant edit can race with upgrade before the watcher subscribes.
+        if (
+          expectedScopes !== undefined &&
+          (row.value.scopes.length !== expectedScopes.length ||
+            row.value.scopes.some((scope) => !expectedScopes.includes(scope)))
+        )
+          return;
         const now = yield* DateTime.now;
         const remaining = row.value.expiresAt.epochMilliseconds - now.epochMilliseconds;
         if (remaining <= 0) return;
@@ -1070,6 +1121,11 @@ export const make = Effect.gen(function* () {
           Stream.fromSubscription(subscription).pipe(
             Stream.filter(
               (change) => change.type === "clientRemoved" && change.sessionId === sessionId,
+            ),
+            Stream.merge(
+              Stream.fromSubscription(scopeSubscription).pipe(
+                Stream.filter((changedId) => changedId === sessionId),
+              ),
             ),
             Stream.runHead,
           ),
@@ -1087,6 +1143,7 @@ export const make = Effect.gen(function* () {
     issueWebSocketToken,
     verifyWebSocketToken,
     listActive,
+    updateScopes,
     awaitInvalidation,
     get streamChanges() {
       return Stream.fromPubSub(changesPubSub);

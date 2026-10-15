@@ -128,7 +128,7 @@ export type ConnectionRegistration = typeof ConnectionRegistration.Type;
  * bootstrap IPC) rather than persisted by the user. They cover the primary
  * local environment plus any additional desktop-local backends running
  * alongside it (e.g. a parallel WSL backend). The primary stays on same-origin
- * cookie auth (`PrimaryConnectionRegistration`); secondary local backends live
+ * cookie auth (`PrimaryConnectionRegistration`), also used by same-origin host gateways; secondary local backends live
  * on a separate loopback origin and authenticate with a bearer token minted
  * from their bootstrap credential (`BearerConnectionRegistration`).
  */

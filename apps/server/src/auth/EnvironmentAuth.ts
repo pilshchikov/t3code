@@ -1,5 +1,8 @@
 import {
   AuthAccessTokenType,
+  AuthEnvironmentScopes,
+  DELEGATED_PERMISSIONS_HEADER,
+  AuthGrantScope,
   AuthAccessWriteScope,
   AuthAdministrativeScopes,
   AuthOrchestrationOperateScope,
@@ -110,6 +113,8 @@ export interface AuthenticatedSession {
   readonly subject: string;
   readonly method: ServerAuthSessionMethod;
   readonly scopes: ReadonlyArray<AuthEnvironmentScope>;
+  /** Original credential grant, used to invalidate sockets independently of a proxy restriction. */
+  readonly credentialScopes?: ReadonlyArray<AuthEnvironmentScope>;
   readonly proofKeyThumbprint?: string;
   readonly expiresAt?: DateTime.DateTime;
 }
@@ -354,6 +359,15 @@ export class ServerAuthCloudMintJwtSigningError extends Schema.TaggedError<Serve
   }
 }
 
+export class ServerAuthClientScopesUpdateError extends Schema.TaggedError<ServerAuthClientScopesUpdateError>()(
+  "ServerAuthClientScopesUpdateError",
+  serverAuthInternalErrorContext,
+) {
+  override get message(): string {
+    return "Failed to update client permissions.";
+  }
+}
+
 export const ServerAuthInternalError = Schema.Union([
   ServerAuthBootstrapCredentialValidationError,
   ServerAuthSessionCredentialValidationError,
@@ -364,6 +378,7 @@ export const ServerAuthInternalError = Schema.Union([
   ServerAuthPairingLinkRevocationError,
   ServerAuthSessionTokenIssueError,
   ServerAuthSessionsListError,
+  ServerAuthClientScopesUpdateError,
   ServerAuthSessionRevocationError,
   ServerAuthOtherSessionsRevocationError,
   ServerAuthWebSocketTokenIssueError,
@@ -470,6 +485,15 @@ export class ServerAuthForbiddenOperationError extends Schema.TaggedError<Server
   }
 }
 
+export class ServerAuthCurrentSessionScopesError extends Schema.TaggedError<ServerAuthCurrentSessionScopesError>()(
+  "ServerAuthCurrentSessionScopesError",
+  {},
+) {
+  override get message(): string {
+    return "Edit this device's permissions from another authorized client.";
+  }
+}
+
 export class EnvironmentAuth extends Context.Service<
   EnvironmentAuth,
   {
@@ -539,6 +563,14 @@ export class EnvironmentAuth extends Context.Service<
     readonly listClientSessions: (
       currentSessionId: AuthSessionId,
     ) => Effect.Effect<ReadonlyArray<AuthClientSession>, ServerAuthInternalError>;
+    readonly updateClientScopes: (
+      actor: Pick<AuthenticatedSession, "sessionId" | "scopes">,
+      targetSessionId: AuthSessionId,
+      scopes: ReadonlyArray<typeof AuthGrantScope.Type>,
+    ) => Effect.Effect<
+      boolean,
+      ServerAuthCurrentSessionScopesError | ServerAuthInvalidRequestError | ServerAuthInternalError
+    >;
     readonly revokeClientSession: (
       currentSessionId: AuthSessionId,
       targetSessionId: AuthSessionId,
@@ -793,6 +825,39 @@ export const make = Effect.gen(function* () {
     ...config.devAllowedOrigins,
   ]);
 
+  const decodeDelegatedPermissions = Schema.decodeEffect(
+    Schema.fromJsonString(AuthEnvironmentScopes),
+  );
+  const restrictDelegatedSession = (
+    session: AuthenticatedSession,
+    request: HttpServerRequest.HttpServerRequest,
+  ) => {
+    const raw = request.headers[DELEGATED_PERMISSIONS_HEADER];
+    if (raw === undefined) return Effect.succeed(session);
+    if (raw.length > 8192)
+      return Effect.fail(
+        new ServerAuthInvalidCredentialError({
+          diagnostic: "Invalid delegated permission restriction.",
+        }),
+      );
+    return decodeDelegatedPermissions(raw).pipe(
+      Effect.map(
+        (requested) =>
+          ({
+            ...session,
+            credentialScopes: session.credentialScopes ?? session.scopes,
+            scopes: session.scopes.filter((scope) => requested.includes(scope)),
+          }) satisfies AuthenticatedSession,
+      ),
+      Effect.mapError(
+        () =>
+          new ServerAuthInvalidCredentialError({
+            diagnostic: "Invalid delegated permission restriction.",
+          }),
+      ),
+    );
+  };
+
   const authenticateRequest = (
     request: HttpServerRequest.HttpServerRequest,
   ): Effect.Effect<AuthenticatedSession, ServerAuthCredentialError | ServerAuthInternalError> => {
@@ -842,6 +907,7 @@ export const make = Effect.gen(function* () {
         }
         return Effect.succeed(session);
       }),
+      Effect.flatMap((session) => restrictDelegatedSession(session, request)),
     );
   };
 
@@ -1202,6 +1268,27 @@ export const make = Effect.gen(function* () {
       Effect.withSpan("EnvironmentAuth.listClientSessions"),
     );
 
+  const updateClientScopes: EnvironmentAuth["Service"]["updateClientScopes"] = Effect.fn(
+    "EnvironmentAuth.updateClientScopes",
+  )(function* (actor, targetSessionId, scopes) {
+    if (actor.sessionId === targetSessionId)
+      return yield* new ServerAuthCurrentSessionScopesError({});
+    if (
+      !scopes.length ||
+      new Set(scopes).size !== scopes.length ||
+      scopes.some((scope) => !AuthGrantScope.literals.includes(scope))
+    )
+      return yield* new ServerAuthInvalidScopeError({});
+    if (
+      !actor.scopes.includes(AuthAccessWriteScope) ||
+      scopes.some((scope) => !actor.scopes.includes(scope))
+    )
+      return yield* new ServerAuthScopeNotGrantedError({});
+    return yield* sessions
+      .updateScopes(targetSessionId, scopes)
+      .pipe(Effect.mapError((cause) => new ServerAuthClientScopesUpdateError({ cause })));
+  });
+
   const revokeClientSession: EnvironmentAuth["Service"]["revokeClientSession"] = Effect.fn(
     "EnvironmentAuth.revokeClientSession",
   )(function* (currentSessionId, targetSessionId) {
@@ -1264,6 +1351,7 @@ export const make = Effect.gen(function* () {
               scopes: session.scopes,
               ...(session.expiresAt ? { expiresAt: session.expiresAt } : {}),
             })),
+            Effect.flatMap((session) => restrictDelegatedSession(session, request)),
           );
         }
       }
@@ -1365,6 +1453,7 @@ export const make = Effect.gen(function* () {
     revokeSession,
     revokeOtherSessionsExcept,
     listClientSessions,
+    updateClientScopes,
     revokeClientSession,
     revokeOtherClientSessions,
     authenticateHttpRequest,

@@ -1,5 +1,6 @@
 import {
   type ConnectionTarget,
+  isSharedHostConnectionTarget,
   connectionRouteId,
   connectionRouteLabel,
   connectionRoutes,
@@ -28,6 +29,7 @@ export function environmentTransportLabel(
   activeTarget: ConnectionTarget | null = null,
 ): string {
   const { entry } = environment;
+  if (isSharedHostConnectionTarget(entry.target)) return "Shared through host";
   if (entry.target._tag === "PrimaryConnectionTarget") return "This machine";
   const routes = connectionRoutes(entry);
   if (routes.length > 1) {

@@ -1,3 +1,4 @@
+import { isHostPrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
 import {
   AVAILABLE_CONNECTION_STATE,
   connectionProjectionPhase,
@@ -60,8 +61,8 @@ function catalogIsComplete(
   if (!catalog.isReady || catalog.entries.size === 0) return false;
   return (
     !requiresPrimaryEnvironment ||
-    Array.from(catalog.entries.values()).some(
-      (entry) => entry.target._tag === "PrimaryConnectionTarget",
+    Array.from(catalog.entries.values()).some((entry) =>
+      isHostPrimaryConnectionTarget(entry.target),
     )
   );
 }

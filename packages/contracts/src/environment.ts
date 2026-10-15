@@ -107,6 +107,7 @@ export type ServerSelfUpdateCapability = typeof ServerSelfUpdateCapability.Type;
 
 export const ExecutionEnvironmentCapabilities = Schema.Struct({
   peerThreadMessaging: Schema.optionalKey(Schema.Boolean),
+  sharedEnvironmentProxy: Schema.optionalKey(Schema.Boolean),
   repositoryIdentity: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   connectionProbe: Schema.optionalKey(Schema.Boolean),
   /** Missing on older servers, which still accept inline image attachments. */

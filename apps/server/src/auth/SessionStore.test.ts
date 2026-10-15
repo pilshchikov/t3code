@@ -97,6 +97,7 @@ const layerFailingSessionLookupRepository = Layer.succeed(AuthSessions.AuthSessi
   createIfAbsent: () => Effect.void,
   getById: () => Effect.fail(repositoryFailure),
   listActive: () => Effect.succeed([]),
+  updateScopes: () => Effect.fail(repositoryFailure),
   revoke: () => Effect.fail(repositoryFailure),
   revokeAllExcept: () => Effect.fail(repositoryFailure),
   setLastConnectedAt: () => Effect.void,
@@ -852,5 +853,88 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
       yield* sessions.recordClientConnection(issued.sessionId, {});
       expect((yield* readRow)[0]).toEqual({ surface: "mobile", appVersion: "1.3.0" });
     }).pipe(Effect.provide(Layer.mergeAll(layerSessionStore(), SqlitePersistence.layerMemory))),
+  );
+});
+
+it.layer(NodeServices.layer)("editable session permissions", (it) => {
+  it.effect.each(["browser-session-cookie", "bearer-access-token", "dpop-access-token"] as const)(
+    "uses saved permissions for an existing %s credential and ticket",
+    (method) =>
+      Effect.gen(function* () {
+        const sessions = yield* SessionStore.SessionStore;
+        const issued = yield* sessions.issue({
+          method,
+          scopes: ["orchestration:read"],
+          ...(method === "dpop-access-token" ? { proofKeyThumbprint: "proof-key" } : {}),
+        });
+        const ticket = yield* sessions.issueWebSocketToken(issued.sessionId);
+        expect(
+          yield* sessions.updateScopes(issued.sessionId, ["orchestration:read", "filesystem:read"]),
+        ).toBe(true);
+        expect((yield* sessions.verify(issued.token)).scopes).toEqual([
+          "orchestration:read",
+          "filesystem:read",
+        ]);
+        expect((yield* sessions.verifyWebSocketToken(ticket.token)).scopes).toEqual([
+          "orchestration:read",
+          "filesystem:read",
+        ]);
+        if (method === "dpop-access-token")
+          expect((yield* sessions.verify(issued.token)).proofKeyThumbprint).toBe("proof-key");
+        yield* sessions.updateScopes(issued.sessionId, ["orchestration:read"]);
+        expect((yield* sessions.verify(issued.token)).scopes).toEqual(["orchestration:read"]);
+        yield* sessions.revoke(issued.sessionId);
+        expect(yield* sessions.updateScopes(issued.sessionId, ["filesystem:write"])).toBe(false);
+      }).pipe(Effect.provide(layerSessionStore())),
+  );
+  it.effect(
+    "closes every old authorization context and catches an edit racing with subscription",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* SessionStore.SessionStore;
+        const client = yield* sessions.issue({ scopes: ["orchestration:read"] });
+        const other = yield* sessions.issue();
+        const otherClosed = yield* Deferred.make<void>();
+        yield* sessions
+          .awaitInvalidation(other.sessionId)
+          .pipe(
+            Effect.andThen(Deferred.succeed(otherClosed, undefined)),
+            Effect.forkScoped({ startImmediately: true }),
+          );
+        const first = yield* sessions
+          .awaitInvalidation(client.sessionId, client.scopes)
+          .pipe(Effect.forkScoped({ startImmediately: true }));
+        const second = yield* sessions
+          .awaitInvalidation(client.sessionId, client.scopes)
+          .pipe(Effect.forkScoped({ startImmediately: true }));
+        yield* sessions.updateScopes(client.sessionId, ["orchestration:read", "filesystem:read"]);
+        yield* Fiber.join(first);
+        yield* Fiber.join(second);
+        yield* sessions.awaitInvalidation(client.sessionId, client.scopes);
+        expect(yield* Deferred.isDone(otherClosed)).toBe(false);
+      }).pipe(Effect.scoped, Effect.provide(Layer.merge(layerSessionStore(), TestClock.layer()))),
+  );
+  it.effect("does not restore an expired client or change a grant on a failed save", () =>
+    Effect.gen(function* () {
+      const sessions = yield* SessionStore.SessionStore;
+      const sql = yield* SqlClient.SqlClient;
+      const expired = yield* sessions.issue({
+        ttl: Duration.seconds(1),
+        scopes: ["orchestration:read"],
+      });
+      yield* TestClock.adjust(Duration.seconds(2));
+      expect(yield* sessions.updateScopes(expired.sessionId, ["filesystem:write"])).toBe(false);
+      const active = yield* sessions.issue({ scopes: ["orchestration:read"] });
+      yield* sql`CREATE TRIGGER reject_grant_update BEFORE UPDATE OF scopes ON auth_sessions BEGIN SELECT RAISE(ABORT, 'save failed'); END`;
+      expect(
+        (yield* sessions.updateScopes(active.sessionId, ["filesystem:write"]).pipe(Effect.flip))
+          ._tag,
+      ).toBe("SessionScopesUpdateError");
+      expect((yield* sessions.verify(active.token)).scopes).toEqual(["orchestration:read"]);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(layerSessionStore(), SqlitePersistence.layerMemory, TestClock.layer()),
+      ),
+    ),
   );
 });

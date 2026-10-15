@@ -1,3 +1,5 @@
+import * as SharedEnvironments from "./connections/SharedEnvironments.ts";
+import * as SharedEnvironmentHttp from "./connections/SharedEnvironmentHttp.ts";
 import * as ResumableSessionDiscovery from "./sessions/ResumableSessionDiscovery.ts";
 import * as AccountLimitsService from "./usage/AccountLimitsService.ts";
 import * as UsageLimitHistory from "./usage/UsageLimitHistory.ts";
@@ -732,6 +734,7 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.mergeAll(
     HttpApiBuilder.layer(EnvironmentHttpApi).pipe(
       Layer.provide(AuthHttp.layer),
+      Layer.provide(SharedEnvironmentHttp.layerApi),
       Layer.provide(McpOAuthHttp.layer.pipe(Layer.provide(McpOAuth.layer))),
       Layer.provide(CloudHttp.layer),
       Layer.provide(OrchestrationHttp.layer),
@@ -743,6 +746,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ),
     ServerHttp.layerOtlpTracesProxyRoute,
     ServerHttp.layerAssetRoute,
+    SharedEnvironmentHttp.layerProxy,
     ServerHttp.layerAttachmentUploadRoute,
     DeviceHubProxy.layer,
     ServerBrowserStream.routeLayer,
@@ -767,6 +771,7 @@ const layerMakeRoutes = Layer.mergeAll(
   // and mutations observed on WebSocket invalidate patches subsequently read over HTTP. Provided
   // after the guide service so it reaches that too.
   Layer.provide(layerPullRequestService),
+  Layer.provide(SharedEnvironments.layer),
   // The stream route and the WebSocket RPCs share one browser.
   Layer.provide(ServerBrowser.layer.pipe(Layer.provide(DesktopBrowserChannel.layer))),
   // Server browser tabs and HTML render previews install and run the same headless browser.

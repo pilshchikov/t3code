@@ -1,3 +1,4 @@
+import { environmentResourceUrl } from "@t3tools/shared/environmentGateway";
 import {
   type AssetCreateUrlInput,
   type AssetCreateUrlResult,
@@ -57,7 +58,7 @@ export function parseAssetCollectionKey(
 
 export function resolveAssetUrl(httpBaseUrl: string, relativeUrl: string): string | null {
   try {
-    return new URL(relativeUrl, httpBaseUrl).toString();
+    return environmentResourceUrl(httpBaseUrl, relativeUrl);
   } catch {
     return null;
   }
@@ -173,7 +174,7 @@ export function createAssetEnvironmentAtoms<R, E>(
       request(WS_METHODS.assetsCreateUrl, input),
     );
     // Callers resolve against the thread's server, so preserve the local server's origin.
-    return { ...asset, relativeUrl: new URL(asset.relativeUrl, local.httpBaseUrl).href };
+    return { ...asset, relativeUrl: environmentResourceUrl(local.httpBaseUrl, asset.relativeUrl) };
   });
   const createUrl = createEnvironmentQueryAtomFamily(runtime, {
     label: "environment-data:assets:create-url",

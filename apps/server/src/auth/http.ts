@@ -9,6 +9,7 @@ import {
   EnvironmentHttpApi,
   EnvironmentInternalError,
   type EnvironmentInternalErrorReason,
+  type EnvironmentOperationForbiddenReason,
   EnvironmentOperationForbiddenError,
   EnvironmentRequestInvalidError,
   type EnvironmentRequestInvalidReason,
@@ -133,7 +134,7 @@ export function failEnvironmentScopeRequired(requiredScope: AuthEnvironmentScope
   );
 }
 
-function failEnvironmentOperationForbidden(reason: "current_session_revoke_not_allowed") {
+function failEnvironmentOperationForbidden(reason: EnvironmentOperationForbiddenReason) {
   return currentEnvironmentTraceId.pipe(
     Effect.flatMap((traceId) =>
       Effect.fail(
@@ -488,6 +489,31 @@ export const layer = HttpApiBuilder.group(
           },
           Effect.catchIf(EnvironmentAuth.isServerAuthInternalError, (error) =>
             failEnvironmentInternal("client_sessions_load_failed", error),
+          ),
+        ),
+      )
+      .handle(
+        "updateClientScopes",
+        Effect.fn("environment.auth.updateClientScopes")(
+          function* (args) {
+            yield* annotateEnvironmentRequest(args.endpoint.name);
+            const session = yield* requireEnvironmentScope(AuthAccessWriteScope);
+            const updated = yield* serverAuth.updateClientScopes(
+              { sessionId: session.sessionId, scopes: Array.from(session.scopes) },
+              args.payload.sessionId,
+              args.payload.scopes,
+            );
+            return { updated };
+          },
+          Effect.catchTags({
+            ServerAuthCurrentSessionScopesError: () =>
+              failEnvironmentOperationForbidden("current_session_scope_change_not_allowed"),
+            ServerAuthInvalidScopeError: () => failEnvironmentInvalidRequest("invalid_scope"),
+            ServerAuthScopeNotGrantedError: () =>
+              failEnvironmentInvalidRequest("scope_not_granted"),
+          }),
+          Effect.catchIf(EnvironmentAuth.isServerAuthInternalError, (error) =>
+            failEnvironmentInternal("internal_error", error),
           ),
         ),
       )

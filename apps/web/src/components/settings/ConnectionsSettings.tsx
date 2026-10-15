@@ -1,4 +1,9 @@
+import {
+  isHostPrimaryConnectionTarget,
+  isSharedHostConnectionTarget,
+} from "@t3tools/client-runtime/connection";
 import { SessionPermissions } from "./SessionPermissions";
+import { ClientScopesDialog } from "./ClientScopesDialog";
 import { AUTH_SCOPE_OPTIONS as PAIRING_SCOPE_OPTIONS } from "@t3tools/shared/authScopeOptions";
 import {
   ChevronRightIcon,
@@ -142,6 +147,7 @@ import { getPairingTokenFromUrl, setPairingTokenOnUrl } from "../../pairingUrl";
 import { readHostedPairingRequest } from "../../hostedPairing";
 import {
   createServerPairingCredential,
+  updateServerClientScopes,
   revokeOtherServerClientSessions,
   revokeServerClientSession,
   revokeServerPairingLink,
@@ -947,6 +953,7 @@ type ConnectedClientListRowProps = {
   revokingClientSessionId: string | null;
   onRevokeSession: (sessionId: ServerClientSessionRecord["sessionId"]) => void;
   canRevoke: boolean;
+  delegatableScopes: ReadonlyArray<AuthEnvironmentScope>;
 };
 
 const ConnectedClientListRow = memo(function ConnectedClientListRow({
@@ -955,6 +962,7 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
   revokingClientSessionId,
   onRevokeSession,
   canRevoke,
+  delegatableScopes,
 }: ConnectedClientListRowProps) {
   const nowMs = useRelativeTimeTick(1_000);
   const isLive = clientSession.current || clientSession.connected;
@@ -1007,6 +1015,15 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
           </p>
         </div>
         <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">
+          {!clientSession.current ? (
+            <ClientScopesDialog
+              label={primaryLabel}
+              scopes={clientSession.scopes}
+              delegatableScopes={delegatableScopes}
+              disabled={!canRevoke || revokingClientSessionId === clientSession.sessionId}
+              onSave={(scopes) => updateServerClientScopes(clientSession.sessionId, scopes)}
+            />
+          ) : null}
           {!clientSession.current ? (
             <Button
               size="xs"
@@ -1245,6 +1262,7 @@ type PairingClientsListProps = {
   onRevokePairingLink: (id: string) => void;
   onRevokeClientSession: (sessionId: ServerClientSessionRecord["sessionId"]) => void;
   canRevoke: boolean;
+  delegatableScopes: ReadonlyArray<AuthEnvironmentScope>;
 };
 
 const PairingClientsList = memo(function PairingClientsList({
@@ -1261,6 +1279,7 @@ const PairingClientsList = memo(function PairingClientsList({
   onRevokePairingLink,
   onRevokeClientSession,
   canRevoke,
+  delegatableScopes,
 }: PairingClientsListProps) {
   return (
     <>
@@ -1287,6 +1306,7 @@ const PairingClientsList = memo(function PairingClientsList({
           revokingClientSessionId={revokingClientSessionId}
           onRevokeSession={onRevokeClientSession}
           canRevoke={canRevoke}
+          delegatableScopes={delegatableScopes}
         />
       ))}
 
@@ -2070,7 +2090,7 @@ export function ConnectionsSettings() {
   const savedEnvironments = useMemo(
     () =>
       environments.filter(
-        (environment) => environment.entry.target._tag !== "PrimaryConnectionTarget",
+        (environment) => !isHostPrimaryConnectionTarget(environment.entry.target),
       ),
     [environments],
   );
@@ -3526,6 +3546,14 @@ export function ConnectionsSettings() {
   );
   const renderAuthorizedClients = (presentation: AccessSectionPresentation) => (
     <>
+      <div className={accessRowClassName(presentation)}>
+        <p className="text-xs text-muted-foreground">
+          Browsers connected to this host also see its connected environments. Keep the desktop app
+          open, and enable View environment and View relay and shared environments in the client’s
+          permissions. Shared access uses the host’s existing connection; the browser needs no SSH
+          setup.
+        </p>
+      </div>
       {desktopAccessManagementError ? (
         <div className={accessRowClassName(presentation)}>
           <p className="text-xs text-destructive">{desktopAccessManagementError}</p>
@@ -3545,6 +3573,7 @@ export function ConnectionsSettings() {
         onRevokePairingLink={handleRevokeDesktopPairingLink}
         onRevokeClientSession={handleRevokeDesktopClientSession}
         canRevoke={canWriteAccess}
+        delegatableScopes={currentSessionScopes ?? []}
       />
     </>
   );
@@ -4149,20 +4178,31 @@ export function ConnectionsSettings() {
           </div>
         }
       >
-        {listedEnvironments.map((environment) => (
-          <SavedBackendListRow
-            key={environment.environmentId}
-            environment={environment}
-            removingEnvironmentId={removingSavedEnvironmentId}
-            onSetEnabled={handleSetSavedBackendEnabled}
-            onRemove={handleRemoveSavedBackend}
-            onAddRoute={(target) => {
-              setRouteTarget(target);
-              setSavedBackendError(null);
-              setAddBackendDialogOpen(true);
-            }}
-          />
-        ))}
+        {listedEnvironments.map((environment) =>
+          isSharedHostConnectionTarget(environment.entry.target) ? (
+            <EnvironmentRow
+              key={environment.environmentId}
+              kind={resolveEnvironmentMachineKind(environment.serverConfig)}
+              label={environment.label}
+              subtitle={`Shared through host · ${connectionStatusText(environment.connection)}`}
+            >
+              <span className="text-xs text-muted-foreground">Managed by host</span>
+            </EnvironmentRow>
+          ) : (
+            <SavedBackendListRow
+              key={environment.environmentId}
+              environment={environment}
+              removingEnvironmentId={removingSavedEnvironmentId}
+              onSetEnabled={handleSetSavedBackendEnabled}
+              onRemove={handleRemoveSavedBackend}
+              onAddRoute={(target) => {
+                setRouteTarget(target);
+                setSavedBackendError(null);
+                setAddBackendDialogOpen(true);
+              }}
+            />
+          ),
+        )}
         <CloudRemoteEnvironmentRows
           primaryEnvironmentId={primaryEnvironmentId}
           savedEnvironments={savedEnvironments}

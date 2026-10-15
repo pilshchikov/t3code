@@ -3409,13 +3409,18 @@ export const layer = Layer.unwrap(
           () =>
             Effect.raceFirst(
               rpcWebSocketHttpEffect,
-              sessions.awaitInvalidation(session.sessionId).pipe(
-                Effect.as(HttpServerResponse.empty()),
-                Effect.catchTags({
-                  SessionCredentialVerificationError: (error) =>
-                    failEnvironmentInternal("internal_error", error),
-                }),
-              ),
+              sessions
+                .awaitInvalidation(
+                  session.sessionId,
+                  Array.from(session.credentialScopes ?? session.scopes),
+                )
+                .pipe(
+                  Effect.as(HttpServerResponse.empty()),
+                  Effect.catchTags({
+                    SessionCredentialVerificationError: (error) =>
+                      failEnvironmentInternal("internal_error", error),
+                  }),
+                ),
             ),
           () => sessions.markDisconnected(session.sessionId),
         );

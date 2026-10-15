@@ -5,6 +5,7 @@ import {
   createAdvertisedEndpoint,
   deriveWsBaseUrl,
   normalizeHttpBaseUrl,
+  environmentEndpointUrl,
 } from "./endpoint.ts";
 
 const coreProvider = {
@@ -57,5 +58,22 @@ describe("advertised endpoint helpers", () => {
       status: "available",
       isDefault: true,
     });
+  });
+});
+
+describe("shared environment API paths", () => {
+  it("keeps gateway paths for descriptor, preview, device and authentication requests", () => {
+    const gateway = "https://mac.test/api/shared-environments/proxy/mini";
+    for (const path of [
+      "/.well-known/t3/environment",
+      "/api/preview-stream",
+      "/api/device-hub",
+      "/api/auth/session",
+    ]) {
+      expect(environmentEndpointUrl(gateway, path)).toBe(gateway + path);
+      expect(environmentEndpointUrl("https://mini.test/ignored?x=1#fragment", path)).toBe(
+        "https://mini.test" + path,
+      );
+    }
   });
 });

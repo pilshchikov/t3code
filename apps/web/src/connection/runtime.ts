@@ -11,6 +11,7 @@ import { Atom } from "effect/reactivity";
 import * as Runtime from "../lib/runtime";
 import * as BackgroundActivityReporter from "../lib/backgroundActivityReporter";
 import * as PeerRelayHost from "../lib/peerRelayHost";
+import * as SharedEnvironmentHost from "../lib/sharedEnvironmentHost";
 import * as ConnectionPlatform from "./platform";
 
 const layerProvidedConnectionPlatform = ConnectionPlatform.layer.pipe(Layer.provide(Runtime.layer));
@@ -47,9 +48,11 @@ const layerProvidedClientConnection = layerSnapshotLoader.pipe(
   ),
 );
 
-const layerConnection = Layer.mergeAll(BackgroundActivityReporter.layer, PeerRelayHost.layer).pipe(
-  Layer.provideMerge(layerProvidedClientConnection),
-);
+const layerConnection = Layer.mergeAll(
+  BackgroundActivityReporter.layer,
+  PeerRelayHost.layer,
+  SharedEnvironmentHost.layer,
+).pipe(Layer.provideMerge(layerProvidedClientConnection));
 
 export const connectionAtomRuntime: Atom.AtomRuntime<
   Layer.Success<ConnectionLayerSource>,

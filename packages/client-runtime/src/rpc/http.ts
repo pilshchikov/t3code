@@ -1,3 +1,4 @@
+import { environmentGatewayPath } from "@t3tools/shared/environmentGateway";
 import {
   EnvironmentHttpApi,
   EnvironmentHttpCommonError,
@@ -88,7 +89,7 @@ export const layerRemoteHttpClient = (
 
 const remoteApiBaseUrl = (httpBaseUrl: string): string => {
   const url = new URL(httpBaseUrl);
-  url.pathname = "/";
+  url.pathname = environmentGatewayPath(httpBaseUrl) || "/";
   url.search = "";
   url.hash = "";
   return url.toString();

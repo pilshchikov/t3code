@@ -1,3 +1,4 @@
+import { isHostPrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
 import { useAuth } from "@clerk/react";
 import { useAtomValue } from "@effect/atom-react";
 import {
@@ -408,7 +409,7 @@ function DevicesStep() {
   const { environments } = useEnvironments();
   const primaryEnvironment = usePrimaryEnvironment();
   const savedEnvironments = environments.filter(
-    (environment) => environment.entry.target._tag !== "PrimaryConnectionTarget",
+    (environment) => !isHostPrimaryConnectionTarget(environment.entry.target),
   );
 
   return (

@@ -1,3 +1,4 @@
+import { isHostPrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
 import type { ConnectionCatalogEntry } from "@t3tools/client-runtime/connection";
 import type { ServerConfig } from "@t3tools/contracts";
 import { useMemo } from "react";
@@ -19,7 +20,7 @@ import {
  * connection id. SSH, relay, and other remote targets are excluded.
  */
 function isLocalConnectionTarget(target: ConnectionCatalogEntry["target"]): boolean {
-  return target._tag === "PrimaryConnectionTarget" || isDesktopLocalConnectionTarget(target);
+  return isHostPrimaryConnectionTarget(target) || isDesktopLocalConnectionTarget(target);
 }
 
 function normalizeConnectionState(phase: string | undefined): EnvironmentUpdateConnectionState {

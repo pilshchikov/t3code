@@ -91,12 +91,12 @@ export const AUTH_SCOPE_OPTIONS: ReadonlyArray<{
   {
     scope: AuthAccessWriteScope,
     title: "Manage access",
-    description: "Issue and revoke credentials for other clients.",
+    description: "Issue and revoke credentials, and edit permissions for authorized clients.",
   },
   {
     scope: AuthRelayReadScope,
-    title: "View relay",
-    description: "Inspect managed relay connectivity.",
+    title: "View relay and shared environments",
+    description: "View this host’s shared environments and managed relay connectivity.",
   },
   {
     scope: AuthRelayWriteScope,

@@ -1,3 +1,5 @@
+import { SharedEnvironmentCatalog } from "@t3tools/contracts";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import {
   ClientCapabilities,
   PlatformConnectionSource,
@@ -59,6 +61,8 @@ import {
 } from "./desktopLocal";
 import * as ConnectionStorage from "./storage";
 import { clientPresentationMetadata } from "./clientMetadata";
+
+import { sharedEnvironmentRegistrations } from "./sharedEnvironmentRoutes";
 
 let nextObservedRpcRequestId = 0;
 
@@ -574,6 +578,10 @@ const layerPlatformConnectionSource = Layer.effect(
     }
     const cacheRef = yield* Ref.make(new Map<string, CachedPlatformRegistration>());
     const rejectedRef = yield* Ref.make(new Map<string, RejectedSecondaryBootstrap>());
+    const sharedRef = yield* Ref.make<{
+      readAt: number;
+      registrations: ReadonlyArray<PlatformConnectionRegistration>;
+    }>({ readAt: -Infinity, registrations: [] });
 
     // Resolve the full set of platform-managed environments the host currently
     // reports: the primary (same-origin cookie auth) plus any desktop-local
@@ -730,6 +738,52 @@ const layerPlatformConnectionSource = Layer.effect(
         yield* Ref.set(rejectedRef, nextRejected);
       }
 
+      // Same-origin browsers inherit the host's connected environments instead of needing SSH or fresh pairing.
+      if (typeof window !== "undefined" && window.desktopBridge === undefined) {
+        let shared = yield* Ref.get(sharedRef);
+        const primary = registrations.find(
+          (registration) => registration._tag === "PrimaryConnectionRegistration",
+        );
+        if (
+          primary?._tag === "PrimaryConnectionRegistration" &&
+          nowEpochMs - shared.readAt >= 10_000
+        ) {
+          const http = yield* HttpClient.HttpClient;
+          const result = yield* http
+            .get(new URL("/api/shared-environments", primary.target.httpBaseUrl).href)
+            .pipe(
+              Effect.flatMap((response) =>
+                Effect.gen(function* () {
+                  if (response.status === 401 || response.status === 403 || response.status === 404)
+                    return { environments: [] } satisfies SharedEnvironmentCatalog;
+                  if (response.status !== 200)
+                    return yield* new ConnectionTransientError({
+                      reason: "endpoint-unavailable",
+                      detail: "Shared environment catalog unavailable.",
+                    });
+                  return yield* HttpClientResponse.schemaBodyJson(SharedEnvironmentCatalog)(
+                    response,
+                  );
+                }),
+              ),
+              Effect.timeout("5 seconds"),
+              Effect.option,
+            );
+          const discovered = Option.isSome(result)
+            ? sharedEnvironmentRegistrations(primary.target, result.value)
+            : shared.registrations;
+          shared = { readAt: nowEpochMs, registrations: discovered };
+          yield* Ref.set(sharedRef, shared);
+        }
+        const known = new Set(
+          registrations.map((registration) => registration.target.environmentId),
+        );
+        registrations.push(
+          ...shared.registrations.filter(
+            (registration) => !known.has(registration.target.environmentId),
+          ),
+        );
+      }
       yield* Ref.set(cacheRef, next);
       return registrations as ReadonlyArray<PlatformConnectionRegistration>;
     }).pipe(Effect.provide(FetchHttpClient.layer));

@@ -709,3 +709,93 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
     }).pipe(Effect.provide(layerEnvironmentAuth({ mode: "web", host: "192.168.1.50" }))),
   );
 });
+
+it.layer(NodeServices.layer)("client permission updates", (it) => {
+  it.effect("applies only explicitly delegated scopes and prevents self edits and escalation", () =>
+    Effect.gen(function* () {
+      const auth = yield* EnvironmentAuth.EnvironmentAuth;
+      const actor = yield* auth.issueSession({ scopes: ["access:write", "orchestration:read"] });
+      const client = yield* auth.issueSession({ scopes: ["orchestration:read"] });
+      expect(yield* auth.updateClientScopes(actor, client.sessionId, ["orchestration:read"])).toBe(
+        true,
+      );
+      expect(
+        (yield* auth
+          .updateClientScopes(actor, client.sessionId, ["filesystem:write"])
+          .pipe(Effect.flip))._tag,
+      ).toBe("ServerAuthScopeNotGrantedError");
+      expect(
+        (yield* auth
+          .updateClientScopes(actor, actor.sessionId, ["orchestration:read"])
+          .pipe(Effect.flip))._tag,
+      ).toBe("ServerAuthCurrentSessionScopesError");
+      expect(
+        (yield* auth.updateClientScopes(actor, client.sessionId, []).pipe(Effect.flip))._tag,
+      ).toBe("ServerAuthInvalidScopeError");
+      expect(
+        (yield* auth
+          .updateClientScopes(actor, client.sessionId, ["orchestration:read", "orchestration:read"])
+          .pipe(Effect.flip))._tag,
+      ).toBe("ServerAuthInvalidScopeError");
+      expect(
+        (yield* auth
+          .updateClientScopes(client, actor.sessionId, ["orchestration:read"])
+          .pipe(Effect.flip))._tag,
+      ).toBe("ServerAuthScopeNotGrantedError");
+      const clients = yield* auth.listClientSessions(actor.sessionId);
+      expect(clients.find((c) => c.sessionId === client.sessionId)?.permissions).toEqual([
+        "orchestration:read",
+      ]);
+    }).pipe(Effect.provide(layerEnvironmentAuth())),
+  );
+});
+
+it.layer(NodeServices.layer)("shared host permission restrictions", (it) => {
+  it.effect(
+    "intersects delegated HTTP and socket permissions without changing the credential grant",
+    () =>
+      Effect.gen(function* () {
+        const auth = yield* EnvironmentAuth.EnvironmentAuth;
+        const owner = yield* auth.issueSession({
+          scopes: ["orchestration:read", "filesystem:read"],
+        });
+        const request = (restriction: string) =>
+          ({
+            url: "/ws",
+            cookies: {},
+            headers: {
+              authorization: `Bearer ${owner.token}`,
+              "x-t3-delegated-permissions": restriction,
+            },
+          }) as never;
+        const delegated = yield* auth.authenticateHttpRequest(
+          request(JSON.stringify(["orchestration:read", "filesystem:write"])),
+        );
+        expect(delegated.scopes).toEqual(["orchestration:read"]);
+        expect(delegated.credentialScopes).toEqual(owner.scopes);
+        const ticket = yield* auth.issueWebSocketTicket(delegated);
+        const socket = yield* auth.authenticateWebSocketUpgrade({
+          url: `/ws?wsTicket=${encodeURIComponent(ticket.ticket)}`,
+          cookies: {},
+          headers: { "x-t3-delegated-permissions": JSON.stringify(["orchestration:read"]) },
+        } as never);
+        expect(socket.scopes).toEqual(["orchestration:read"]);
+        expect(socket.credentialScopes).toEqual(owner.scopes);
+        const unchanged = yield* auth.authenticateHttpRequest({
+          cookies: {},
+          headers: { authorization: `Bearer ${owner.token}` },
+        } as never);
+        expect(unchanged.scopes).toEqual(owner.scopes);
+        for (const invalid of [
+          "invalid",
+          "[]x",
+          JSON.stringify(["invented:permission"]),
+          " ".repeat(8193),
+        ]) {
+          expect(
+            (yield* auth.authenticateHttpRequest(request(invalid)).pipe(Effect.flip))._tag,
+          ).toBe("ServerAuthInvalidCredentialError");
+        }
+      }).pipe(Effect.provide(layerEnvironmentAuth())),
+  );
+});

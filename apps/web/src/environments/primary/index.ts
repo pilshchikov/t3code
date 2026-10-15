@@ -14,6 +14,7 @@ export {
   resolveInitialServerAuthGateState,
   revokeOtherServerClientSessions,
   revokeServerClientSession,
+  updateServerClientScopes,
   revokeServerPairingLink,
   stripPairingTokenFromUrl,
   submitServerAuthCredential,

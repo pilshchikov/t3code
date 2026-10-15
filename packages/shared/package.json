@@ -498,6 +498,10 @@
     "./PtyAdapter": {
       "types": "./src/PtyAdapter.ts",
       "import": "./src/PtyAdapter.ts"
+    },
+    "./environmentGateway": {
+      "types": "./src/environmentGateway.ts",
+      "import": "./src/environmentGateway.ts"
     }
   },
   "scripts": {

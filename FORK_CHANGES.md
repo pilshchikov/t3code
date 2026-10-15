@@ -1,5 +1,38 @@
 # Fork Changes
 
+## Editable client permissions and shared host environments — 2026-10-15
+
+- Authorized clients have an **Edit permissions** dialog in Connections, with Read only,
+  Standard and All available presets. Existing cookie, bearer and proof credentials use the
+  persisted grant; changes close old sockets and active proxy streams so reconnects see the
+  edited grant. Managers cannot grant scopes they lack, edit their current client or revive an
+  expired/revoked client. No database migration or manual edits to live user data.
+- Phone browsers on the desktop host's tailnet/LAN web address discover the host's connected
+  SSH/direct environments automatically. The desktop publishes active authenticated routes to
+  its own server; a same-origin streaming HTTP/WebSocket gateway forwards over those routes.
+  Remote credentials remain in host memory. No phone SSH, new tunnel, cloud service, pairing
+  per remote machine or outbound discovery is introduced. Discovery runs at most every ten
+  seconds; publishing follows connection events and retries temporary failures.
+- Shared access requires `orchestration:read` and `relay:read` (now labeled **View relay and
+  shared environments**), then intersects the phone's permissions with the remote credential.
+  Remote servers must advertise delegated-permission support; older servers and proof-only
+  routes remain unavailable through the host. Both server builds need updating. The host must
+  stay open and connected; native mobile retains its existing direct setup.
+- Gateway-aware API, descriptor, asset, preview and device URLs retain the selected environment
+  prefix. Shared environments appear as **Shared through host**, are managed by the host, and
+  do not replace the actual primary machine or advertise the host's MCP address as the remote's.
+- Sources: server `auth/{EnvironmentAuth,SessionStore,http}.ts`, persistence `AuthSessions.ts`,
+  `connections/{SharedEnvironments,SharedEnvironmentHttp}.ts`, contracts `auth.ts`,
+  `environmentSharing.ts`, `environmentHttp.ts`, web `ClientScopesDialog.tsx`,
+  `ConnectionsSettings.tsx`, `connection/{platform,sharedEnvironmentRoutes}.ts`,
+  `lib/sharedEnvironmentHost.ts`, shared `environmentGateway.ts` and client-runtime connection,
+  endpoint, HTTP and asset helpers. User guidance: `docs/user/remote-access.md`.
+- Validation: 128 focused tests passed, including two actual temporary HTTP/WebSocket servers,
+  phone cookie and ticket authentication, denied writes, live grant edits/socket cleanup,
+  disconnected/outdated host handling, credential isolation, URL routing and dialog interactions.
+  Seven scoped typechecks passed (server, web, desktop, native mobile, contracts, shared and
+  client-runtime); changed-file lint passed with existing warnings. No browser checks performed.
+
 ## Upstream follow-up integration — 2026-10-15 (c079503d07)
 
 - Merged 16 additional commits from upstream `main` through

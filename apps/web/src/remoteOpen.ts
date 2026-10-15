@@ -1,3 +1,4 @@
+import { isHostPrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
 /**
  * Remote open-in-editor: when this client is not on the environment's
  * machine, "Open" must hand the OS a `vscode://vscode-remote/ssh-remote+…`
@@ -70,7 +71,7 @@ export function resolveRemoteOpenState(input: {
   if (target === null) {
     return LOCAL_EXEC;
   }
-  if (target._tag === "PrimaryConnectionTarget") {
+  if (target._tag === "PrimaryConnectionTarget" && isHostPrimaryConnectionTarget(target)) {
     // The desktop app manages its own primary backend, so it is always on
     // this machine even when its URL is not loopback (wsl-only mode binds
     // the WSL2 NAT address). In a browser, a loopback primary means the

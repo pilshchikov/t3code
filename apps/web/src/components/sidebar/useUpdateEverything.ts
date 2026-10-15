@@ -1,3 +1,4 @@
+import { isHostPrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
 import { useAtomValue } from "@effect/atom-react";
 import { PROVIDER_DISPLAY_NAMES } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
@@ -59,7 +60,7 @@ export function useUpdateEverything(localUpdateVersion: string | null) {
           connected: environment.connection.phase === "connected",
           hostedByThisApp:
             isElectron &&
-            (environment.entry.target._tag === "PrimaryConnectionTarget" ||
+            (isHostPrimaryConnectionTarget(environment.entry.target) ||
               isDesktopLocalConnectionTarget(environment.entry.target)),
           canMaintain: canUpdateServer(
             get(environmentSession.sessionStateAtom(environment.environmentId)),

@@ -1,3 +1,4 @@
+import { PublishSharedEnvironmentsInput, SharedEnvironmentCatalog } from "./environmentSharing.ts";
 import * as Context from "effect/Context";
 import type * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
@@ -31,6 +32,7 @@ import {
   AuthPairingCredentialResult,
   AuthPairingLink,
   AuthRevokeClientSessionInput,
+  AuthUpdateClientScopesInput,
   AuthRevokePairingLinkInput,
   AuthEnvironmentScope,
   AuthTokenExchangeRequest,
@@ -105,6 +107,7 @@ export type EnvironmentAuthInvalidReason = typeof EnvironmentAuthInvalidReason.T
 
 export const EnvironmentOperationForbiddenReason = Schema.Literals([
   "current_session_revoke_not_allowed",
+  "current_session_scope_change_not_allowed",
 ]);
 export type EnvironmentOperationForbiddenReason = typeof EnvironmentOperationForbiddenReason.Type;
 
@@ -519,6 +522,14 @@ class EnvironmentAuthHttpApi extends HttpApiGroup.make("auth")
     }).middleware(EnvironmentAuthenticatedAuth),
   )
   .add(
+    HttpApiEndpoint.post("updateClientScopes", "/api/auth/clients/scopes", {
+      headers: OptionalBearerHeaders,
+      payload: AuthUpdateClientScopesInput,
+      success: Schema.Struct({ updated: Schema.Boolean }),
+      error: [EnvironmentRequestInvalidError, ...EnvironmentSessionRevokeErrors],
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
     HttpApiEndpoint.post("revokeClient", "/api/auth/clients/revoke", {
       headers: OptionalBearerHeaders,
       payload: AuthRevokeClientSessionInput,
@@ -772,8 +783,26 @@ class EnvironmentWebhooksHttpApi extends HttpApiGroup.make("webhooks")
   .add(HttpApiEndpoint.patch("webhookPatch", WEBHOOK_PATH, webhookEndpoint))
   .add(HttpApiEndpoint.get("webhookGet", WEBHOOK_PATH, webhookEndpoint)) {}
 
+class EnvironmentSharingHttpApi extends HttpApiGroup.make("sharedEnvironments")
+  .add(
+    HttpApiEndpoint.get("catalog", "/api/shared-environments", {
+      headers: OptionalBearerHeaders,
+      success: SharedEnvironmentCatalog,
+      error: EnvironmentScopedOperationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("publish", "/api/shared-environments", {
+      headers: OptionalBearerHeaders,
+      payload: PublishSharedEnvironmentsInput,
+      success: Schema.Struct({ published: Schema.Number }),
+      error: [EnvironmentRequestInvalidError, ...EnvironmentScopedOperationErrors],
+    }).middleware(EnvironmentAuthenticatedAuth),
+  ) {}
+
 export class EnvironmentHttpApi extends HttpApi.make("environment")
   .add(EnvironmentMetadataHttpApi)
+  .add(EnvironmentSharingHttpApi)
   .add(EnvironmentAuthHttpApi)
   .add(EnvironmentMcpOAuthHttpApi)
   .add(EnvironmentOrchestrationHttpApi)

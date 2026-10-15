@@ -447,6 +447,12 @@ export const AuthRevokePairingLinkInput = Schema.Struct({
 });
 export type AuthRevokePairingLinkInput = typeof AuthRevokePairingLinkInput.Type;
 
+export const AuthUpdateClientScopesInput = Schema.Struct({
+  sessionId: AuthSessionId,
+  scopes: AuthGrantScopes,
+});
+export type AuthUpdateClientScopesInput = typeof AuthUpdateClientScopesInput.Type;
+
 export const AuthRevokeClientSessionInput = Schema.Struct({
   sessionId: AuthSessionId,
 });

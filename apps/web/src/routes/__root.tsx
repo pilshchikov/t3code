@@ -1,3 +1,4 @@
+import { isHostPrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
 import { PermissionUpdateNotice } from "../components/PermissionUpdateNotice";
 import { type ServerLifecycleWelcomePayload } from "@t3tools/contracts";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
@@ -412,9 +413,7 @@ function HostedStaticEnvironmentBootstrap() {
 
   useEffect(() => {
     if (
-      environments.some(
-        (environment) => environment.entry.target._tag === "PrimaryConnectionTarget",
-      )
+      environments.some((environment) => isHostPrimaryConnectionTarget(environment.entry.target))
     ) {
       return;
     }
