@@ -5,12 +5,14 @@ import {
   communicationDetailRefs,
   communicationThreadKey,
   deriveThreadCommunication,
+  retainThreadCommunication,
+  type ThreadCommunication,
   type CommunicationSelection,
   type CommunicationParticipant,
 } from "@t3tools/client-runtime/state/thread-communication";
 import { EnvironmentId, ThreadId, type ScopedThreadRef } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { environmentThreadDetails, threadEnvironment } from "../../state/threads";
 import { useThreadProjection, useThreadShells } from "../../state/entities";
 import { useEnvironments } from "../../state/environments";
@@ -90,7 +92,7 @@ function ConnectedCommunication({
   );
   const rootHistory = useAtomValue(environmentThreadDetails.historyAtom(root));
   const rootError = useAtomValue(environmentThreadDetails.errorAtom(root));
-  const model = useMemo(() => {
+  const currentModel = useMemo(() => {
     const sourceThreads = selected.flatMap((source) =>
       source.thread === null ? [] : [source.thread],
     );
@@ -100,6 +102,14 @@ function ConnectedCommunication({
       environmentLabels: labels,
     });
   }, [root.environmentId, root.threadId, rootThread, selected, labels]);
+  const [retained, setRetained] = useState<ThreadCommunication | null>(null);
+  useEffect(() => {
+    setRetained((previous) => retainThreadCommunication(previous, currentModel));
+  }, [currentModel]);
+  const model = useMemo(
+    () => retainThreadCommunication(retained, currentModel),
+    [retained, currentModel],
+  );
   const errors = [rootError, ...selected.map((source) => source.error)].filter(
     (error) => error !== null,
   );

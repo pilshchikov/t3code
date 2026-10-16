@@ -15,6 +15,9 @@ import * as DateTime from "effect/DateTime";
 import { v2Projection, v2Now } from "./orchestrationV2TestFixtures.ts";
 import {
   communicationDetailRefs,
+  retainThreadCommunication,
+  recentCommunicationParticipants,
+  type ThreadCommunication,
   deriveThreadCommunication,
   selectCommunicationMessages,
 } from "./threadCommunication.ts";
@@ -320,5 +323,105 @@ describe("thread communication", () => {
     expect(
       model.messages.filter((m) => m.text === agent().result && m.from === `${local}:${child}`),
     ).toHaveLength(1);
+  });
+});
+
+describe("retained communication history", () => {
+  const participant = (
+    id: string,
+    parentId: string | null = "root",
+    at = "2026-10-15T12:00:00Z",
+  ) => ({
+    id,
+    label: id,
+    environmentId: local,
+    environmentLabel: "Laptop",
+    threadId: ThreadId.make(id),
+    parentId,
+    status: "completed",
+    model: "sonnet",
+    lastActivityAt: at,
+  });
+  const message = (id: string, from: string, to: string, at = "2026-10-15T12:00:00Z") => ({
+    id,
+    from,
+    to,
+    at,
+    text: id,
+    summary: null,
+    kind: "response" as const,
+    state: "received" as const,
+  });
+  const first: ThreadCommunication = {
+    rootId: "root",
+    participants: [
+      participant("root", null),
+      participant("auditor"),
+      participant("nested", "auditor"),
+    ],
+    messages: [message("result", "nested", "auditor")],
+  };
+  it("keeps discovered agents and exchanges when different detail streams are selected", () => {
+    const second: ThreadCommunication = {
+      rootId: "root",
+      participants: [participant("root", null), participant("recorder")],
+      messages: [],
+    };
+    const combined = retainThreadCommunication(first, second);
+    expect(combined.participants.map((p) => p.id)).toEqual([
+      "root",
+      "auditor",
+      "nested",
+      "recorder",
+    ]);
+    expect(combined.messages.map((m) => m.id)).toEqual(["result"]);
+    const overview = retainThreadCommunication(combined, {
+      rootId: "root",
+      participants: [participant("root", null)],
+      messages: [],
+    });
+    expect(overview.participants).toHaveLength(4);
+    expect(overview.messages).toHaveLength(1);
+  });
+  it("updates live metadata, preserves delivery acknowledgements and clears another root", () => {
+    const update: ThreadCommunication = {
+      ...first,
+      participants: [
+        { ...participant("auditor", null, "2026-10-15T13:00:00Z"), status: "working" },
+      ],
+      messages: [{ ...first.messages[0]!, state: "sent" }],
+    };
+    const combined = retainThreadCommunication(first, update);
+    expect(combined.participants.find((p) => p.id === "auditor")).toMatchObject({
+      status: "working",
+      parentId: "root",
+    });
+    expect(combined.messages).toHaveLength(1);
+    expect(combined.messages[0]?.state).toBe("received");
+    expect(retainThreadCommunication(combined, { ...update, rootId: "other" })).toEqual({
+      ...update,
+      rootId: "other",
+    });
+  });
+  it("orders activity newest first without using selection or replacing equal-time order", () => {
+    const history: ThreadCommunication = {
+      rootId: "root",
+      participants: [
+        participant("old", null, "2026-10-14T12:00:00Z"),
+        participant("new", null, "2026-10-15T12:00:00Z"),
+        participant("peer", null, "2026-10-15T12:00:00Z"),
+      ],
+      messages: [message("newer", "old", "peer", "2026-10-16T12:00:00Z")],
+    };
+    expect(recentCommunicationParticipants(history).map((p) => p.id)).toEqual([
+      "old",
+      "peer",
+      "new",
+    ]);
+    expect(recentCommunicationParticipants({ ...history, messages: [] }).map((p) => p.id)).toEqual([
+      "new",
+      "peer",
+      "old",
+    ]);
   });
 });

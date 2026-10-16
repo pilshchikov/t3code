@@ -1,5 +1,32 @@
 # Fork Changes
 
+## Stable, searchable agent communication — 2026-10-15
+
+- Replaced the web/desktop map's fixed-coordinate, selection-prioritized cards and ambiguous
+  one-way links with a coordinator/task tree. Nested agents follow actual parentage; both
+  directions have distinct task/message/reply counts. Direct agent exchanges appear separately.
+  Full task titles wrap, machine/model/status remain visible, and selection highlights nodes
+  without moving them. Missing/cyclic parents remain visible as separate threads.
+- Retain discovered participants and recorded messages for the lifetime of the open viewer on
+  web and native mobile, even when selecting different detail streams. This fixes agent totals
+  shrinking on selection. Live metadata and delivery acknowledgements update existing records;
+  the archive clears on close/root change. Only the selected detail sources remain subscribed.
+- Task conversations and message feeds use newest-first order. Web has task search by title,
+  machine or model, activity timestamps and pages of 50 tasks/30 exchanges. Older exchanges
+  append below recent ones. The overview bounds each branch/direct-link list, with explicit
+  show-all and focus-selection controls; focusing preserves the overall discovered-agent count.
+  Map scrolling and minimum transcript height keep small phone conversations readable.
+- Sources: `apps/web/src/components/chat/{AgentCommunicationMap,AgentCommunicationView,
+AgentCommunicationControl}.tsx`, `agentCommunicationStyles.ts`,
+  `packages/client-runtime/src/state/threadCommunication.ts` and native
+  `apps/mobile/src/features/threads/ThreadCommunicationSheet.tsx`.
+- Validation: 18 focused extraction/retention/order and DOM interaction tests passed. An isolated
+  Chromium fixture using production components passed desktop (1440×900), phone (390×844) and
+  short-phone (320×568) checks, including 75 tasks, search, pagination, stable node positions,
+  nested agents, directed counts, explicit focus, collapse and close. Scoped web/native/shared
+  runtime typechecks and changed-file lint passed with non-failing warnings. Native UI was
+  typechecked, not exercised on a device. No live-data writes, app build, install or restart.
+
 ## Neutral activity above the composer — 2026-10-15
 
 - Restored neutral text and icons for command/monitoring activity above the prompt on

@@ -204,4 +204,146 @@ describe("communication dialog interactions", () => {
       "No recorded communication",
     );
   });
+  it("keeps every agent in place while selecting cards, connections and the parent", async () => {
+    const children = Array.from({ length: 9 }, (_, index) => ({
+      ...model.participants[1]!,
+      id: `child-${index}`,
+      label: `Task ${index + 1}`,
+      threadId: ThreadId.make(`child-${index}`),
+      lastActivityAt: `2026-10-15T10:00:0${9 - index}Z`,
+    }));
+    const many: ThreadCommunication = {
+      ...model,
+      participants: [model.participants[0]!, ...children],
+      messages: [{ ...model.messages[0]!, to: "child-8" }],
+    };
+    function ManyAgents() {
+      const [selection, select] = useState<CommunicationSelection>({ kind: "all" });
+      return <AgentCommunicationView model={many} selection={selection} onSelect={select} />;
+    }
+    await act(async () => root.render(<ManyAgents />));
+    const order = () =>
+      [...container.querySelectorAll("[data-communication-agent]")].map((element) =>
+        element.getAttribute("data-communication-agent"),
+      );
+    await click("Show all 10 agents");
+    const initial = order();
+    expect(initial).toEqual(["parent", ...children.map((child) => child.id)]);
+    await click("Read exchanges with Task 9");
+    expect(order()).toEqual(initial);
+    expect(
+      container.querySelector('[aria-label="Messages between agents"]')?.textContent,
+    ).toContain("Check the reconnect behavior.");
+    await click("Read exchanges with Task 2");
+    expect(order()).toEqual(initial);
+    await click("Read connection between Lead agent and Task 9");
+    expect(order()).toEqual(initial);
+    await click("Read exchanges with Lead agent");
+    expect(order()).toEqual(initial);
+    expect(container.querySelector('nav [aria-pressed="true"]')?.textContent).toContain(
+      "All conversations",
+    );
+  });
+  it("shows actual nested parentage and separates reply counts from assigned tasks", async () => {
+    const nested: ThreadCommunication = {
+      ...model,
+      participants: [
+        model.participants[0]!,
+        model.participants[1]!,
+        { ...model.participants[2]!, parentId: "auditor" },
+      ],
+      messages: [
+        {
+          ...model.messages[0]!,
+          id: "reply",
+          from: "auditor",
+          to: "parent",
+          kind: "response",
+          state: "received",
+        },
+        model.messages[0]!,
+        { ...model.messages[1]!, kind: "delegation" },
+        model.messages[2]!,
+      ],
+    };
+    function NestedAgents() {
+      const [selection, select] = useState<CommunicationSelection>({ kind: "all" });
+      return <AgentCommunicationView model={nested} selection={selection} onSelect={select} />;
+    }
+    await act(async () => root.render(<NestedAgents />));
+    const branch = container.querySelector('[aria-label="Tasks delegated by Auditor"]');
+    expect(branch?.querySelector('[data-communication-agent="recorder"]')).not.toBeNull();
+    expect(button("Read connection between Lead agent and Auditor").textContent).toContain(
+      "1 task",
+    );
+    expect(button("Read connection between Lead agent and Auditor").textContent).toContain(
+      "1 reply",
+    );
+    await click("Read connection between Lead agent and Auditor");
+    const messages = container.querySelector('[aria-label="Messages between agents"]');
+    expect(messages?.querySelectorAll("article")).toHaveLength(2);
+  });
+  it("keeps unrelated and cyclic records visible without inventing a coordinator link", async () => {
+    const inconsistent: ThreadCommunication = {
+      ...model,
+      participants: [
+        model.participants[0]!,
+        { ...model.participants[1]!, parentId: "recorder" },
+        { ...model.participants[2]!, parentId: "auditor" },
+      ],
+    };
+    await act(async () =>
+      root.render(
+        <AgentCommunicationView
+          model={inconsistent}
+          selection={{ kind: "all" }}
+          onSelect={() => {}}
+        />,
+      ),
+    );
+    expect(container.querySelectorAll("[data-communication-agent]")).toHaveLength(3);
+    expect(container.querySelector('[aria-label="Tasks delegated by Lead agent"]')).toBeNull();
+    expect(container.textContent).toContain("Other threads");
+  });
+  it("pages a long task history newest first and loads older exchanges below the latest", async () => {
+    const tasks = Array.from({ length: 75 }, (_, i) => ({
+      ...model.participants[1]!,
+      id: `task-${i}`,
+      label: `History task ${i}`,
+      threadId: ThreadId.make(`task-${i}`),
+      lastActivityAt: new Date(Date.UTC(2026, 9, 15, 0, i)).toISOString(),
+    }));
+    const history: ThreadCommunication = {
+      ...model,
+      participants: [model.participants[0]!, ...tasks],
+      messages: tasks.map((p, i) => ({
+        ...model.messages[0]!,
+        id: `message-${i}`,
+        to: p.id,
+        text: `Exchange ${i}`,
+        at: p.lastActivityAt,
+      })),
+    };
+    function History() {
+      const [selection, select] = useState<CommunicationSelection>({ kind: "all" });
+      return <AgentCommunicationView model={history} selection={selection} onSelect={select} />;
+    }
+    await act(async () => root.render(<History />));
+    const taskIds = () =>
+      [...container.querySelectorAll("nav [data-communication-task]")].map((element) =>
+        element.getAttribute("data-communication-task"),
+      );
+    expect(taskIds()).toHaveLength(50);
+    expect(taskIds()[0]).toBe("task-74");
+    await click("Show 25 more tasks");
+    expect(taskIds()).toHaveLength(75);
+    expect(taskIds().at(-1)).toBe("task-0");
+    const feed = container.querySelector('[aria-label="Messages between agents"]')!;
+    expect(feed.querySelectorAll("article")).toHaveLength(30);
+    expect(feed.querySelector("article")?.textContent).toContain("Exchange 74");
+    await click("Show 30 older messages");
+    expect(feed.querySelectorAll("article")).toHaveLength(60);
+    expect(feed.querySelector("article")?.textContent).toContain("Exchange 74");
+    expect(container.querySelectorAll("[data-communication-agent]").length).toBeLessThan(10);
+  });
 });

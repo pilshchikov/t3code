@@ -6,12 +6,15 @@ import {
   communicationStatusTone,
   communicationThreadKey,
   deriveThreadCommunication,
+  retainThreadCommunication,
+  recentCommunicationParticipants,
+  type ThreadCommunication,
   selectCommunicationMessages,
   type CommunicationSelection,
 } from "@t3tools/client-runtime/state/thread-communication";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { Atom } from "effect/reactivity";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText as Text } from "../../components/AppText";
@@ -86,7 +89,7 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
   const sources = useAtomValue(
     sourcesAtom(JSON.stringify([root, ...refs].map((ref) => [ref.environmentId, ref.threadId]))),
   );
-  const model = useMemo(
+  const currentModel = useMemo(
     () =>
       deriveThreadCommunication({
         root: { environmentId: root.environmentId, threadId: root.threadId },
@@ -95,6 +98,15 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
       }),
     [root.environmentId, root.threadId, sources, labels],
   );
+  const [retained, setRetained] = useState<ThreadCommunication | null>(null);
+  useEffect(() => {
+    setRetained((previous) => retainThreadCommunication(previous, currentModel));
+  }, [currentModel]);
+  const model = useMemo(
+    () => retainThreadCommunication(retained, currentModel),
+    [retained, currentModel],
+  );
+  const orderedParticipants = useMemo(() => recentCommunicationParticipants(model), [model]);
   const messages = selectCommunicationMessages(model, selection);
   const participants = new Map(model.participants.map((p) => [p.id, p]));
   const insets = useSafeAreaInsets();
@@ -129,7 +141,7 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
           tone={selection.kind === "all" ? "primary" : "secondary"}
           onPress={() => select({ kind: "all" })}
         />
-        {model.participants
+        {orderedParticipants
           .filter((p) => p.id !== model.rootId)
           .map((p) => (
             <MaterialButton
@@ -209,37 +221,40 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
         ) : null}
         <Text className="text-sm font-t3-medium">
           {selected?.label ??
-            (selection.kind === "all" ? "Parent overview" : "Selected connection")}
+            (selection.kind === "all" ? "All conversations" : "Selected connection")}
         </Text>
         <Text className="text-xs text-foreground-muted">
           Recorded messages. Viewing does not send messages. Select a task to read its own
-          conversation.
+          conversation. Newest messages first.
         </Text>
+        {messages
+          .slice(-visibleCount)
+          .reverse()
+          .map((m) => (
+            <View key={m.id} className="gap-1 rounded-2xl border border-border p-3">
+              <Text className="text-xs font-t3-medium">
+                {participants.get(m.from)?.label} → {participants.get(m.to)?.label}
+              </Text>
+              <Text className="text-xs text-foreground-muted">
+                {participants.get(m.from)?.environmentLabel} →{" "}
+                {participants.get(m.to)?.environmentLabel} · {new Date(m.at).toLocaleString()} ·{" "}
+                <Text className={statusClasses[communicationStatusTone(m.state)]}>
+                  {m.state === "recorded" ? "In agent thread" : m.state}
+                </Text>
+              </Text>
+              {m.summary ? <Text className="text-sm font-t3-medium">{m.summary}</Text> : null}
+              <Text selectable className="text-sm">
+                {m.text}
+              </Text>
+            </View>
+          ))}
         {messages.length > visibleCount ? (
           <MaterialButton
-            label="Show earlier messages"
+            label="Show older messages"
             tone="text"
             onPress={() => setVisibleCount((n) => n + 30)}
           />
         ) : null}
-        {messages.slice(-visibleCount).map((m) => (
-          <View key={m.id} className="gap-1 rounded-2xl border border-border p-3">
-            <Text className="text-xs font-t3-medium">
-              {participants.get(m.from)?.label} → {participants.get(m.to)?.label}
-            </Text>
-            <Text className="text-xs text-foreground-muted">
-              {participants.get(m.from)?.environmentLabel} →{" "}
-              {participants.get(m.to)?.environmentLabel} · {new Date(m.at).toLocaleString()} ·{" "}
-              <Text className={statusClasses[communicationStatusTone(m.state)]}>
-                {m.state === "recorded" ? "In agent thread" : m.state}
-              </Text>
-            </Text>
-            {m.summary ? <Text className="text-sm font-t3-medium">{m.summary}</Text> : null}
-            <Text selectable className="text-sm">
-              {m.text}
-            </Text>
-          </View>
-        ))}
         {messages.length === 0 ? (
           <Text className="py-6 text-sm text-foreground-muted">
             {sources.some((s) => s.thread === null && s.error === null)

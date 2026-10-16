@@ -13,6 +13,7 @@ export interface CommunicationParticipant {
   readonly parentId: string | null;
   readonly status: string;
   readonly model: string | null;
+  readonly lastActivityAt?: string;
 }
 
 export interface CommunicationMessage {
@@ -150,7 +151,8 @@ export function deriveThreadCommunication(input: {
       environmentId,
       environmentLabel: environmentLabel(environmentId),
       threadId: thread.id,
-      parentId: parent,
+      parentId: parent ?? participants.get(id)?.parentId ?? null,
+      lastActivityAt: DateTime.formatIso(thread.updatedAt),
       status:
         projection.runs.at(-1)?.status ??
         deriveProviderSubagentStatus(projection)?.status ??
@@ -179,6 +181,7 @@ export function deriveThreadCommunication(input: {
         parentId: id,
         status: agent.status,
         model: agent.model,
+        lastActivityAt: DateTime.formatIso(agent.updatedAt),
       });
       for (const alias of [native, agent.id, agent.childThreadId, agent.title]) {
         if (alias !== null) aliases.set(`${id}:${alias}`, childId);
@@ -466,5 +469,77 @@ export function communicationDetailRefs(
     ids.includes(p.id) && p.threadId !== null
       ? [{ environmentId: p.environmentId, threadId: p.threadId }]
       : [],
+  );
+}
+
+/** Keep discovered communication while only the selected detail streams remain subscribed. */
+export function retainThreadCommunication(
+  previous: ThreadCommunication | null,
+  current: ThreadCommunication,
+): ThreadCommunication {
+  if (previous === null || previous.rootId !== current.rootId)
+    return { ...current, participants: recentCommunicationParticipants(current) };
+  const participants = new Map(
+    previous.participants.map((participant) => [participant.id, participant]),
+  );
+  const messages = new Map(previous.messages.map((message) => [message.id, message]));
+  for (const participant of recentCommunicationParticipants(current)) {
+    const old = participants.get(participant.id);
+    if (!old) {
+      participants.set(participant.id, participant);
+      continue;
+    }
+    const newer =
+      (Date.parse(old.lastActivityAt ?? "") || 0) >
+      (Date.parse(participant.lastActivityAt ?? "") || 0);
+    const update = {
+      ...participant,
+      ...(newer ? old : {}),
+      parentId: participant.parentId ?? old.parentId,
+      model: participant.model ?? old.model,
+      status:
+        participant.status === "unknown" ? old.status : newer ? old.status : participant.status,
+      environmentLabel: participant.environmentLabel,
+    };
+    participants.set(participant.id, update);
+  }
+  for (const message of current.messages) {
+    const old = messages.get(message.id);
+    if (old?.state !== "received" || message.state === "received")
+      messages.set(message.id, message);
+  }
+  return {
+    rootId: current.rootId,
+    participants: [...participants.values()],
+    messages: [...messages.values()].sort(
+      (a, b) => Date.parse(a.at) - Date.parse(b.at) || a.id.localeCompare(b.id),
+    ),
+  };
+}
+
+/** Activity order is independent of the selected task and deterministic for equal timestamps. */
+export function communicationParticipantActivity(
+  model: ThreadCommunication,
+): ReadonlyMap<string, number> {
+  const activity = new Map(
+    model.participants.map((participant) => [
+      participant.id,
+      Date.parse(participant.lastActivityAt ?? "") || 0,
+    ]),
+  );
+  for (const message of model.messages) {
+    const at = Date.parse(message.at) || 0;
+    for (const id of [message.from, message.to])
+      activity.set(id, Math.max(at, activity.get(id) ?? 0));
+  }
+  return activity;
+}
+
+export function recentCommunicationParticipants(
+  model: ThreadCommunication,
+): ReadonlyArray<CommunicationParticipant> {
+  const activity = communicationParticipantActivity(model);
+  return [...model.participants].sort(
+    (a, b) => (activity.get(b.id) ?? 0) - (activity.get(a.id) ?? 0),
   );
 }

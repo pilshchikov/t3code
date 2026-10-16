@@ -29,6 +29,12 @@ Only recorded communication appears: task instructions, returned results, and su
 messages. Load earlier history when needed; claims written in ordinary replies or shared files
 are not evidence that a message was delivered.
 
+Conversations and exchanges are ordered newest first. The web viewer lets you search task titles,
+machines and models, and load older entries as needed. Its map separates delegated tasks from
+agent-to-agent messages and counts both directions. For large histories, expand the overview or
+focus a selected conversation explicitly. Discovered agents stay available while the viewer is
+open; totals cover the loaded history and can grow when earlier history is loaded.
+
 ## T3 Connect
 
 T3 Connect makes an environment available to your other devices without setting
