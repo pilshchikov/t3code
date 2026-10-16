@@ -18,19 +18,16 @@ import { SidebarInput, SidebarMenuButton } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 export interface SidebarThreadHeaderProps {
-  /** Without projects there is nothing to scope, so those controls stay out. */
+  searchFieldRef?: RefObject<HTMLDivElement | null>;
   hasProjects: boolean;
-  /** The project scope combobox, rendered in its own row below search. */
   projectScope: ReactNode;
   /** Present only while the project rail is hidden, and never on mobile. */
   onShowProjectRail?: (() => void) | undefined;
   onNewProject: () => void;
-  /** Receives the click so Shift+click can skip the project picker. */
   onNewThread: (event: ReactMouseEvent) => void;
   newThreadDisabled: boolean;
   newThreadShortcutLabel: string | null | undefined;
   newThreadInProjectShortcutLabel: string | null | undefined;
-  /** Shift+click only matters once there is more than one project to pick. */
   showNewThreadInProjectHint: boolean;
   searchInputRef: RefObject<HTMLInputElement | null>;
   searchQuery: string;
@@ -53,6 +50,7 @@ export function SidebarThreadHeader({
   newThreadInProjectShortcutLabel,
   showNewThreadInProjectHint,
   searchInputRef,
+  searchFieldRef,
   searchQuery,
   onSearchQueryChange,
   onSearchKeyDown,
@@ -73,7 +71,10 @@ export function SidebarThreadHeader({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-1">
-        <div className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground md:h-8">
+        <div
+          ref={searchFieldRef}
+          className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground md:h-8"
+        >
           <SearchIcon className="size-4 shrink-0 text-[var(--sidebar-icon-color)]" />
           <Input
             ref={searchInputRef}
@@ -153,11 +154,6 @@ export function SidebarThreadHeader({
   );
 }
 
-/**
- * Icon button with a tooltip, sized for the header's segmented pair. Spreads
- * unknown props through so it can serve as a popup trigger's render target,
- * which injects its own handlers, ref and aria state.
- */
 export function SidebarHeaderIconButton({
   label,
   tooltip = label,
@@ -165,7 +161,6 @@ export function SidebarHeaderIconButton({
   children,
   ...rest
 }: {
-  /** Accessible name; also the tooltip unless `tooltip` says more. */
   label: string;
   tooltip?: ReactNode;
   className?: string | undefined;
@@ -191,7 +186,6 @@ export function SidebarHeaderIconButton({
         }
       >
         {children}
-        {/* Coarse-pointer hit area, matching the rest of the sidebar chrome. */}
         <span
           aria-hidden
           className="pointer-events-none absolute left-1/2 top-1/2 size-[max(100%,3rem)] -translate-1/2 pointer-fine:hidden"

@@ -266,7 +266,7 @@ const PATH_SEPARATOR_PATTERN = /[\\/]/;
 const FILE_EXTENSION_PATTERN = /\.[A-Za-z0-9_-]+$/;
 const NUMERIC_DOTTED_PATTERN = /^\d+(?:\.\d+)+$/;
 const BARE_EXTENSIONLESS_POSITION_PATTERN = /^[A-Za-z0-9_-]+(?::\d+){1,2}$/;
-// Any `Name:digits` shape also matches `error:1`, `port:3000`, `TODO:12`, so
+// Any `Name:digits` shape also matches `error:1`, `port:3000`, `label:12`, so
 // extensionless linking is limited to conventional filenames.
 const EXTENSIONLESS_FILE_NAMES = new Set([
   "Makefile",
@@ -379,12 +379,6 @@ function looksLikeHostname(segment: string, hasPosition: boolean): boolean {
   return !hasPosition && COUNTRY_HOSTNAME_TLDS.has(lastLabel);
 }
 
-/**
- * Inline code spans mostly hold identifiers, commands, and refs (`node.meta`,
- * `origin/main`) rather than deliberate link destinations, so auto-linking
- * them demands stronger path evidence than an explicit markdown link does:
- * an unambiguous path prefix, a file extension, or a :line suffix.
- */
 export function resolveInlineCodeFileLinkMeta(
   codeText: string,
   cwd?: string,

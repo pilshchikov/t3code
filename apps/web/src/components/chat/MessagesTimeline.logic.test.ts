@@ -725,7 +725,6 @@ describe("deriveMessagesTimelineRows", () => {
       expect(live).toHaveLength(1);
       expect(live[0]).toMatchObject({ entry: { id: entries.at(-1)!.id } });
     }
-    // Presentation must not rewrite the retained provider lifecycle.
     expect(first.kind === "work" && first.entry.toolLifecycleStatus).toBe("inProgress");
   });
 
@@ -1389,7 +1388,6 @@ describe("deriveMessagesTimelineRows", () => {
     );
     expect(foldRow?.runId).toBe("turn-1");
     expect(foldRow?.expanded).toBe(false);
-    // User message boundary (00:00:00) → terminal message updatedAt (00:00:22).
     expect(foldRow?.label).toBe("Worked for 22s");
     expect(collapsedRows.map((row) => row.id)).toEqual([
       "user-entry",
@@ -1494,7 +1492,6 @@ describe("deriveMessagesTimelineRows", () => {
       ),
     ).toBe(true);
 
-    // A late failure must remain visible even though successful work is folded.
     const failedEntries = timelineEntries.map((entry) =>
       entry.kind === "work" && entry.id === "work-entry-after-text-0"
         ? { ...entry, entry: { ...entry.entry, toolLifecycleStatus: "failed" as const } }
@@ -1582,10 +1579,6 @@ describe("deriveMessagesTimelineRows", () => {
   });
 
   it("derives a sane duration for a steer-superseded turn with one instant commentary message", () => {
-    // A steer ends the previous turn early: its only message completes the
-    // instant it is created, and trailing work entries land after it. The
-    // fold duration must span from the user message that started the turn to
-    // the last entry, not message createdAt → message updatedAt (~0ms).
     const rows = deriveMessagesTimelineRows({
       timelineEntries: [
         {
@@ -1685,7 +1678,6 @@ describe("deriveMessagesTimelineRows", () => {
       (row): row is Extract<(typeof rows)[number], { kind: "turn-fold" }> =>
         row.kind === "turn-fold",
     );
-    // User message (00:00:00) → trailing work entry (00:00:12).
     expect(foldRow?.runId).toBe("turn-1");
     expect(foldRow?.label).toBe("Worked for 12s");
   });
@@ -1848,8 +1840,6 @@ describe("deriveMessagesTimelineRows", () => {
   );
 
   it("keeps the previous turn folded while a newly sent message awaits its turn", () => {
-    // Right after send, isWorking is true but latestRun still points at the
-    // previous, settled turn — it must stay folded through that window.
     const rows = deriveMessagesTimelineRows({
       timelineEntries: [
         {
@@ -2199,8 +2189,6 @@ describe("deriveMessagesTimelineRows", () => {
   });
 
   it("folds each run of a provider-native subagent thread like a normal turn", () => {
-    // A Claude subagent's child thread, as projected: no runs, one runless
-    // root turn, and a user prompt for the launch and for a SendMessage resume.
     const threadId = ThreadId.make("subagent-child");
     const rootNodeId = NodeId.make("task-root");
     const at = (second: number) =>
@@ -2309,7 +2297,6 @@ describe("deriveMessagesTimelineRows", () => {
             : row.kind,
       );
 
-    // Settled: each run folds its work, keeping its prompt and final answer.
     const settled = rows({ resume: "completed", working: false });
     expect(shape(settled)).toEqual([
       "user:launch",
@@ -2320,7 +2307,6 @@ describe("deriveMessagesTimelineRows", () => {
       "assistant:resume-answer",
     ]);
 
-    // Each fold opens on its own.
     const launchFold = settled.find((row) => row.kind === "turn-fold");
     if (launchFold?.kind !== "turn-fold") throw new Error("Expected the launch fold");
     const expanded = rows({
@@ -2338,7 +2324,6 @@ describe("deriveMessagesTimelineRows", () => {
       "assistant:resume-answer",
     ]);
 
-    // While the resume runs, only the settled launch folds.
     expect(shape(rows({ resume: "running", working: true }))).toEqual([
       "user:launch",
       "fold:Worked for 8.0s",
@@ -2348,7 +2333,6 @@ describe("deriveMessagesTimelineRows", () => {
       "work-live",
     ]);
 
-    // A failed run stays open, as on a normal thread.
     expect(shape(rows({ resume: "failed", working: false }))).toEqual([
       "user:launch",
       "fold:Worked for 8.0s",
@@ -2429,6 +2413,32 @@ describe("deriveMessagesTimelineRows", () => {
     const withoutPrompt = rows([]);
     expect(withoutPrompt).toContain("turn-fold");
     expect(withoutPrompt).toContain("assistant:imported-update");
+
+    const timelineEntries = [
+      message("imported-prompt", "user", 0),
+      message("imported-first", "assistant", 2),
+      message("imported-update", "assistant", 4),
+      message("imported-answer", "assistant", 8),
+    ];
+    const foldInput = { timelineEntries, latestRun: null, isWorking: false };
+    const foldRunId = timelineEntryTurnFoldRunId(foldInput, "imported-update");
+    expect(foldRunId).not.toBeNull();
+    const foldRow = deriveMessagesTimelineRows({
+      ...foldInput,
+      turnDiffSummaries: [],
+      supportsConversationRollback: false,
+    }).find((row) => row.kind === "turn-fold");
+    expect(foldRow?.kind === "turn-fold" ? foldRow.runId : null).toBe(foldRunId);
+    expect(timelineEntryTurnFoldRunId(foldInput, "imported-answer")).toBeNull();
+    const expanded = deriveMessagesTimelineRows({
+      ...foldInput,
+      expandedRunIds: new Set([foldRunId!]),
+      turnDiffSummaries: [],
+      supportsConversationRollback: false,
+    });
+    expect(
+      expanded.some((row) => row.kind === "message" && row.message.id === "imported-update"),
+    ).toBe(true);
   });
 
   it("shows a provider-native subagent's runless tools as live work while it works", () => {
@@ -2481,7 +2491,6 @@ describe("deriveMessagesTimelineRows", () => {
       active: true,
     });
 
-    // Once the subagent settles, the same entries fold as finished history.
     const settled = rows({ commandStatus: "completed", working: false });
     expect(settled.map((row) => row.kind)).toEqual(["message", "turn-fold"]);
   });
@@ -3679,7 +3688,6 @@ describe("v2 run and attempt history", () => {
     );
     expect(foldRow?.runId).toBe("turn-1");
     expect(foldRow?.expanded).toBe(false);
-    // User message boundary (00:00:00) → terminal message updatedAt (00:00:22).
     expect(foldRow?.label).toBe("Worked for 22s");
     expect(collapsedRows.map((row) => row.id)).toEqual([
       "user-entry",
@@ -3951,7 +3959,6 @@ describe("v2 run and attempt history", () => {
   describe("a steer that supersedes an attempt", () => {
     const runId = RunId.make("run-steered");
     const at = (second: number) => `2026-01-01T00:00:${String(second).padStart(2, "0")}Z`;
-    // The steer stamps the superseded attempt at 0:10.
     const supersededAttempt = {
       id: RunAttemptId.make("attempt-1"),
       runId,
@@ -4139,7 +4146,6 @@ describe("v2 run and attempt history", () => {
     expect(rows.map((row) => row.id)).toEqual(["work-entry", "interrupt-result"]);
     expect(rows.some((row) => row.kind === "turn-fold")).toBe(false);
 
-    // The command the interrupt cut short stays visible with its outcome.
     const stoppedRows = deriveMessagesTimelineRows({
       timelineEntries: [
         {
@@ -4244,8 +4250,6 @@ describe("streaming v2 row projection", () => {
       timelineInput,
       initial.timeline,
     );
-    // The actual v2 selectors recreate shell/checkpoint summaries on every
-    // projection event, even when their contents did not change.
     const input = {
       ...initial.input,
       timelineEntries: timeline.entries,
@@ -4896,7 +4900,6 @@ it("keeps the working header in place across worktree setup handoff", () => {
     },
   ]);
 
-  // A failed setup never handed off, so the card stays under the send.
   const withMessages = deriveMessagesTimelineRows({
     timelineEntries: [userEntry, assistantEntry],
     isWorking: true,
@@ -4913,8 +4916,6 @@ it("keeps the working header in place across worktree setup handoff", () => {
     "thinking",
   ]);
 
-  // Once the agent stage is done the setup script may still be running in
-  // the background: the header owns its progress chip, so no setup row remains.
   const stage = (id: "agent" | "setup-script", status: "done" | "running") =>
     ({
       id,
@@ -4946,8 +4947,6 @@ it("keeps the working header in place across worktree setup handoff", () => {
   });
   expect(asyncRows.map((row) => row.kind)).toEqual(["message", "working", "thinking"]);
 
-  // Dispatched but not yet visible as a turn: the full card stays put so
-  // nothing collapses during the handoff.
   const handoffRows = deriveMessagesTimelineRows({
     timelineEntries: [userEntry],
     isWorking: true,
@@ -4959,8 +4958,6 @@ it("keeps the working header in place across worktree setup handoff", () => {
   expect(handoffRows.map((row) => row.kind)).toEqual(["message", "working", "worktree-setup"]);
   expect(handoffRows[2]).toMatchObject({ kind: "worktree-setup", embedded: false });
 
-  // A clean finish before the turn is live keeps that same layout, so the card
-  // does not jump above the header in the gap before the run starts.
   const settledRows = deriveMessagesTimelineRows({
     timelineEntries: [userEntry],
     isWorking: true,
@@ -4975,7 +4972,6 @@ it("keeps the working header in place across worktree setup handoff", () => {
   });
   expect(settledRows.map((row) => row.kind)).toEqual(["message", "working", "worktree-setup"]);
 
-  // A script that already finished has nothing left to show once the turn is live.
   const finishedRows = deriveMessagesTimelineRows({
     timelineEntries: [userEntry],
     latestRun: liveTurn,
@@ -5245,7 +5241,6 @@ describe("live subagents after their parent turn settles", () => {
     "keeps a running %s child visible while the rest of the settled turn folds",
     (origin) => {
       const rows = rowsFor([child("child", 3, "running", origin)]);
-      // The reasoning and command still fold; only the live card stays out.
       expect(rows.map((row) => row.id)).toEqual([
         "user",
         `turn-fold:${runId}`,
@@ -5311,8 +5306,6 @@ describe("live subagents after their parent turn settles", () => {
 });
 
 describe("subagent continued by a later turn", () => {
-  // Stored shape from #15891: resuming a subagent moves its item to the
-  // resuming run, but the item keeps the ordinal from the turn that started it.
   const threadId = ThreadId.make("parent-thread");
   const run1 = RunId.make("run-1");
   const run2 = RunId.make("run-2");

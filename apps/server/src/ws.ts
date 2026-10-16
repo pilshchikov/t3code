@@ -125,6 +125,8 @@ import * as ServerConfig from "./config.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
+import * as CommandOutputHub from "./orchestration-v2/CommandOutputHub.ts";
+import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as ThreadManagementService from "./orchestration-v2/ThreadManagementService.ts";
 import * as McpAppRequests from "./mcpApps/McpAppRequests.ts";
 import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManager.ts";
@@ -605,7 +607,22 @@ const SourceControlWsRpcGroup = RpcGroup.make(
     sourceControlRpcTags.has(rpc._tag),
   ),
 );
-const MainWsRpcGroup = ServerWsRpcGroup.omit(...SOURCE_CONTROL_RPC_TAGS);
+const STATUS_STREAM_RPC_TAGS = [
+  WS_METHODS.serverGetDatabaseStorage,
+  ORCHESTRATION_V2_WS_METHODS.subscribeCommandOutput,
+] as const;
+const statusStreamRpcTags: ReadonlySet<string> = new Set(STATUS_STREAM_RPC_TAGS);
+type StatusStreamRequests = Extract<
+  ServerRequests,
+  { readonly _tag: (typeof STATUS_STREAM_RPC_TAGS)[number] }
+>;
+const StatusStreamWsRpcGroup = RpcGroup.make(
+  ...Array.from(ServerWsRpcGroup.requests.values()).filter((rpc): rpc is StatusStreamRequests =>
+    statusStreamRpcTags.has(rpc._tag),
+  ),
+);
+const SEPARATE_RPC_TAGS = [...SOURCE_CONTROL_RPC_TAGS, ...STATUS_STREAM_RPC_TAGS] as const;
+const MainWsRpcGroup = ServerWsRpcGroup.omit(...SEPARATE_RPC_TAGS);
 
 // When a resuming client's cursor is more than this many events behind the
 // current head, skip the per-event catch-up replay and send a fresh shell
@@ -1295,6 +1312,8 @@ const makeWsHandlers = (
       }
     };
     const threadLaunch = yield* ThreadLaunchService.ThreadLaunchService;
+    const commandOutputHub = yield* CommandOutputHub.CommandOutputHub;
+    const databaseStorage = yield* DatabaseStorage.DatabaseStorage;
     const providerSessionManager = yield* ProviderSessionManager.ProviderSessionManagerV2;
     const scheduledTasks = yield* ScheduledTasks.ScheduledTaskService;
     const secretRequests = yield* SecretRequests.SecretRequests;
@@ -2128,6 +2147,12 @@ const makeWsHandlers = (
             Effect.andThen(subscribeOrchestrationV2Thread(input)),
           ),
         ),
+      [ORCHESTRATION_V2_WS_METHODS.subscribeCommandOutput]: (input) =>
+        Stream.unwrap(
+          Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
+            Effect.as(commandOutputHub.subscribe(input)),
+          ),
+        ),
       [WS_METHODS.scheduledTasksList]: (_input) =>
         scheduledTasks.list().pipe(Effect.map(withVisibleWebhookUrls)),
       [WS_METHODS.scheduledTasksSubscribe]: (_input) =>
@@ -2474,6 +2499,7 @@ const makeWsHandlers = (
         }),
       [WS_METHODS.serverRunStorageCleanup]: () => storageCleanup.runNow,
       [WS_METHODS.serverGetStorageCleanupReport]: () => storageCleanup.reports,
+      [WS_METHODS.serverGetDatabaseStorage]: () => databaseStorage.status,
       [WS_METHODS.serverGetSettings]: (_input) =>
         serverSettings.getSettings.pipe(Effect.map(ServerSettings.redactServerSettingsForClient)),
       [WS_METHODS.serverUpdateSettings]: ({ patch, providerInstanceMutation }) =>
@@ -3289,8 +3315,9 @@ const makeWsHandlers = (
         ),
     });
     return Layer.mergeAll(
-      MainWsRpcGroup.toLayer(Struct.omit(handlers, SOURCE_CONTROL_RPC_TAGS)),
+      MainWsRpcGroup.toLayer(Struct.omit(handlers, SEPARATE_RPC_TAGS)),
       SourceControlWsRpcGroup.toLayer(Struct.pick(handlers, SOURCE_CONTROL_RPC_TAGS)),
+      StatusStreamWsRpcGroup.toLayer(Struct.pick(handlers, STATUS_STREAM_RPC_TAGS)),
     );
   });
 

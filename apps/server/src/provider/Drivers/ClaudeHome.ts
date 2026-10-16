@@ -10,13 +10,6 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 type ClaudeEnvironmentConfig = Pick<ClaudeSettings, "configDir" | "homePath">;
 const quotePath = Schema.encodeSync(Schema.fromJsonString(Schema.String));
 
-/**
- * Resolve the Claude config directory the CLI would use: the instance's
- * `homePath` (exported as `CLAUDE_CONFIG_DIR`), then an inherited
- * `CLAUDE_CONFIG_DIR`, then Claude's default `~/.claude`. Empty must not
- * fall back to bare `$HOME` — that leftover from the old HOME override
- * produced a different continuation group than an explicit `~/.claude`.
- */
 export const resolveClaudeHomePath = Effect.fn("resolveClaudeHomePath")(function* (
   config: ClaudeEnvironmentConfig,
   environment?: NodeJS.ProcessEnv,
@@ -60,11 +53,10 @@ export const makeClaudeEnvironment = Effect.fn("makeClaudeEnvironment")(function
 });
 
 /**
- * Whether an administrator installed Claude Code's `managed-mcp.json`. While it
- * exists Claude refuses `--strict-mcp-config` and exits before initializing,
- * but it already ignores user, project and `--mcp-config` servers on its own,
- * so callers that pass the flag for isolation can drop it. Paths match the
- * ones Claude Code checks.
+ * While it exists Claude refuses `--strict-mcp-config` and exits before
+ * initializing, but it already ignores user, project and `--mcp-config` servers
+ * on its own, so callers that pass the flag for isolation can drop it. Paths
+ * match the ones Claude Code checks.
  */
 export const hasClaudeManagedMcpConfig = Effect.fn("hasClaudeManagedMcpConfig")(function* () {
   const fileSystem = yield* FileSystem.FileSystem;

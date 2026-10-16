@@ -10,6 +10,7 @@ import { Spinner } from "~/components/ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { PierreEntryIcon } from "~/components/chat/PierreEntryIcon";
 import { cn } from "~/lib/utils";
+import { observeResize } from "~/lib/observeResize";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import * as Schema from "effect/Schema";
 
@@ -181,6 +182,7 @@ export function NativeProjectFileTree(props: {
   selectedPaths: ReadonlyArray<string>;
   resolvedTheme: "light" | "dark";
   onOpenFile: (path: string) => void;
+  mentionPath?: (path: string) => string;
   onSelectionChange: (paths: ReadonlyArray<string>) => void;
   onDeleteSelected: () => void | Promise<void>;
   onDeleteEntry?: (path: string) => void | Promise<void>;
@@ -240,9 +242,7 @@ export function NativeProjectFileTree(props: {
       );
     };
     updateHeight();
-    const observer = new ResizeObserver(updateHeight);
-    observer.observe(scrollElement);
-    return () => observer.disconnect();
+    return observeResize(scrollElement, updateHeight);
   }, []);
 
   // Collapse keeps the open file reachable rather than shutting the tree down to nothing,
@@ -354,7 +354,7 @@ export function NativeProjectFileTree(props: {
           key={`directory:${node.path}`}
           type="button"
           className={cn(
-            "flex w-auto items-center gap-1.5 rounded-md pe-2 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "flex w-auto items-center gap-1.5 rounded-md pe-2 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
             node.ignored && "opacity-45",
           )}
           style={rowStyle}
@@ -407,7 +407,7 @@ export function NativeProjectFileTree(props: {
               draggable
               data-item-path={node.path}
               className={cn(
-                "flex w-auto items-center gap-1.5 rounded-md pe-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "flex w-auto items-center gap-1.5 rounded-md pe-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                 selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
                 node.ignored && "opacity-45",
               )}
@@ -419,7 +419,10 @@ export function NativeProjectFileTree(props: {
               }}
               onDragStart={(event) => {
                 const paths = selectedPathSet.has(node.path) ? props.selectedPaths : [node.path];
-                const mentions = paths.map(composerMentionFromTreePath).filter(Boolean).join(" ");
+                const mentions = paths
+                  .map((path) => composerMentionFromTreePath(props.mentionPath?.(path) ?? path))
+                  .filter(Boolean)
+                  .join(" ");
                 if (!mentions) return;
                 event.dataTransfer.effectAllowed = "move";
                 event.dataTransfer.setData(COMPOSER_MENTION_DRAG_TYPE, mentions);

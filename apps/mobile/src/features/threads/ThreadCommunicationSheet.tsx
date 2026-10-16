@@ -17,8 +17,8 @@ import { Atom } from "effect/reactivity";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppText as Text } from "../../components/AppText";
-import { MaterialButton } from "../../components/MaterialButton";
+import { AppText as Text } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
 import { useEnvironments } from "../../state/environments";
 import {
   environmentThreadDetails,
@@ -129,14 +129,14 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
     <View className="flex-1 bg-sheet">
       <View className="flex-row items-center justify-between gap-2 px-4 pt-4 pb-2">
         <Text className="flex-1 text-lg font-t3-medium">Agent communication</Text>
-        <MaterialButton label="Close" tone="text" onPress={() => navigation.goBack()} />
+        <Button label="Close" tone="text" onPress={() => navigation.goBack()} />
       </View>
       <ScrollView
         horizontal
         className="max-h-16 shrink-0 border-b border-border"
         contentContainerClassName="gap-2 px-4 py-2"
       >
-        <MaterialButton
+        <Button
           label="Overview"
           tone={selection.kind === "all" ? "primary" : "secondary"}
           onPress={() => select({ kind: "all" })}
@@ -144,7 +144,7 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
         {orderedParticipants
           .filter((p) => p.id !== model.rootId)
           .map((p) => (
-            <MaterialButton
+            <Button
               key={p.id}
               label={p.label}
               tone={selected?.id === p.id ? "primary" : "secondary"}
@@ -157,7 +157,7 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
         contentContainerClassName="gap-3 px-4 py-3"
         contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
       >
-        <MaterialButton
+        <Button
           label={mapOpen ? "Hide connection map" : "Show connection map"}
           tone="text"
           onPress={() => setMapOpen(!mapOpen)}
@@ -249,7 +249,7 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
             </View>
           ))}
         {messages.length > visibleCount ? (
-          <MaterialButton
+          <Button
             label="Show older messages"
             tone="text"
             onPress={() => setVisibleCount((n) => n + 30)}
@@ -263,7 +263,7 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
           </Text>
         ) : null}
         {history ? (
-          <MaterialButton
+          <Button
             label={history.history.loading ? "Loading history…" : "Load earlier history"}
             tone="text"
             disabled={history.history.loading}
@@ -280,7 +280,7 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
           />
         ) : null}
         {selected?.threadId ? (
-          <MaterialButton
+          <Button
             label="Open thread"
             tone="secondary"
             onPress={() =>

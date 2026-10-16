@@ -43,15 +43,6 @@ export interface DesktopBackendOutputLogShape {
   readonly discardSession: Effect.Effect<void>;
 }
 
-// Factory for per-instance backend output logs. `forInstance(id)` returns
-// a writer that targets a distinct rotating log file — the primary
-// instance keeps `server-child.log` so the historical path stays stable
-// for ops; other instances get `server-child-<sanitized-id>.log`.
-//
-// Writers are cached per id within a single factory instance so repeated
-// `forInstance` calls (e.g. during a backend restart that re-resolves
-// services) reuse the same rotating writer rather than racing each other
-// on the same file.
 export class DesktopBackendOutputLogFactory extends Context.Service<
   DesktopBackendOutputLogFactory,
   {
@@ -387,11 +378,8 @@ const backendLogFilePathForInstance = (
   return environment.path.join(environment.logDir, `server-child-${sanitized}.log`);
 };
 
-// Just the IO sink. Cacheable by resolved file path so two ids that
-// sanitize to the same filename share a single RotatingLogFileWriter
-// (no race on currentSize tracking). Splitting the sink off from the
-// per-call shape lets the shape annotate writes with the *caller's*
-// id rather than whatever id created the cached writer first.
+// Cacheable by resolved file path so two ids that sanitize to the same filename
+// share a single RotatingLogFileWriter (no race on currentSize tracking).
 const makeBackendOutputSinkForInstance = (
   environment: DesktopEnvironment.DesktopEnvironment["Service"],
   id: string,
@@ -504,14 +492,6 @@ const layerBackendOutputLogFactory = Layer.effect(
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const factoryScope = yield* Scope.Scope;
-    // Per-file-path cache of the IO sink only. The per-call shape
-    // wraps the sink with the caller's instance id so a cache hit on
-    // a path collision (e.g. "wsl:default" and "wsl_default" both
-    // resolve to server-child-wsl_default.log) doesn't attribute the
-    // second caller's writes to the first caller's id. Each sink pins
-    // itself to the factory's scope so all log resources tear down
-    // together at app exit. Mutex serializes concurrent first-time
-    // lookups for the same file path.
     const cacheRef = yield* SynchronizedRef.make<
       ReadonlyMap<string, Option.Option<RotatingLogFileWriter>>
     >(new Map());
@@ -554,11 +534,6 @@ const layerBackendOutputLogFactory = Layer.effect(
   }),
 );
 
-/**
- * Logs and traces for the main process, assembled together because they share
- * one read of the environment and Settings, and because a process gets exactly
- * one logger set.
- */
 const layerTelemetry = Layer.unwrap(
   Effect.gen(function* () {
     const environment = yield* DesktopEnvironment.DesktopEnvironment;
