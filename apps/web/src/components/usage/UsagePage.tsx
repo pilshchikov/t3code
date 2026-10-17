@@ -9,7 +9,10 @@ import {
   type UsageProviderKind,
 } from "@t3tools/contracts";
 import { CircleAlertIcon, ChevronDownIcon, InfoIcon, SlidersHorizontalIcon } from "lucide-react";
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Cause from "effect/Cause";
 import {
   cursorKeychainAccessEnvironments,
   refreshUsageLimits,
@@ -120,6 +123,61 @@ function zeroHour(hourStart: string): HourlyTotals {
 }
 const providerLabel = (provider: UsageProviderKind) => PROVIDER_PRESENTATION[provider].label;
 
+// useUsage keys its queries on this set, so it must keep its identity.
+function useHiddenProviderSet(hiddenProviders: UsagePagePreferences["hiddenProviders"]) {
+  "use memo";
+  return new Set(hiddenProviders);
+}
+
+function usageLoading(
+  showingKept: boolean,
+  selectedEnvironments: Parameters<typeof usageLoadingState>[0],
+  refreshingUsage: boolean,
+  hiddenProviders: ReadonlySet<UsageProviderKind>,
+) {
+  if (showingKept) {
+    return { partial: true, everyProvider: true, providers: new Set<UsageProviderKind>() };
+  }
+  const state = usageLoadingState(selectedEnvironments, refreshingUsage);
+  const providers = new Set([...state.providers].filter((p) => !hiddenProviders.has(p)));
+  return {
+    partial: state.everyProvider || providers.size > 0,
+    everyProvider: state.everyProvider,
+    providers,
+  };
+}
+
+// UsageProviderChart memoizes on the provider collections, so they must keep their identity.
+function useUsageProviders(
+  showingKept: boolean,
+  selectedEnvironments: Parameters<typeof usageLoadingState>[0],
+  refreshingUsage: boolean,
+  hiddenProviders: ReadonlySet<UsageProviderKind>,
+  mergedProviders: MergedUsage["providers"],
+) {
+  "use memo";
+  const loading = usageLoading(showingKept, selectedEnvironments, refreshingUsage, hiddenProviders);
+  const providersWithData = providersWithUsage(mergedProviders);
+  const activeProviders = PROVIDER_ORDER.filter(
+    (provider) => providersWithData.includes(provider) || loading.providers.has(provider),
+  );
+  const chartLoadingProviders = new Set(
+    activeProviders.filter((provider) => loading.everyProvider || loading.providers.has(provider)),
+  );
+  return { loading, providersWithData, activeProviders, chartLoadingProviders };
+}
+
+// UsageProviderChart memoizes on these arrays, so they must keep their identity.
+function useUsagePeriods(usageWindow: ReturnType<typeof makeWindow>) {
+  "use memo";
+  const days = enumerateDays(usageWindow.sinceDay, usageWindow.untilDay);
+  const hours =
+    usageWindow.sinceTime === undefined || usageWindow.untilTime === undefined
+      ? []
+      : enumerateHourStarts(usageWindow.sinceTime, usageWindow.untilTime);
+  return { days, hours };
+}
+
 export function UsagePage() {
   const [preferences, setPreferences] = useState(readUsagePagePreferences);
   useEscapeToGoBack();
@@ -150,10 +208,7 @@ export function UsagePage() {
   const [selectedModelKey, setSelectedModelKey] = useState<string | null>(null);
   const [selectedEnvironmentIds, setSelectedEnvironmentIds] =
     useState<ReadonlySet<EnvironmentId> | null>(null);
-  const hiddenProviders = useMemo(
-    () => new Set(preferences.hiddenProviders),
-    [preferences.hiddenProviders],
-  );
+  const hiddenProviders = useHiddenProviderSet(preferences.hiddenProviders);
   const { days: windowDays, window } = windowSelection;
   const isPast24Hours = windowDays === 1;
   const {
@@ -169,18 +224,13 @@ export function UsagePage() {
   const shownHourly = shownWindow.resolution === "hour";
   const refreshingUsage = isRefreshing && !showingLimits;
   const showingKept = shown !== null && shown.window !== window;
-  const loading = useMemo(() => {
-    if (showingKept) {
-      return { partial: true, everyProvider: true, providers: new Set<UsageProviderKind>() };
-    }
-    const state = usageLoadingState(selectedEnvironments, refreshingUsage);
-    const providers = new Set([...state.providers].filter((p) => !hiddenProviders.has(p)));
-    return {
-      partial: state.everyProvider || providers.size > 0,
-      everyProvider: state.everyProvider,
-      providers,
-    };
-  }, [showingKept, refreshingUsage, selectedEnvironments, hiddenProviders]);
+  const { loading, providersWithData, activeProviders, chartLoadingProviders } = useUsageProviders(
+    showingKept,
+    selectedEnvironments,
+    refreshingUsage,
+    hiddenProviders,
+    merged.providers,
+  );
   const isProviderLoading = (provider: UsageProviderKind) =>
     loading.everyProvider || loading.providers.has(provider);
   const presentations = useAtomValue(environmentPresentations.presentationsAtom);
@@ -212,50 +262,19 @@ export function UsagePage() {
     (environment) => environment.canReadDiagnostics,
   );
 
-  const days = useMemo(
-    () => enumerateDays(shownWindow.sinceDay, shownWindow.untilDay),
-    [shownWindow.sinceDay, shownWindow.untilDay],
-  );
-  const hours = useMemo(
-    () =>
-      shownWindow.sinceTime === undefined || shownWindow.untilTime === undefined
-        ? []
-        : enumerateHourStarts(shownWindow.sinceTime, shownWindow.untilTime),
-    [shownWindow.sinceTime, shownWindow.untilTime],
-  );
+  const { days, hours } = useUsagePeriods(shownWindow);
   // The hourly window is small enough to render every period: the table then
   // reads chronologically like the chart, instead of jumping between the hours
   // that happened to have activity. Daily windows can run 90 periods, so those
   // stay newest-first with the interesting end on top.
-  const breakdownPeriods = useMemo<readonly (DailyTotals | HourlyTotals)[]>(() => {
-    if (!shownHourly) return merged.daily.toReversed();
-    const byHour = new Map(merged.hourly.map((entry) => [entry.hourStart, entry]));
-    return hours.map((hourStart) => byHour.get(hourStart) ?? zeroHour(hourStart));
-  }, [shownHourly, merged.daily, merged.hourly, hours]);
-  const breakdownModels = useMemo(
-    () =>
-      breakdown === "model" && metric === "tokens"
-        ? sortModelsByTokens(merged.models)
-        : merged.models,
-    [breakdown, merged.models, metric],
-  );
-  const providersWithData = useMemo(() => providersWithUsage(merged.providers), [merged.providers]);
-  const activeProviders = useMemo(
-    () =>
-      PROVIDER_ORDER.filter(
-        (provider) => providersWithData.includes(provider) || loading.providers.has(provider),
-      ),
-    [loading.providers, providersWithData],
-  );
-  const chartLoadingProviders = useMemo(
-    () =>
-      new Set(
-        activeProviders.filter(
-          (provider) => loading.everyProvider || loading.providers.has(provider),
-        ),
-      ),
-    [activeProviders, loading.everyProvider, loading.providers],
-  );
+  const hourlyByStart = new Map(merged.hourly.map((entry) => [entry.hourStart, entry]));
+  const breakdownPeriods: readonly (DailyTotals | HourlyTotals)[] = shownHourly
+    ? hours.map((hourStart) => hourlyByStart.get(hourStart) ?? zeroHour(hourStart))
+    : merged.daily.toReversed();
+  const breakdownModels =
+    breakdown === "model" && metric === "tokens"
+      ? sortModelsByTokens(merged.models)
+      : merged.models;
   const selectedModel =
     selectedModelKey === null
       ? undefined
@@ -296,9 +315,10 @@ export function UsagePage() {
     if (nextMetric === "limits") setLimitsNow(Date.now());
     updatePreferences({ metric: nextMetric });
   };
-  const refreshLimits = async (automatic = false, afterPending = false) => {
-    try {
-      await Promise.all(
+  const refreshLimits = (automatic = false, afterPending = false) =>
+    // Settled so the timestamp still advances when a refresh throws.
+    settlePromise(() =>
+      Promise.all(
         Array.from(presentations, ([environmentId, presentation]) => {
           if (selectedEnvironmentIds !== null && !selectedEnvironmentIds.has(environmentId)) return;
           if (presentation.connection.phase === "connected" && presentation.serverConfig !== null) {
@@ -310,11 +330,11 @@ export function UsagePage() {
             );
           }
         }),
-      );
-    } finally {
+      ),
+    ).then((result) => {
       setLimitsNow(Date.now());
-    }
-  };
+      if (!AsyncResult.isSuccess(result)) throw Cause.squash(result.cause);
+    });
   const onUsageKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (
       event.defaultPrevented ||
@@ -1038,15 +1058,12 @@ function CursorEnableButton({
   const [pending, setPending] = useState(false);
   const enable = async () => {
     setPending(true);
-    try {
-      const result = await updateSettings({
-        environmentId,
-        input: { patch: { cursorKeychainUsageEnabled: true } },
-      });
-      if (result._tag === "Success") onEnabled();
-    } finally {
-      setPending(false);
-    }
+    const result = await updateSettings({
+      environmentId,
+      input: { patch: { cursorKeychainUsageEnabled: true } },
+    });
+    if (result._tag === "Success") onEnabled();
+    setPending(false);
   };
   const button = tooltip ? (
     <InlineButton
