@@ -15,6 +15,8 @@ const runtimeVersionPolicy =
   (APP_VARIANT === "development" ? "appVersion" : "fingerprint");
 
 const personalTeamBundleIdentifier = repoEnv.T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID?.trim();
+// Signs Personal Team builds with the owner's own team instead of T3 Tools'.
+const personalTeamId = repoEnv.T3CODE_IOS_PERSONAL_TEAM_ID?.trim() || undefined;
 const IOS_BUNDLE_IDENTIFIER_PATTERN = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
 
 const fromRepoRoot = (relativePath: string) => `../../${relativePath}`;
@@ -255,7 +257,7 @@ const config: ExpoConfig = {
     // Pin code signing to the T3 Tools team so non-interactive `expo run:ios`
     // does not fall back to a personal team (which cannot sign app groups,
     // Sign in with Apple, or push notification entitlements).
-    appleTeamId: "ARK85ZXQ4Z",
+    appleTeamId: isIosPersonalTeamBuild ? personalTeamId : "ARK85ZXQ4Z",
     associatedDomains: [
       `applinks:${variant.relyingParty}`,
       `webcredentials:${variant.relyingParty}`,
@@ -321,6 +323,9 @@ const config: ExpoConfig = {
     favicon: variant.assets.appIcon,
   },
   plugins: [
+    // Same-type mods run last-registered-first, so registering this first lets it
+    // strip entitlements after every later plugin has added them.
+    ...(isIosPersonalTeamBuild ? ["./plugins/withoutIosPersonalTeamCapabilities.cjs"] : []),
     "expo-asset",
     [
       "expo-font",
@@ -359,8 +364,7 @@ const config: ExpoConfig = {
         mode: APP_VARIANT === "development" ? "development" : "production",
       },
     ],
-    // appleSignIn must be gated here: withoutIosPersonalTeamCapabilities.cjs runs before
-    // plugins earlier in this array, so it cannot strip the entitlement Clerk would add.
+    // Keep appleSignIn gated so Clerk does not add its native Sign in with Apple setup.
     ["@clerk/expo", { theme: "./clerk-theme.json", appleSignIn: !isIosPersonalTeamBuild }],
     "expo-web-browser",
     [
@@ -466,7 +470,6 @@ const config: ExpoConfig = {
     "./plugins/withAndroidModernAlertDialog.cjs",
     "./plugins/withAndroidPredictiveBackCompat.cjs",
     "./plugins/withAndroidTabletOrientation.cjs",
-    ...(isIosPersonalTeamBuild ? ["./plugins/withoutIosPersonalTeamCapabilities.cjs"] : []),
   ],
   extra: {
     appVariant: APP_VARIANT,

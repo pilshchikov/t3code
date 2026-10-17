@@ -68,10 +68,12 @@ previous directory.
 
 If your Xcode account only has a Personal Team, use a bundle identifier you control and opt into the
 reduced-capability local build. Personal Team builds omit the widget and share extensions, push
-entitlement, and native Sign in with Apple entitlement; builds without this opt-in are unchanged.
+entitlement, associated domains, and native Sign in with Apple entitlement; builds without this
+opt-in are unchanged.
 
 ```bash
 T3CODE_IOS_PERSONAL_TEAM=1 \
+T3CODE_IOS_PERSONAL_TEAM_ID="<your team ID>" \
 T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID=com.example.t3code.dev \
 vp run ios:dev
 ```
@@ -86,9 +88,13 @@ The Personal Team equivalent also needs a unique bundle identifier:
 
 ```bash
 T3CODE_IOS_PERSONAL_TEAM=1 \
+T3CODE_IOS_PERSONAL_TEAM_ID="<your team ID>" \
 T3CODE_IOS_PERSONAL_TEAM_BUNDLE_ID=com.example.t3code \
 vp run ios:release
 ```
+
+Set `T3CODE_MOBILE_UPDATES_ENABLED=0` in root `.env` / `.env.local` or the build environment to
+keep official OTA updates off a fork build.
 
 Build and run the local iOS preview app:
 
