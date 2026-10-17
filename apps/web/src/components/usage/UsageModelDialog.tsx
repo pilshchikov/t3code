@@ -1,6 +1,5 @@
 import { formatPercent, formatTokens, formatUsd } from "@t3tools/shared/usageFormat";
 import { isModelCostUnknown, type ModelTotals } from "@t3tools/shared/usageMerge";
-import { useMemo } from "react";
 
 import { mergeAnsweredUsage, type EnvironmentUsageStatus } from "../../state/usage";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
@@ -48,37 +47,33 @@ export function UsageModelDialog({
   readonly onSetPrice: () => void;
   readonly onClose: () => void;
 }) {
-  const usage = useMemo(
-    () =>
-      mergeAnsweredUsage(
-        environments.map((environment) => ({
-          ...environment,
-          summary:
-            environment.summary === null
-              ? null
-              : {
-                  ...environment.summary,
-                  buckets: environment.summary.buckets.filter((bucket) => {
-                    const source = environment.summary?.sources.find((candidate) =>
-                      bucket.sourceId !== undefined
-                        ? candidate.sourceId === bucket.sourceId ||
-                          candidate.fingerprint.resolvedHomePath === bucket.sourceId
-                        : candidate.fingerprint.provider === bucket.provider,
-                    );
-                    const sourceId =
-                      bucket.sourceId ??
-                      source?.sourceId ??
-                      source?.fingerprint.resolvedHomePath ??
-                      bucket.provider;
-                    return sourceId === model.sourceId;
-                  }),
-                },
-        })),
-        (bucket) => bucket.provider === model.provider && bucket.model === model.model,
-      ),
-    [environments, model.provider, model.model, model.sourceId],
+  const usage = mergeAnsweredUsage(
+    environments.map((environment) => ({
+      ...environment,
+      summary:
+        environment.summary === null
+          ? null
+          : {
+              ...environment.summary,
+              buckets: environment.summary.buckets.filter((bucket) => {
+                const source = environment.summary?.sources.find((candidate) =>
+                  bucket.sourceId !== undefined
+                    ? candidate.sourceId === bucket.sourceId ||
+                      candidate.fingerprint.resolvedHomePath === bucket.sourceId
+                    : candidate.fingerprint.provider === bucket.provider,
+                );
+                const sourceId =
+                  bucket.sourceId ??
+                  source?.sourceId ??
+                  source?.fingerprint.resolvedHomePath ??
+                  bucket.provider;
+                return sourceId === model.sourceId;
+              }),
+            },
+    })),
+    (bucket) => bucket.provider === model.provider && bucket.model === model.model,
   );
-  const providers = useMemo(() => [model.provider], [model.provider]);
+  const providers = [model.provider];
   const presentation = PROVIDER_PRESENTATION[model.provider];
   const costUnknown = isModelCostUnknown(model);
   const hitRate = cacheHitRate(model);

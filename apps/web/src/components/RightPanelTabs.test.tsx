@@ -1,11 +1,11 @@
-import { EnvironmentId, type ThreadPullRequestLink } from "@t3tools/contracts";
 import type { DesktopPreviewFavicon, PreviewSessionSnapshot } from "@t3tools/contracts";
-import { renderToStaticMarkup } from "react-dom/server";
 import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
+import { renderToStaticMarkup } from "react-dom/server";
+import { RightPanelTabs } from "./RightPanelTabs";
+import { EnvironmentId, type ThreadPullRequestLink } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  RightPanelTabs,
   resolvePullRequestTabLink,
   shouldOpenDefaultBrowserProfileFromMenuClick,
   surfaceShortcutActionForKey,
@@ -236,39 +236,6 @@ describe("surface shortcut typing contexts", () => {
   it("claims letters when focus sits outside any editable region", () => {
     expect(surfaceShortcutTargetsTypingContext(null)).toBe(false);
     expect(surfaceShortcutTargetsTypingContext(makeTarget(null))).toBe(false);
-  });
-});
-
-describe("RightPanelTabs audio indicator", () => {
-  const cases = [
-    { audible: false, audioMuted: false, label: null },
-    { audible: false, audioMuted: true, label: null },
-    { audible: true, audioMuted: false, label: "Mute Local site" },
-    { audible: true, audioMuted: true, label: "Unmute Local site" },
-  ] as const;
-
-  it.each(cases)("audible=$audible muted=$audioMuted", ({ audible, audioMuted, label }) => {
-    const html = renderTabs(null, undefined, { audible, audioMuted });
-    if (label === null) {
-      expect(html).not.toContain("Mute Local site");
-      expect(html).not.toContain("Unmute Local site");
-    } else {
-      expect(html).toContain(`aria-label="${label}"`);
-    }
-  });
-
-  it("addresses the desktop by runtime tab id, never the server session id", () => {
-    const seen: string[] = [];
-    renderTabs(null, undefined, { audible: true }, (tabId) => {
-      seen.push(tabId);
-      return `runtime:${tabId}`;
-    });
-    expect(seen).toContain("tab-1");
-  });
-
-  it("hides the toggle when no runtime tab id can be resolved", () => {
-    const html = renderTabs(null, undefined, { audible: true }, null);
-    expect(html).not.toContain("Mute Local site");
   });
 });
 

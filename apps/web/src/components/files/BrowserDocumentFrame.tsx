@@ -23,7 +23,7 @@ import {
   matchesKeybindingShortcut,
   normalizeEventKey,
 } from "@t3tools/shared/keybindings";
-import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 
 import { useOpenLink } from "~/browser/useOpenLink";
 import { ExpandedImageDialog } from "~/components/chat/ExpandedImageDialog";
@@ -142,37 +142,38 @@ export function HtmlRenderDocument(props: {
   // binding counts whatever its `when`, and a key that any binding gives to
   // another command stays with the page. Printable keys are excluded except
   // the ISO panel shortcuts, which the root listener claims before the composer.
-  const { shortcuts, blocked } = useMemo(() => {
-    const mac = isMacPlatform(navigator.platform);
-    const resolve = (shortcut: KeybindingShortcut): HtmlRenderShortcut => ({
-      key: shortcut.key,
-      metaKey: shortcut.metaKey || (shortcut.modKey && mac),
-      ctrlKey: shortcut.ctrlKey || (shortcut.modKey && !mac),
-      shiftKey: shortcut.shiftKey,
-      altKey: shortcut.altKey,
-    });
-    const blocked = [...keybindings, ...(environmentKeybindings ?? [])]
-      .filter((binding) => !HTML_RENDER_SHORTCUT_COMMANDS.has(binding.command))
-      .map((binding) => resolve(binding.shortcut));
-    const shortcuts = new Map<string, HtmlRenderShortcut>();
-    for (const { command, shortcut } of keybindings) {
-      if (
-        HTML_RENDER_SHORTCUT_COMMANDS.has(command) &&
-        (shortcut.metaKey ||
-          shortcut.ctrlKey ||
-          shortcut.modKey ||
-          ((command === "rightPanel.toggle" || command === "rightPanel.toggleMaximized") &&
-            (shortcut.key === "§" || shortcut.key === "±")))
-      ) {
-        shortcuts.set(shortcutConflictKey(shortcut), resolve(shortcut));
-        // macOS reports Shift+§ as ± inside the frame as well.
-        if (shortcut.key === "§" && shortcut.shiftKey) {
-          shortcuts.set(`${shortcutConflictKey(shortcut)}:iso`, { ...resolve(shortcut), key: "±" });
-        }
+  const mac = isMacPlatform(navigator.platform);
+  const resolve = (shortcut: KeybindingShortcut): HtmlRenderShortcut => ({
+    key: shortcut.key,
+    metaKey: shortcut.metaKey || (shortcut.modKey && mac),
+    ctrlKey: shortcut.ctrlKey || (shortcut.modKey && !mac),
+    shiftKey: shortcut.shiftKey,
+    altKey: shortcut.altKey,
+  });
+  const blocked = [...keybindings, ...(environmentKeybindings ?? [])]
+    .filter((binding) => !HTML_RENDER_SHORTCUT_COMMANDS.has(binding.command))
+    .map((binding) => resolve(binding.shortcut));
+  const shortcutsByKey = new Map<string, HtmlRenderShortcut>();
+  for (const { command, shortcut } of keybindings) {
+    if (
+      HTML_RENDER_SHORTCUT_COMMANDS.has(command) &&
+      (shortcut.metaKey ||
+        shortcut.ctrlKey ||
+        shortcut.modKey ||
+        ((command === "rightPanel.toggle" || command === "rightPanel.toggleMaximized") &&
+          (shortcut.key === "§" || shortcut.key === "±")))
+    ) {
+      shortcutsByKey.set(shortcutConflictKey(shortcut), resolve(shortcut));
+      // macOS reports Shift+§ as ± inside the frame as well.
+      if (shortcut.key === "§" && shortcut.shiftKey) {
+        shortcutsByKey.set(`${shortcutConflictKey(shortcut)}:iso`, {
+          ...resolve(shortcut),
+          key: "±",
+        });
       }
     }
-    return { shortcuts: [...shortcuts.values()], blocked };
-  }, [environmentKeybindings, keybindings]);
+  }
+  const shortcuts = [...shortcutsByKey.values()];
   const postShortcuts = () => {
     frameRef.current?.contentWindow?.postMessage(
       htmlRenderShortcutsMessage(shortcuts, blocked),

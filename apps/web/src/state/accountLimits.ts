@@ -51,6 +51,7 @@ export interface EnvironmentLimitsStatus {
 
 const accountLimitsAtom = Atom.make((get): readonly EnvironmentLimitsStatus[] => {
   const presentations = get(environmentPresentations.presentationsAtom);
+  const providersByEnvironment = get(environmentPresentations.providersByEnvironmentAtom);
   const statuses: EnvironmentLimitsStatus[] = [];
   for (const [environmentId, presentation] of presentations) {
     const result = get(serverEnvironment.accountLimits({ environmentId, input: {} }));
@@ -59,7 +60,7 @@ const accountLimitsAtom = Atom.make((get): readonly EnvironmentLimitsStatus[] =>
       environmentId,
       environmentLabel: presentation.entry.target.label ?? null,
       environmentIsPrimary: isHostPrimaryConnectionTarget(presentation.entry.target),
-      providers: presentation.serverConfig?.providers ?? null,
+      providers: providersByEnvironment.get(environmentId) ?? null,
       isPending: result.waiting,
       snapshots:
         summary === null || !ACCOUNT_LIMITS_ACCEPTED_VERSIONS.includes(summary.contractVersion)
