@@ -1,4 +1,3 @@
-import { MiddleTruncate } from "../ui/middle-truncate";
 import {
   PULL_REQUEST_ROW_CLASS,
   PULL_REQUEST_ROW_NUMBER_CLASS,
@@ -21,8 +20,13 @@ import {
   MoreHorizontalIcon,
   PlusIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { LegendList } from "@legendapp/list/react";
+import { memo, useCallback, useMemo, useState } from "react";
 
+import {
+  COMPOSER_PULL_REQUEST_DRAG_TYPE,
+  encodePullRequestDragPayload,
+} from "~/components/chat/composerMentionDrag";
 import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
 import { findProjectForChangeRequest, useOpenPrLink } from "~/lib/openPullRequestLink";
 import { cn } from "~/lib/utils";
@@ -34,7 +38,7 @@ import { useAtomCommand } from "~/state/use-atom-command";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
-import { ScrollArea } from "../ui/scroll-area";
+import { MiddleTruncate } from "../ui/middle-truncate";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { openLinkPullRequestDialog } from "./LinkPullRequestDialog";
 import { type PullRequestListLine } from "./pullRequestListLines";
@@ -76,7 +80,7 @@ function ChecksGlyph({
   );
 }
 
-function LinkRow({
+function LinkRowImpl({
   line,
   threadRef,
   projectId,
@@ -89,7 +93,6 @@ function LinkRow({
   projectId: ProjectId | null;
   speedMode: boolean;
   onUnlink: (link: ThreadPullRequestLink) => void;
-  /** Null when the environment cannot watch pull requests. */
   onSetWatching: ((link: ThreadPullRequestLink, watching: boolean) => void) | null;
 }) {
   const openPrLink = useOpenPrLink(threadRef);
@@ -106,7 +109,6 @@ function LinkRow({
   const snapshot = link.snapshot;
   const open = snapshot === null || snapshot.state === "open";
   const watching = link.watch !== undefined;
-  // A link carries no host summary, so the host's own definition says what it can do.
   const linkHostActions = (
     sourceControlClients.findByChangeRequestUrl(link.url) ?? UNKNOWN_SOURCE_CONTROL_CLIENT
   ).changeRequestActions;
@@ -123,7 +125,6 @@ function LinkRow({
           ...(link.stack === null ? {} : { stack: link.stack }),
         }
       : null;
-  // Speed mode swaps the menu for quick actions only where a row has some to offer.
   const hasQuickActions =
     actionEntry !== null && pullRequestQuickActions(actionEntry, linkHostActions).length > 0;
   return (
@@ -135,9 +136,6 @@ function LinkRow({
         setMenuPosition({ x: event.clientX, y: event.clientY });
         setMenuOpen(true);
       }}
-      // Each layer steps in under the one it targets. The step is capped: beyond a few layers
-      // the indent only says "still in the stack", which the connector line already does, and
-      // a sixteen-layer stack would otherwise stair-step off the right edge.
       style={{ paddingLeft: `${0.5 + Math.min(depth, 3) * 1.25}rem` }}
     >
       {depth > 0 ? <span aria-hidden className="-ml-2 h-6 w-px shrink-0 bg-border/70" /> : null}
@@ -157,6 +155,25 @@ function LinkRow({
       <a
         href={link.url}
         onClick={(event) => openPrLink(event, link.url, threadRef)}
+        // The link's own URL still rides along for drops outside the app; the composer takes
+        // this payload instead and adds the pull request as a context chip.
+        onDragStart={
+          snapshot === null
+            ? undefined
+            : (event) =>
+                event.dataTransfer.setData(
+                  COMPOSER_PULL_REQUEST_DRAG_TYPE,
+                  encodePullRequestDragPayload({
+                    number: link.number,
+                    title: snapshot.title,
+                    url: link.url,
+                    headBranch: snapshot.headBranch,
+                    baseBranch: snapshot.baseBranch,
+                    state: snapshot.state,
+                    isDraft: snapshot.isDraft,
+                  }),
+                )
+        }
         className="flex min-w-0 flex-1"
       >
         <PullRequestRowLines
@@ -192,9 +209,6 @@ function LinkRow({
               </>
             ) : null
           }
-          // Match the full PR list: diff counts up top, checks under the lifecycle glyph, the
-          // verdict by the author. Each is absent rather than neutral when the host said
-          // nothing, so a row without them reads as unknown, not as fine.
           status={
             <PullRequestDiffStat
               additions={snapshot?.additions ?? 0}
@@ -230,8 +244,6 @@ function LinkRow({
               ) : null}
               {snapshot !== null ? (
                 <>
-                  {/* Cut in the middle: rows from one owner differ in the repository name at the
-                      end, which a tail cut would hide. */}
                   <Tooltip>
                     <TooltipTrigger render={<span className="flex min-w-0 max-w-32 font-mono" />}>
                       <MiddleTruncate value={link.repository} showTitle={false} />
@@ -257,9 +269,6 @@ function LinkRow({
           visible={speedMode}
         />
       ) : null}
-      {/* Out of the row's flow, so no row reserves a column for a button only the hovered one
-          shows. It sits over the right end of the second line on the row's own hover color,
-          fading in from the left, so it covers the time and leaves the diff counts alone. */}
       <span
         className={cn(
           "absolute right-0 bottom-0.5 flex items-center rounded-r-md bg-background pr-1 pl-5",
@@ -325,6 +334,12 @@ function LinkRow({
   );
 }
 
+/** Memoized so a modifier key or a sync of one link re-renders only the rows that changed. */
+const LinkRow = memo(LinkRowImpl);
+
+const lineKey = (line: PullRequestListLine) =>
+  `${line.link.host}/${line.link.repository}#${line.link.number}`;
+
 export function ThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThreadRef }) {
   const configs = useServerConfigs();
   if (configs.get(threadRef.environmentId)?.environment.capabilities.threadPullRequests !== true) {
@@ -360,6 +375,14 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
   const supportsWatch = capabilities?.threadPullRequestWatch === true;
   const links = useMemo(() => visibleThreadPullRequests(thread?.pullRequests ?? []), [thread]);
   const overview = useMemo(() => threadPullRequestsOverview(links), [links]);
+  const rows = useMemo(
+    () =>
+      overview.groups.flatMap((group) => [
+        { kind: "group" as const, key: group.key, group },
+        ...group.lines.map((line) => ({ kind: "link" as const, key: lineKey(line), line })),
+      ]),
+    [overview],
+  );
   const handleUnlink = useCallback(
     (link: ThreadPullRequestLink) => {
       void unlink({
@@ -397,6 +420,13 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
     }
     return latest;
   }, [links]);
+
+  // Legend re-renders visible rows only when data or extraData changes, so everything the rows
+  // read from outside their line goes in here.
+  const rowInputs = useMemo(
+    () => ({ speedMode, environmentProjects, capabilities, supportsWatch, thread }),
+    [speedMode, environmentProjects, capabilities, supportsWatch, thread],
+  );
 
   if (links.length === 0) {
     return (
@@ -449,43 +479,41 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
           ) : null}
         </div>
       </header>
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="flex flex-col gap-4 p-1.5">
-          {overview.groups.map((group) => (
-            <section
-              key={group.key}
-              aria-label={`${group.host}/${group.repository}`}
-              className="min-w-0"
-            >
-              <div className="px-2 py-2">
-                <h3 className="break-all text-xs font-medium">
-                  {group.host}/{group.repository}
-                </h3>
-                <p className="text-2xs text-muted-foreground">
-                  {group.links.length} PRs · {group.branches.length} known branches
-                </p>
-              </div>
-              {group.lines.map((line) => (
-                <LinkRow
-                  key={`${line.link.host}/${line.link.repository}#${line.link.number}`}
-                  line={line}
-                  threadRef={threadRef}
-                  projectId={
-                    capabilities?.pullRequests === true
-                      ? (findProjectForChangeRequest(environmentProjects, line.link)?.id ??
-                        thread?.projectId ??
-                        null)
-                      : null
-                  }
-                  speedMode={speedMode}
-                  onUnlink={handleUnlink}
-                  onSetWatching={supportsWatch ? handleSetWatching : null}
-                />
-              ))}
-            </section>
-          ))}
-        </div>
-      </ScrollArea>
+      <LegendList
+        data={rows}
+        keyExtractor={(row) => `${row.kind}:${row.key}`}
+        extraData={rowInputs}
+        renderItem={({ item }) =>
+          item.kind === "group" ? (
+            <div className="px-2 py-2" aria-label={`${item.group.host}/${item.group.repository}`}>
+              <h3 className="break-all text-xs font-medium">
+                {item.group.host}/{item.group.repository}
+              </h3>
+              <p className="text-2xs text-muted-foreground">
+                {item.group.links.length} PRs · {item.group.branches.length} known branches
+              </p>
+            </div>
+          ) : (
+            <LinkRow
+              line={item.line}
+              threadRef={threadRef}
+              projectId={
+                capabilities?.pullRequests === true
+                  ? (findProjectForChangeRequest(environmentProjects, item.line.link)?.id ??
+                    thread?.projectId ??
+                    null)
+                  : null
+              }
+              speedMode={speedMode}
+              onUnlink={handleUnlink}
+              onSetWatching={supportsWatch ? handleSetWatching : null}
+            />
+          )
+        }
+        estimatedItemSize={44}
+        drawDistance={440}
+        className="min-h-0 flex-1 overscroll-contain p-1.5"
+      />
       <footer className="flex items-center justify-between border-t border-border/60 px-2 py-1.5 text-2xs text-muted-foreground">
         <span>
           {lastSynced

@@ -5,7 +5,7 @@ import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
 import { expect, it } from "@effect/vitest";
 import {
-  AuthAdministrativeScopes,
+  AuthStandardClientScopes,
   EnvironmentId,
   EnvironmentHttpApi,
   ORCHESTRATION_PROTOCOL_VERSION,
@@ -64,7 +64,7 @@ it.layer(NodeServices.layer)("shared environment browser gateway", (it) => {
       Effect.gen(function* () {
         const remoteContext = yield* Layer.build(authLayer(remoteId));
         const remoteAuth = Context.get(remoteContext, EnvironmentAuth.EnvironmentAuth);
-        const remoteOwner = yield* remoteAuth.issueSession({ scopes: AuthAdministrativeScopes });
+        const remoteOwner = yield* remoteAuth.issueSession({ scopes: AuthStandardClientScopes });
         let modern = true;
         let calls = 0;
         const descriptor = (): ExecutionEnvironmentDescriptor => ({
@@ -144,7 +144,7 @@ it.layer(NodeServices.layer)("shared environment browser gateway", (it) => {
         const hostAuth = Context.get(hostContext, EnvironmentAuth.EnvironmentAuth);
         const sessions = Context.get(hostContext, SessionStore.SessionStore);
         const shared = Context.get(hostContext, Shared.SharedEnvironments);
-        const owner = yield* hostAuth.issueSession({ scopes: AuthAdministrativeScopes });
+        const owner = yield* hostAuth.issueSession({ scopes: AuthStandardClientScopes });
         yield* sessions.markConnected(owner.sessionId);
         const phoneScopes = ["orchestration:read", "relay:read", "filesystem:read"] as const;
         const pairing = yield* hostAuth.issuePairingCredential({ scopes: [...phoneScopes].sort() });

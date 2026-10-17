@@ -143,7 +143,6 @@ function skipReason(cause: Cause.Cause<unknown>): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** When a host read failed because the host is rate limited, the time that pause ends. */
 function rateLimitRetryAt(cause: Cause.Cause<unknown>): number | undefined {
   let error: unknown = Cause.squash(cause);
   while (error instanceof Error) {
@@ -157,12 +156,6 @@ function isUnsettled(thread: ProjectionStore.ProjectionThreadPullRequests): bool
   return thread.settledOverride !== "settled" && thread.settledAt === null;
 }
 
-/**
- * Keeps every thread ↔ pull request link's host snapshot current. One sweep a minute reads
- * only the active threads that have links, groups visible links by pull request so the host
- * is asked once per PR no matter how many threads share it, and writes back only what
- * changed. Native stacks the host reports are auto-linked to the thread as `source: "stack"`.
- */
 export class PullRequestSyncReactor extends Context.Service<
   PullRequestSyncReactor,
   {
@@ -201,12 +194,9 @@ export const make = Effect.gen(function* () {
     // Cleanup remains due even when every linked thread has already settled.
     if (entries.some((entry) => terminalLinkExpired(entry.link, nowMs))) return true;
     if (entries.some((entry) => entry.link.snapshot === null)) return true;
-    // Settled threads stop watching their pull requests. Unsettling one makes its links due on
-    // the next sweep, since the cadence clock below kept running while it was settled.
     const active = entries.filter((entry) => isUnsettled(entry.thread));
     if (active.every((entry) => entry.link.snapshot?.state === "merged")) return false;
     if (active.some((entry) => entry.link.snapshot?.state === "open")) return true;
-    // Closed requests can reopen on the host.
     const last = lastSyncedAt.get(key);
     return last === undefined || nowMs - last >= SLOW_SYNC_INTERVAL_MS;
   };
@@ -216,7 +206,6 @@ export const make = Effect.gen(function* () {
     <E>(cause: Cause.Cause<E>): Effect.Effect<void, E> =>
       Cause.hasInterruptsOnly(cause) ? Effect.failCause(cause) : Effect.logWarning(message, fields);
 
-  /** `requested` reads only keys asked for through `requestSync`; `all` is the periodic pass. */
   const sweep = Effect.fn("PullRequestSyncReactor.sweep")(function* (scope: "all" | "requested") {
     const threads = yield* projections.getThreadsWithPullRequests();
     const now = yield* DateTime.now;
@@ -237,8 +226,6 @@ export const make = Effect.gen(function* () {
     for (const key of retryStacks) if (!groups.has(key)) retryStacks.delete(key);
     for (const key of requested.keys()) if (!groups.has(key)) requested.delete(key);
 
-    // Layers auto-linked this sweep, so two links of one thread that share a
-    // stack do not both try to add the same sibling.
     const linkedThisSweep = new Set<string>();
     const persistence = yield* Semaphore.make(1);
 
@@ -373,8 +360,7 @@ export const make = Effect.gen(function* () {
                 (cause) => !Cause.hasInterruptsOnly(cause),
                 (cause) =>
                   rateLimitRetryAt(cause) !== undefined
-                    ? // The sweep records the pause and holds the host's other reads until it ends.
-                      Effect.sync(() => retryStacks.add(key)).pipe(
+                    ? Effect.sync(() => retryStacks.add(key)).pipe(
                         Effect.andThen(Effect.failCause(cause)),
                       )
                     : Effect.logWarning("pull request stack lookup failed", {
@@ -423,7 +409,6 @@ export const make = Effect.gen(function* () {
       );
     });
 
-    // Failed host reads by reason: how many, and the first key that failed that way.
     const skips = new Map<string, { count: number; readonly key: string }>();
     const readGroup = (key: string, entries: ReadonlyArray<LinkEntry>, pauseKey: string) =>
       syncGroup(key, entries).pipe(
@@ -462,8 +447,6 @@ export const make = Effect.gen(function* () {
       // GitHub answers them in one request rather than one `gh pr view` apiece.
       { concurrency: 25, discard: true },
     );
-    // A host failure such as a signed-out CLI fails every due pull request the same way, so a
-    // sweep reports one line per reason rather than one per pull request.
     for (const [reason, { count, key }] of skips) {
       yield* Effect.logWarning("pull request sync skipped", { count, key, reason });
     }
@@ -471,13 +454,11 @@ export const make = Effect.gen(function* () {
 
   const worker = yield* makeDrainableWorker((scope: "all" | "requested") =>
     Effect.suspend(() => {
-      // Requests from here on queue another sweep; the ones already recorded are read by this.
       if (scope === "requested") requestedSweepQueued = false;
       return sweep(scope);
     }).pipe(Effect.catchCause(logSkipped("pull request sync sweep failed", {}))),
   );
 
-  // Threads whose current run ran a merge or close command, until that run ends.
   const closeCommandThreads = new Set<ThreadId>();
   const refreshOpenLinks = (threadId: ThreadId) =>
     projections.getThreadsWithPullRequests(threadId).pipe(
@@ -499,8 +480,6 @@ export const make = Effect.gen(function* () {
     "PullRequestSyncReactor.start",
   )(function* () {
     const events = engine.streamDomainEvents;
-    // A client reading a pull request, or its branch status, can see it merge or close before
-    // the next sweep does.
     const stateChanges = Stream.merge(
       yield* pullRequests.subscribeStateChanges,
       yield* git.subscribePullRequestStateChanges,

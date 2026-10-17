@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { View } from "react-native";
 import type { ServerSettingsPatch } from "@t3tools/contracts";
-import { AppText as Text, AppTextInput } from "../../../components/AppText";
+import { AppText as Text, AppTextInput } from "../../../components/ui/AppText";
 
 function NumericField({
   value,

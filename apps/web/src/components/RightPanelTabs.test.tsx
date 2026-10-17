@@ -9,6 +9,7 @@ import {
   resolvePullRequestTabLink,
   shouldOpenDefaultBrowserProfileFromMenuClick,
   surfaceShortcutActionForKey,
+  surfaceShortcutTargetsTypingContext,
   tabMuteMenuItem,
 } from "./RightPanelTabs";
 
@@ -217,10 +218,28 @@ describe("surface shortcuts", () => {
   });
 });
 
+describe("surface shortcut typing contexts", () => {
+  const makeTarget = (matches: string | null) => ({
+    closest(selectors: string) {
+      if (matches === null || !selectors.includes(matches)) return null;
+      return {};
+    },
+  });
+
+  it("treats form fields and every editable region as typing contexts", () => {
+    expect(surfaceShortcutTargetsTypingContext(makeTarget("input"))).toBe(true);
+    expect(surfaceShortcutTargetsTypingContext(makeTarget("textarea"))).toBe(true);
+    expect(surfaceShortcutTargetsTypingContext(makeTarget("select"))).toBe(true);
+    expect(surfaceShortcutTargetsTypingContext(makeTarget("[contenteditable]"))).toBe(true);
+  });
+
+  it("claims letters when focus sits outside any editable region", () => {
+    expect(surfaceShortcutTargetsTypingContext(null)).toBe(false);
+    expect(surfaceShortcutTargetsTypingContext(makeTarget(null))).toBe(false);
+  });
+});
+
 describe("RightPanelTabs audio indicator", () => {
-  // A muted tab only shows the indicator while it is actually making sound:
-  // arming mute on a quiet tab is deliberate and stays invisible until there
-  // is something to suppress.
   const cases = [
     { audible: false, audioMuted: false, label: null },
     { audible: false, audioMuted: true, label: null },
@@ -239,8 +258,6 @@ describe("RightPanelTabs audio indicator", () => {
   });
 
   it("addresses the desktop by runtime tab id, never the server session id", () => {
-    // Session ids are only unique per server process; sending one to the
-    // Electron manager raises PreviewTabNotFoundError and silently no-ops.
     const seen: string[] = [];
     renderTabs(null, undefined, { audible: true }, (tabId) => {
       seen.push(tabId);
@@ -260,8 +277,6 @@ describe("tabMuteMenuItem", () => {
     ({ audioMuted, audible: false }) as Parameters<typeof tabMuteMenuItem>[0]["overlay"];
 
   it("stays disabled until the desktop tab exists", () => {
-    // The server session id resolves before the preview manager finishes
-    // createTab. Muting in that window fails with an error nobody surfaces.
     expect(tabMuteMenuItem({ overlay: null, canResolveRuntimeTabId: true })).toEqual({
       label: "Mute tab",
       disabled: true,

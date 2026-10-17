@@ -1,5 +1,111 @@
 # Fork Changes
 
+## Upstream integration — 2026-10-16 (a7025639c0)
+
+- Merged 123 upstream commits through `a7025639c0e16aad3081106c935bf3025f601a1e` onto the
+  morning integration `2141b7ced3`. 52 paths changed on both sides. Git stopped on 18 of
+  them; the rest merged automatically and were reviewed for dropped fork behavior.
+- Upstream now lists web files the React Compiler must compile (`apps/web/reactCompiledFiles.ts`)
+  and fails lint on manual memoization and compiler bailouts in them. Fork additions in
+  listed files (`ChatView`, `Sidebar`, `CommandPalette`, `BranchToolbar`, `MessagesTimeline`,
+  `ChatComposer`, `ProjectSettingsPanel`, `SettingsPanels`, `UsagePage` and others) were
+  rewritten as plain values and functions, `useStableCallback`, `useEffectEvent` or
+  render-time state resets. `ProjectSettingsPanel` no longer uses try/finally while adding a
+  workspace root, because the compiler skips such components.
+- `DiffPanel.tsx` and `files/FileBrowserPanel.tsx` keep the fork implementations (multi-repository
+  diffs and the native Files tree). Upstream's only change to them was its compiler refactor of
+  code the fork replaced. Both are removed from `reactCompiledFiles.ts`: the fork versions
+  still memoize by hand and `DiffPanel` writes refs during render.
+- Upstream moved right-panel rendering into `chat/RightPanelSurfaceContent.tsx`. The fork's
+  Git history surface is a `git-history` case there with multi-root workspaces. Files and file
+  previews stay mounted by `ChatView` so open file tabs keep their state, and the new
+  component renders nothing for them.
+- `ChatView` resets per-thread timeline state (pull request dialog, live follow, scroll-to-bottom)
+  during render when the route thread changes and keeps the fork's remembered reading position.
+  Upstream's resume-time compaction stays out with the other compact-before-send paths.
+- `Sidebar` adopts upstream's `useSidebarThreads` and lookup hooks. Manual thread order,
+  project rail/slots/scope, picker height, disabled layout animation, the resume sessions
+  section and direct unpinning feed into them. Moving an active thread finishes the
+  local-to-shared order migration as before. `CommandPalette` is rebuilt on upstream's
+  version with folder selection, "Add as / Part of an existing project" attachment and
+  primary-host filtering re-applied.
+- Composer: orb buttons keep the saved send/stop colors, the steer tooltip has no compaction
+  wording, scroll collapse stays disabled and `min-h-[1lh]` stays on the editor. Usage keeps
+  chronological hourly rows on upstream's period and provider hooks. Telemetry export settings
+  stay a disabled stub.
+- Upstream folded access and T3 Connect management into `AuthStandardClientScopes` and
+  removed `AuthAdministrativeScopes`. The fork's Standard preset and pairing default now
+  carry those scopes, matching upstream. `connections/SharedEnvironments.test.ts` uses the
+  standard set.
+- Validation: frozen-lockfile installation with lifecycle scripts disabled and repo-wide
+  `vp run typecheck` passed. The React Compiler coverage test passes for every listed file.
+  `vp check` reports 14 errors, all in files this merge did not change (`accountLimitsNormalize.ts`,
+  `AccountLimits.tsx`, `GitHistoryPanel.tsx`, `DiffFilesTreeNavigator.tsx`,
+  `FileWorktreeToolbar.tsx`, `SymbolNavigationDialog.tsx`, `ui/resizable-columns.tsx`): section
+  dividers, outset focus rings, native `title` tooltips and a restricted `GitMergeIcon` import.
+  Scoped tests for web (2642), server (1510), shared, contracts and client-runtime fail the same
+  15 web, 26 server, 4 shared and 2 contracts tests as the `2141b7ced3` parent; client-runtime
+  passes. `lint:mobile` ran with swiftlint, ktlint and detekt not installed, so it checked
+  nothing. No app builds, dev servers, installed-app or live-data operations, push or main edits.
+
+## Daily upstream integration — 2026-10-16
+
+- Merge target `cfafb4bb54d244e4612f5681aad3832ea64cb0fb`, fork parent
+  `5b6a0d86caadaf8d6044c4e6fdbf9b01b626d920`. Integrates the entire upstream
+  range after `c079503d07`, preserving both histories. The incoming comment cleanup
+  touches thousands of files; reviewed 290 paths changed on both sides, including
+  automatic merges, and reconciled 95 conflicting files individually.
+- Retained disabled external analytics/OTLP and endpoint probes, provider refresh/version/
+  manifest gates, opt-in desktop updates and Keychain access, stable desktop storage and
+  encrypted local connections. Released migration IDs and atomic preview translation stay
+  intact. Upstream Beta branding and CLI distribution changes do not alter the installed app.
+- Shared-worktree cleanup now considers parent/subagent owners together while retaining
+  archived ownership, secondary repository selections, settle-now precedence, expiry,
+  pending-work/session/terminal guards and fresh settlement checks. Branch synchronization
+  adds upstream's expected-branch guard alongside the validated initial-preparation exception;
+  ordinary active/background work still cannot change its primary checkout.
+- Retained multi-repository Files, exact-root previews, editor navigation/history, Structure/
+  Commit views, deletion/undo and saved collapse/expansion/resize state. Upstream folder
+  breadcrumbs keep the owning checkout when navigating in place or opening a folder beside
+  a file. Host folder browsing remains shallow. PR lists retain repository headers, totals,
+  stack structure and touch menus while adopting virtualization and draggable context chips.
+- Live composer paths mount the saved-color Arcane renderer for Send/Resume/Queue/Steer and
+  normal/pending-input Stop; Classic remains selectable. Existing chats and draft heroes keep
+  forced mobile expansion, disabled scroll/focus collapse, short placeholder, custom width and
+  keyboard/viewport handling. Compact-before-send proposals remain removed. Independent
+  one-second timeline recovery, bottom following, first assistant text outside folds, mixed-work
+  labels and imported-thread identities remain connected.
+- Project rail/status dots/colors, project grouping/attachments/slots/order/picker sizing,
+  root and multi-root Markdown explorer links, V2 CLI resume, Git history/staged-only commit
+  generation, panel/editor shortcuts and right-click tab closing remain live. Claude worker
+  effort hooks and child-specific selection ingestion remain alongside resumed-child fixes.
+  Usage keeps account/source/model identities and compact per-provider trends.
+- Project notes/workspace/peer MCP registration, shared host environment routes, permission
+  editing, durable response watches, idle-compaction overrides/current native usage/quota
+  guards, worker-question recovery, two-hour terminal-PR unlinking and Never-default settlement
+  remain connected. Native fork-only communication and compaction components follow the new
+  shared UI locations. Multiwork and machine sync remain retired; older usage/sync components
+  remain superseded. WebSocket registration keeps all fork RPCs and adds live command-output
+  subscriptions and database-storage reporting. Their status streams use a separate typed
+  registration group so the larger fork protocol retains concrete Effect requirements.
+- Native repository menus now use AppBar types; the composer mounts a single measured control
+  host. Full-width folder navigation reveals the selected repository/folder, and host-folder
+  drag mentions remain absolute with loaded-entry search and expand-all disabled. The web
+  Files tree uses the shared resize observer and inset focus indicators.
+- Validation: frozen-lockfile installation succeeded with lifecycle scripts disabled after a
+  metadata-timeout retry. Removed the stale duplicate Clerk devDependency while retaining the
+  upstream runtime dependency. Scoped typechecks passed for contracts, shared, client-runtime,
+  provider-core, provider-acp, effect-acp, provider-grok, source-control-github, server, web,
+  mobile, desktop and scripts. Effect suggestions remain non-failing. The 667-file scoped lint
+  scan reported 675 warnings (primarily React compiler/dependency rules, unused declarations
+  and UI styling); its five blocking findings were corrected and follow-up lint passed.
+  Formatting passed for the integration resolutions. Diff whitespace warnings are limited to
+  16 imported dependency-patch context lines; those patches remain unchanged. Imported upstream
+  tests are retained and existing fixtures reconciled where needed; no tests were independently
+  added or run. No app builds,
+  packaging, dev servers, browser/device checks, installed-app/live-data operations, process
+  stops, push, PR, external messages, subagents, other-worktree/main edits or schedule changes.
+
 ## Communication inbox and reading controls — 2026-10-15
 
 - Reworked the communication dialog into the selected inbox layout using existing T3 theme,

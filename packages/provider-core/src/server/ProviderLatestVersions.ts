@@ -14,9 +14,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 
-/** A found version stays fresh this long. */
 const FOUND_TTL = Duration.hours(1);
-/** A failed lookup is retried sooner, so a flaky network does not hide an update for an hour. */
 const MISSING_TTL = Duration.minutes(1);
 
 interface Entry {
@@ -27,10 +25,6 @@ interface Entry {
 export class ProviderLatestVersions extends Context.Service<
   ProviderLatestVersions,
   {
-    /**
-     * Returns the cached version for `key`, running `lookup` when there is no
-     * fresh entry or `fresh` is set. `null` means the lookup found nothing.
-     */
     readonly cached: <E, R>(
       key: string,
       lookup: Effect.Effect<string | null, E, R>,
@@ -40,7 +34,6 @@ export class ProviderLatestVersions extends Context.Service<
   }
 >()("@t3tools/provider-core/server/ProviderLatestVersions") {}
 
-/** Starts from `seed`, for tests that need a cached entry. */
 export const make = (seed: Iterable<readonly [key: string, version: string | null]> = []) =>
   Effect.gen(function* () {
     const entries = yield* Ref.make(

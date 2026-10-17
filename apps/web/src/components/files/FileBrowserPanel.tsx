@@ -1,3 +1,5 @@
+import { RefreshIcon } from "~/components/ui/refresh-icon";
+import { joinHostPath } from "./filePath";
 import type { EnvironmentId, GitFileChange, ProjectEntry } from "@t3tools/contracts";
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
 import { ChevronsDownUpIcon, ChevronsUpDownIcon, Trash2Icon, XIcon } from "lucide-react";
@@ -84,10 +86,16 @@ interface FileBrowserPanelProps {
   environmentId: EnvironmentId;
   cwd: string;
   projectName: string;
-  /** Entry currently open in the surface; revealed and selected in the tree. A directory is expanded. */
   selectedPath: string | null;
   selectedPathRevealId: number;
   onOpenFile: (relativePath: string) => void;
+  /**
+   * Set when `cwd` is a host folder outside the workspace rather than the
+   * workspace root. Entries then open and mention as host paths. A host folder can
+   * be a home directory, so nothing walks it whole: there is no expand-all, and
+   * search filters the folders already loaded instead of indexing on the server.
+   */
+  hostFolder?: boolean;
   onRefreshSelectedFile?: () => void;
   workspaceMutationId?: string | null;
 }
@@ -187,7 +195,10 @@ export default function FileBrowserPanel({
   onOpenFile,
   onRefreshSelectedFile,
   workspaceMutationId = null,
+  hostFolder = false,
 }: FileBrowserPanelProps) {
+  const panelPath = (relativePath: string) =>
+    hostFolder ? joinHostPath(cwd, relativePath) : relativePath;
   const { resolvedTheme } = useTheme();
   const composerRef = useComposerHandleContext();
   const fileContextMenu = useFileContextMenu(environmentId);
@@ -200,7 +211,7 @@ export default function FileBrowserPanel({
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const search = useProjectPathSearch(
-    { environmentId, cwd, query: deferredQuery, kind: "file" },
+    { environmentId, cwd: hostFolder ? null : cwd, query: deferredQuery, kind: "file" },
     200,
   );
   const onExpandedDirectoriesChange = useCallback((paths: readonly string[]) => {
@@ -225,7 +236,7 @@ export default function FileBrowserPanel({
   const entries = useMemo(
     () =>
       uniqueProjectEntries(
-        deferredQuery.trim()
+        deferredQuery.trim() && !hostFolder
           ? search.entries
           : mergeDirectoryListings(
               entriesQuery.data?.entries ?? [],
@@ -234,6 +245,7 @@ export default function FileBrowserPanel({
             ),
       ),
     [
+      hostFolder,
       deferredQuery,
       search.entries,
       entriesQuery.data?.entries,
@@ -433,7 +445,9 @@ export default function FileBrowserPanel({
     async (relativePath: string, position: { x: number; y: number }) => {
       const api = readLocalApi();
       if (!api) return;
-      const mention = serializeComposerFileLink(relativePath);
+      const mention = serializeComposerFileLink(
+        hostFolder ? joinHostPath(cwd, relativePath) : relativePath,
+      );
       const absolutePath = resolvePathLinkTarget(relativePath, cwd);
       // Folders share the environment open/reveal actions, but cannot become composer mentions.
       const isFile = filePaths.has(relativePath);
@@ -508,7 +522,7 @@ export default function FileBrowserPanel({
         });
       }
     },
-    [composerRef, cwd, deletePaths, environmentId, fileContextMenu, filePaths],
+    [composerRef, cwd, deletePaths, environmentId, fileContextMenu, filePaths, hostFolder],
   );
   const handleRefresh = useCallback(() => {
     setRefreshId((value) => value + 1);
@@ -607,6 +621,7 @@ export default function FileBrowserPanel({
                 variant="ghost"
                 size="icon-xs"
                 aria-label="Expand all folders"
+                disabled={hostFolder}
                 onClick={() => setExpandAllRequestId((id) => id + 1)}
               />
             }
@@ -670,9 +685,9 @@ export default function FileBrowserPanel({
         <div className="p-4 text-xs leading-relaxed text-destructive">{entriesQuery.error}</div>
       ) : entriesQuery.data === null ? (
         <div className="p-4 text-xs text-muted-foreground">Loading files…</div>
-      ) : deferredQuery.trim() && search.isPending ? (
+      ) : deferredQuery.trim() && !hostFolder && search.isPending ? (
         <div className="p-4 text-xs text-muted-foreground">Searching files…</div>
-      ) : deferredQuery.trim() && search.error ? (
+      ) : deferredQuery.trim() && !hostFolder && search.error ? (
         <div className="p-4 text-xs text-destructive">{search.error}</div>
       ) : entries.length === 0 ? (
         <div className="p-4 text-xs text-muted-foreground">No files found in this directory.</div>
@@ -683,13 +698,14 @@ export default function FileBrowserPanel({
           entries={entries}
           loadingDirectories={loadingDirectories}
           fileColors={fileColors}
-          expandAllRequestId={expandAllRequestId}
+          expandAllRequestId={hostFolder ? 0 : expandAllRequestId}
           query={deferredQuery}
           selectedPath={selectedPath}
           selectedPathRevealId={selectedPathRevealId}
           selectedPaths={selectedPaths}
           resolvedTheme={resolvedTheme}
-          onOpenFile={onOpenFile}
+          onOpenFile={(path) => onOpenFile(panelPath(path))}
+          mentionPath={panelPath}
           onSelectionChange={setSelectedPaths}
           onDeleteSelected={deleteSelectedFiles}
           onDeleteEntry={(path) => deletePaths([path])}
@@ -701,4 +717,3 @@ export default function FileBrowserPanel({
     </div>
   );
 }
-import { RefreshIcon } from "~/components/ui/refresh-icon";
