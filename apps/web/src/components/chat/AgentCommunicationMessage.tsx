@@ -99,6 +99,7 @@ export const AgentCommunicationMessage = memo(function AgentCommunicationMessage
         ? element.clientHeight
         : PREVIEW_HEIGHT_REM * parseFloat(getComputedStyle(document.documentElement).fontSize);
     setOverflows(element.scrollHeight > limit + 1);
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Edited text changes the rendered height.
   }, [mode, message.text]);
   const truncated =
     overflows ||

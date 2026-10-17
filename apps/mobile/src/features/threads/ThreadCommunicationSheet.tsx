@@ -243,7 +243,7 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
               ["full", "Expand all"],
             ] as const
           ).map(([mode, label]) => (
-            <MaterialButton
+            <Button
               key={mode}
               label={label}
               tone={readingMode === mode ? "secondary" : "text"}
@@ -362,7 +362,7 @@ function CommunicationBody({
         </View>
       )}
       {expandable ? (
-        <MaterialButton
+        <Button
           label={
             mode === "full"
               ? "Shorten message"
