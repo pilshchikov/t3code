@@ -3,6 +3,7 @@ import { EnvironmentId, ThreadId, type ScopedThreadRef } from "@t3tools/contract
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   communicationDetailRefs,
+  communicationStatusLabel,
   communicationStatusTone,
   communicationThreadKey,
   deriveThreadCommunication,
@@ -25,11 +26,14 @@ import {
   environmentThreadShells,
   threadEnvironment,
 } from "../../state/threads";
+import { SelectableMarkdownText } from "../../native/SelectableMarkdownText";
+import { useMarkdownPreviewStyles } from "../files/FileMarkdownPreview";
+import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
 import { useAtomCommand } from "../../state/use-atom-command";
 
 const statusClasses = {
   working: "text-adaptive-sky-600-400",
-  monitoring: "text-adaptive-sky-600-400 opacity-80",
+  monitoring: "text-adaptive-blue-600-400",
   done: "text-adaptive-emerald-700-300",
   failed: "text-danger-foreground",
   input: "text-adaptive-indigo-600-300",
@@ -79,7 +83,9 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
   const [refs, setRefs] = useState<ReadonlyArray<ScopedThreadRef>>(() =>
     communicationThreadKey(root) === communicationThreadKey(target) ? [] : [target],
   );
-  const [mapOpen, setMapOpen] = useState(true);
+  const [readingMode, setReadingMode] = useState<"compact" | "preview" | "full">("preview");
+  const [readingRevision, setReadingRevision] = useState(0);
+  const [mapOpen, setMapOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(30);
   const { environments } = useEnvironments();
   const labels = useMemo(
@@ -176,11 +182,13 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
                 <Text className="text-xs text-foreground-muted">
                   {p.environmentLabel} ·{" "}
                   <Text className={statusClasses[communicationStatusTone(p.status)]}>
-                    {p.status}
+                    {communicationStatusLabel(p.status)}
                   </Text>
                 </Text>
                 <Text className="text-xs text-foreground-muted">
-                  {model.messages.filter((m) => m.from === p.id || m.to === p.id).length} exchanges
+                  {exchangeCount(
+                    model.messages.filter((m) => m.from === p.id || m.to === p.id).length,
+                  )}
                 </Text>
               </Pressable>
             ))}
@@ -227,11 +235,30 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
           Recorded messages. Viewing does not send messages. Select a task to read its own
           conversation. Newest messages first.
         </Text>
+        <View className="flex-row flex-wrap gap-1">
+          {(
+            [
+              ["compact", "Collapse all"],
+              ["preview", "Short previews"],
+              ["full", "Expand all"],
+            ] as const
+          ).map(([mode, label]) => (
+            <MaterialButton
+              key={mode}
+              label={label}
+              tone={readingMode === mode ? "secondary" : "text"}
+              onPress={() => {
+                setReadingMode(mode);
+                setReadingRevision((n) => n + 1);
+              }}
+            />
+          ))}
+        </View>
         {messages
           .slice(-visibleCount)
           .reverse()
           .map((m) => (
-            <View key={m.id} className="gap-1 rounded-2xl border border-border p-3">
+            <View key={m.id} className="gap-1 border-b border-border py-3">
               <Text className="text-xs font-t3-medium">
                 {participants.get(m.from)?.label} → {participants.get(m.to)?.label}
               </Text>
@@ -239,13 +266,19 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
                 {participants.get(m.from)?.environmentLabel} →{" "}
                 {participants.get(m.to)?.environmentLabel} · {new Date(m.at).toLocaleString()} ·{" "}
                 <Text className={statusClasses[communicationStatusTone(m.state)]}>
-                  {m.state === "recorded" ? "In agent thread" : m.state}
+                  {m.state === "recorded"
+                    ? "In agent thread"
+                    : m.state === "pending"
+                      ? "Sending"
+                      : communicationStatusLabel(m.state)}
                 </Text>
               </Text>
               {m.summary ? <Text className="text-sm font-t3-medium">{m.summary}</Text> : null}
-              <Text selectable className="text-sm">
-                {m.text}
-              </Text>
+              <CommunicationBody
+                key={`${m.id}:${readingRevision}`}
+                text={m.text}
+                initialMode={readingMode}
+              />
             </View>
           ))}
         {messages.length > visibleCount ? (
@@ -294,4 +327,57 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
       </ScrollView>
     </View>
   );
+}
+
+function CommunicationBody({
+  text,
+  initialMode,
+}: {
+  text: string;
+  initialMode: "compact" | "preview" | "full";
+}) {
+  const [mode, setMode] = useState(initialMode);
+  const styles = useMarkdownPreviewStyles();
+  const preview = text.slice(0, 1200).split("\n").slice(0, 12).join("\n");
+  const expandable =
+    preview.length < text.length || text.length > 400 || text.split("\n").length > 6;
+  return (
+    <View className="gap-2">
+      {mode === "compact" ? (
+        <Text numberOfLines={2} className="text-xs text-foreground-muted">
+          {text.slice(0, 250).replace(/\s+/g, " ")}
+        </Text>
+      ) : (
+        <View className={mode === "preview" ? "max-h-40 overflow-hidden" : ""}>
+          <SelectableMarkdownText
+            markdown={mode === "full" ? text : preview}
+            textStyle={styles.nativeTextStyle}
+            onLinkPress={(href) => {
+              if (mode === "full") void tryOpenExternalUrl(href, "markdown-link");
+            }}
+            renderImage={({ alt }) => (
+              <Text className="text-xs text-foreground-muted">{alt || "Image attachment"}</Text>
+            )}
+          />
+        </View>
+      )}
+      {expandable ? (
+        <MaterialButton
+          label={
+            mode === "full"
+              ? "Shorten message"
+              : mode === "compact"
+                ? "Read message"
+                : "Show full message"
+          }
+          tone="text"
+          onPress={() => setMode(mode === "full" ? "preview" : "full")}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function exchangeCount(count: number) {
+  return `${count} ${count === 1 ? "exchange" : "exchanges"}`;
 }

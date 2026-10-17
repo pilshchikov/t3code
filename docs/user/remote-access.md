@@ -22,12 +22,15 @@ messaging tools; Claude workers need distinct names to address one another. Thei
 conversations remain readable but do not accept ordinary T3 turns.
 
 To read these exchanges, open the thread details panel and choose **Agent communication**.
-Select a task or a connection in the map to read its conversation, including parent messages
+Select a task, or use **Show map** and select a connection, to read its conversation, including parent messages
 addressed to those agents. On the native mobile app, open the Agents list and choose
 **Agent communication**. No setting is required, and viewing does not send messages or start work.
 Only recorded communication appears: task instructions, returned results, and supported agent
 messages. Load earlier history when needed; claims written in ordinary replies or shared files
 are not evidence that a message was delivered.
+
+Messages use short Markdown previews by default. Expand individual messages to read them fully,
+or use **Collapse all** to scan compact rows and **Expand all** to read the loaded exchanges.
 
 Conversations and exchanges are ordered newest first. The web viewer lets you search task titles,
 machines and models, and load older entries as needed. Its map separates delegated tasks from

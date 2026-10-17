@@ -1,5 +1,31 @@
 # Fork Changes
 
+## Communication inbox and reading controls — 2026-10-15
+
+- Reworked the communication dialog into the selected inbox layout using existing T3 theme,
+  typography, controls, quiet task rows, and divided exchanges. The connection map remains
+  available on demand; selection, history loading, live delivery and environment routing are unchanged.
+- Messages render Markdown with bounded previews by default, individual expansion, and
+  Collapse all / Short previews / Expand all. Collapsed bodies unmount Markdown; previews
+  parse at most 1,200 characters and 12 lines. Existing newest-first paging remains intact.
+- Web/desktop and phone web share the dialog. Native mobile has equivalent reading modes
+  using its existing Markdown renderer. Scope remains the current thread and its related agents.
+- Each agent has a colored initial avatar, hashed from its id so the color stays stable. The
+  coordinator uses a branch icon. Avatars appear on task rows, the conversation header, map
+  nodes, and on both sides of every exchange. Exchanges read as sender → recipient, then
+  kind, delivery state, machine and time.
+- Expand controls appear only for clipped messages, and clipped previews fade out. Compact rows
+  strip Markdown syntax. Statuses read as sentence case through the shared
+  `communicationStatusLabel` (`Awaiting input`, not `awaiting_input`). Counts are singular-aware.
+  Monitoring states use a readable teal (web) or blue (native) instead of reduced opacity.
+- Sources: `apps/web/src/components/chat/AgentCommunication{Dialog,View,Message,Avatar,Map}.tsx`,
+  `packages/client-runtime/src/state/threadCommunication.ts` and
+  `apps/mobile/src/features/threads/ThreadCommunicationSheet.tsx`.
+- Validation: focused web and client-runtime tests; web/mobile typechecks; changed-file lint;
+  isolated browser checks of production components with real 3-agent and 280-agent thread
+  snapshots at desktop, phone and short-phone sizes, plus a synthetic 6-agent, 2-machine
+  snapshot in light and dark themes for the avatar pass. Native device layout not exercised.
+
 ## Stable, searchable agent communication — 2026-10-15
 
 - Replaced the web/desktop map's fixed-coordinate, selection-prioritized cards and ambiguous

@@ -15,6 +15,7 @@ import * as DateTime from "effect/DateTime";
 import { v2Projection, v2Now } from "./orchestrationV2TestFixtures.ts";
 import {
   communicationDetailRefs,
+  communicationStatusLabel,
   retainThreadCommunication,
   recentCommunicationParticipants,
   type ThreadCommunication,
@@ -423,5 +424,13 @@ describe("retained communication history", () => {
       "peer",
       "old",
     ]);
+  });
+});
+
+describe("communication status labels", () => {
+  it("reads provider statuses as sentence-case words", () => {
+    expect(communicationStatusLabel("awaiting_input")).toBe("Awaiting input");
+    expect(communicationStatusLabel("running")).toBe("Running");
+    expect(communicationStatusLabel("unknown")).toBe("Status unavailable");
   });
 });

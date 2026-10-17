@@ -10,6 +10,7 @@ import {
   MonitorIcon,
 } from "lucide-react";
 import {
+  communicationStatusLabel,
   communicationStatusTone,
   type CommunicationMessage,
   type CommunicationParticipant,
@@ -19,6 +20,7 @@ import {
 import { Button } from "../ui/button";
 import { cn } from "../../lib/utils";
 import { communicationStatusClasses } from "./agentCommunicationStyles";
+import { AgentCommunicationAvatar } from "./AgentCommunicationAvatar";
 
 interface Connection {
   readonly from: string;
@@ -120,10 +122,7 @@ export function AgentCommunicationMap(props: {
       : participant.parentId !== null
         ? "Subagent"
         : "Other thread";
-    const status =
-      participant.status === "unknown"
-        ? "Status unavailable"
-        : participant.status.replaceAll("_", " ");
+    const status = communicationStatusLabel(participant.status);
     const Icon = coordinator
       ? GitBranchIcon
       : participant.parentId !== null
@@ -150,15 +149,18 @@ export function AgentCommunicationMap(props: {
             <Icon aria-hidden className="size-3.5" />
             {role}
           </span>
-          <span
-            className={cn("flex items-center gap-1.5 capitalize", communicationStatusClasses[tone])}
-          >
+          <span className={cn("flex items-center gap-1.5", communicationStatusClasses[tone])}>
             <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-current" />
             {status}
           </span>
         </span>
-        <span className="block break-words text-sm font-medium leading-snug [overflow-wrap:anywhere]">
-          {participant.label}
+        <span className="flex items-start gap-2">
+          {coordinator ? null : (
+            <AgentCommunicationAvatar id={participant.id} label={participant.label} size="xs" />
+          )}
+          <span className="min-w-0 break-words text-sm font-medium leading-snug [overflow-wrap:anywhere]">
+            {participant.label}
+          </span>
         </span>
         <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-muted-foreground">
           <span className="inline-flex min-w-0 items-center gap-1.5 break-words [overflow-wrap:anywhere]">

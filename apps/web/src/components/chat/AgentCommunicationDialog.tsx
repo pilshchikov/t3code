@@ -26,9 +26,8 @@ export function AgentCommunicationDialog(props: { children: (onClose: () => void
       >
         <DialogHeader className="shrink-0">
           <DialogTitle>Agent communication</DialogTitle>
-          <DialogDescription>
-            Task conversations and connections between the parent, subagents, and other
-            environments.
+          <DialogDescription className="sr-only md:not-sr-only">
+            Assignments, replies, and conversations connected to this thread.
           </DialogDescription>
         </DialogHeader>
         {open ? props.children(() => setOpen(false)) : null}

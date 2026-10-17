@@ -75,6 +75,12 @@ export function communicationStatusTone(status: string) {
   }
 }
 
+export function communicationStatusLabel(status: string): string {
+  if (status === "unknown") return "Status unavailable";
+  const words = status.replaceAll("_", " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function communicationThreadKey(ref: ScopedThreadRef): string {
   return `${ref.environmentId}:${ref.threadId}`;
 }

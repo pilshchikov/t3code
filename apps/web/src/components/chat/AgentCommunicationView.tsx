@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { ChevronDownIcon, NetworkIcon, MessagesSquareIcon } from "lucide-react";
+import { NetworkIcon, MessagesSquareIcon } from "lucide-react";
 import {
   selectCommunicationMessages,
   recentCommunicationParticipants,
   communicationParticipantActivity,
   communicationStatusTone,
+  communicationStatusLabel,
   type ThreadCommunication,
   type CommunicationSelection,
   type CommunicationParticipant,
@@ -12,18 +13,14 @@ import {
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { cn } from "../../lib/utils";
-import { useMediaQuery } from "../../hooks/useMediaQuery";
+import {
+  AgentCommunicationMessage,
+  type CommunicationReadingMode,
+} from "./AgentCommunicationMessage";
 
 import { communicationStatusClasses as statusClasses } from "./agentCommunicationStyles";
 import { AgentCommunicationMap } from "./AgentCommunicationMap";
-
-const stateLabels = {
-  sent: "Sent",
-  received: "Received",
-  pending: "Sending",
-  failed: "Failed",
-  recorded: "In agent thread",
-};
+import { AgentCommunicationAvatar } from "./AgentCommunicationAvatar";
 
 export function AgentCommunicationView(props: {
   readonly model: ThreadCommunication;
@@ -33,9 +30,13 @@ export function AgentCommunicationView(props: {
   readonly onOpenThread?: (participant: CommunicationParticipant) => void;
   readonly historyActions?: React.ReactNode;
 }) {
-  const shortPhone = useMediaQuery("(max-width: 767px) and (max-height: 650px)");
-  const [mapOverride, setMapOverride] = useState<boolean | null>(null);
-  const mapOpen = mapOverride ?? !shortPhone;
+  const [mapOpen, setMapOpen] = useState(false);
+  const [readingMode, setReadingMode] = useState<CommunicationReadingMode>("preview");
+  const [readingRevision, setReadingRevision] = useState(0);
+  const changeReadingMode = (mode: CommunicationReadingMode) => {
+    setReadingMode(mode);
+    setReadingRevision((revision) => revision + 1);
+  };
   const [visibleCount, setVisibleCount] = useState(30);
   const { model, selection } = props;
   const byId = new Map(model.participants.map((p) => [p.id, p]));
@@ -77,12 +78,15 @@ export function AgentCommunicationView(props: {
   };
   return (
     <div
-      className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[13rem_minmax(0,1fr)]"
+      className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[16rem_minmax(0,1fr)]"
       data-agent-communication-view
     >
-      <nav aria-label="Task conversations" className="hidden min-h-0 flex-col border-r md:flex">
+      <nav
+        aria-label="Task conversations"
+        className="hidden min-h-0 flex-col border-r bg-muted/10 md:flex"
+      >
         <div className="shrink-0 space-y-2 p-3">
-          <p className="px-2 text-xs font-medium text-muted-foreground">TASK CONVERSATIONS</p>
+          <p className="px-2 text-xs font-medium text-muted-foreground">Conversations</p>
           <Input
             size="compact"
             type="search"
@@ -91,10 +95,14 @@ export function AgentCommunicationView(props: {
             value={query}
             onChange={(event) => updateQuery(event.target.value)}
           />
-          <p className="px-2 text-2xs text-muted-foreground">{tasks.length} tasks · Newest first</p>
+          <p className="px-2 text-2xs text-muted-foreground">
+            {plural(tasks.length, "task")} · Latest activity first
+          </p>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
           <TaskButton
+            agentId={model.rootId}
+            coordinator
             label="All conversations"
             count={model.messages.length}
             selected={selection.kind === "all"}
@@ -104,13 +112,14 @@ export function AgentCommunicationView(props: {
             <TaskButton
               key={p.id}
               taskId={p.id}
+              agentId={p.id}
               label={p.label}
               detail={
                 <>
-                  {p.environmentLabel} ·{" "}
                   <span className={statusClasses[communicationStatusTone(p.status)]}>
-                    {p.status}
-                  </span>
+                    {communicationStatusLabel(p.status)}
+                  </span>{" "}
+                  · {p.environmentLabel}
                 </>
               }
               count={counts.get(p.id) ?? 0}
@@ -181,84 +190,110 @@ export function AgentCommunicationView(props: {
             </select>
           </label>
         </div>
-        <section aria-label="Connection map" className="flex min-h-0 shrink flex-col border-b">
-          <div className="flex shrink-0 items-center justify-between gap-2 px-4 py-2">
-            <span className="flex items-center gap-2 text-xs font-medium">
-              <NetworkIcon aria-hidden className="size-4" /> Who’s coordinating
-            </span>
+        {mapOpen ? (
+          <section aria-label="Connection map" className="flex min-h-0 shrink flex-col border-b">
+            <AgentCommunicationMap model={model} selection={selection} onSelect={choose} />
+          </section>
+        ) : null}
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-3">
+          <span className="flex shrink-0 -space-x-2">
+            {(selection.kind === "all"
+              ? [model.rootId]
+              : selection.kind === "participant"
+                ? [selection.id]
+                : [selection.from, selection.to]
+            ).map((id) => (
+              <AgentCommunicationAvatar
+                key={id}
+                id={id}
+                label={byId.get(id)?.label ?? "Agent"}
+                coordinator={id === model.rootId}
+                size="md"
+              />
+            ))}
+          </span>
+          <div className="min-w-0 flex-1 basis-40">
+            <h3 className="truncate text-sm font-medium">{heading}</h3>
+            <p className="line-clamp-2 text-xs text-muted-foreground">
+              {selection.kind === "all"
+                ? (byId.get(model.rootId)?.label ?? "This thread")
+                : "Assignments, replies, and messages"}
+            </p>
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            {selection.kind !== "all" ? (
+              <Button size="xs" variant="ghost" onClick={() => choose({ kind: "all" })}>
+                Overview
+              </Button>
+            ) : null}
             <Button
               size="xs"
-              variant="ghost"
+              variant="ghost-muted"
               aria-expanded={mapOpen}
-              onClick={() => setMapOverride(!mapOpen)}
+              onClick={() => setMapOpen(!mapOpen)}
             >
+              <NetworkIcon aria-hidden />
               {mapOpen ? "Hide map" : "Show map"}
-              <ChevronDownIcon />
             </Button>
           </div>
-          {mapOpen ? (
-            <AgentCommunicationMap model={model} selection={selection} onSelect={choose} />
-          ) : null}
-        </section>
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
-          <div className="min-w-0">
-            <h3 className="truncate text-sm font-medium">{heading}</h3>
-            <p className="text-xs text-muted-foreground">
-              {selection.kind === "all"
-                ? "Task assignments, returned results, and messages between agents."
-                : "Recorded communication · viewing does not send messages"}
-            </p>
-            <p className="mt-1 text-2xs text-muted-foreground">Newest first</p>
-          </div>
-          {selection.kind !== "all" ? (
-            <Button size="xs" variant="ghost" onClick={() => choose({ kind: "all" })}>
-              Overview
+        </div>
+        <div
+          className="flex shrink-0 flex-wrap items-center gap-1 border-b px-4 py-2"
+          role="group"
+          aria-label="Message display"
+        >
+          {(
+            [
+              ["compact", "Collapse all"],
+              ["preview", "Short previews"],
+              ["full", "Expand all"],
+            ] as const
+          ).map(([mode, label]) => (
+            <Button
+              key={mode}
+              size="micro"
+              variant={readingMode === mode ? "secondary" : "ghost-muted"}
+              aria-pressed={readingMode === mode}
+              onClick={() => changeReadingMode(mode)}
+            >
+              {label}
             </Button>
-          ) : null}
+          ))}
+          <span className="ml-auto hidden text-2xs text-muted-foreground sm:block">
+            Newest first
+          </span>
         </div>
         <section
           aria-label="Messages between agents"
           className="min-h-24 flex-1 overflow-y-auto overscroll-contain px-4 pb-4"
           key={JSON.stringify(selection)}
         >
-          {visibleMessages.map((message) => (
-            <article key={message.id} className="mt-4 rounded-xl border bg-muted/15 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span className="font-medium">
-                  {byId.get(message.from)?.label ?? "Agent"}{" "}
-                  <span className="text-muted-foreground">→</span>{" "}
-                  {byId.get(message.to)?.label ?? "Agent"}
-                </span>
-                <time dateTime={message.at} className="text-muted-foreground">
-                  {new Date(message.at).toLocaleString()}
-                </time>
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                {byId.get(message.from)?.environmentLabel} →{" "}
-                {byId.get(message.to)?.environmentLabel} ·{" "}
-                <span className={statusClasses[communicationStatusTone(message.state)]}>
-                  {stateLabels[message.state]}
-                </span>
-              </div>
-              {message.summary ? (
-                <h4 className="mt-2 text-sm font-medium">{message.summary}</h4>
-              ) : null}
-              <details open={message.text.length <= 6000}>
-                <summary
-                  className={
-                    message.text.length > 6000
-                      ? "mt-2 cursor-pointer text-xs text-muted-foreground"
-                      : "hidden"
-                  }
-                >
-                  Read full message ({message.text.length.toLocaleString()} characters)
-                </summary>
-                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed [overflow-wrap:anywhere]">
-                  {message.text}
-                </p>
-              </details>
-            </article>
-          ))}
+          {visibleMessages.map((message) => {
+            const from = byId.get(message.from);
+            const to = byId.get(message.to);
+            return (
+              <AgentCommunicationMessage
+                key={`${message.id}:${readingRevision}`}
+                message={message}
+                from={{
+                  id: message.from,
+                  label: from?.label ?? "Agent",
+                  coordinator: message.from === model.rootId,
+                }}
+                to={{
+                  id: message.to,
+                  label: to?.label ?? "Agent",
+                  coordinator: message.to === model.rootId,
+                }}
+                environment={
+                  from?.environmentLabel === to?.environmentLabel
+                    ? (from?.environmentLabel ?? "")
+                    : `${from?.environmentLabel ?? "Unknown environment"} → ${to?.environmentLabel ?? "Unknown environment"}`
+                }
+                mode={readingMode}
+              />
+            );
+          })}
           {messages.length > visibleCount ? (
             <div className="py-3">
               <Button
@@ -287,7 +322,8 @@ export function AgentCommunicationView(props: {
         </section>
         <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-xs text-muted-foreground">
           <span>
-            {messages.length} recorded exchanges{props.loading ? " · Loading task…" : ""}
+            {plural(messages.length, "recorded exchange")}
+            {props.loading ? " · Loading task…" : ""}
           </span>
           <div className="flex flex-wrap gap-2">
             {props.historyActions}
@@ -316,7 +352,13 @@ const formatActivityTime = new Intl.DateTimeFormat(undefined, {
   minute: "2-digit",
 });
 
+function plural(count: number, noun: string) {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 function TaskButton(props: {
+  agentId: string;
+  coordinator?: boolean;
   label: string;
   detail?: React.ReactNode;
   count: number;
@@ -332,23 +374,32 @@ function TaskButton(props: {
       data-communication-task={props.taskId}
       onClick={props.onClick}
       className={cn(
-        "mb-1 block w-full min-w-0 rounded-lg border p-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-        props.selected ? "border-primary/40 bg-primary/10" : "border-transparent hover:bg-muted/50",
+        "mb-0.5 flex w-full min-w-0 gap-2.5 rounded-md px-2.5 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+        props.selected ? "bg-accent text-accent-foreground" : "hover:bg-muted/50",
       )}
     >
-      <span className="line-clamp-2 break-words text-sm font-medium [overflow-wrap:anywhere]">
-        {props.label}
-      </span>
-      {props.detail ? (
-        <span className="block truncate text-xs text-muted-foreground">{props.detail}</span>
-      ) : null}
-      <span className="mt-1 flex flex-wrap gap-x-2 text-2xs text-muted-foreground">
-        <span>{props.count} exchanges</span>
-        {props.at ? (
-          <time dateTime={new Date(props.at).toISOString()}>
-            {formatActivityTime.format(props.at)}
-          </time>
+      <AgentCommunicationAvatar
+        id={props.agentId}
+        label={props.label}
+        coordinator={props.coordinator ?? false}
+      />
+      <span className="min-w-0 flex-1">
+        <span className="line-clamp-2 break-words text-xs font-medium [overflow-wrap:anywhere]">
+          {props.label}
+        </span>
+        {props.detail ? (
+          <span className="mt-0.5 block truncate text-2xs text-muted-foreground">
+            {props.detail}
+          </span>
         ) : null}
+        <span className="mt-1 flex flex-wrap gap-x-2 text-2xs text-muted-foreground tabular-nums">
+          <span>{plural(props.count, "exchange")}</span>
+          {props.at ? (
+            <time dateTime={new Date(props.at).toISOString()}>
+              {formatActivityTime.format(props.at)}
+            </time>
+          ) : null}
+        </span>
       </span>
     </button>
   );

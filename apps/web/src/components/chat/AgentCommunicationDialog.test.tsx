@@ -106,7 +106,7 @@ describe("communication dialog interactions", () => {
     await click("Agent communication");
     const dialog = document.querySelector('[role="dialog"]');
     expect(dialog).not.toBeNull();
-    expect(dialog?.textContent).toContain("Who’s coordinating");
+    await click("Show map");
     await click("Read connection between Auditor and Recorder");
     const messages = document.querySelector('[aria-label="Messages between agents"]')!;
     expect(messages.textContent).toContain("What happens if the connection closes?");
@@ -139,6 +139,7 @@ describe("communication dialog interactions", () => {
     expect(mountedViewers).toBe(0);
     await click("Agent communication");
     expect(mountedViewers).toBe(1);
+    await click("Show map");
     await click("Read connection between Auditor and Recorder");
     await act(async () =>
       publish?.({
@@ -226,6 +227,7 @@ describe("communication dialog interactions", () => {
       [...container.querySelectorAll("[data-communication-agent]")].map((element) =>
         element.getAttribute("data-communication-agent"),
       );
+    await click("Show map");
     await click("Show all 10 agents");
     const initial = order();
     expect(initial).toEqual(["parent", ...children.map((child) => child.id)]);
@@ -271,6 +273,7 @@ describe("communication dialog interactions", () => {
       return <AgentCommunicationView model={nested} selection={selection} onSelect={select} />;
     }
     await act(async () => root.render(<NestedAgents />));
+    await click("Show map");
     const branch = container.querySelector('[aria-label="Tasks delegated by Auditor"]');
     expect(branch?.querySelector('[data-communication-agent="recorder"]')).not.toBeNull();
     expect(button("Read connection between Lead agent and Auditor").textContent).toContain(
@@ -301,6 +304,7 @@ describe("communication dialog interactions", () => {
         />,
       ),
     );
+    await click("Show map");
     expect(container.querySelectorAll("[data-communication-agent]")).toHaveLength(3);
     expect(container.querySelector('[aria-label="Tasks delegated by Lead agent"]')).toBeNull();
     expect(container.textContent).toContain("Other threads");
@@ -345,5 +349,67 @@ describe("communication dialog interactions", () => {
     expect(feed.querySelectorAll("article")).toHaveLength(60);
     expect(feed.querySelector("article")?.textContent).toContain("Exchange 74");
     expect(container.querySelectorAll("[data-communication-agent]").length).toBeLessThan(10);
+  });
+  it("formats Markdown and switches between compact, preview and full messages without losing task selection", async () => {
+    const formatted = {
+      ...model,
+      messages: [
+        {
+          ...model.messages[0]!,
+          text:
+            "## Findings\n\n**Confirmed** with `cache.ts`.\n\n| File | Result |\n| --- | --- |\n| cache.ts | Pass |\n\n" +
+            "Additional evidence.\n".repeat(120) +
+            "Final evidence marker",
+        },
+      ],
+    };
+    await act(async () =>
+      root.render(
+        <AgentCommunicationView
+          model={formatted}
+          selection={{ kind: "participant", id: "auditor" }}
+          onSelect={() => {}}
+        />,
+      ),
+    );
+    const feed = container.querySelector('[aria-label="Messages between agents"]')!;
+    expect(feed.querySelector("h2")?.textContent).toBe("Findings");
+    expect(feed.querySelector("strong")?.textContent).toBe("Confirmed");
+    expect(feed.querySelector("table")).not.toBeNull();
+    expect(feed.textContent).not.toContain("Final evidence marker");
+    await click("Show full message");
+    expect(feed.textContent).toContain("Final evidence marker");
+    await click("Collapse all");
+    expect(feed.querySelector(".chat-markdown")).toBeNull();
+    expect(feed.querySelector("article")?.getAttribute("data-reading-mode")).toBe("compact");
+    await click("Read message");
+    expect(feed.textContent).toContain("Final evidence marker");
+    await click("Short previews");
+    expect(feed.textContent).not.toContain("Final evidence marker");
+    await click("Expand all");
+    expect(feed.textContent).toContain("Final evidence marker");
+    expect(
+      container.querySelector('[data-communication-task="auditor"]')?.getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+  it("offers expansion only for clipped messages and shows compact rows without Markdown syntax", async () => {
+    const mixed = {
+      ...model,
+      messages: [
+        { ...model.messages[1]!, text: "Short **note** with `code`." },
+        { ...model.messages[2]!, text: "Long evidence.\n".repeat(200) },
+      ],
+    };
+    await act(async () =>
+      root.render(
+        <AgentCommunicationView model={mixed} selection={{ kind: "all" }} onSelect={() => {}} />,
+      ),
+    );
+    const feed = container.querySelector('[aria-label="Messages between agents"]')!;
+    const [long, short] = feed.querySelectorAll("article");
+    expect(long?.querySelector("button")?.textContent).toBe("Show full message");
+    expect(short?.querySelector("button")).toBeNull();
+    await click("Collapse all");
+    expect(feed.querySelectorAll("article")[1]?.textContent).toContain("Short note with code.");
   });
 });
