@@ -113,6 +113,11 @@ vi.mock(import("./ProjectActionsSettings"), async (original) => ({
   ...(await original()),
   ProjectActionsSettings: (() => null) as never,
 }));
+// The fork's add-folder control opens the command palette, which the app root provides.
+vi.mock(import("../../commandPaletteContext"), async (original) => ({
+  ...(await original()),
+  useOpenDirectoryCommandPalette: () => () => {},
+}));
 
 import { useComposerDraftStore } from "../../composerDraftStore";
 import { appAtomRegistry } from "../../rpc/atomRegistry";

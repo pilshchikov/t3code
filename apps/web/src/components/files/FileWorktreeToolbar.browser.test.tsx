@@ -1,7 +1,8 @@
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { act, type ReactNode } from "react";
-import { create, type ReactTestRenderer } from "react-test-renderer";
+import { act, type ReactElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { userEvent } from "vite-plus/test/browser";
 
 const { select, queries, pages, refresh } = vi.hoisted(() => ({
   select: vi.fn(),
@@ -26,23 +27,6 @@ vi.mock("~/state/query", () => ({
   },
 }));
 vi.mock("~/components/ui/toast", () => ({ toastManager: { add: vi.fn() } }));
-vi.mock("~/components/ui/menu", () => {
-  const box = ({ children, ...props }: { children?: ReactNode }) => (
-    <div {...props}>{children}</div>
-  );
-  return Object.fromEntries(
-    [
-      "Menu",
-      "MenuGroup",
-      "MenuGroupLabel",
-      "MenuItem",
-      "MenuPopup",
-      "MenuRadioGroup",
-      "MenuRadioItem",
-      "MenuTrigger",
-    ].map((name) => [name, box]),
-  );
-});
 import { FileWorktreeToolbar } from "./FileWorktreeToolbar";
 
 const environmentId = EnvironmentId.make("selectors");
@@ -54,7 +38,30 @@ const root = (name: string) => ({
   branch: "main",
   primary: name === "frontend",
 });
-let renderer: ReactTestRenderer | undefined;
+let reactRoot: Root | undefined;
+let container: HTMLDivElement;
+async function render(element: ReactElement) {
+  container = document.body.appendChild(document.createElement("div"));
+  reactRoot = createRoot(container);
+  await act(async () => reactRoot!.render(element));
+}
+async function openMenu(name: string) {
+  await act(async () =>
+    userEvent.click(
+      container.querySelector<HTMLElement>(`[aria-label="Select checkout for ${name}"]`)!,
+    ),
+  );
+}
+async function findMenuItem(role: string, text: string) {
+  return vi.waitFor(() => {
+    const item = [...document.querySelectorAll<HTMLElement>(`[role="${role}"]`)].find((element) =>
+      element.textContent?.includes(text),
+    );
+    if (!item) throw new Error(`Missing ${role} ${text}`);
+    return item;
+  });
+}
+
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   select.mockReset().mockResolvedValue({ _tag: "Success", value: { cwd: "/backend/task" } });
@@ -71,48 +78,40 @@ beforeEach(() => {
     });
 });
 afterEach(async () => {
-  if (renderer) await act(() => renderer!.unmount());
-  renderer = undefined;
+  await act(async () => reactRoot?.unmount());
+  reactRoot = undefined;
+  document.body.replaceChildren();
   vi.unstubAllGlobals();
 });
 
 describe("repository checkout controls", () => {
   it("sends the selected repository identity and leaves the primary control unchanged", async () => {
-    await act(async () => {
-      renderer = create(
-        <>
-          <FileWorktreeToolbar
-            environmentId={environmentId}
-            threadRef={threadRef}
-            root={root("frontend")}
-          />
-          <FileWorktreeToolbar
-            environmentId={environmentId}
-            threadRef={threadRef}
-            root={root("backend")}
-          />
-        </>,
-      );
-    });
-    const controls = renderer!.root.findAll(
-      (node) => node.type === "div" && node.props["data-file-worktree-selector"],
+    await render(
+      <>
+        <FileWorktreeToolbar
+          environmentId={environmentId}
+          threadRef={threadRef}
+          root={root("frontend")}
+        />
+        <FileWorktreeToolbar
+          environmentId={environmentId}
+          threadRef={threadRef}
+          root={root("backend")}
+        />
+      </>,
     );
-    const radio = controls[1]!.find(
-      (node) => node.type === "div" && typeof node.props.onValueChange === "function",
-    );
-    await act(async () => {
-      radio.props.onValueChange("/backend/task");
-    });
+    await openMenu("backend");
+    const task = await findMenuItem("menuitemradio", "/backend/task");
+    await act(async () => userEvent.click(task));
     expect(select).toHaveBeenCalledExactlyOnceWith({
       environmentId,
       input: { threadId: threadRef.threadId, workspaceRoot: "/backend", path: "/backend/task" },
     });
-    const primary = controls[0]!.find(
-      (node) => node.type === "div" && typeof node.props.onValueChange === "function",
-    );
-    expect(primary.props.value).toBe("/frontend");
+    expect(
+      container.querySelector('[data-file-worktree-selector="/frontend"]')?.textContent,
+    ).not.toContain("task");
     expect(queries).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/backend" }));
-    expect(JSON.stringify(renderer!.toJSON())).not.toContain("Multiwork");
+    expect(document.body.textContent).not.toContain("Multiwork");
   });
   it("loads additional branch pages and selects a branch by repository", async () => {
     pages.set("/backend:0", { ...pages.get("/backend:0"), nextCursor: 200 });
@@ -121,32 +120,17 @@ describe("repository checkout controls", () => {
       refs: [{ name: "older", current: false, worktreePath: null }],
       nextCursor: null,
     });
-    await act(async () => {
-      renderer = create(
-        <FileWorktreeToolbar
-          environmentId={environmentId}
-          threadRef={threadRef}
-          root={root("backend")}
-        />,
-      );
-    });
-    const more = renderer!.root.find(
-      (node) => node.type === "div" && node.children.includes("Load more branches"),
+    await render(
+      <FileWorktreeToolbar
+        environmentId={environmentId}
+        threadRef={threadRef}
+        root={root("backend")}
+      />,
     );
-    await act(async () => {
-      more.props.onClick();
-    });
+    await openMenu("backend");
+    await act(async () => userEvent.click(await findMenuItem("menuitem", "Load more branches")));
     expect(queries).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/backend", cursor: 200 }));
-    const older = renderer!.root.find(
-      (node) =>
-        node.type === "div" &&
-        typeof node.props.onClick === "function" &&
-        node.findAll((child) => child.type === "span" && child.children.includes("older")).length >
-          0,
-    );
-    await act(async () => {
-      older.props.onClick();
-    });
+    await act(async () => userEvent.click(await findMenuItem("menuitem", "older")));
     expect(select).toHaveBeenCalledWith({
       environmentId,
       input: { threadId: threadRef.threadId, workspaceRoot: "/backend", branch: "older" },

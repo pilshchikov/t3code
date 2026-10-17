@@ -1,7 +1,6 @@
-// @vitest-environment jsdom
 import { act, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import type {
   CommunicationSelection,
@@ -115,7 +114,7 @@ describe("communication dialog interactions", () => {
     await click("Hide map");
     expect(document.querySelector('[aria-label="Agents in the map"]')).toBeNull();
     await click("Close");
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
   });
   it("receives new exchanges while open, preserves the chosen connection, and releases its viewer on close", async () => {
     let mountedViewers = 0;

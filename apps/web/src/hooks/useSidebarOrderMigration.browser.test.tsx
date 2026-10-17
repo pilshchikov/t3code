@@ -1,5 +1,5 @@
 import { act } from "react";
-import { create, type ReactTestRenderer } from "react-test-renderer";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 import { useSidebarThreadOrderStore } from "../sidebarThreadOrderStore";
 import { useSidebarOrderMigration } from "./useSidebarOrderMigration";
@@ -33,15 +33,21 @@ vi.mock("../state/entities", () => ({
 }));
 vi.mock("../components/ui/toast", () => ({ toastManager: { add: fixture.toast } }));
 
-let renderer: ReactTestRenderer | undefined;
+let root: Root | undefined;
+let container: HTMLDivElement;
 function Probe() {
   useSidebarOrderMigration(fixture.write);
   return null;
 }
 async function mount() {
-  await act(async () => {
-    renderer = create(<Probe />);
-  });
+  container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  await act(async () => root!.render(<Probe />));
+}
+async function unmount() {
+  await act(async () => root?.unmount());
+  root = undefined;
+  container?.remove();
 }
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -68,8 +74,8 @@ beforeEach(() => {
     migrating: false,
   });
 });
-afterEach(() => {
-  act(() => renderer?.unmount());
+afterEach(async () => {
+  await unmount();
   vi.unstubAllGlobals();
 });
 
@@ -78,7 +84,7 @@ it("shares a saved order once and no longer overlays it on server updates", asyn
   expect(fixture.write).toHaveBeenCalledTimes(2);
   expect(fixture.threads[1]!.activeOrderKey! < fixture.threads[0]!.activeOrderKey!).toBe(true);
   expect(useSidebarThreadOrderStore.getState().order).toEqual([]);
-  act(() => renderer?.unmount());
+  await unmount();
   await mount();
   expect(fixture.write).toHaveBeenCalledTimes(2);
 });
@@ -89,7 +95,7 @@ it("retains a failed plan and resumes it after the drawer remounts", async () =>
   expect(pending).toHaveLength(2);
   expect(useSidebarThreadOrderStore.getState().order).toEqual(["env:b", "env:a"]);
   expect(useSidebarThreadOrderStore.getState().migrating).toBe(false);
-  act(() => renderer?.unmount());
+  await unmount();
   await mount();
   expect(useSidebarThreadOrderStore.getState().pendingMigration).toEqual([]);
   expect(fixture.threads[1]!.activeOrderKey).toBe(pending[0]!.orderKey);
@@ -100,11 +106,11 @@ it("waits for snapshots and leaves older servers' arrangements intact", async ()
   expect(fixture.write).not.toHaveBeenCalled();
   fixture.ready = true;
   fixture.liveSnapshotsReady = false;
-  await act(async () => renderer?.update(<Probe />));
+  await act(async () => root!.render(<Probe />));
   expect(fixture.write).not.toHaveBeenCalled();
   fixture.liveSnapshotsReady = true;
   fixture.supported = false;
-  await act(async () => renderer?.update(<Probe />));
+  await act(async () => root!.render(<Probe />));
   expect(fixture.write).not.toHaveBeenCalled();
   expect(useSidebarThreadOrderStore.getState().order).toEqual(["env:b", "env:a"]);
 });
@@ -119,7 +125,7 @@ it("resumes a partially written plan without reordering a thread changed elsewhe
   await mount();
   expect(useSidebarThreadOrderStore.getState().pendingMigration).toHaveLength(2);
   fixture.threads[1]!.activeOrderKey = "z";
-  act(() => renderer?.unmount());
+  await unmount();
   await mount();
   expect(fixture.threads[1]!.activeOrderKey).toBe("z");
   expect(fixture.threads[0]!.activeOrderKey).not.toBeNull();

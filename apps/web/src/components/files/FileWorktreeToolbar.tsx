@@ -160,6 +160,7 @@ export function FileWorktreeToolbar(props: {
           {refsQuery.data?.nextCursor != null ? (
             <MenuItem
               disabled={refsQuery.isPending}
+              closeOnClick={false}
               onClick={() => setCursor(refsQuery.data?.nextCursor ?? undefined)}
             >
               Load more branches

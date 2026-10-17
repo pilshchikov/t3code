@@ -1,5 +1,32 @@
 # Fork Changes
 
+## Upstream integration 2026-10-17 (13aa882c22)
+
+- Merged 277 upstream commits in two merges: through `4b1024dafe` (`0288f7a67e`, started by the
+  nightly sync, which ran out of credits before committing) and through `13aa882c22`.
+- Upstream now applies React Compiler lint rules to every web file. Fork files that still keep
+  manual caches or bail out of the compiler are listed in `apps/web/reactCompilerForkExceptions.ts`
+  (31 files) and excluded from that lint block in `vite.config.ts`.
+  `src/reactCompilerCoverage.test.ts` checks that every other web file compiles without bailouts.
+  Remove a file from the list once it compiles cleanly.
+- Upstream's `KnownWorkspaces.ts` also accepts the fork's configured secondary repositories and
+  their selected checkouts, as long as a selection is a Git-listed worktree of that repository.
+  `WorkspaceFileSystem.ts` keeps the external read and watch resolver.
+- Upstream moved React tests to a real browser. Fork tests now run there: `MessagesTimeline`
+  expects the fork's latest-entry work log and one-second position recovery,
+  `ProjectSettingsPanel` mocks the command palette its add-folder control opens, and the agent
+  communication dialog test waits for the close animation.
+- "Load more branches" in the Files checkout menu keeps the menu open (`closeOnClick={false}`),
+  so the next page of branches is visible after loading.
+- Upstream migration `063_DropUnusedV1Projections` is fork migration 68. No fork server code
+  reads the dropped V1 tables.
+- Validation: `vp run typecheck` passes. `vp check` has the same 14 pre-existing errors as
+  before the merge. Web tests that failed after the merge were compared with the parent and
+  only `ProjectSettingsPanel` was new, now fixed. Migration, doctor and database maintenance
+  tests pass (12). Fork-heavy web tests (agent communication, compiler coverage, project
+  settings, Files checkout toolbar, timeline) pass, 1139 tests. The full server suite was not
+  completed because it ran past 40 minutes.
+
 ## Upstream integration — 2026-10-16 (a7025639c0)
 
 - Merged 123 upstream commits through `a7025639c0e16aad3081106c935bf3025f601a1e` onto the

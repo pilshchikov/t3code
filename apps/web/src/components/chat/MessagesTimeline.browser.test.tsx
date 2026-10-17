@@ -295,7 +295,9 @@ describe("MessagesTimeline work rows", () => {
         toolLifecycleStatus: "completed",
       }),
     ]);
-    expect(button("Ran 2 commands and received 1 update")).toBeDefined();
+    // The fork shows the latest entry and counts the earlier ones.
+    expect(button("+2 previous log entries")).toBeDefined();
+    expect(container.querySelector('[aria-label="Hidden work includes a failure"]')).toBeNull();
   });
 
   it("marks a failed tool inside an expanded work log", async () => {
@@ -333,7 +335,6 @@ describe("MessagesTimeline work rows", () => {
       ],
       { workspaceRoot: "C:/Users/mike/dev-stuff/t3code" },
     );
-    await click(button(/^Received 1 update/));
     await vi.waitFor(() => expect(text()).toContain("t3code/apps/web/src/session-logic.ts"));
     expect(text()).not.toContain("C:/Users/mike/dev-stuff/t3code/apps/web/src/session-logic.ts");
   });
@@ -360,7 +361,6 @@ describe("MessagesTimeline work rows", () => {
         projectedItem: v2Item("dynamic_tool", item),
       }),
     ]);
-    await click(button(/^Received 1 update/));
     await vi.waitFor(() => expect(text()).toContain("Read a T3 thread"));
     expect(text()).not.toContain("mcp__t3-code__t3_thread_read");
   });
@@ -1221,6 +1221,8 @@ describe("MessagesTimeline scroll position", () => {
     await renderElement(<Thread />);
     const composerState = () => container.querySelector("output")!.textContent;
     const viewport = await waitForList(props);
+    // The fork keeps recovering the opening position for a second after mount.
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
     await click(button("Collapse"));
     const toggle = () => button("Command output");
     await click(toggle());
@@ -1262,43 +1264,30 @@ describe("MessagesTimeline send anchor", () => {
 });
 
 it("returns to the latest message when the remembered row no longer exists", async () => {
-  const threadKey = "env-restore:missing-row";
-  rememberTimelinePosition(threadKey, {
+  const props = baseProps();
+  rememberTimelinePosition(props.routeThreadKey, {
     rowId: "removed-row",
     offsetWithinRow: 20,
     scrollOffset: 0,
     atEnd: false,
   });
-  let scrollTop = 0;
   const onIsAtEndChange = vi.fn();
-  const listRef = createRef<LegendListRef>();
-  listRef.current = {
-    getScrollableNode: () => null,
-    getState: () => ({ data: [] }),
-    scrollToEnd: async () => {
-      scrollTop = 2400;
-    },
-    scrollToOffset: async ({ offset }: { offset: number }) => {
-      scrollTop = offset;
-    },
-  } as unknown as LegendListRef;
   await renderTimeline(
-    [
-      work("restore-work", {
-        label: "Run lint",
-        tone: "tool",
-        itemType: "command_execution",
-        command: "pnpm lint",
-        toolLifecycleStatus: "completed",
-      }),
-    ],
-    {
-      routeThreadKey: threadKey,
-      listRef,
-      liveFollowEnabled: false,
-      onIsAtEndChange,
-    },
+    Array.from({ length: 12 }, (_, index) =>
+      message(
+        `Message ${index}\n\n${"Long paragraph. ".repeat(80)}`,
+        { role: "assistant" },
+        `m-${index}`,
+      ),
+    ),
+    { ...props, liveFollowEnabled: false, onIsAtEndChange },
   );
-  await vi.waitFor(() => expect(scrollTop).toBe(2400));
+  await vi.waitFor(() => {
+    const viewport = props.listRef.current?.getScrollableNode();
+    expect(viewport?.scrollHeight ?? 0).toBeGreaterThan(viewport?.clientHeight ?? 0);
+    expect(viewport!.scrollTop + viewport!.clientHeight).toBeGreaterThanOrEqual(
+      viewport!.scrollHeight - 2,
+    );
+  });
   expect(onIsAtEndChange).toHaveBeenCalledWith(true);
 });
