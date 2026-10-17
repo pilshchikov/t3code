@@ -17,6 +17,7 @@ import {
   setMarkdownTaskChecked,
   shouldRenderMarkdownPreview,
   shouldShowFileExplorer,
+  siblingWorktreeLabel,
   writeMarkdownPreviewMode,
   workspaceAssetResource,
 } from "./filePreviewMode";
@@ -54,6 +55,27 @@ describe("file preview read errors", () => {
       operationPath: "/workspace",
     });
     expect(filePreviewReadErrorMessage(error)).toBe("The workspace folder could not be accessed.");
+  });
+
+  it("names the workspace folder for a missing workspace file only", () => {
+    const missing = (relativePath: string) =>
+      new ProjectReadFileError({ cwd: "/repo", relativePath, failure: "path_not_found" });
+    expect(filePreviewReadErrorMessage(missing("docs/REPORT.md"))).toBe(
+      "This file does not exist in /repo.",
+    );
+    expect(filePreviewReadErrorMessage(missing("/repo/docs/REPORT.md"))).toBe(
+      "This file does not exist.",
+    );
+  });
+
+  it("labels a sibling worktree by folder and branch", () => {
+    const location = {
+      absolutePath: "/work/trad-lead/REPORT.md",
+      worktreePath: "/work/trad-lead",
+      modifiedAt: 1,
+    };
+    expect(siblingWorktreeLabel({ ...location, branch: "main" })).toBe("trad-lead (main)");
+    expect(siblingWorktreeLabel({ ...location, branch: null })).toBe("trad-lead");
   });
 
   it("preserves the public message from older servers", () => {

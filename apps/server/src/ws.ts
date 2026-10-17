@@ -210,6 +210,7 @@ import * as Peers from "./peers/Peers.ts";
 import * as PeerThreads from "./peers/PeerThreads.ts";
 import * as KnownWorkspaces from "./workspace/KnownWorkspaces.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
+import * as SiblingWorktreeFiles from "./workspace/SiblingWorktreeFiles.ts";
 import { readWorkflowScript } from "./orchestration-v2/workflowScriptQuery.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
@@ -1386,6 +1387,7 @@ const makeWsHandlers = (
     const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
     const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
     const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+    const gitVcsDriver = yield* GitVcsDriver.GitVcsDriver;
     const peerFiles = yield* PeerFiles.PeerFiles;
     const peers = yield* Peers.Peers;
     const peerThreads = yield* PeerThreads.PeerThreads;
@@ -2773,6 +2775,10 @@ const makeWsHandlers = (
                 cause,
               }),
           ),
+        ),
+      [WS_METHODS.projectsLocateFile]: (input) =>
+        SiblingWorktreeFiles.locateInSiblingWorktrees(input).pipe(
+          Effect.provideService(GitVcsDriver.GitVcsDriver, gitVcsDriver),
         ),
       [WS_METHODS.projectsWriteFile]: (input) =>
         workspaceFileSystem.writeFile(input).pipe(

@@ -5,6 +5,7 @@ import {
   type SelectedProjectWorkspace,
 } from "@t3tools/shared/threadWorkspaces";
 import { FileWorktreeToolbar } from "./FileWorktreeToolbar";
+import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import { DIFF_SURFACE_THEME_UNSAFE_CSS } from "~/lib/diffRendering";
 import {
@@ -151,6 +152,7 @@ import {
   resolveFilePreviewPath,
   setMarkdownTaskChecked,
   shouldShowFileExplorer,
+  siblingWorktreeLabel,
   workspaceAssetResource,
 } from "./filePreviewMode";
 import { useFileSaveCoordinator } from "./useFileSaveCoordinator";
@@ -159,6 +161,7 @@ import {
   getProjectFileContents,
   setProjectFileQueryData,
   useProjectEntriesQuery,
+  useProjectFileLocations,
   useProjectFileQuery,
 } from "./projectFilesQueryState";
 import { SymbolNavigationDialog } from "./SymbolNavigationDialog";
@@ -1388,7 +1391,7 @@ export default function FilePreviewPanel({
   workspaceRoots,
   workspaceSelections,
 }: FilePreviewPanelProps) {
-  const relativePath =
+  const resolvedPath =
     attachment === undefined ? resolveFilePreviewPath(requestedPath, cwd) : requestedPath;
   const draft = typeof composerDraftTarget === "string";
   const { resolvedTheme } = useTheme();
@@ -1401,6 +1404,20 @@ export default function FilePreviewPanel({
     setSelectedRootCwd(cwd);
   }, [cwd]);
   const activeCwd = selectedRootCwd;
+  const missingKey = `${activeCwd}\u0000${resolvedPath ?? ""}`;
+  const [missingFile, setMissingFile] = useState<string | null>(null);
+  const [chosenSibling, setChosenSibling] = useState<{ key: string; path: string } | null>(null);
+  const missing = attachment === undefined && resolvedPath !== null && missingFile === missingKey;
+  const siblings = useProjectFileLocations(environmentId, activeCwd, resolvedPath, missing);
+  const sibling = missing
+    ? (siblings.locations.find(
+        (location) =>
+          chosenSibling?.key === missingKey && location.absolutePath === chosenSibling.path,
+      ) ??
+      siblings.locations[0] ??
+      null)
+    : null;
+  const relativePath = sibling?.absolutePath ?? resolvedPath;
   const onPendingChange = useCallback(
     (path: string, pending: boolean) => onWorkspacePendingChange(path, pending, activeCwd),
     [onWorkspacePendingChange, activeCwd],
@@ -1444,6 +1461,13 @@ export default function FilePreviewPanel({
     selectedFilePending,
     active,
   );
+  if (
+    relativePath === resolvedPath &&
+    file.readError?.failure === "path_not_found" &&
+    missingFile !== missingKey
+  ) {
+    setMissingFile(missingKey);
+  }
   const attemptedPath = file.readError?.resolvedPath ?? file.readError?.operationPath;
   // A chat link cannot tell a folder from a file, so a folder arrives here as
   // a file surface and the read fails. Keep the breadcrumbs, drop the preview
@@ -1782,6 +1806,26 @@ export default function FilePreviewPanel({
 
   const previewSurface = (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      {sibling && !commitDiffPath ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border/60 bg-info/8 px-3 py-1.5 text-xs text-foreground dark:bg-info/16">
+          <span className="min-w-0">
+            Not in this checkout. Showing it from{" "}
+            <span className="font-medium">{siblingWorktreeLabel(sibling)}</span>.
+          </span>
+          {siblings.locations
+            .filter((location) => location !== sibling)
+            .map((location) => (
+              <Button
+                key={location.absolutePath}
+                size="xs"
+                variant="outline"
+                onClick={() => setChosenSibling({ key: missingKey, path: location.absolutePath })}
+              >
+                {siblingWorktreeLabel(location)}
+              </Button>
+            ))}
+        </div>
+      ) : null}
       {commitDiffPath ? (
         <>
           <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border/60 px-3">
@@ -1857,12 +1901,21 @@ export default function FilePreviewPanel({
           title={relativePath}
           workspaceMutationId={file.data?.revision ?? workspaceMutationId}
         />
+      ) : relativePath && missing && siblings.isPending ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground">
+          <LoaderCircle className="size-5 animate-spin" />
+        </div>
       ) : relativePath && file.error && file.data === null ? (
         <div role="alert" className="flex min-h-0 flex-1 flex-col overflow-auto">
           <div className="my-auto flex shrink-0 flex-col gap-3 px-6 py-6 text-center text-xs leading-relaxed">
             <p className="text-destructive">
               {file.readError ? filePreviewReadErrorMessage(file.readError) : file.error}
             </p>
+            {missing && !siblings.isPending ? (
+              <p className="text-muted-foreground">
+                No other worktree of this repository has it either.
+              </p>
+            ) : null}
             {attemptedPath ? (
               <p className="text-muted-foreground">
                 Attempted path

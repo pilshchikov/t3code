@@ -278,14 +278,20 @@ export const make = Effect.gen(function* () {
       const realTargetPath = yield* Effect.tryPromise({
         try: () => NodeFSP.realpath(requestedPath),
         catch: (cause) =>
-          new WorkspaceFileSystemOperationError({
-            workspaceRoot: input.cwd,
-            relativePath: input.relativePath,
-            resolvedPath: requestedPath,
-            operationPath: requestedPath,
-            operation: "realpath-target",
-            cause,
-          }),
+          isNoEntryError(cause)
+            ? new WorkspacePathNotFoundError({
+                workspaceRoot: input.cwd,
+                relativePath: input.relativePath,
+                resolvedPath: requestedPath,
+              })
+            : new WorkspaceFileSystemOperationError({
+                workspaceRoot: input.cwd,
+                relativePath: input.relativePath,
+                resolvedPath: requestedPath,
+                operationPath: requestedPath,
+                operation: "realpath-target",
+                cause,
+              }),
       });
       return { relativePath: requestedPath, realTargetPath };
     }
@@ -310,14 +316,20 @@ export const make = Effect.gen(function* () {
     const realTargetPath = yield* Effect.tryPromise({
       try: () => NodeFSP.realpath(target.absolutePath),
       catch: (cause) =>
-        new WorkspaceFileSystemOperationError({
-          workspaceRoot: input.cwd,
-          relativePath: input.relativePath,
-          resolvedPath: target.absolutePath,
-          operationPath: target.absolutePath,
-          operation: "realpath-target",
-          cause,
-        }),
+        isNoEntryError(cause)
+          ? new WorkspacePathNotFoundError({
+              workspaceRoot: input.cwd,
+              relativePath: input.relativePath,
+              resolvedPath: target.absolutePath,
+            })
+          : new WorkspaceFileSystemOperationError({
+              workspaceRoot: input.cwd,
+              relativePath: input.relativePath,
+              resolvedPath: target.absolutePath,
+              operationPath: target.absolutePath,
+              operation: "realpath-target",
+              cause,
+            }),
     });
     if (!isInsideRealRoot(realWorkspaceRoot, realTargetPath)) {
       return yield* new WorkspaceFilePathEscapeError({

@@ -1,5 +1,10 @@
 import { resolveMarkdownFileLinkTarget } from "~/markdown-links";
-import type { AssetResource, ProjectReadFileError, ScopedThreadRef } from "@t3tools/contracts";
+import type {
+  AssetResource,
+  ProjectFileLocation,
+  ProjectReadFileError,
+  ScopedThreadRef,
+} from "@t3tools/contracts";
 import { isAbsolutePath, workspaceRelativeFilePath } from "@t3tools/shared/path";
 
 export function resolveFilePreviewPath(path: string | null, cwd: string): string | null {
@@ -25,6 +30,10 @@ export function filePreviewReadErrorMessage(error: ProjectReadFileError): string
       return "The requested path is outside the workspace.";
     case "resolved_path_outside_root":
       return "The path resolves to a location outside the workspace.";
+    case "path_not_found":
+      return error.cwd && error.relativePath && !isAbsolutePath(error.relativePath)
+        ? `This file does not exist in ${error.cwd}.`
+        : "This file does not exist.";
     case "operation_failed":
       return error.operation === "realpath-workspace-root"
         ? "The workspace folder could not be accessed."
@@ -32,6 +41,11 @@ export function filePreviewReadErrorMessage(error: ProjectReadFileError): string
     default:
       return error.message;
   }
+}
+
+export function siblingWorktreeLabel(location: ProjectFileLocation): string {
+  const folder = location.worktreePath.split(/[\\/]/).findLast(Boolean) ?? location.worktreePath;
+  return location.branch ? `${folder} (${location.branch})` : folder;
 }
 
 export function shouldShowFileExplorer(input: {

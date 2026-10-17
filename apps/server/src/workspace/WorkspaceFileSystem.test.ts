@@ -381,27 +381,20 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceFileSystemLive", (i
       }),
     );
 
-    it.effect("preserves the real cause and path for I/O failures", () =>
+    it.effect("reports a missing relative or absolute file as not found", () =>
       Effect.gen(function* () {
         const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
         const path = yield* Path.Path;
         const cwd = yield* makeTempDir;
         const resolvedPath = path.join(cwd, "missing.txt");
 
-        const error = yield* workspaceFileSystem
-          .readFile({ cwd, relativePath: "missing.txt" })
-          .pipe(Effect.flip);
-
-        expect(error).toBeInstanceOf(WorkspaceFileSystem.WorkspaceFileSystemOperationError);
-        expect(error).toMatchObject({
-          workspaceRoot: cwd,
-          relativePath: "missing.txt",
-          resolvedPath,
-          operationPath: resolvedPath,
-          operation: "realpath-target",
-        });
-        expect(error.cause).toBeInstanceOf(Error);
-        expect((error.cause as NodeJS.ErrnoException).code).toBe("ENOENT");
+        for (const relativePath of ["missing.txt", resolvedPath]) {
+          const error = yield* workspaceFileSystem
+            .readFile({ cwd, relativePath })
+            .pipe(Effect.flip);
+          expect(error).toBeInstanceOf(WorkspaceFileSystem.WorkspacePathNotFoundError);
+          expect(error).toMatchObject({ workspaceRoot: cwd, relativePath, resolvedPath });
+        }
       }),
     );
   });

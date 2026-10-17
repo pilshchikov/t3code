@@ -166,6 +166,11 @@ export function createProjectEnvironmentAtoms<R, E>(
           (result, isCurrent) => fileMetadata.rememberFile(input.cwd, result, isCurrent),
         ),
     }),
+    locateFile: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:projects:locate-file",
+      tag: WS_METHODS.projectsLocateFile,
+      idleTtlMs: 0,
+    }),
     watchFile: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:projects:watch-file",
       tag: WS_METHODS.projectsWatchFile,

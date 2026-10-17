@@ -2,7 +2,9 @@ import { useAtomValue } from "@effect/atom-react";
 import type { ProjectEntriesChangedEvent, ProjectFileChangedEvent } from "@t3tools/contracts";
 import {
   type EnvironmentId,
+  type ProjectFileLocation,
   type ProjectListEntriesResult,
+  type ProjectLocateFileResult,
   ProjectReadFileError,
   type ProjectReadFileResult,
 } from "@t3tools/contracts";
@@ -30,6 +32,9 @@ const EMPTY_PROJECT_FILE_QUERY_ATOM = Atom.make(
 const EMPTY_PROJECT_FILE_WATCH_ATOM = Atom.make(
   AsyncResult.initial<ProjectFileChangedEvent, never>(false),
 ).pipe(Atom.withLabel("project-file-watch:empty"));
+const EMPTY_PROJECT_FILE_LOCATIONS_ATOM = Atom.make(
+  AsyncResult.initial<ProjectLocateFileResult, never>(false),
+).pipe(Atom.withLabel("project-file-locations:empty"));
 const EMPTY_PROJECT_ENTRIES_WATCH_ATOM = Atom.make(
   AsyncResult.initial<ProjectEntriesChangedEvent, never>(false),
 ).pipe(Atom.withLabel("project-entries-watch:empty"));
@@ -454,5 +459,22 @@ export function useProjectFileQuery(
     readError,
     isNotFile: readError?.failure === "path_not_file",
     refresh,
+  };
+}
+
+export function useProjectFileLocations(
+  environmentId: EnvironmentId,
+  cwd: string,
+  relativePath: string | null,
+  enabled: boolean,
+): { readonly locations: ReadonlyArray<ProjectFileLocation>; readonly isPending: boolean } {
+  const result = useAtomValue(
+    enabled && relativePath !== null
+      ? projectEnvironment.locateFile({ environmentId, input: { cwd, relativePath } })
+      : EMPTY_PROJECT_FILE_LOCATIONS_ATOM,
+  );
+  return {
+    locations: Option.getOrNull(AsyncResult.value(result))?.locations ?? [],
+    isPending: enabled && result._tag === "Initial",
   };
 }

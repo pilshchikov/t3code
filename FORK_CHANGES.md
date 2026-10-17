@@ -1,5 +1,22 @@
 # Fork Changes
 
+## File links found in other worktrees, 2026-10-17
+
+- A chat link to a file that is missing in the thread's checkout now looks for the same
+  repository path in the repository's other Git worktrees, such as an agent's
+  `.claude/worktrees/*` checkout or a sibling checkout on `main`. The preview opens the newest
+  copy read-only with a notice naming the worktree and branch, and buttons switch to the other
+  copies. Agents often write a report in their own worktree and link it under the main checkout.
+- A missing file now reads as "This file does not exist" instead of "could not be accessed".
+  The server reports `path_not_found` for missing workspace and absolute paths.
+- Sources: `apps/server/src/workspace/SiblingWorktreeFiles.ts` (`projects.locateFile`),
+  `GitVcsDriver.listWorktrees`, `WorkspaceFileSystem.ts`, `FilePreviewPanel.tsx`,
+  `filePreviewMode.ts`, `projectFilesQueryState.ts`.
+- The search runs on the host that owns the project, so a remote environment needs its server
+  updated before it finds sibling copies.
+- Validation: typecheck passes, `vp check` keeps the 14 pre-existing errors. New server tests
+  build a real repository with two linked worktrees. File system, preview and contract tests pass.
+
 ## Upstream integration 2026-10-17 (13aa882c22)
 
 - Merged 277 upstream commits in two merges: through `4b1024dafe` (`0288f7a67e`, started by the

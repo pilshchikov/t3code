@@ -169,6 +169,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.peerRelayRespond]: "workspace",
   [WS_METHODS.projectsListEntries]: "workspace",
   [WS_METHODS.projectsReadFile]: "workspace",
+  [WS_METHODS.projectsLocateFile]: "workspace",
   [WS_METHODS.projectsSearchContents]: "workspace",
   [WS_METHODS.projectsSearchEntries]: "workspace",
   [WS_METHODS.projectsWriteFile]: "workspace",
