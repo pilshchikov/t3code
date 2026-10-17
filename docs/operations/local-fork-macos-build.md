@@ -4,16 +4,16 @@ Use this procedure when the owner asks to rebuild, reinstall, or restart the loc
 desktop app. It produces the complete Electron application, including the web client, server,
 native dependencies, and resource monitor.
 
-This checkout installs the Apple Silicon Alpha product at:
+This checkout installs the Apple Silicon Beta product at:
 
 ```text
-/Applications/T3 Code (Alpha).app
+/Applications/T3 Code (Beta).app
 ```
 
 ## Do not use the development runtime
 
 `pnpm build:desktop` only builds source artifacts. It does not produce an installable application.
-Likewise, `apps/desktop/.electron-runtime/T3 Code (Alpha).app` is the cached Electron development
+Likewise, `apps/desktop/.electron-runtime/T3 Code (Beta).app` is the cached Electron development
 runtime, not the application to copy into `/Applications`.
 
 For a real local reinstall, build the arm64 DMG with `dist:desktop:dmg:arm64`, mount that DMG, and
@@ -101,7 +101,7 @@ hdiutil verify "$dmg_path"
 ```
 
 Local builds are unsigned/ad-hoc builds. A strict `codesign --verify --deep --strict` check can
-report that the bundle has no sealed resources; the previous local Alpha install behaves the same
+report that the bundle has no sealed resources; the previous local install behaves the same
 way. The useful local checks are a successful artifact build, DMG verification, correct bundle
 version and architecture, and a successful launch. Signed/notarized builds use the release
 credentials and are a different workflow.
@@ -115,9 +115,9 @@ stopping the running app:
 app_version="$(node -p "require('./apps/desktop/package.json').version")"
 commit_short="$(git rev-parse --short=12 HEAD)"
 dmg_path="release/T3-Code-${app_version}-arm64.dmg"
-mount_path="/Volumes/T3 Code (Alpha) ${app_version} Installer"
-source_app="$mount_path/T3 Code (Alpha).app"
-staged_app="/Applications/T3 Code (Alpha)-new-${commit_short}.app"
+mount_path="/Volumes/T3 Code (Beta) ${app_version} Installer"
+source_app="$mount_path/T3 Code (Beta).app"
+staged_app="/Applications/T3 Code (Beta)-new-${commit_short}.app"
 
 test ! -e "$staged_app"
 diskutil image attach --mountOptions nobrowse --readOnly "$dmg_path"
@@ -130,12 +130,12 @@ Check the staged bundle before replacing anything:
 ```sh
 /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$staged_app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$staged_app/Contents/Info.plist"
-file "$staged_app/Contents/MacOS/T3 Code (Alpha)"
+file "$staged_app/Contents/MacOS/T3 Code (Beta)"
 test -f "$staged_app/Contents/Resources/app.asar"
 test -x "$staged_app/Contents/Resources/resource-monitor/t3-resource-monitor"
 ```
 
-The display name must be `T3 Code (Alpha)`, the version must equal `$app_version`, and the main
+The display name must be `T3 Code (Beta)`, the version must equal `$app_version`, and the main
 executable must be arm64.
 
 ## 6. Quit, replace, and relaunch
@@ -155,8 +155,8 @@ reinstall.
 Keep the previous bundle recoverable, then put the staged bundle at the installed path:
 
 ```sh
-installed_app="/Applications/T3 Code (Alpha).app"
-backup_app="/Users/$(id -un)/.Trash/T3 Code (Alpha)-pre-${commit_short}.app"
+installed_app="/Applications/T3 Code (Beta).app"
+backup_app="/Users/$(id -un)/.Trash/T3 Code (Beta)-pre-${commit_short}.app"
 
 test -d "$installed_app"
 test -d "$staged_app"
@@ -167,6 +167,11 @@ diskutil eject "$mount_path"
 open -a "$installed_app"
 ```
 
+Builds before 0.1.0 were branded Alpha and installed at `/Applications/T3 Code (Alpha).app`. The
+first Beta install replaces that bundle: set `installed_app` to the Alpha path for the backup move,
+then move the staged bundle to `/Applications/T3 Code (Beta).app`. Both use the bundle identifier
+`com.t3tools.t3code` and the same user data.
+
 Do not recursively delete the installed app, the repository root, `release/`, or a broad directory.
 Moving the previous explicit bundle to Trash makes rollback possible.
 
@@ -174,13 +179,13 @@ Moving the previous explicit bundle to Trash makes rollback possible.
 
 ```sh
 /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
-  '/Applications/T3 Code (Alpha).app/Contents/Info.plist'
+  '/Applications/T3 Code (Beta).app/Contents/Info.plist'
 
 ps -axo pid=,etime=,command= | \
-  rg '/Applications/T3 Code \(Alpha\)\.app/Contents/MacOS/T3 Code \(Alpha\)'
+  rg '/Applications/T3 Code \(Beta\)\.app/Contents/MacOS/T3 Code \(Beta\)'
 
 ps -axo pid=,etime=,command= | \
-  rg '/Applications/T3 Code \(Alpha\)\.app/Contents/Resources/app\.asar/apps/server/dist/bin\.mjs'
+  rg '/Applications/T3 Code \(Beta\)\.app/Contents/Resources/app\.asar/apps/server/dist/bin\.mjs'
 ```
 
 Both the desktop process and its bundled server process should use the installed application path.

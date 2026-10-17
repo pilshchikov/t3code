@@ -94,7 +94,7 @@ The most common defect in this repo is a change that works on the path you teste
 
 ## Local fork desktop rebuilds
 
-When the owner asks to rebuild, reinstall, or restart the local macOS Alpha app, follow
+When the owner asks to rebuild, reinstall, or restart the local macOS app, follow
 [`docs/operations/local-fork-macos-build.md`](docs/operations/local-fork-macos-build.md). A real
 install must come from the packaged arm64 DMG. Never copy `apps/desktop/.electron-runtime`, and do
 not treat `build:desktop` alone as an installable application. Preserve the prior explicit app
