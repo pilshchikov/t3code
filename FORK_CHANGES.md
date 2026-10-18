@@ -1,5 +1,25 @@
 # Fork Changes
 
+## Upstream integration 2026-10-18 (8fbc22ca95)
+
+- Merged 13 upstream commits after `13aa882c22`, preserving project rail groups, sibling-worktree
+  file links and the existing fork behavior. Upstream's recent history contains 375 PR commits
+  in the preceding 30 hours; the prior integrations already included the other 362.
+- Mobile navigation keeps both the fork's thread communication sheet and upstream's linked
+  pull request sheet. Android layout fixes and mobile React Compiler support are included.
+- Working threads can be dragged into chat as references again. The sidebar still keeps the
+  fork's manual active-thread order and disabled layout animation; working rows cannot be
+  reordered into another shelf.
+- The linked pull request panel retains repository headers, totals and stack grouping. Its
+  fork overview now imports the list helper from shared code after upstream moved it there.
+  Relative-time labels use upstream's clock-aware component, including the fork's sync footer.
+- Validation: frozen-lockfile installation with lifecycle scripts disabled; web, mobile and
+  client-runtime typechecks pass. Focused web/shared/contracts tests pass (1,467), including
+  project groups, sidebar dragging/snoozing, PR overview, file previews and web compiler coverage.
+  Focused server/mobile/lint-rule tests pass (1,071), including real sibling worktrees, workspace
+  files, Android layouts, mobile PR behavior and mobile compiler coverage. Lint on 109 changed
+  source files passes with warnings. No browser verification or desktop rebuild was performed.
+
 ## Project rail groups, 2026-10-17
 
 - Projects in the rail can be grouped, like tab groups in Chrome and Firefox. A group has a name,

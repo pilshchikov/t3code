@@ -11,7 +11,10 @@ import {
   sourceControlClients,
   UNKNOWN_SOURCE_CONTROL_CLIENT,
 } from "@t3tools/client-runtime/source-control-clients";
-import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
+import {
+  type PullRequestListLine,
+  visibleThreadPullRequests,
+} from "@t3tools/shared/threadPullRequests";
 import {
   ArrowUpRightIcon,
   EyeIcon,
@@ -35,13 +38,12 @@ import { useProjects, useServerConfigs, useThreadShell } from "~/state/entities"
 import { PullRequestsUnavailableState } from "./PullRequestsUnavailableState";
 import { threadEnvironment } from "~/state/threads";
 import { useAtomCommand } from "~/state/use-atom-command";
-import { formatRelativeTimeLabel } from "~/timestampFormat";
+import { RelativeTime } from "~/components/RelativeTime";
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { MiddleTruncate } from "../ui/middle-truncate";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { openLinkPullRequestDialog } from "./LinkPullRequestDialog";
-import { type PullRequestListLine } from "./pullRequestListLines";
 import { threadPullRequestsOverview } from "./threadPullRequestsOverview";
 import {
   PullRequestDiffStat,
@@ -183,7 +185,7 @@ function LinkRowImpl({
                 #{link.number}
               </TooltipTrigger>
               <TooltipPopup>
-                {SOURCE_LABELS[link.source]} · {formatRelativeTimeLabel(link.linkedAt)}
+                {SOURCE_LABELS[link.source]} · <RelativeTime timestamp={link.linkedAt} />
               </TooltipPopup>
             </Tooltip>
           }
@@ -516,9 +518,13 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
       />
       <footer className="flex items-center justify-between border-t border-border/60 px-2 py-1.5 text-2xs text-muted-foreground">
         <span>
-          {lastSynced
-            ? `Latest sync ${formatRelativeTimeLabel(lastSynced)}`
-            : "Awaiting host status"}
+          {lastSynced ? (
+            <>
+              Latest sync <RelativeTime timestamp={lastSynced} />
+            </>
+          ) : (
+            "Awaiting host status"
+          )}
         </span>
       </footer>
     </div>
