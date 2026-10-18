@@ -1,5 +1,18 @@
 # Fork Changes
 
+## Headless relay telemetry remains disabled, 2026-10-18
+
+- The headless CLI and environment server now pass no collector configuration to relay tracing,
+  matching web and mobile. Their cloud tracing layers previously accepted runtime or embedded
+  collector credentials despite the fork's disabled analytics and ordinary OTLP exports.
+- Sources: `apps/server/src/cloud/relayTracing.ts`, `relayTracing.test.ts`.
+- Validation: both new tests reproduced an HTTP export before the fix and no export afterward,
+  with a fully configured collector. All 20 focused tests for server relay tracing, analytics,
+  desktop collector overrides and mobile tracing pass. The running local and Mac mini servers
+  had no relay telemetry environment credentials, and neither installed server build had embedded
+  collector credentials. Scoped server typecheck and lint pass. This source change needs a rebuild
+  before installation.
+
 ## Daily upstream integration — 2026-10-18 (3ff5b3c82a)
 
 - Merge target `3ff5b3c82a62baddc0c2b1b227e9d3a06190c426`, fork parent
