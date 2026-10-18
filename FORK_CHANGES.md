@@ -1,5 +1,54 @@
 # Fork Changes
 
+## Daily upstream integration — 2026-10-18 (3ff5b3c82a)
+
+- Merge target `3ff5b3c82a62baddc0c2b1b227e9d3a06190c426`, fork parent
+  `8789f653f968f344895c7bd3b658ae9bfa67075d`. Merges all nine upstream commits
+  after `c52453717a` with both histories intact. Reviewed all incoming production
+  changes and all ten paths modified on both sides, including automatic merges.
+- Resolved the timeline conflict by moving shared row context into each rendered row
+  and passing it through the list's extra data, as upstream requires for thread-switch
+  performance. Retained the fork's `data-messages-timeline-row-frame` sizing hooks and
+  `chat-timeline-system-scale`, independent one-second recovery and bottom following.
+  First assistant text outside settled folds, mixed-work disclosure labels and stable
+  imported-thread identities remain connected (`apps/web/src/components/chat/MessagesTimeline.tsx` and its logic).
+- Accepted workflow-opening blocks on web/desktop and native mobile, the optional wire
+  marker and retained opening message in bounded history. Claude workflow members now
+  project incremental thinking/tool/answer transcripts using account-scoped config paths;
+  worker effort observation hooks and child-specific selection ingestion remain intact.
+  The other nine overlapping files retain identical fork added/removed lines against
+  upstream. SQLite index/startup changes, unchanged-preview identity preservation and
+  cached PR link normalization integrate without changing fork storage or PR policies.
+- Traced live callers: saved-color Arcane Send/Resume/Queue/Steer and ordinary/pending-input
+  Stop with Classic available; forced mobile expansion for existing chats and drafts,
+  disabled scroll/focus collapse, ordinary sending without compact-first actions, custom
+  width and web/native keyboard layout; project rail/groups/status dots/colors, slots,
+  ordering and picker sizing; per-repository Files/worktree selectors, persisted collapse/
+  expansion/resize, exact-root and sibling-worktree previews, revision validation and dirty
+  editor protection, deletion/undo, Structure/Commit/Git History and editor navigation;
+  global panel shortcuts/right-click tab closing and project-root/multi-root Markdown
+  explorer routing; mounted CLI resume using V2 native references.
+- Initial checkout binding/clearing still requires the validated preparing run, only queued
+  follow-ups, no provider session, question or background work. Ordinary active/background
+  work stays protected. Account/source/model usage rows and colored per-account limits/trends
+  remain separate. Project memory/workspace/peer MCP, communication viewer/shared host routes,
+  durable response watches, idle-compaction project overrides/native usage/quota guards,
+  worker-question recovery, cleanup preferences, two-hour terminal-PR unlinking and
+  Never-default settlement remain live. Multiwork and machine sync remain retired; legacy
+  usage/sync components remain superseded. Disabled external analytics/OTLP, provider
+  refresh/version/manifest opt-ins, desktop update/Keychain gates, stable desktop storage
+  and locally encrypted connection persistence remain in their active paths.
+- Validation: frozen-lockfile installation succeeded with lifecycle scripts disabled.
+  Scoped typechecks passed for contracts, shared, client-runtime, provider-core, server,
+  web, native mobile and desktop. Non-failing Effect suggestions remain. Lint on 32
+  changed TypeScript files passed with zero errors and 60 warnings (unused symbols,
+  React refs/effects/memoization and UI styling). Integration formatting and whitespace
+  checks passed. These are static checks; runtime/UI behavior was not exercised.
+  No tests independently added or run; imported upstream tests are retained. No builds,
+  packaging, dev servers, browser/device checks, app operations, live-data operations,
+  process stops, push, PR, external messages, subagents, other-worktree/main edits or
+  schedule changes.
+
 ## Upstream integration 2026-10-18 (c52453717a)
 
 - Merged 14 upstream commits after `13aa882c22`, preserving project rail groups, sibling-worktree
