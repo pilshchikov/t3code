@@ -1,10 +1,11 @@
 # Fork Changes
 
-## Upstream integration 2026-10-18 (8fbc22ca95)
+## Upstream integration 2026-10-18 (c52453717a)
 
-- Merged 13 upstream commits after `13aa882c22`, preserving project rail groups, sibling-worktree
-  file links and the existing fork behavior. Upstream's recent history contains 375 PR commits
-  in the preceding 30 hours; the prior integrations already included the other 362.
+- Merged 14 upstream commits after `13aa882c22`, preserving project rail groups, sibling-worktree
+  file links and the existing fork behavior. The first fetch found 375 PR commits in the preceding
+  30 hours, of which 13 were missing locally. A final fetch found one additional browser-test
+  timing fix, included in a second merge.
 - Mobile navigation keeps both the fork's thread communication sheet and upstream's linked
   pull request sheet. Android layout fixes and mobile React Compiler support are included.
 - Working threads can be dragged into chat as references again. The sidebar still keeps the
@@ -18,7 +19,8 @@
   project groups, sidebar dragging/snoozing, PR overview, file previews and web compiler coverage.
   Focused server/mobile/lint-rule tests pass (1,071), including real sibling worktrees, workspace
   files, Android layouts, mobile PR behavior and mobile compiler coverage. Lint on 109 changed
-  source files passes with warnings. No browser verification or desktop rebuild was performed.
+  source files passes with warnings. The final browser-test timing fix also passes web typecheck
+  and targeted lint. No browser verification or desktop rebuild was performed.
 
 ## Project rail groups, 2026-10-17
 
