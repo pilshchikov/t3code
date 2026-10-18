@@ -1,5 +1,47 @@
 # Fork Changes
 
+## Project rail groups, 2026-10-17
+
+- Projects in the rail can be grouped, like tab groups in Chrome and Firefox. A group has a name,
+  one of ten colors, and an ordered member list. A project belongs to at most one group, and a
+  group that loses its last project disappears. Clicking a group label folds or unfolds it with an
+  animation. A folded label shows the project count and the members' status dots, and hovering it
+  shows a card with every member and its status. Option-click on a label, or "Show threads from
+  this group", scopes the thread sidebar to all of the group's projects.
+- The rail has two views. The short view keeps the 52px icon column with tab-group labels. The
+  named view shows project names and group headers with a chevron, color, a stack of the first
+  three icons when folded, status dots and a count. The footer chevrons, a double-click on the
+  rail's right edge, Enter or the arrow keys on that edge, and the rail menu switch views. Dragging
+  the edge resizes the named view between 168px and 360px, and dragging it below 110px snaps back
+  to the short view. The thread sidebar follows the rail width.
+- Right-click menus: a project has Show threads, Add to group or Move to group (with New group),
+  Remove from group, Move up and down, Copy path and Project settings. A group has Collapse or
+  Expand, Show threads from this group, Rename, Color, Add project, Collapse other groups, Move
+  group up and down, and Ungroup. The empty rail has New group, Add project, Expand all, Collapse
+  all, Show or Hide names, and Hide project rail. New group from a project menu creates the group at
+  once and opens a name and color editor at its label. The footer's New group button opens a form
+  with name, color and a project checklist.
+- Drag and drop: drop a project on a group label to add it, beside another project to reorder or
+  join that project's group, or below the list to move it to the end. Group labels drag as a unit.
+  Option-Up and Option-Down move a focused project.
+- Settings > Appearance > Project rail picks one of five group styles, `projectRailGroupStyle`:
+  Edge (default), Well, Outline, Label or Solid. The picker shows a live preview of each.
+- Storage: groups are local to the device, in `t3code:project-rail-groups:v1`. The rail order is
+  still the manual project order (`projectOrder`). A group sits where its first member is, and
+  every rail move writes the flattened rail order back to `projectOrder`, so the command palette and
+  the sidebar picker see the same order. Members whose project is not loaded are kept but hidden.
+  The view and width are in `t3code:sidebar:project-rail-layout`. A group scope is stored as
+  `rail-group:<id>` in the existing scope key and falls back to all projects once the group is
+  gone.
+- Sources: `apps/web/src/components/sidebar/ProjectRail.tsx`, `projectRailGroups.logic.ts`,
+  `projectRailGroupsStore.ts`, `projectRailMenus.ts`, `ProjectRailGroupPopovers.tsx`,
+  `projectRail.css`, `projectRailVisibility.ts`, `components/Sidebar.tsx` (group scope),
+  `AppSidebarLayout.tsx` (rail width), `settings/ProjectRailGroupStylePicker.tsx`,
+  `packages/contracts/src/settings.ts`.
+- Validation: typecheck passes and `vp check` keeps the 14 pre-existing errors. Logic tests cover
+  layout, every group operation and storage sanitizing. A browser test folds a group, switches
+  views and opens the project menu. The React Compiler coverage test passes.
+
 ## File links found in other worktrees, 2026-10-17
 
 - A chat link to a file that is missing in the thread's checkout now looks for the same

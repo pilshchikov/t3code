@@ -39,3 +39,46 @@ export function projectRailStatuses(
   }
   return projects;
 }
+
+export const EMPTY_PROJECT_RAIL_STATUS: ProjectRailStatus = {
+  running: false,
+  monitoring: false,
+  completed: false,
+  input: false,
+};
+
+export function combineProjectRailStatuses(
+  statuses: Iterable<ProjectRailStatus | undefined>,
+): ProjectRailStatus {
+  const combined = { ...EMPTY_PROJECT_RAIL_STATUS };
+  for (const status of statuses) {
+    if (!status) continue;
+    combined.running ||= status.running;
+    combined.monitoring ||= status.monitoring;
+    combined.completed ||= status.completed;
+    combined.input ||= status.input;
+  }
+  return combined;
+}
+
+export function projectRailStatusLabel(status: ProjectRailStatus): string {
+  return [
+    status.running && "Agent working",
+    status.monitoring && "Monitoring background work",
+    status.completed && "Unread completion",
+    status.input && "Input or approval needed",
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+export function railGroupStatusSummary(statuses: ReadonlyArray<ProjectRailStatus>): string {
+  const working = statuses.filter((status) => status.running).length;
+  const input = statuses.filter((status) => status.input).length;
+  const unread = statuses.filter((status) => status.completed).length;
+  const parts = [`${statuses.length} ${statuses.length === 1 ? "project" : "projects"}`];
+  if (working > 0) parts.push(`${working} working`);
+  if (input > 0) parts.push(`${input} ${input === 1 ? "needs" : "need"} input`);
+  if (unread > 0) parts.push(`${unread} unread`);
+  return parts.join(" · ");
+}

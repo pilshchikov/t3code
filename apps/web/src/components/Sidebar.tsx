@@ -297,6 +297,9 @@ import { applySidebarThreadOrder, useSidebarThreadOrderStore } from "../sidebarT
 import { useSidebarOrderMigration } from "../hooks/useSidebarOrderMigration";
 import { useSidebarProjectScope } from "../hooks/useSidebarProjectScope";
 import { useProjectRailVisible } from "./sidebar/projectRailVisibility";
+import { railGroupIdFromScopeKey, railGroupName } from "./sidebar/projectRailGroups.logic";
+import { useProjectRailGroupsStore } from "./sidebar/projectRailGroupsStore";
+import { railGroupSwatchHex } from "./sidebar/projectRailMenus";
 import { projectSlotNumber, useProjectSlotStore } from "../projectSlotStore";
 import { Kbd } from "./ui/kbd";
 import {
@@ -2874,11 +2877,24 @@ export default function Sidebar() {
     clearSelection();
     setPersistedProjectScopeKey(key);
   };
-  const projectScopeKey = resolveSidebarProjectScopeKey({
-    groups: projectGroups,
-    key: persistedProjectScopeKey,
-    settings: projectGroupingSettings,
-  });
+  const railGroups = useProjectRailGroupsStore((state) => state.groups);
+  const scopedRailGroupId = railGroupIdFromScopeKey(persistedProjectScopeKey);
+  const scopedRailGroup =
+    scopedRailGroupId === null
+      ? null
+      : (railGroups.find((group) => group.id === scopedRailGroupId) ?? null);
+  const resolveProjectScopeKey = (canClearMissingScope: boolean) =>
+    scopedRailGroupId !== null
+      ? scopedRailGroup !== null || !canClearMissingScope
+        ? persistedProjectScopeKey
+        : null
+      : resolveSidebarProjectScopeKey({
+          groups: projectGroups,
+          key: persistedProjectScopeKey,
+          settings: projectGroupingSettings,
+          canClearMissingScope,
+        });
+  const projectScopeKey = resolveProjectScopeKey(false);
   const showProjectEnvironments = projectGroupsSpanEnvironments(projectGroups);
   const [projectRailVisible, setProjectRailVisible] = useProjectRailVisible();
   const projectAccentColorByKey = useAccentColorStore((state) => state.projectColors);
@@ -2916,9 +2932,10 @@ export default function Sidebar() {
     }
     return environmentLabelById.get(thread.environmentId) ?? null;
   };
-  const selectedProjectScopeItem =
-    projectScopeItems.find((item) => item.value === (projectScopeKey ?? "all")) ??
-    projectScopeItems[0]!;
+  const selectedProjectScopeItem = scopedRailGroup
+    ? { value: persistedProjectScopeKey ?? "all", label: railGroupName(scopedRailGroup) }
+    : (projectScopeItems.find((item) => item.value === (projectScopeKey ?? "all")) ??
+      projectScopeItems[0]!);
   const filteredProjectScopeItems = filterSidebarProjectScopeItems({
     items: projectScopeItems,
     query: projectScopeMenuState.query,
@@ -2929,32 +2946,35 @@ export default function Sidebar() {
     projectScopeKey === null
       ? null
       : (projectGroups.find((project) => project.projectKey === projectScopeKey) ?? null);
-  const scopedProjectKeys =
-    scopedProjectGroup === null
+  const scopedProjectKeys = scopedRailGroup
+    ? new Set(
+        projectGroups
+          .filter((project) => scopedRailGroup.members.includes(project.projectKey))
+          .flatMap((project) =>
+            project.memberProjectRefs.map(
+              (projectRef) => `${projectRef.environmentId}:${projectRef.projectId}`,
+            ),
+          ),
+      )
+    : scopedProjectGroup === null
       ? null
       : new Set(
           scopedProjectGroup.memberProjectRefs.map(
             (projectRef) => `${projectRef.environmentId}:${projectRef.projectId}`,
           ),
         );
+  const settledProjectScopeKey = resolveProjectScopeKey(
+    allProjectSnapshotsReady && allProjectConfigsReady,
+  );
   useEffect(() => {
-    const nextKey = resolveSidebarProjectScopeKey({
-      groups: projectGroups,
-      key: persistedProjectScopeKey,
-      settings: projectGroupingSettings,
-      canClearMissingScope: allProjectSnapshotsReady && allProjectConfigsReady,
-    });
-    if (nextKey !== persistedProjectScopeKey) {
+    if (settledProjectScopeKey !== persistedProjectScopeKey) {
       clearSelection();
-      setPersistedProjectScopeKey(nextKey);
+      setPersistedProjectScopeKey(settledProjectScopeKey);
     }
   }, [
-    allProjectConfigsReady,
-    allProjectSnapshotsReady,
     clearSelection,
     persistedProjectScopeKey,
-    projectGroups,
-    projectGroupingSettings,
+    settledProjectScopeKey,
     setPersistedProjectScopeKey,
   ]);
   const routeDraftIdForRows = routeTarget?.kind === "draft" ? routeTarget.draftId : null;
@@ -4709,7 +4729,9 @@ export default function Sidebar() {
                         aria-label={
                           scopedProjectGroup
                             ? `Filter threads by project: ${scopedProjectGroup.displayName}`
-                            : "Filter threads by project"
+                            : scopedRailGroup
+                              ? `Filter threads by project group: ${railGroupName(scopedRailGroup)}`
+                              : "Filter threads by project"
                         }
                       />
                     }
@@ -4717,6 +4739,14 @@ export default function Sidebar() {
                     {scopedProjectGroup ? (
                       <span className="flex shrink-0">
                         <ProjectFavicon project={scopedProjectGroup} className="size-6 md:size-5" />
+                      </span>
+                    ) : scopedRailGroup ? (
+                      <span className="grid size-6 shrink-0 place-items-center md:size-5">
+                        <span
+                          aria-hidden
+                          className="size-3 rounded-sm"
+                          style={{ backgroundColor: railGroupSwatchHex(scopedRailGroup.color) }}
+                        />
                       </span>
                     ) : (
                       <ListFilterIcon className="size-6 md:size-5" />
@@ -5257,6 +5287,8 @@ export default function Sidebar() {
                 </>
               ) : scopedProjectGroup ? (
                 `No threads in ${scopedProjectGroup.displayName} yet`
+              ) : scopedRailGroup ? (
+                `No threads in ${railGroupName(scopedRailGroup)} yet`
               ) : (
                 "No threads yet"
               )}

@@ -1,6 +1,7 @@
 import { IdleCompactionSettings } from "./IdleCompactionSettings";
 import { SettingsGroup } from "./SettingsGroup";
 import { ChatCustomWidthControl } from "./ChatCustomWidthControl";
+import { ProjectRailGroupStylePicker } from "./ProjectRailGroupStylePicker";
 import { settingsScopeEnvironmentLabels } from "./settingsScopeAxis";
 import { useScopedSettingsWriteAllowed } from "./useScopedSettings";
 import { Spinner } from "~/components/ui/spinner";
@@ -29,6 +30,7 @@ import {
 import {
   type ComposerActionStyle,
   DEFAULT_COMPOSER_ACTION_STYLE,
+  DEFAULT_PROJECT_RAIL_GROUP_STYLE,
   DEFAULT_COMPOSER_ORB_SEND_COLOR,
   DEFAULT_COMPOSER_ORB_STOP_COLOR,
   DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
@@ -1543,6 +1545,28 @@ export function AppearanceSettingsPanel() {
             </div>
           }
         />
+      </SettingsSection>
+
+      <SettingsSection id="appearance-project-rail" title="Project rail">
+        <SettingsRow
+          {...searchableSetting("project-rail-group-style")}
+          description="How groups look in the project rail, in both the short and the named view."
+          resetAction={
+            settings.projectRailGroupStyle !== DEFAULT_PROJECT_RAIL_GROUP_STYLE ? (
+              <SettingResetButton
+                label="project group style"
+                onClick={() =>
+                  updateSettings({ projectRailGroupStyle: DEFAULT_PROJECT_RAIL_GROUP_STYLE })
+                }
+              />
+            ) : null
+          }
+        >
+          <ProjectRailGroupStylePicker
+            value={settings.projectRailGroupStyle}
+            onChange={(projectRailGroupStyle) => updateSettings({ projectRailGroupStyle })}
+          />
+        </SettingsRow>
       </SettingsSection>
 
       <SettingsSection id="motion" title="Motion">

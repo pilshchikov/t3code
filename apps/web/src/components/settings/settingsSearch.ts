@@ -233,6 +233,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["orb sphere send stop plasma arcane classic button style"],
   },
   {
+    id: "project-rail-group-style",
+    title: "Project group style",
+    to: "/settings/appearance",
+    searchTerms: ["project rail groups tab group edge well outline label solid colour color"],
+  },
+  {
     id: "composer-orb-colors",
     title: "Orb colours",
     to: "/settings/appearance",

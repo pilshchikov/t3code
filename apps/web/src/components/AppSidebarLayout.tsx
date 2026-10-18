@@ -36,8 +36,13 @@ import LegacyThreadSidebar from "./LegacySidebar";
 import { useThreadVisitedMigration } from "../hooks/useThreadVisitedMigration";
 import ThreadSidebar from "./Sidebar";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
-import { ProjectRail, PROJECT_RAIL_WIDTH } from "./sidebar/ProjectRail";
-import { useProjectRailVisible } from "./sidebar/projectRailVisibility";
+import { ProjectRail } from "./sidebar/ProjectRail";
+import {
+  resolveProjectRailWidth,
+  useProjectRailDragWidth,
+  useProjectRailLayout,
+  useProjectRailVisible,
+} from "./sidebar/projectRailVisibility";
 import { SidebarBrandWidthProbe, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { MainAppLocationTracker } from "./sidebar/mainAppLocation";
 import { useSidebarStageBackdropVariant } from "./SidebarStageBackdrop";
@@ -275,6 +280,8 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const isMacosDesktop = isElectron && isMacPlatform(navigator.platform);
   const [sidebarWidth, setSidebarWidth] = useState(readInitialThreadSidebarWidth);
   const [projectRailVisible] = useProjectRailVisible();
+  const [projectRailLayout] = useProjectRailLayout();
+  const projectRailDragWidth = useProjectRailDragWidth((state) => state.width);
   const isMobile = useIsMobile();
   useEffect(() => {
     if (!isMobile || isElectron) return;
@@ -306,7 +313,10 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   ) as CSSProperties;
   const sidebarProviderStyle = {
     "--sidebar-width": `${clampThreadSidebarWidth(sidebarWidth, sidebarMinimumWidth, sidebarMaximumWidth)}px`,
-    "--project-rail-width": projectRailVisible && !isMobile ? PROJECT_RAIL_WIDTH : "0px",
+    "--project-rail-width":
+      projectRailVisible && !isMobile
+        ? `${resolveProjectRailWidth(projectRailLayout, projectRailDragWidth)}px`
+        : "0px",
     "--panel-animation-duration": `${panelAnimationDurationMs}ms`,
     ...windowControlsInsetStyle,
     ...(isMacosDesktop && !isWindowFullscreen ? { "--project-rail-top-inset": "2.5rem" } : {}),
@@ -336,7 +346,9 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     <PanelAnimationSuppressionProvider value={panelAnimationsSuppressed}>
       <SidebarProvider
         className="h-full! min-h-0!"
-        data-panel-animations={routePanelAnimationsActive ? "true" : "false"}
+        data-panel-animations={
+          routePanelAnimationsActive && projectRailDragWidth === null ? "true" : "false"
+        }
         defaultOpen
         style={sidebarProviderStyle}
       >
