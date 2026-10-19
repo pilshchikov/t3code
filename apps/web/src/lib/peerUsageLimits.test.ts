@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import * as Stream from "effect/Stream";
 import {
   EnvironmentSupervisor,
   PrimaryConnectionTarget,
@@ -13,8 +14,11 @@ import {
 import type { RpcSession } from "@t3tools/client-runtime/rpc";
 import { EnvironmentId, WS_METHODS } from "@t3tools/contracts";
 
-const { call } = vi.hoisted(() => ({ call: vi.fn() }));
-vi.mock("@t3tools/client-runtime/rpc", () => ({ request: (...args: unknown[]) => call(...args) }));
+const { call, watch } = vi.hoisted(() => ({ call: vi.fn(), watch: vi.fn() }));
+vi.mock("@t3tools/client-runtime/rpc", () => ({
+  request: (...args: unknown[]) => call(...args),
+  subscribe: (...args: unknown[]) => watch(...args),
+}));
 import { readPeerUsageLimits } from "./peerUsageLimits";
 
 const layerSupervisor = Layer.effect(
@@ -38,7 +42,7 @@ const layerSupervisor = Layer.effect(
 );
 
 const config = {
-  environment: { environmentId: "laptop" },
+  environment: { environmentId: "laptop", capabilities: { usageLimitSources: true } },
   providers: [
     {
       instanceId: "claude-work",
@@ -53,13 +57,24 @@ const config = {
       },
     },
   ],
-  usageLimitSources: [],
+};
+const hub = {
+  id: "hub",
+  label: "Usage hub",
+  kind: "cliproxy",
+  checkedAt: "2026-10-19T05:49:00Z",
+  accounts: [],
 };
 
 describe("peer usage page reads", () => {
   it.effect("reads the destination page snapshot and omits provider runtime details", () =>
     Effect.gen(function* () {
       call.mockReset().mockReturnValue(Effect.succeed(config));
+      watch
+        .mockReset()
+        .mockReturnValue(
+          Stream.make({ type: "usageLimitSourcesUpdated", payload: { sources: [hub] } }),
+        );
       const result = yield* readPeerUsageLimits(false);
       expect(result).toMatchObject({
         environmentId: "laptop",
@@ -69,12 +84,21 @@ describe("peer usage page reads", () => {
       });
       expect(call).toHaveBeenCalledExactlyOnceWith(WS_METHODS.serverGetConfig, {});
       expect(JSON.stringify(result)).not.toContain("/private/config");
+      expect(result.snapshot.sources).toEqual([hub]);
+      expect(watch).toHaveBeenCalledExactlyOnceWith(WS_METHODS.subscribeServerConfig, {
+        usageLimitSources: true,
+      });
     }).pipe(Effect.provide(layerSupervisor)),
   );
 
   it.effect("awaits the normal refresh before reading the page configuration", () =>
     Effect.gen(function* () {
       const performed: string[] = [];
+      watch
+        .mockReset()
+        .mockReturnValue(
+          Stream.make({ type: "usageLimitSourcesUpdated", payload: { sources: [] } }),
+        );
       call.mockReset().mockImplementation((method: string) =>
         Effect.sync(() => {
           performed.push(method);

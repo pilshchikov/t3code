@@ -7,7 +7,8 @@
   unsupported while the laptop's work/personal accounts had current windows. Every provider/source
   is labelled with its environment; a single unsupported entry never implies all Claude accounts
   are unsupported. Optional `includeConnected:false` requests a local-only read explicitly.
-- The app relays the destination's existing provider refresh and `server.getConfig` read, projecting
+- The app relays the destination's existing provider refresh, `server.getConfig` read and initial
+  usage-hub config-stream snapshot (hub data is not in `server.getConfig`), projecting
   only the same safe quota/account fields. It does not create provider sessions, copy credentials,
   or recursively query peers. Disconnected, mismatched, missing-relay and failed reads report
   incomplete coverage with notices; unavailable quotas are never fabricated as zero or safe.
