@@ -13,6 +13,13 @@ cost, split by token type and by speed. These estimates are not your subscriptio
 split, such as a provider-reported cost for a model without public rates, shows as **Other**.
 Select a model under **Breakdown** to see its trend, cache hit rate, and cost per million tokens.
 
+Ask an agent to check usage or remaining account limits. Claude, Codex and other agents connected
+to T3 can read the same data through `t3_usage_read` and `t3_usage_limits_read`, without relying
+on their provider's native usage tools. Limits stay separate for each configured account and hub;
+agents can request a fresh probe and see when a reading is missing or unavailable. History defaults
+to today in UTC unless you ask for another date range or time zone. Each tool reads the environment
+where the agent is running; the Usage page can combine several connected environments.
+
 ## Model breakdown
 
 OpenCode reads its SQLite database and older JSON history. Antigravity reads local conversation

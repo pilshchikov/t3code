@@ -38,8 +38,12 @@ import * as Peers from "../../../peers/Peers.ts";
 import * as PeerThreadMessaging from "../../../peers/PeerThreadMessaging.ts";
 import * as PreviewAutomationBroker from "../../PreviewAutomationBroker.ts";
 import * as PreviewBrowser from "../../../preview/PreviewBrowser.ts";
+import * as UsageService from "../../../usage/UsageService.ts";
+import * as UsageLimitSources from "../../../usage/UsageLimitSources.ts";
 
 const layerStubServices = Layer.mergeAll(
+  Layer.mock(UsageService.UsageService)({}),
+  Layer.mock(UsageLimitSources.UsageLimitSources)({}),
   Layer.mock(PeerThreadMessaging.PeerThreadMessaging)({}),
   Layer.mock(ThreadWorkspaces.ThreadWorkspaces)({}),
   SqlitePersistence.layerMemory,
@@ -149,6 +153,8 @@ it.effect("production mcp layer lists worktree tools over http", () =>
       expect(toolNames).toContain("t3_worktree_status");
       expect(toolNames).toContain("preview_status");
       expect(toolNames).toContain("delegate_task");
+      expect(toolNames).toContain("t3_usage_limits_read");
+      expect(toolNames).toContain("t3_usage_read");
 
       const handoff = tools.find((tool) => tool.name === "t3_worktree_handoff");
       expect(handoff?.annotations?.readOnlyHint).toBe(false);

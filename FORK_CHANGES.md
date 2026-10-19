@@ -1,5 +1,24 @@
 # Fork Changes
 
+## Agent access to Usage page data, 2026-10-18
+
+- Added read-only `t3_usage_limits_read` and `t3_usage_read` MCP tools for Claude, Codex and every
+  provider using T3 MCP. They reuse the provider registry, usage hub snapshots and transcript/account
+  scanner behind the Usage pages. Quota windows stay separate by configured provider instance or
+  hub account, with timestamps, reset times and explicit missing/probe-failure states. Optional
+  refresh uses the existing provider/hub probes; reads do not redeem credits or switch accounts.
+- History returns the page's token/cost/source/pricing data, defaults to today in UTC and supports
+  date/time-zone/hourly windows and waiting for slow source refreshes. Tools are scoped to the
+  calling environment, require normal orchestration read access and support read-only clients.
+- Shared provider instructions teach agents to use these tools when native usage detection is
+  absent, including Claude. Shared tool presentation keeps their activity readable on every client.
+- Sources: `packages/contracts/src/usageMcp.ts`, `apps/server/src/usage/UsageSnapshots.ts`,
+  `apps/server/src/mcp/toolkits/usage/`, MCP registration and shared orchestration instructions.
+- Validation: 63 focused tests pass, including authenticated Claude tool discovery, MCP reads,
+  separate accounts/hubs, explicit refresh, missing/probe-failed readings, JSON-safe optional
+  snapshot fields, source attribution and time-zone defaults. Scoped typechecks pass for contracts,
+  shared, provider-core, server, client-runtime, web and mobile; changed TypeScript lint passes.
+
 ## Files checkout recovery, 2026-10-18
 
 - Discover checkout choices through each repository's configured root, rather than its selected

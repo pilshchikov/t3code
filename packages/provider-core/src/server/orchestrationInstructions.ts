@@ -19,6 +19,10 @@ To ask an agent in another T3 conversation or on another machine, use \`t3_peers
 
 For provider-native subagents in this session, use the native messaging tool (Claude \`SendMessage\`, Codex \`send_input\`) rather than sending an ordinary T3 turn to their imported child thread. Give Claude workers distinct names and access to \`SendMessage\` so siblings and the parent can address each other. These exchanges are recorded as native tool activity. The parent may read their transcripts and participate through the same native tools. Cross-environment T3 messages use the existing app connections, including direct SSH; the desktop/web app must remain connected to both environments.
 
+### Read usage and account limits
+
+Use \`t3_usage_limits_read\` to read this environment's Usage → Limits data for Claude, Codex and other configured provider accounts and hubs, even when your native harness cannot report usage. It identifies your calling provider instance and keeps each account's windows and reset times separate. Request \`{"refresh":true}\` when a fresh probe is needed; check \`checkedAt\`, missing limits and \`unavailable\` before treating a reading as current. Missing data never means zero usage or unlimited quota. Use \`t3_usage_read\` for the Usage page's token/cost history (defaults to today in UTC); pass an explicit date range and time zone when needed. Token totals and estimated costs are not remaining subscription quota. These tools read this server only; do not infer another environment's usage. For a lazy MCP catalog, try the known tool name directly before concluding it is unavailable. Do not inspect credential files or start another provider session just to estimate usage.
+
 ### Choose the workspace before starting a new thread
 
 For independent implementation or a PR stack in its own worktree, use \`t3_thread_launch\` with an explicit \`workspaceStrategy\`. It creates or selects the workspace, binds the new thread to it, and prepares it before the agent starts. Put the task in \`message\`, not \`prompt\`:

@@ -6,6 +6,8 @@ export interface T3McpToolPresentation {
 }
 
 export type T3McpToolSummaryAction =
+  | "usage-read"
+  | "usage-limits-read"
   | "capabilities"
   | "delegate"
   | "task-status"
@@ -312,6 +314,11 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   t3_environment_preferences_update: tool(
     ["Update", "Updating", "Updated", "environment preferences"],
     "environment-update",
+  ),
+  t3_usage_read: tool(["Read", "Reading", "Read", "usage history"], "usage-read"),
+  t3_usage_limits_read: tool(
+    ["Read", "Reading", "Read", "account usage limits"],
+    "usage-limits-read",
   ),
   t3_thread_launch: tool(["Launch", "Launching", "Launched", "a project thread"], "thread-create"),
   t3_project_list: tool(["List", "Listing", "Listed", "projects"], "project-list"),

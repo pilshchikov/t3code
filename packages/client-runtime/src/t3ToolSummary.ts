@@ -330,6 +330,12 @@ export function summarizeT3ToolCalls(
     case "environment-read":
       label = phrase("Checked", "check", `environment preferences ${times}`);
       break;
+    case "usage-read":
+      label = phrase("Checked", "check", `usage history ${times}`);
+      break;
+    case "usage-limits-read":
+      label = phrase("Checked", "check", `account usage limits ${times}`);
+      break;
     case "environment-update":
       label = phrase("Updated", "update", `environment preferences ${times}`);
       break;
