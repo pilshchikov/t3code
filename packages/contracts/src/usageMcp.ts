@@ -2,10 +2,17 @@ import * as Schema from "effect/Schema";
 import { EnvironmentId, IsoDateTime } from "./baseSchemas.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
 import { ServerProvider } from "./server.ts";
-import { ServerProviderUsageLimits, UsageLimitSourceSnapshots } from "./providerUsageLimits.ts";
+import {
+  ServerProviderUsageLimits,
+  UsageLimitSourceSnapshot,
+  UsageLimitSourceSnapshots,
+} from "./providerUsageLimits.ts";
 import { UsageDay, UsageSummaryInput } from "./usage.ts";
 
-export const McpUsageLimitsInput = Schema.Struct({ refresh: Schema.optional(Schema.Boolean) });
+export const McpUsageLimitsInput = Schema.Struct({
+  refresh: Schema.optional(Schema.Boolean),
+  includeConnected: Schema.optional(Schema.Boolean),
+});
 export type McpUsageLimitsInput = typeof McpUsageLimitsInput.Type;
 
 export const McpUsageLimitsSnapshot = Schema.Struct({
@@ -31,10 +38,39 @@ export const McpUsageLimitsSnapshot = Schema.Struct({
 });
 export type McpUsageLimitsSnapshot = typeof McpUsageLimitsSnapshot.Type;
 
+export const McpUsageLimitsReport = Schema.Struct({
+  readAt: IsoDateTime,
+  coverageComplete: Schema.Boolean,
+  notices: Schema.Array(Schema.String),
+  environments: Schema.Array(
+    Schema.Struct({
+      environmentId: EnvironmentId,
+      label: Schema.String,
+      available: Schema.Boolean,
+      error: Schema.optional(Schema.String),
+    }),
+  ),
+  providers: Schema.Array(
+    Schema.Struct({
+      ...McpUsageLimitsSnapshot.fields.providers.value.fields,
+      environmentId: EnvironmentId,
+      environmentLabel: Schema.String,
+    }),
+  ),
+  sources: Schema.Array(
+    Schema.Struct({
+      ...UsageLimitSourceSnapshot.fields,
+      environmentId: EnvironmentId,
+      environmentLabel: Schema.String,
+    }),
+  ),
+});
+export type McpUsageLimitsReport = typeof McpUsageLimitsReport.Type;
+
 export const McpUsageLimitsResult = Schema.Struct({
   environmentId: EnvironmentId,
   currentProviderInstanceId: Schema.NullOr(ProviderInstanceId),
-  ...McpUsageLimitsSnapshot.fields,
+  ...McpUsageLimitsReport.fields,
 });
 
 export const McpUsageReadInput = Schema.Struct({

@@ -27,7 +27,7 @@ export const UsageToolkit = Toolkit.make(
   Tool.make("t3_usage_limits_read", {
     ...shared,
     description:
-      "Read the same provider/account quota data as this environment's Usage → Limits page, including Claude and Codex profiles and configured usage hubs. Call this rather than guessing limits from a model's native tools. Returns usedPercent, reset times, checkedAt, unavailable/probe-failure states and the caller's provider instance ID. A null limits value means unknown, never zero usage. Cached by default; refresh:true runs the existing page probes first. A refresh can still fail: inspect checkedAt and unavailable before treating data as current. Does not redeem credits or change accounts. Other environments are not included.",
+      "Read Usage → Limits across this server AND connected environments by default, including Claude/Codex profiles and hubs. Each provider/source has environmentId and environmentLabel; instance IDs alone are not global. A token-only Claude instance can report unsupported while another machine's named Claude accounts have valid windows: inspect ALL providers before declaring Claude unsupported. Quotas can be duplicated across machines; do not sum a shared account's allowance. Returns usedPercent, resetsAt, checkedAt, unavailable states and the calling instance ID. Null means unknown, never zero or unlimited. Check coverageComplete, environments and notices: an unreachable environment's quota is unknown, never safe. Keep an updated app connected to both machines. refresh:true uses existing page probes. includeConnected:false explicitly limits the read to this server. Does not redeem credits or change accounts.",
     parameters: McpUsageLimitsInput,
     success: Schema.toCodecJson(McpUsageLimitsResult),
   })

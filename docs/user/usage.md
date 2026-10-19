@@ -17,8 +17,11 @@ Ask an agent to check usage or remaining account limits. Claude, Codex and other
 to T3 can read the same data through `t3_usage_read` and `t3_usage_limits_read`, without relying
 on their provider's native usage tools. Limits stay separate for each configured account and hub;
 agents can request a fresh probe and see when a reading is missing or unavailable. History defaults
-to today in UTC unless you ask for another date range or time zone. Each tool reads the environment
-where the agent is running; the Usage page can combine several connected environments.
+to today in UTC unless you ask for another date range or time zone. History reads the environment
+where the agent runs. Limits include connected environments by default, with each reading labelled
+by machine. Keep the desktop/web app open and connected to both machines. Unreachable machines
+are reported as incomplete coverage, so an agent cannot treat their missing quotas as safe. Set
+`includeConnected:false` only when you explicitly want this server's limits alone.
 
 ## Model breakdown
 

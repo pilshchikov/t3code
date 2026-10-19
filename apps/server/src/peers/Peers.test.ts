@@ -86,6 +86,7 @@ const startRelay = Effect.gen(function* () {
       case "describe":
         return Effect.succeed({ type: "described", peers: [] });
       case "threads-list":
+      case "usage-limits":
       case "thread-read":
       case "thread-send":
       case "thread-wait":

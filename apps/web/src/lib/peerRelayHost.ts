@@ -1,5 +1,6 @@
 import { EnvironmentRegistry } from "@t3tools/client-runtime/connection";
 import { request, subscribe } from "@t3tools/client-runtime/rpc";
+import { readPeerUsageLimits } from "./peerUsageLimits";
 import {
   type EnvironmentId,
   PeerFilesError,
@@ -81,6 +82,13 @@ export const layer = Layer.effectDiscard(
 
     const perform = (source: EnvironmentId, operation: PeerRelayOperation) => {
       switch (operation.type) {
+        case "usage-limits":
+          return onPeer(
+            source,
+            operation.environmentId,
+            readPeerUsageLimits(operation.refresh),
+            (result) => ({ type: "usage-limits", ...result }),
+          );
         case "describe":
           return describe(source, operation.projectId);
         case "threads-list":

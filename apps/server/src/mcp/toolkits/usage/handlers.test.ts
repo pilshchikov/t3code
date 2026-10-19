@@ -8,6 +8,9 @@ import {
   type ServerProvider,
   type UsageSummaryInput,
   type UsageLimitSourceSnapshot,
+  type PeerEnvironment,
+  type PeerRelayReply,
+  type PeerRelayOperation,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as ErrorReporter from "effect/ErrorReporter";
@@ -15,6 +18,7 @@ import * as Layer from "effect/Layer";
 import * as TestClock from "effect/testing/TestClock";
 import { McpSchema, McpServer } from "effect/ai";
 import * as Environment from "../../../environment/ServerEnvironment.ts";
+import * as Peers from "../../../peers/Peers.ts";
 import * as ProviderRegistry from "../../../provider/ProviderRegistry.ts";
 import * as UsageLimitSources from "../../../usage/UsageLimitSources.ts";
 import * as UsageService from "../../../usage/UsageService.ts";
@@ -70,6 +74,11 @@ function harness(
     provider("claude-work", 75),
     provider("claude-personal", 10),
   ],
+  peerOptions: {
+    peers?: ReadonlyArray<PeerEnvironment>;
+    reply?: PeerRelayReply;
+    discoveryFails?: boolean;
+  } = {},
 ) {
   let currentProviders = providers;
   const state = {
@@ -78,6 +87,8 @@ function harness(
     refreshes: 0,
     sourceRefreshes: 0,
     usageInputs: [] as UsageSummaryInput[],
+    peerRequests: [] as PeerRelayOperation[],
+    discoveries: 0,
   };
   const hub: UsageLimitSourceSnapshot = {
     id: UsageLimitSourceId.make("hub"),
@@ -97,6 +108,32 @@ function harness(
     ],
   };
   const layer = McpHttpServer.layerUsageToolkit.pipe(
+    Layer.provide(
+      Layer.mock(Peers.Peers)({
+        describe: () =>
+          Effect.sync(() => {
+            state.discoveries++;
+            return peerOptions.peers ?? [];
+          }).pipe(
+            Effect.flatMap((peers) =>
+              peerOptions.discoveryFails
+                ? Effect.fail(new Peers.PeersError({ code: "no_relay", message: "No relay" }))
+                : Effect.succeed(peers),
+            ),
+          ),
+        request: (operation) =>
+          Effect.sync(() => {
+            state.peerRequests.push(operation);
+            return (
+              peerOptions.reply ?? {
+                type: "failed" as const,
+                code: "peer_unreachable" as const,
+                message: "Unavailable",
+              }
+            );
+          }),
+      }),
+    ),
     Layer.provide(
       Layer.succeed(
         ErrorReporter.CurrentErrorReporters,
@@ -284,6 +321,136 @@ it.effect("refreshes the page's provider and hub probes only on request", () => 
         { limits: { checkedAt: "2026-10-18T01:00:00.000Z" } },
         { limits: { checkedAt: "2026-10-18T01:00:00.000Z" } },
       ],
+    });
+  }).pipe(Effect.provide(h.layer));
+});
+
+it.effect(
+  "reads laptop Claude quotas when the calling mini's token-only Claude reports unsupported",
+  () => {
+    const laptopId = EnvironmentId.make("laptop");
+    const work = provider("claude-work", 97);
+    const personal = provider("claude-personal", 88);
+    const h = harness(
+      [
+        {
+          ...provider("claude-work", 0),
+          usageLimits: { checkedAt, windows: [], unavailable: { reason: "unsupported" } },
+        },
+      ],
+      {
+        peers: [{ environmentId: laptopId, label: "Laptop", connected: true, projects: [] }],
+        reply: {
+          type: "usage-limits",
+          environmentId: laptopId,
+          snapshot: {
+            readAt: checkedAt,
+            providers: [work, personal].map((p) => ({
+              instanceId: p.instanceId,
+              driver: p.driver,
+              displayName: p.displayName,
+              enabled: true,
+              installed: true,
+              available: true,
+              auth: p.auth,
+              limits: p.usageLimits!,
+            })),
+            sources: [],
+          },
+        },
+      },
+    );
+    return Effect.gen(function* () {
+      const result = yield* call("t3_usage_limits_read", { refresh: true });
+      expect(result.isError, JSON.stringify(h.state.errors)).toBe(false);
+      expect(result.structuredContent).toMatchObject({
+        coverageComplete: true,
+        environments: [
+          { environmentId, available: true },
+          { environmentId: laptopId, label: "Laptop", available: true },
+        ],
+        providers: [
+          { environmentId, limits: { unavailable: { reason: "unsupported" } } },
+          {
+            environmentId: laptopId,
+            environmentLabel: "Laptop",
+            instanceId: "claude-work",
+            limits: { windows: [{ usedPercent: 97 }] },
+          },
+          {
+            environmentId: laptopId,
+            instanceId: "claude-personal",
+            limits: { windows: [{ usedPercent: 88 }] },
+          },
+        ],
+      });
+      expect(h.state.peerRequests).toEqual([
+        { type: "usage-limits", environmentId: laptopId, refresh: true },
+      ]);
+    }).pipe(Effect.provide(h.layer));
+  },
+);
+
+it.effect("reports incomplete coverage when connected quotas cannot be read", () => {
+  const h = harness([], {
+    peers: [
+      {
+        environmentId: EnvironmentId.make("laptop"),
+        label: "Laptop",
+        connected: true,
+        projects: [],
+      },
+    ],
+  });
+  return Effect.gen(function* () {
+    const result = yield* call("t3_usage_limits_read", {});
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toMatchObject({
+      coverageComplete: false,
+      environments: [
+        { available: true },
+        { available: false, error: expect.stringContaining("unknown") },
+      ],
+    });
+  }).pipe(Effect.provide(h.layer));
+});
+
+it.effect("does not claim full page coverage without a relaying app", () => {
+  const h = harness([], { discoveryFails: true });
+  return Effect.gen(function* () {
+    const result = yield* call("t3_usage_limits_read", {});
+    expect(result.structuredContent).toMatchObject({
+      coverageComplete: false,
+      notices: [expect.stringContaining("incomplete")],
+    });
+    const local = yield* call("t3_usage_limits_read", { includeConnected: false });
+    expect(local.structuredContent).toMatchObject({ coverageComplete: true, notices: [] });
+    expect(h.state.discoveries).toBe(1);
+  }).pipe(Effect.provide(h.layer));
+});
+
+it.effect("does not attribute another environment's reply to the requested laptop", () => {
+  const h = harness([], {
+    peers: [
+      {
+        environmentId: EnvironmentId.make("laptop"),
+        label: "Laptop",
+        connected: true,
+        projects: [],
+      },
+    ],
+    reply: {
+      type: "usage-limits",
+      environmentId: EnvironmentId.make("wrong-machine"),
+      snapshot: { readAt: checkedAt, providers: [], sources: [] },
+    },
+  });
+  return Effect.gen(function* () {
+    const result = yield* call("t3_usage_limits_read", {});
+    expect(result.structuredContent).toMatchObject({
+      coverageComplete: false,
+      providers: [],
+      environments: [{ available: true }, { environmentId: "laptop", available: false }],
     });
   }).pipe(Effect.provide(h.layer));
 });

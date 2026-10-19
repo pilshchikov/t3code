@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { McpUsageLimitsSnapshot } from "./usageMcp.ts";
 
 import {
   EnvironmentId,
@@ -224,6 +225,11 @@ export const PeerThreadOperation = Schema.Union([
 export type PeerThreadOperation = typeof PeerThreadOperation.Type;
 
 export const PeerRelayOperation = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("usage-limits"),
+    environmentId: EnvironmentId,
+    refresh: Schema.Boolean,
+  }),
   PeerThreadOperation,
   Schema.Struct({ type: Schema.Literal("describe"), projectId: Schema.NullOr(ProjectId) }),
   Schema.Struct({
@@ -251,6 +257,11 @@ export const PeerRelayRequest = Schema.Struct({
 export type PeerRelayRequest = typeof PeerRelayRequest.Type;
 
 export const PeerRelayReply = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("usage-limits"),
+    environmentId: EnvironmentId,
+    snapshot: McpUsageLimitsSnapshot,
+  }),
   Schema.Struct({ type: Schema.Literal("threads-listed"), result: PeerThreadsListResult }),
   Schema.Struct({ type: Schema.Literal("thread-read"), result: PeerThreadReadResult }),
   Schema.Struct({ type: Schema.Literal("thread-sent"), result: PeerThreadSendResult }),

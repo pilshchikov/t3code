@@ -1,5 +1,25 @@
 # Fork Changes
 
+## Usage limits across connected environments, 2026-10-18
+
+- Quota MCP reads now include the other environments connected through the desktop/web app by
+  default. The prior server-only implementation could report a token-only Mini Claude instance as
+  unsupported while the laptop's work/personal accounts had current windows. Every provider/source
+  is labelled with its environment; a single unsupported entry never implies all Claude accounts
+  are unsupported. Optional `includeConnected:false` requests a local-only read explicitly.
+- The app relays the destination's existing provider refresh and `server.getConfig` read, projecting
+  only the same safe quota/account fields. It does not create provider sessions, copy credentials,
+  or recursively query peers. Disconnected, mismatched, missing-relay and failed reads report
+  incomplete coverage with notices; unavailable quotas are never fabricated as zero or safe.
+- Sources: `apps/server/src/usage/UsageSnapshots.ts`, `apps/web/src/lib/peerRelayHost.ts`,
+  `peerUsageLimits.ts`, `packages/shared/src/usageMcpSnapshot.ts`, usage/peer contracts, and shared
+  provider instructions. Token/cost history remains scoped to its own server.
+- Validation: 42 focused MCP, peer relay, client quota read and provider-instruction tests pass.
+  Regression coverage includes unsupported Mini Claude plus valid laptop work/personal windows,
+  incomplete discovery/read coverage, explicit local-only reads and mismatched environment replies.
+  Scoped server/web/mobile/contracts/shared typechecks and changed-file lint pass; frozen install
+  preserves the dependency lockfile.
+
 ## Agent access to Usage page data, 2026-10-18
 
 - Added read-only `t3_usage_limits_read` and `t3_usage_read` MCP tools for Claude, Codex and every
@@ -8,8 +28,9 @@
   hub account, with timestamps, reset times and explicit missing/probe-failure states. Optional
   refresh uses the existing provider/hub probes; reads do not redeem credits or switch accounts.
 - History returns the page's token/cost/source/pricing data, defaults to today in UTC and supports
-  date/time-zone/hourly windows and waiting for slow source refreshes. Tools are scoped to the
-  calling environment, require normal orchestration read access and support read-only clients.
+  date/time-zone/hourly windows and waiting for slow source refreshes. History reads its own server;
+  quota reads include connected environments as described above. Both require normal orchestration
+  read access and support read-only clients.
 - Shared provider instructions teach agents to use these tools when native usage detection is
   absent, including Claude. Shared tool presentation keeps their activity readable on every client.
 - Sources: `packages/contracts/src/usageMcp.ts`, `apps/server/src/usage/UsageSnapshots.ts`,
