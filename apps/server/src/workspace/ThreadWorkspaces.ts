@@ -180,7 +180,7 @@ const make = Effect.gen(function* () {
             })),
             status: yield* git.localStatus({ cwd: ctx.cwd }),
             refs: yield* git.listRefs({
-              cwd: ctx.cwd,
+              cwd: ctx.root,
               ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
             }),
           };
@@ -219,7 +219,7 @@ const make = Effect.gen(function* () {
             let cursor: number | undefined;
             do {
               const page = yield* git.listRefs({
-                cwd: ctx.cwd,
+                cwd: ctx.root,
                 ...(cursor === undefined ? {} : { cursor }),
               });
               refs.push(...page.refs);
@@ -231,7 +231,7 @@ const make = Effect.gen(function* () {
               if (ref.worktreePath === null) yield* requirePrimaryIdle(ctx);
               const cwd =
                 ref.worktreePath ??
-                (yield* git.createWorktree({ cwd: ctx.cwd, refName: ref.name, path: null }))
+                (yield* git.createWorktree({ cwd: ctx.root, refName: ref.name, path: null }))
                   .worktree.path;
               return yield* attach(ctx, cwd);
             }

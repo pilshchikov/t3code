@@ -43,7 +43,8 @@ export function FileWorktreeToolbar(props: {
     vcsEnvironment.listRefs({
       environmentId: props.environmentId,
       input: {
-        cwd: props.root.path,
+        // Discover recovery choices even when the selected checkout was removed.
+        cwd: props.root.workspaceRoot,
         refKind: "local",
         refresh: true,
         limit: 200,
@@ -110,7 +111,7 @@ export function FileWorktreeToolbar(props: {
       >
         <MenuTrigger
           disabled={pending}
-          className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded px-2 text-left text-xs text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded px-2 text-left text-xs text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           aria-label={`Select checkout for ${props.root.label ?? workspaceDirectoryName(props.root.workspaceRoot)}`}
         >
           <FolderGit2 className="size-3.5 shrink-0" />

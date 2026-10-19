@@ -86,7 +86,9 @@ function shell(overrides: Partial<OrchestrationV2ThreadShell> = {}): Orchestrati
 const threadId = ThreadId.make("workspace-test");
 const projectId = ProjectId.make("workspace-project");
 const providerInstanceId = ProviderInstanceId.make("claude");
-const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
+const makeHarness = Effect.fn("makeWorkspaceHarness")(function* (
+  overrides: Partial<OrchestrationV2ThreadShell>,
+) {
   const commands: Array<OrchestrationV2ServerCommand> = [];
   const creations: Array<unknown> = [];
   const captures: Array<string> = [];
@@ -98,6 +100,7 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
     providerInstanceId,
     activeRunId: RunId.make("workspace-run"),
     modelSelection: { instanceId: providerInstanceId, model: "test" },
+    ...overrides,
   });
   const scope = {
     environmentId: EnvironmentId.make("test"),
@@ -172,7 +175,7 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
     Layer.mock(GitWorkflowService)({
       localStatus: ({ cwd }) =>
         Effect.succeed({
-          isRepo: true,
+          isRepo: !cwd.endsWith("/deleted"),
           hasPrimaryRemote: true,
           isDefaultRef: cwd === "/repo",
           refName: cwd === "/repo" ? "main" : "task",
@@ -181,25 +184,27 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
         }),
       listRefs: ({ cursor, cwd }) =>
         Effect.succeed({
-          isRepo: true,
+          isRepo: !cwd.endsWith("/deleted"),
           hasPrimaryRemote: true,
           totalCount: 2,
           nextCursor: cursor === undefined ? 1 : null,
-          refs: [
-            {
-              name: cursor === undefined ? "main" : "task",
-              current: cursor === undefined,
-              isDefault: cursor === undefined,
-              worktreePath:
-                cursor === undefined
-                  ? cwd.startsWith("/backend")
-                    ? "/backend"
-                    : "/repo"
-                  : cwd.startsWith("/backend")
-                    ? "/backend/task"
-                    : "/worktrees/task",
-            },
-          ],
+          refs: cwd.endsWith("/deleted")
+            ? []
+            : [
+                {
+                  name: cursor === undefined ? "main" : "task",
+                  current: cursor === undefined,
+                  isDefault: cursor === undefined,
+                  worktreePath:
+                    cursor === undefined
+                      ? cwd.startsWith("/backend")
+                        ? "/backend"
+                        : "/repo"
+                      : cwd.startsWith("/backend")
+                        ? "/backend/task"
+                        : "/worktrees/task",
+                },
+              ],
         }),
       createWorktree: (input) =>
         Effect.sync(() => {
@@ -250,9 +255,54 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* () {
 }, Effect.provide(McpProviderSessions.layer));
 
 describe("thread workspace MCP", () => {
+  it.effect("recovers a missing primary checkout through a live sibling branch", () =>
+    Effect.gen(function* () {
+      const h = yield* makeHarness({ worktreePath: "/worktrees/deleted", branch: "deleted" });
+      const inspected = yield* h.call("thread_workspace_inspect", {});
+      expect(inspected.status.isRepo).toBe(false);
+      expect(inspected.refs.refs[0]?.name).toBe("main");
+      const selected = yield* h.call("thread_workspace_select", { branch: "task" });
+      expect(selected.cwd).toBe("/worktrees/task");
+      expect(h.commands[0]).toMatchObject({
+        worktreePath: "/worktrees/task",
+        expectedWorktreePath: "/worktrees/deleted",
+      });
+      expect(h.creations).toEqual([]);
+    }).pipe(Effect.scoped),
+  );
+  it.effect("recovers a missing secondary checkout without changing the primary", () =>
+    Effect.gen(function* () {
+      const h = yield* makeHarness({
+        workspaceSelections: [
+          { workspaceRoot: "/backend", cwd: "/backend/deleted", branch: "deleted" },
+        ],
+      });
+      const selected = yield* h.call("thread_workspace_select", {
+        workspaceRoot: "/backend",
+        path: "/backend/task",
+      });
+      expect(selected.cwd).toBe("/backend/task");
+      expect(h.commands[0]).toMatchObject({
+        workspaceSelection: { workspaceRoot: "/backend", cwd: "/backend/task" },
+        expectedWorkspaceCwd: "/backend/deleted",
+      });
+      expect(h.commands[0]).not.toHaveProperty("worktreePath");
+    }).pipe(Effect.scoped),
+  );
+  it.effect("does not recover a missing primary checkout while work is active", () =>
+    Effect.gen(function* () {
+      const h = yield* makeHarness({
+        worktreePath: "/worktrees/deleted",
+        activityRunStatus: "running",
+      });
+      yield* h.call("thread_workspace_select", { path: "/repo" }).pipe(Effect.flip);
+      expect(h.commands).toEqual([]);
+      expect(h.creations).toEqual([]);
+    }).pipe(Effect.scoped),
+  );
   it.effect("selects each repository independently and preserves the primary checkout", () =>
     Effect.gen(function* () {
-      const h = yield* makeHarness();
+      const h = yield* makeHarness({});
       const selected = yield* h.call("thread_workspace_select", {
         workspaceRoot: "/backend",
         branch: "task",
@@ -275,7 +325,7 @@ describe("thread workspace MCP", () => {
   );
   it.effect("rejects ambiguous selection without changes", () =>
     Effect.gen(function* () {
-      const h = yield* makeHarness();
+      const h = yield* makeHarness({});
       for (const input of [{}, { path: "/repo", branch: "main" }]) {
         const error = yield* h.call("thread_workspace_select", input).pipe(Effect.flip);
         expect(error.message).toContain("exactly one");
@@ -286,7 +336,7 @@ describe("thread workspace MCP", () => {
   );
   it.effect("inspects without mutation and preserves ref pagination", () =>
     Effect.gen(function* () {
-      const h = yield* makeHarness();
+      const h = yield* makeHarness({});
       const result = yield* h.call("thread_workspace_inspect", {});
       expect(result.cwd).toBe("/repo");
       expect(result.refs.nextCursor).toBe(1);
@@ -295,7 +345,7 @@ describe("thread workspace MCP", () => {
   );
   it.effect("creates from the requested base and selects only the token's thread", () =>
     Effect.gen(function* () {
-      const h = yield* makeHarness();
+      const h = yield* makeHarness({});
       const result = yield* h.call("thread_workspace_create", {
         mode: "worktree",
         branch: "task",
@@ -315,7 +365,7 @@ describe("thread workspace MCP", () => {
   );
   it.effect("selects older worktrees across ref pages and can return to the project root", () =>
     Effect.gen(function* () {
-      const h = yield* makeHarness();
+      const h = yield* makeHarness({});
       expect((yield* h.call("thread_workspace_select", { branch: "task" })).cwd).toBe(
         "/worktrees/task",
       );
@@ -326,7 +376,7 @@ describe("thread workspace MCP", () => {
   );
   it.effect("rejects unrelated directories without mutation", () =>
     Effect.gen(function* () {
-      const h = yield* makeHarness();
+      const h = yield* makeHarness({});
       const error = yield* h
         .call("thread_workspace_select", { path: "/unrelated/repo" })
         .pipe(Effect.flip);
@@ -336,7 +386,7 @@ describe("thread workspace MCP", () => {
   );
   it.effect("rejects missing capabilities and stale sessions before any mutation", () =>
     Effect.gen(function* () {
-      const h = yield* makeHarness();
+      const h = yield* makeHarness({});
       yield* h
         .call("thread_workspace_create", { mode: "worktree", branch: "task" }, [])
         .pipe(Effect.flip);

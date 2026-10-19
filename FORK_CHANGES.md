@@ -1,5 +1,24 @@
 # Fork Changes
 
+## Files checkout recovery, 2026-10-18
+
+- Discover checkout choices through each repository's configured root, rather than its selected
+  worktree. A removed worktree previously hid the Files picker and prevented the server from
+  selecting a live sibling checkout. Keep the selected directory visible until an explicit choice.
+- Workspace inspection and selection share this recovery behavior across web/desktop, mobile and
+  MCP. Selection still validates repository membership, protects active primary work and preserves
+  independent secondary selections. Branch selection can create a checkout from the configured root.
+- Sources: `apps/web/src/components/files/FileWorktreeToolbar.tsx`,
+  `apps/server/src/workspace/ThreadWorkspaces.ts` and their component/MCP regression tests.
+- Compared Files components, workspace services and shared thread workspace selection against the
+  pre-sync fork: those implementations survived the October 18 merges unchanged. The reported
+  directory no longer exists; this change repairs the recovery path without recreating that checkout.
+- Validation: Chromium regression reproduced the hidden picker before the fix; server regressions
+  reproduced failed primary/secondary recovery. All 111 focused Files/workspace tests pass, covering recovery,
+  pagination, active-work protection, independent repositories, file revisions and editor retention.
+  Web/server typechecks and scoped lint pass (existing styling/React warnings remain).
+  Integrated Browser-panel verification is unavailable because its tools are absent in this session.
+
 ## Provider discovery after a macOS shell timeout, 2026-10-18
 
 - If the desktop login-shell probe fails or times out, add existing `~/.local/bin`,

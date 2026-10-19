@@ -85,6 +85,23 @@ afterEach(async () => {
 });
 
 describe("repository checkout controls", () => {
+  it("allows recovering from a deleted selected checkout using the configured repository", async () => {
+    pages.set("/backend/deleted:0", { isRepo: false, refs: [], nextCursor: null });
+    await render(
+      <FileWorktreeToolbar
+        environmentId={environmentId}
+        threadRef={threadRef}
+        root={{ ...root("backend"), path: "/backend/deleted" }}
+      />,
+    );
+    expect(container.textContent).toContain("deleted");
+    await openMenu("backend");
+    await act(async () => userEvent.click(await findMenuItem("menuitemradio", "/backend/task")));
+    expect(select).toHaveBeenCalledExactlyOnceWith({
+      environmentId,
+      input: { threadId: threadRef.threadId, workspaceRoot: "/backend", path: "/backend/task" },
+    });
+  });
   it("sends the selected repository identity and leaves the primary control unchanged", async () => {
     await render(
       <>
