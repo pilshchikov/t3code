@@ -1,5 +1,24 @@
 # Fork Changes
 
+## Claude conversation forks respect account history, 2026-10-19
+
+- Native Claude forks run the existing history worker with the selected provider instance's
+  environment. The SDK's process-global history lookup no longer reads the server's default
+  account instead of a custom `CLAUDE_CONFIG_DIR` or `HOME`; concurrent profiles stay isolated
+  (`ClaudeAdapterV2.ts`). Node/desktop builds use the sibling worker entry and standalone
+  executables use the existing hidden history subcommand.
+- If the source session is absent from the current checkout's project directory, search the
+  selected account's other project directories. Preserve the requested message cursor and never
+  fall back to another account (`claudeHistoryWorker.ts`). This allows forks after checkout
+  changes or removal of the original worktree.
+- Validation: eight focused query-runner/native-fork/MCP-channel tests pass, including real SDK
+  forks of concurrent account fixtures, HOME overrides, cursor truncation and missing-session
+  account isolation. The two positive account regressions fail against unchanged HEAD. Four
+  subagent-effort tests in the wider adapter file also fail against unchanged HEAD. An isolated
+  copy of the reported source transcript successfully forks at the requested assistant message;
+  live history is not modified. Server typechecking and changed-file lint pass (one existing
+  unused-binding warning).
+
 ## Daily upstream integration — 2026-10-19 (34c5a6d446)
 
 - Merge target `34c5a6d4461ff7be2c1a059c3c51c3496c1e14df`, fork parent

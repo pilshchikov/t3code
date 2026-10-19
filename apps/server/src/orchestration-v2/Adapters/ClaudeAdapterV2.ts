@@ -23,7 +23,6 @@ import { normalizeClaudeTurnTokenUsage } from "../../provider/ClaudeTurnTokenUsa
 import {
   type CanUseTool,
   type HookCallback,
-  forkSession as forkClaudeSession,
   type EffortLevel,
   type ForkSessionOptions,
   type ForkSessionResult,
@@ -50,6 +49,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk/sdk-tools";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- the SDK takes a Node ChildProcess for the CLI.
 import * as NodeChildProcess from "node:child_process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { parseCliArgs } from "@t3tools/shared/cliArgs";
 import { AgentScope } from "@t3tools/shared/AgentScope";
 import * as HostProcess from "@t3tools/shared/HostProcess";
@@ -508,9 +508,23 @@ export class ClaudeAgentSdkQueryRunner extends Context.Service<
 export interface ClaudeAgentSdkSessionForkInput {
   readonly sessionId: string;
   readonly options: ForkSessionOptions;
+  readonly environment: NodeJS.ProcessEnv;
   readonly threadId: ThreadId;
   readonly providerSessionId: OrchestrationV2ProviderSession["id"];
 }
+
+const encodeClaudeForkOptions = Schema.encodeEffect(
+  Schema.fromJsonString(
+    Schema.Struct({
+      dir: Schema.optionalKey(Schema.String),
+      upToMessageId: Schema.optionalKey(Schema.String),
+      title: Schema.optionalKey(Schema.String),
+    }),
+  ),
+);
+const decodeClaudeForkResult = Schema.decodeEffect(
+  Schema.fromJsonString(Schema.Struct({ sessionId: Schema.String })),
+);
 
 export interface ClaudeAgentSdkSubagentLookupInput {
   readonly sessionId: string;
@@ -744,7 +758,11 @@ export function makeClaudeAgentSdkProtocolLogger(input: {
 export const layerQueryRunner: Layer.Layer<
   ClaudeAgentSdkQueryRunner,
   never,
-  Crypto.Crypto | ProviderEventLoggers.ProviderEventLoggers
+  | Crypto.Crypto
+  | FileSystem.FileSystem
+  | Path.Path
+  | ChildProcessSpawner.ChildProcessSpawner
+  | ProviderEventLoggers.ProviderEventLoggers
 > = Layer.effect(
   ClaudeAgentSdkQueryRunner,
   Effect.gen(function* () {
@@ -752,6 +770,12 @@ export const layerQueryRunner: Layer.Layer<
     const { native: nativeEventLogger } = yield* ProviderEventLoggers.ProviderEventLoggers;
     const agentScope = yield* AgentScope;
     const platform = yield* HostProcess.Platform;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const executable = yield* HostProcess.ExecutablePath;
+    const args = yield* HostProcess.Arguments;
+    const isExecutable = yield* HostProcess.IsExecutable;
 
     return ClaudeAgentSdkQueryRunner.of({
       allocateSessionId: crypto
@@ -1015,10 +1039,52 @@ export const layerQueryRunner: Layer.Layer<
             options: input.options,
           },
         });
-        const result = yield* Effect.tryPromise({
-          try: () => forkClaudeSession(input.sessionId, input.options),
-          catch: (cause) => queryRunnerError(cause, "forkSession"),
-        });
+        // The SDK history API reads process-global HOME/CLAUDE_CONFIG_DIR. A
+        // separate process keeps concurrent account instances isolated.
+        const result = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const workerArgs = [
+              "forkSession",
+              input.sessionId,
+              yield* encodeClaudeForkOptions(input.options),
+            ];
+            let commandArgs: string[];
+            if (isExecutable) {
+              commandArgs = ["__claude-history", ...workerArgs];
+            } else {
+              const entry = yield* fileSystem.realPath(args[1] ?? "");
+              const extension = entry.endsWith(".ts") ? ".ts" : ".mjs";
+              commandArgs = [
+                path.join(path.dirname(entry), `claude-history-worker${extension}`),
+                ...workerArgs,
+              ];
+            }
+            const child = yield* spawner.spawn(
+              ChildProcess.make(executable, commandArgs, { env: input.environment }),
+            );
+            const [stdout, stderr, exitCode] = yield* Effect.all(
+              [
+                Stream.mkString(Stream.decodeText(child.stdout)),
+                Stream.mkString(Stream.decodeText(child.stderr)),
+                child.exitCode,
+              ],
+              { concurrency: "unbounded" },
+            );
+            if (exitCode !== 0) {
+              return yield* queryRunnerError(
+                stderr.trim() || "Claude history worker failed.",
+                "forkSession",
+              );
+            }
+            return yield* decodeClaudeForkResult(stdout);
+          }),
+        ).pipe(
+          Effect.mapError((cause) =>
+            isClaudeAgentSdkQueryRunnerError(cause)
+              ? cause
+              : queryRunnerError(cause, "forkSession"),
+          ),
+        );
         yield* logProtocolEvent({
           direction: "incoming",
           stage: "decoded",
@@ -9582,6 +9648,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               const forked = yield* queryRunner.forkSession({
                 sessionId: sourceNativeThreadId,
                 options: forkOptions,
+                environment: adapterOptions.environment,
                 threadId: forkInput.targetThreadId,
                 providerSessionId: input.providerSessionId,
               });

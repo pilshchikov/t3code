@@ -95,6 +95,150 @@ const realQueryRunner = layerQueryRunner.pipe(
   Layer.provide(NodeServices.layer),
 );
 
+describe("Claude account history forks", () => {
+  const sessionId = "11111111-1111-4111-8111-111111111111";
+  const cursor = "22222222-2222-4222-8222-222222222222";
+  const sourceDirectory = "-original-worktree";
+  const writeTranscript = (configDir: string, text: string) => {
+    const project = NodePath.join(configDir, "projects", sourceDirectory);
+    NodeFS.mkdirSync(project, { recursive: true });
+    NodeFS.writeFileSync(
+      NodePath.join(project, `${sessionId}.jsonl`),
+      [
+        {
+          type: "user",
+          uuid: "33333333-3333-4333-8333-333333333333",
+          parentUuid: null,
+          sessionId,
+          message: { role: "user", content: text },
+        },
+        {
+          type: "assistant",
+          uuid: cursor,
+          parentUuid: "33333333-3333-4333-8333-333333333333",
+          sessionId,
+          message: { role: "assistant", content: [{ type: "text", text }] },
+        },
+        {
+          type: "user",
+          uuid: "44444444-4444-4444-8444-444444444444",
+          parentUuid: cursor,
+          sessionId,
+          message: { role: "user", content: "after-fork-cursor" },
+        },
+      ]
+        .map((line) => JSON.stringify(line))
+        .join("\n") + "\n",
+    );
+  };
+  const withFixture = <E>(
+    test: (root: string) => Effect.Effect<void, E, ClaudeAgentSdkQueryRunner>,
+  ) =>
+    Effect.gen(function* () {
+      const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-claude-fork-"));
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => NodeFS.rmSync(root, { recursive: true, force: true })),
+      );
+      yield* test(root);
+    }).pipe(
+      Effect.provide(realQueryRunner),
+      Effect.provideService(HostProcess.Arguments, [
+        process.execPath,
+        new URL("../../bin.ts", import.meta.url).pathname,
+      ]),
+    );
+
+  it.effect(
+    "forks concurrent account histories after changing worktrees, at the requested cursor",
+    () =>
+      withFixture((root) =>
+        Effect.gen(function* () {
+          const runner = yield* ClaudeAgentSdkQueryRunner;
+          const results = yield* Effect.all(
+            ["work", "personal"].map((account) =>
+              Effect.gen(function* () {
+                const configDir = NodePath.join(root, account);
+                writeTranscript(configDir, `${account}-history`);
+                const result = yield* runner.forkSession({
+                  sessionId,
+                  options: { dir: root, upToMessageId: cursor },
+                  environment: { ...process.env, HOME: root, CLAUDE_CONFIG_DIR: configDir },
+                  threadId: ThreadId.make(`fork-${account}`),
+                  providerSessionId: ProviderSessionId.make(`session-${account}`),
+                });
+                const contents = NodeFS.readFileSync(
+                  NodePath.join(
+                    configDir,
+                    "projects",
+                    sourceDirectory,
+                    `${result.sessionId}.jsonl`,
+                  ),
+                  "utf8",
+                );
+                assert.include(contents, `${account}-history`);
+                assert.notInclude(contents, "after-fork-cursor");
+                return result.sessionId;
+              }),
+            ),
+            { concurrency: "unbounded" },
+          );
+          assert.notEqual(results[0], results[1]);
+        }),
+      ),
+  );
+
+  it.effect("uses a profile's HOME when no config directory is set", () =>
+    withFixture((root) =>
+      Effect.gen(function* () {
+        const runner = yield* ClaudeAgentSdkQueryRunner;
+        const configDir = NodePath.join(root, ".claude");
+        writeTranscript(configDir, "home-profile-history");
+        const result = yield* runner.forkSession({
+          sessionId,
+          options: {},
+          environment: { ...process.env, HOME: root, CLAUDE_CONFIG_DIR: undefined },
+          threadId: ThreadId.make("fork-home"),
+          providerSessionId: ProviderSessionId.make("session-home"),
+        });
+        assert.include(
+          NodeFS.readFileSync(
+            NodePath.join(configDir, "projects", sourceDirectory, `${result.sessionId}.jsonl`),
+            "utf8",
+          ),
+          "home-profile-history",
+        );
+      }),
+    ),
+  );
+
+  it.effect("does not fall back to another account when the selected account has no session", () =>
+    withFixture((root) =>
+      Effect.gen(function* () {
+        const runner = yield* ClaudeAgentSdkQueryRunner;
+        writeTranscript(NodePath.join(root, ".claude"), "wrong-account-history");
+        const result = yield* Effect.exit(
+          runner.forkSession({
+            sessionId,
+            options: { dir: root },
+            environment: {
+              ...process.env,
+              HOME: root,
+              CLAUDE_CONFIG_DIR: NodePath.join(root, "work"),
+            },
+            threadId: ThreadId.make("fork-missing"),
+            providerSessionId: ProviderSessionId.make("session-missing"),
+          }),
+        );
+        assert.isTrue(Exit.isFailure(result));
+        assert.deepEqual(
+          NodeFS.readdirSync(NodePath.join(root, ".claude", "projects", sourceDirectory)),
+          [`${sessionId}.jsonl`],
+        );
+      }),
+    ),
+  );
+});
+
 function fakeClaudeCli(script: string): string {
   const dir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-claude-cli-"));
   const cli = NodePath.join(dir, "claude");
