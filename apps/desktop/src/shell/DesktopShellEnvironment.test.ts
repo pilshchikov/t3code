@@ -1,6 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as PlatformError from "effect/PlatformError";
@@ -76,6 +77,7 @@ function runShellEnvironment(input: {
     command: ChildProcess.Command,
   ) => string | { output: string; exitCode: number };
   readonly failure?: PlatformError.PlatformError;
+  readonly fileSystem?: FileSystem.FileSystem;
 }) {
   const layerEnvironment = Layer.succeed(
     DesktopEnvironment.DesktopEnvironment,
@@ -104,7 +106,14 @@ function runShellEnvironment(input: {
   }).pipe(
     Effect.provide(
       DesktopShellEnvironment.layer.pipe(
-        Layer.provide(Layer.mergeAll(layerEnvironment, NodeServices.layer, layerSpawner)),
+        Layer.provide(
+          Layer.mergeAll(
+            layerEnvironment,
+            NodeServices.layer,
+            layerSpawner,
+            input.fileSystem ? Layer.succeed(FileSystem.FileSystem, input.fileSystem) : Layer.empty,
+          ),
+        ),
       ),
     ),
   );
@@ -427,6 +436,9 @@ describe("DesktopShellEnvironment", () => {
       yield* runShellEnvironment({
         env,
         platform: "darwin",
+        fileSystem: FileSystem.makeNoop({
+          exists: (path) => Effect.succeed(path === "/opt/homebrew/bin"),
+        }),
         handler: (command) => {
           if (command._tag !== "StandardCommand") return "";
           commands.push(command.command);
@@ -436,6 +448,30 @@ describe("DesktopShellEnvironment", () => {
 
       assert.deepEqual(commands, ["/opt/homebrew/bin/nu", "/bin/zsh", "/bin/launchctl"]);
       assert.equal(env.PATH, "/opt/homebrew/bin:/usr/bin");
+    }),
+  );
+
+  it.effect("finds native and Homebrew CLIs when macOS only returns a system PATH", () =>
+    Effect.gen(function* () {
+      const env: NodeJS.ProcessEnv = {
+        HOME: "/Users/test",
+        SHELL: "/bin/zsh",
+        PATH: "/custom/bin:/usr/bin",
+      };
+      yield* runShellEnvironment({
+        env,
+        platform: "darwin",
+        fileSystem: FileSystem.makeNoop({
+          exists: (path) =>
+            Effect.succeed(path === "/Users/test/.local/bin" || path === "/opt/homebrew/bin"),
+        }),
+        handler: (command) =>
+          command._tag === "StandardCommand" && command.command === "/bin/launchctl"
+            ? "/usr/bin:/bin"
+            : "",
+      });
+
+      assert.equal(env.PATH, "/usr/bin:/bin:/custom/bin:/Users/test/.local/bin:/opt/homebrew/bin");
     }),
   );
 

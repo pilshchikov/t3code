@@ -1,5 +1,16 @@
 # Fork Changes
 
+## Provider discovery after a macOS shell timeout, 2026-10-18
+
+- If the desktop login-shell probe fails or times out, add existing `~/.local/bin`,
+  `/opt/homebrew/bin` and `/usr/local/bin` directories after the inherited and launchctl PATH.
+  A system-only launchd PATH previously hid native Claude and Homebrew Codex installations after
+  restart. Successful shell hydration keeps its existing behavior and account settings are unchanged.
+- Sources: `apps/desktop/src/shell/DesktopShellEnvironment.ts` and its test.
+- Validation: the new regression failed before the fix; all 23 shell environment tests now pass,
+  along with desktop typecheck and scoped lint. The fallback test covers a system-only launchctl
+  PATH, preserves inherited entries and omits nonexistent installation directories.
+
 ## Headless relay telemetry remains disabled, 2026-10-18
 
 - The headless CLI and environment server now pass no collector configuration to relay tracing,

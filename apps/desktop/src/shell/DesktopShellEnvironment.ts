@@ -422,9 +422,25 @@ const installPosixEnvironment = Effect.fn("desktop.shellEnvironment.installPosix
       config.platform === "darwin" && !shellEnvironment.PATH
         ? yield* readLaunchctlPath
         : Option.none<string>();
+    // After a slow shell times out, launchd often has only macOS system paths.
+    // Keep native CLI and Homebrew installs reachable without a second shell probe.
+    const fallbackPaths: string[] = [];
+    if (config.platform === "darwin" && !shellEnvironment.PATH) {
+      const homeDirectory = config.env.HOME?.trim();
+      for (const directory of [
+        ...(homeDirectory ? [`${homeDirectory}/.local/bin`] : []),
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+      ]) {
+        if (yield* fileSystem.exists(directory).pipe(Effect.orElseSucceed(() => false))) {
+          fallbackPaths.push(directory);
+        }
+      }
+    }
     const mergedPath = mergePaths(config.platform, [
       trimNonEmpty(shellEnvironment.PATH).pipe(Option.orElse(() => launchctlPath)),
       readEnvPath(config.env),
+      trimNonEmpty(fallbackPaths.join(":")),
     ]);
 
     if (Option.isSome(mergedPath)) {
