@@ -18,7 +18,7 @@ import {
   useEditorNavigationStore,
   type RecentEditorFile,
 } from "~/editorNavigationStore";
-import { useClientSettings, useUpdateClientSettings } from "~/hooks/useSettings";
+import { useClientSettings, updateClientSettings as updateSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import { projectEnvironment } from "~/state/projects";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
@@ -194,7 +194,6 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
   const navigate = useNavigate();
   const openCommandPalette = useOpenCommandPalette();
   const settings = useClientSettings();
-  const updateSettings = useUpdateClientSettings();
   const searchEntries = useAtomQueryRunner(projectEnvironment.searchEntries, {
     reportFailure: false,
   });

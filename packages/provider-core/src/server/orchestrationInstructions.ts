@@ -1,29 +1,33 @@
 import type { ProviderInteractionMode } from "@t3tools/contracts";
 
-export const T3_CODE_ORCHESTRATION_INSTRUCTIONS = `
-
-## T3 Code orchestration
+/**
+ * Authored as self-contained sections so a provider that limits the size of
+ * each instruction entry can deliver every one whole. Codex cuts the middle out
+ * of any entry over 4,000 bytes, so start a new section before one gets close.
+ */
+export const T3_CODE_ORCHESTRATION_SECTIONS: ReadonlyArray<string> = [
+  `## T3 Code orchestration
 
 The \`t3-code\` MCP server provides app-owned orchestration. Treat these concepts distinctly:
 
 - A delegated task/subagent is child work owned by the current thread. Use \`orchestrator_capabilities\` to discover the current provider/model IDs from the same live catalog as the composer, including configured custom models. Do not treat a native tool's model list as the full list of available subagent models. Prefer native subagent tools for same-provider work only when they support the chosen model. Use \`delegate_task\` with that provider instance and model when native tools cannot, including for same-provider work. Also use \`delegate_task\` for cross-provider or explicitly T3-owned child tasks. For a child task that needs a separate checkout, use \`delegate_task\` with \`isolation:"worktree"\` across any provider or model. It starts from the parent local commit and runs project setup; uncommitted edits are not copied. Retain each returned \`taskId\`, and use \`task_status\` or \`task_cancel\` to manage it. The returned \`childThreadId\` is backing storage for the subagent, not the target for starting another delegated review round.
 - \`t3_thread_launch\` and \`create_threads\` create ordinary top-level T3 conversations. Use them only when the user explicitly asks for separate/new/top-level threads or conversations. Never use them merely because the user said "subagent" or requested parallel delegated work.
-- For every T3 delegated review round, call \`delegate_task\` again. Include the original brief, prior findings, responses, and unresolved objections in each new task prompt. Track each round by its own \`taskId\`. Use a distinct \`clientRequestId\` per round, stable across retries of that round. Do not use \`t3_thread_send\` on \`childThreadId\` to continue a delegated review.
-- \`schedule_task\` creates persistent recurring work in the app scheduler. Pass \`schedule\` as a structured object, never as JSON text: \`{"type":"interval","everyMs":3600000}\` for an interval, or \`{"type":"fixed_time","timeOfDay":"09:00","weekdays":[1,2,3,4,5]}\` for a wall-clock schedule, or \`{"type":"webhook"}\` to run on each request to the returned \`webhookUrl\` (the run sees the request only through \`{{body.path}}\`-style placeholders in the prompt). By default runs return to the current thread, which suits orchestrating: each trigger arrives here and you delegate or dedupe; set \`bindToCurrentThread=false\` only when the user wants a fresh thread for every run. After scheduling a timer, report the returned cadence and next run time; for a webhook, report its \`webhookUrl\`, or say T3 Connect remote access is needed if it is missing.
+- For every T3 delegated review round, call \`delegate_task\` again. Include the original brief, prior findings, responses, and unresolved objections in each new task prompt. Track each round by its own \`taskId\`. Use a distinct \`clientRequestId\` per round, stable across retries of that round. Do not use \`t3_thread_send\` on \`childThreadId\` to continue a delegated review.`,
+  `- \`schedule_task\` creates persistent recurring work in the app scheduler. Pass \`schedule\` as a structured object, never as JSON text: \`{"type":"interval","everyMs":3600000}\` for an interval, or \`{"type":"fixed_time","timeOfDay":"09:00","weekdays":[1,2,3,4,5]}\` for a wall-clock schedule, or \`{"type":"webhook"}\` to run on each request to the returned \`webhookUrl\` (the run sees the request only through \`{{body.path}}\`-style placeholders in the prompt). By default runs return to the current thread, which suits orchestrating: each trigger arrives here and you delegate or dedupe; set \`bindToCurrentThread=false\` only when the user wants a fresh thread for every run. After scheduling a timer, report the returned cadence and next run time; for a webhook, report its \`webhookUrl\`, or say T3 Connect remote access is needed if it is missing.
 - When you need a secret from the user (a token, API key, or webhook signing secret), call \`request_secret\` so they enter it privately, then pass the returned \`secretRef\` to the tool that needs it, e.g. \`signature.secretRef\` on a webhook task for a sender that signs requests such as GitHub. A \`secretRef\` works once. Never ask for a secret in chat, never invent one, and never repeat one.
 - To mention another thread to the user, link it as \`[title](t3-thread://v1/<threadId>)\` with its exact \`threadId\`, not URL-encoded. T3 Code opens the thread in the app and shows its current title.
-
-### Messages between agents
+`,
+  `### Messages between agents
 
 To ask an agent in another T3 conversation or on another machine, use \`t3_peers_list\`, then \`t3_peer_threads_list\` with the destination environmentId and projectId. Use \`includeSubagents:true\` to find T3-managed child and sibling agents. \`self.environmentId\` addresses this machine. Read with \`t3_peer_thread_read\`, and send an actual attributed conversation message with \`t3_peer_thread_send\`; a note pushed through Git is not a delivered chat message. Keep each \`clientRequestId\` stable across retries. Select \`watch:"once"\` to receive this reply, \`watch:"continuous"\` for subsequent replies until stopped, or \`watch:"none"\` when no wake is needed. A watch lets you end the turn; do not start a polling shell or a second monitor. \`t3_peer_thread_watches\` lists watches and \`t3_peer_thread_unwatch\` stops one without stopping the recipient. Stop/archive/settlement clears your watches. Parent agents can read, send to, and watch their T3-owned children's conversations, including exchanges with siblings; keep new delegated review rounds on \`delegate_task\`.
 
 For provider-native subagents in this session, use the native messaging tool (Claude \`SendMessage\`, Codex \`send_input\`) rather than sending an ordinary T3 turn to their imported child thread. Give Claude workers distinct names and access to \`SendMessage\` so siblings and the parent can address each other. These exchanges are recorded as native tool activity. The parent may read their transcripts and participate through the same native tools. Cross-environment T3 messages use the existing app connections, including direct SSH; the desktop/web app must remain connected to both environments.
-
-### Read usage and account limits
+`,
+  `### Read usage and account limits
 
 Use \`t3_usage_limits_read\` to read this environment's Usage → Limits data for Claude, Codex and other configured provider accounts and hubs, even when your native harness cannot report usage. It identifies your calling provider instance and keeps each account's windows and reset times separate. Request \`{"refresh":true}\` when a fresh probe is needed; check \`checkedAt\`, missing limits and \`unavailable\` before treating a reading as current. Missing data never means zero usage or unlimited quota. Use \`t3_usage_read\` for the Usage page's token/cost history (defaults to today in UTC); pass an explicit date range and time zone when needed. Token totals and estimated costs are not remaining subscription quota. Limits include connected environments by default through the app's existing connections. Inspect ALL provider entries and their environment labels: a token-only Claude instance reporting unsupported does not invalidate another machine's named Claude accounts. Check coverageComplete, environments and notices; disconnected/missing machines have unknown quotas, not safe quotas. Keep an updated app open and connected to both machines. Do not add duplicated subscription allowances across machines. Use includeConnected:false only for an explicitly local quota check. Token/cost history still reads this server only. For a lazy MCP catalog, try the known tool name directly before concluding it is unavailable. Do not inspect credential files or start another provider session just to estimate usage.
-
-### Choose the workspace before starting a new thread
+`,
+  `### Choose the workspace before starting a new thread
 
 For independent implementation or a PR stack in its own worktree, use \`t3_thread_launch\` with an explicit \`workspaceStrategy\`. It creates or selects the workspace, binds the new thread to it, and prepares it before the agent starts. Put the task in \`message\`, not \`prompt\`:
 
@@ -35,15 +39,19 @@ For stacked work, set \`baseRef\` to the intended parent branch and \`startFromO
 
 \`t3_thread_launch\` is the single-thread launch tool. Use \`create_threads\` only for a batch of threads intentionally sharing the caller's checkout: it always inherits the caller's project, branch, and worktree and has no workspace override. Asking an agent to run \`git worktree add\` or \`cd\` in its prompt does not update T3's thread binding. Select the workspace in the launch call instead. \`t3_worktree_handoff\` moves the calling thread, not another thread, and cannot move a thread already attached to a worktree.
 
-\`t3_thread_launch\` has no idempotency key. Retain its returned threadId and inspect it with \`t3_thread_read\` / \`t3_thread_wait\`; preparation can still be running after acceptance. If a launch fails or its response is lost, inspect \`t3_thread_list\` before retrying, since a thread may already exist.
-
-Tool names may include a harness-normalized MCP prefix, such as \`mcp__t3_code__delegate_task\`; the semantics are the same. Some harnesses attach optional MCP servers lazily: if an initial tool-catalog scan does not show T3 tools, do not conclude that cross-provider delegation is unavailable. Make one bounded direct attempt using the known T3 tool name on the next tool step. In Codex code mode, for example, call \`tools.mcp__t3_code__orchestrator_capabilities({})\` before reporting that the capability is absent. Keep polling/wait loops bounded, do not duplicate active work, and use stable \`clientRequestId\` values when retrying tools that accept them.
+\`t3_thread_launch\` has no idempotency key. Retain its returned threadId and inspect it with \`t3_thread_read\` / \`t3_thread_wait\`; preparation can still be running after acceptance. If a launch fails or its response is lost, inspect \`t3_thread_list\` before retrying, since a thread may already exist.`,
+  `Tool names may include a harness-normalized MCP prefix, such as \`mcp__t3_code__delegate_task\`; the semantics are the same. Some harnesses attach optional MCP servers lazily: if an initial tool-catalog scan does not show T3 tools, do not conclude that cross-provider delegation is unavailable. Make one bounded direct attempt using the known T3 tool name on the next tool step. In Codex code mode, for example, call \`tools.mcp__t3_code__orchestrator_capabilities({})\` before reporting that the capability is absent. Keep polling/wait loops bounded, do not duplicate active work, and use stable \`clientRequestId\` values when retrying tools that accept them.
 
 ACP fallback: some ACP agents accept the injected MCP server but fail to expose its tools. When the T3 tools are absent and \`T3_ACP_MCP_NODE\` is present, call the same tools through the terminal: \`ELECTRON_RUN_AS_NODE=1 "$T3_ACP_MCP_NODE" \${T3_ACP_MCP_ENTRYPOINT:+"$T3_ACP_MCP_ENTRYPOINT"} acp-mcp-call orchestrator_capabilities '{}'\` (\`T3_ACP_MCP_ENTRYPOINT\` is unset when T3 runs as a standalone executable). Delegate with \`acp-mcp-call delegate_task '{"task":"...","target":{"providerInstanceId":"...","model":"..."},"mode":"async","clientRequestId":"..."}'\`. This is the supported T3 transport fallback, not an ordinary shell-based substitute for delegation.
 
 ### Showing visuals
 
-When a chart, table, diagram, image collage, or mockup would say more than prose, build a self-contained HTML page, check it with \`html_preview\`, then publish it with \`html_render\` before your final reply. The reader sees the page above that reply, so don't announce or restate it; add only what it doesn't say.
+When a chart, table, diagram, image collage, or mockup would say more than prose, build a self-contained HTML page, check it with \`html_preview\`, then publish it with \`html_render\` before your final reply. The reader sees the page above that reply, so don't announce or restate it; add only what it doesn't say.`,
+];
+
+export const T3_CODE_ORCHESTRATION_INSTRUCTIONS = `
+
+${T3_CODE_ORCHESTRATION_SECTIONS.join("\n\n")}
 `;
 
 export const T3_CODE_BROWSER_TOOL_INSTRUCTIONS = `

@@ -1,3 +1,4 @@
+import { PullRequestGlyph } from "./pullRequest/pullRequestIcons";
 import type { CodeViewDiffItem } from "@pierre/diffs";
 import type { EnvironmentId, GitHistoryCommit, ProjectWorkspace } from "@t3tools/contracts";
 import {
@@ -5,7 +6,6 @@ import {
   CircleDotIcon,
   FilesIcon,
   GitBranchIcon,
-  GitMergeIcon,
   LoaderCircleIcon,
   RefreshCwIcon,
   Columns2Icon,
@@ -18,7 +18,7 @@ import { useTheme } from "~/hooks/useTheme";
 import { workspaceDisplayName } from "~/lib/projectWorkspacePresentation";
 import { cn } from "~/lib/utils";
 import { gitEnvironment } from "~/state/git";
-import { useClientSettings, useUpdateClientSettings } from "~/hooks/useSettings";
+import { useClientSettings, updateClientSettings } from "~/hooks/useSettings";
 import {
   buildFileDiffRenderKey,
   getRenderablePatch,
@@ -80,7 +80,7 @@ function CommitRow(props: { commit: GitHistoryCommit; selected: boolean; onSelec
         <span className="absolute inset-y-[-9px] left-1/2 w-px -translate-x-1/2 bg-border" />
         <span className="relative z-10 flex size-4 items-center justify-center rounded-full bg-background ring-1 ring-border group-hover:ring-foreground/30">
           {isMerge ? (
-            <GitMergeIcon className="size-2.5 text-violet-500" />
+            <PullRequestGlyph.merged className="size-2.5 text-violet-500" />
           ) : (
             <CircleDotIcon className="size-2.5 text-blue-500" />
           )}
@@ -174,7 +174,6 @@ export default function GitHistoryPanel(props: {
       : null,
   );
   const diffRenderMode = useClientSettings().diffLayout;
-  const updateClientSettings = useUpdateClientSettings();
   const setDiffRenderMode = (diffLayout: "stacked" | "split") =>
     updateClientSettings({ diffLayout });
   const [wordWrap, setWordWrap] = useState(false);
@@ -224,7 +223,7 @@ export default function GitHistoryPanel(props: {
       >
         {roots.length > 1 ? (
           <DropdownMenu>
-            <DropdownMenuTrigger className="inline-flex h-7 min-w-0 max-w-52 items-center gap-1.5 rounded-md px-2 text-xs font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <DropdownMenuTrigger className="inline-flex h-7 min-w-0 max-w-52 items-center gap-1.5 rounded-md px-2 text-xs font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
               <GitBranchIcon className="size-3.5 shrink-0" />
               <span className="truncate">
                 {activeRoot ? workspaceDisplayName(activeRoot, activeRootIndex) : "Repository"}

@@ -1,5 +1,84 @@
 # Fork Changes
 
+## Daily upstream integration — 2026-10-19 (34c5a6d446)
+
+- Merge target `34c5a6d4461ff7be2c1a059c3c51c3496c1e14df`, fork parent
+  `29f3285ac6fefafdda06633381a800478ed40ed8`. Integrates all 343 incoming commits
+  with a real merge and both histories intact. Reviewed the upstream changes and
+  fork differences, including all 121 paths changed on both sides and automatic
+  merges; resolved the 26 conflicted paths individually.
+- Preserve the native Files tree, deletion/undo, editor navigation, multi-root
+  selectors, selected checkout recovery, independent collapse/resize persistence,
+  and file-revision/dirty-editor protection. Accept upstream Markdown task edits,
+  browser reveal capability and PDF previews; propagate workspace mutation identity
+  into the rendered Markdown surface. The new PDF asset helper retains the shared
+  host's environment gateway prefix instead of routing to the host's default environment
+  (`FileBrowserPanel.tsx`, `FilePreviewPanel.tsx`, `packages/shared/src/preview.ts`).
+  Adapt the fork-only history/editor navigation consumers to upstream's direct
+  `updateClientSettings` API; use the shared merge glyph and inset focus ring.
+- Claude's capability probe retries transient failures and can reuse capabilities
+  only for the same account organization, without treating failed/fallback probes
+  as fresh usage. Reset-credit/account lookup and empty-transcript recovery follow
+  the CLI's configured `HOME` and `CLAUDE_CONFIG_DIR`; custom accounts must not fall
+  back to the process's default account. Worker effort hooks and child-specific
+  model/effort ingestion remain live (`ClaudeDriver.ts`, `ClaudeAdapterV2.ts`).
+- Keep stable alphabetical account columns, account accents, account/model history
+  identity and independent trend rows while accepting weekly-exhaustion suppression,
+  bounded refill estimates and new provider usage fields. The current pooled Limits
+  UI remains authoritative; superseded account-limit components are not restored
+  (`packages/shared/src/usageLimits.ts`, web/native usage components and user guide).
+- Register upstream's PR-link canonicalization as migration **69**, retaining every
+  released fork migration ID and the preview-history translation. Adapt the imported
+  migration expectations to the fork sequence. Thread forks drop upstream PR watches
+  and fork peer-response watches. Preserve two-hour terminal-PR unlinking, open-PR
+  inactivity protection, Never-default settlement, settled checkout cleanup and
+  guarded thread expiry (`Migrations.ts`, `ThreadForkService.ts`,
+  `PullRequestSyncReactor.ts`, `ThreadSettlementService.ts`, `storageCleanup.ts`).
+- Retain the no-op analytics boundary even with upstream's new feature instrumentation:
+  no analytics identifier, event buffer, delivery or flush is enabled. Update the
+  existing analytics architecture guidance to state this policy. Disabled OTLP/relay
+  export, opt-in provider/manifest network refresh and automatic updates, local
+  encrypted connection storage and persistent desktop identity remain connected.
+- Keep private per-root guidance, project memory, workspace/peer communication and
+  connected-environment quota MCP tools registered and injected into provider sessions.
+  Merge their instructions into upstream's separate Codex additional-context entries;
+  all six orchestration sections remain below the 4,000-byte entry cap (largest source
+  section 2,185 bytes). Keep the validated initial preparation run as the sole busy-guard
+  exception: it can bind/clear its checkout with queued follow-ups, but cannot bypass
+  active provider sessions, background work or pending input. Project-scoped automatic
+  compaction remains scheduled and rechecks eligibility and real quota recovery.
+- Trace live client mounts: `ChatView` → `ChatComposer` → `ComposerPrimaryActions` still
+  mounts `ComposerActionOrb` for Orb, uses the saved send color for send/resume/queue/
+  steer and saved stop color for both ordinary and pending-input Stop; Classic remains
+  selectable. Existing chats and draft heroes share unconditional mobile expansion,
+  without scroll/focus collapse. Preserve independent scroll recovery/bottom following,
+  custom chat width, first assistant text outside settled folds, mixed-work disclosure
+  labels and upstream's stable imported-thread identity. `ResumeSessionsSection` is
+  mounted and creates V2 native-session references; project-root Markdown links open
+  the explorer. Native mobile retains keyboard/inset guards and measured composer
+  width while accepting upstream's compiler/draft subscription changes and precise
+  iOS 27.1 SDK gate. Project rail groups/status dots/colors/slots, app accents, right
+  panel shortcuts, Git History/Commit/Structure surfaces, communication viewer and
+  per-root workspace controls remain reachable. Explicitly retired Multiwork and
+  machine sync stay retired; obsolete helpers do not replace their active successors.
+- Validation: frozen-lockfile dependency installation passed with lifecycle scripts
+  disabled. Repaired stale `vitest-browser-react` peer references left by the automatic
+  React 19.3 lockfile merge; package versions/integrity remain pinned. Scoped
+  `tsc-rs --noEmit` passed for all **25 affected workspaces**: the four app surfaces,
+  contracts/shared/client-runtime, affected provider/ACP/source-control/SSH/Tailscale
+  packages, relay, lint plugin and scripts. Server/web rechecks passed after the final
+  integration corrections. Changed-file lint passed for **722 files**, with **0 errors
+  and 311 warnings** (React dependencies/state/refs, existing styling, unused bindings,
+  and other advisory rules); typechecks also emit non-failing Effect suggestions.
+  Resolved files were formatted. Whitespace checks pass except two whitespace-bearing
+  context lines in the incoming dependency patch, retained verbatim for patch matching.
+- No tests were authored or executed; incoming tests were retained and conflicting
+  expectations adapted only. No app/native builds, browser/device/runtime verification,
+  packaging, dev servers, installed-app changes, process stops or live-userdata access.
+  No push, PR, external messages, subagents, main/other-worktree edits or schedule changes.
+  Native compilation and visual/behavioral runtime validation remain unperformed by
+  the owner's daily-merge constraint; these checks establish static integration only.
+
 ## Usage limits across connected environments, 2026-10-18
 
 - Quota MCP reads now include the other environments connected through the desktop/web app by

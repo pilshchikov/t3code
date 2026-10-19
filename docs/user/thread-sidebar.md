@@ -98,6 +98,13 @@ Drag within the pinned or active section to change its order across connected cl
 New threads appear above arranged work. On the mobile app, **Move up** and **Move down**
 update the same saved order. Older servers keep device-local active arrangements until upgraded.
 
+On native mobile, open a thread's menu and choose **Arrange threads**. Drag a handle within or between
+**Pinned** and **Active** to reorder, pin, or unpin. Drop onto the **Settled** divider to
+settle a thread. The dragged card shows the action before you release it. Expand **Snoozed**
+or **Settled** to drag a parked thread back into either live section. Each drop saves; close the sheet to return to the thread list.
+**Move up** and **Move down** are also available in the thread menu. The server
+saves the order, so it survives a refresh and appears on your other connected devices.
+
 In a mobile browser, swipe right from near the left edge to open the thread sidebar. Swipe left
 on the sidebar's empty space or headings to close it. The selected project filter is remembered
 on this device when you close the sidebar or reload the page.

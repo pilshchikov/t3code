@@ -23,7 +23,7 @@ vi.mock("~/commandPaletteContext", () => ({
 
 vi.mock("~/hooks/useSettings", () => ({
   useClientSettings: () => ({ showEditorTabs: true }),
-  useUpdateClientSettings: () => vi.fn(),
+  updateClientSettings: vi.fn(),
 }));
 
 vi.mock("~/state/projects", () => ({

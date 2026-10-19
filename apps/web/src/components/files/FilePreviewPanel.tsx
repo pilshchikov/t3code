@@ -25,6 +25,7 @@ import {
   isWorkspaceImagePreviewPath,
   isWorkspaceVideoPreviewPath,
 } from "@t3tools/shared/filePreview";
+import { useAtomValue } from "@effect/atom-react";
 import {
   DEFAULT_TOKENIZE_MAX_LENGTH,
   VirtualizedFile,
@@ -42,13 +43,7 @@ import {
   type EditorOptions,
 } from "@pierre/diffs/edit";
 import type { WorkerPoolManager } from "@pierre/diffs/worker";
-import {
-  EditProvider,
-  File,
-  type FileOptions,
-  Virtualizer,
-  useWorkerPool,
-} from "@pierre/diffs/react";
+import { EditProvider, File, Virtualizer, useWorkerPool } from "@pierre/diffs/react";
 import { DiffWorkerPoolProvider } from "../DiffWorkerPoolProvider";
 import { useFilesystemReadAccess } from "~/state/filesystem";
 import {
@@ -65,7 +60,6 @@ import {
   Globe2,
   GripHorizontal,
   LoaderCircle,
-  RefreshCw,
   X,
 } from "lucide-react";
 import { Code2, Eye, Table2 } from "lucide";
@@ -88,7 +82,7 @@ import {
 import { useExplorerViewStore } from "~/explorerViewStore";
 import { MorphIcon } from "~/components/MorphIcon";
 import { useRemoteOpenState } from "~/remoteOpen";
-import { useClientSettings, useUpdateClientSettings } from "~/hooks/useSettings";
+import { useClientSettings, updateClientSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { useWorkspaceMutationRefresh } from "~/hooks/useWorkspaceMutationRefresh";
@@ -114,7 +108,7 @@ import { usePreviewAvailable } from "~/browser/previewRuntime";
 import { useEnvironmentHttpBaseUrl, usePrimaryEnvironmentId } from "~/state/environments";
 import { previewEnvironment } from "~/state/preview";
 import { projectEnvironment } from "~/state/projects";
-import { useEnvironmentQuery } from "~/state/query";
+import { serverEnvironment } from "~/state/server";
 import { useEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
@@ -1098,7 +1092,8 @@ const RenderedMarkdownSurface = memo(function RenderedMarkdownSurface({
   relativePath,
   contents,
   threadRef,
-  readOnly: _readOnly,
+  workspaceMutationId,
+  readOnly,
   onPendingChange,
 }: Omit<
   EditableFileSurfaceProps,
@@ -1112,6 +1107,7 @@ const RenderedMarkdownSurface = memo(function RenderedMarkdownSurface({
 > & {
   threadRef: ScopedThreadRef;
   readOnly: boolean;
+  workspaceMutationId: string | null;
 }) {
   const saveCoordinator = useFileSaveCoordinator({
     environmentId,
@@ -1128,15 +1124,20 @@ const RenderedMarkdownSurface = memo(function RenderedMarkdownSurface({
         workspaceRoot={cwd}
         threadRef={threadRef}
         className="file-markdown-preview w-full px-6 py-5"
-        onTaskListChange={({ markerOffset, checked }) => {
-          const currentContents =
-            getOptimisticProjectFileQueryData(environmentId, cwd, relativePath)?.contents ??
-            contents;
-          const nextContents = setMarkdownTaskChecked(currentContents, markerOffset, checked);
-          if (nextContents === currentContents) return;
-          setProjectFileQueryData(environmentId, cwd, relativePath, nextContents);
-          saveCoordinator.change(nextContents);
-        }}
+        workspaceMutationId={workspaceMutationId}
+        onTaskListChange={
+          readOnly
+            ? undefined
+            : ({ markerOffset, checked }) => {
+                const currentContents =
+                  getOptimisticProjectFileQueryData(environmentId, cwd, relativePath)?.contents ??
+                  contents;
+                const nextContents = setMarkdownTaskChecked(currentContents, markerOffset, checked);
+                if (nextContents === currentContents) return;
+                setProjectFileQueryData(environmentId, cwd, relativePath, nextContents);
+                saveCoordinator.change(nextContents);
+              }
+        }
       />
     </ScrollArea>
   );
@@ -1430,6 +1431,7 @@ export default function FilePreviewPanel({
       ),
     [primaryCwd, projectRoot, workspaceRoots, workspaceSelections],
   );
+  const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
   const environmentHttpBaseUrl = useEnvironmentHttpBaseUrl(environmentId);
   const previewAvailable = usePreviewAvailable(environmentId);
   const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
@@ -1488,6 +1490,12 @@ export default function FilePreviewPanel({
     attachment === undefined &&
     (file.isNotFile || (folderTrail !== undefined && file.data === null && file.error === null));
   const hostFolderPath = isFolder && isHostFile ? relativePath : null;
+  // A chat-linked folder reads as a file until its read settles, and revealing a
+  // folder selects it in its parent instead of opening it, so reveal waits.
+  const revealsInFileManager =
+    !isFolder &&
+    (file.data !== null || file.error !== null) &&
+    serverConfig?.shellRevealInFileManager === true;
   // Everything preview-related keys off previewPath; a folder has no preview.
   const previewPath = isFolder ? null : relativePath;
 
@@ -1569,7 +1577,6 @@ export default function FilePreviewPanel({
         : null;
   const canToggleRendered =
     previewPath !== null && attachment === undefined && renderedMode !== null;
-  const updateClientSettings = useUpdateClientSettings();
   const showsRawText =
     previewPath !== null &&
     file.data !== null &&
@@ -1947,6 +1954,7 @@ export default function FilePreviewPanel({
             relativePath={relativePath}
             threadRef={threadRef}
             contents={file.data.contents}
+            workspaceMutationId={workspaceMutationId}
             key={`${activeCwd}:${relativePath}`}
             readOnly={isHostFile || !canWriteFiles}
             onPendingChange={onPendingChange}
@@ -2097,6 +2105,7 @@ export default function FilePreviewPanel({
               availableEditors={availableEditors}
               openInCwd={absolutePath}
               compact
+              revealFileManager={revealsInFileManager}
             />
           ) : null}
           {canToggleRendered && renderedMode ? (
