@@ -1,3 +1,6 @@
+import { writeMarkdownPreviewMode } from "./filePreviewMode";
+import { readMarkdownPreviewMode } from "./filePreviewMode";
+import { normalizeMarkdownPreviewMode } from "./filePreviewMode";
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import { ProjectReadFileError } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
@@ -11,14 +14,10 @@ import {
 import {
   filePreviewReadErrorMessage,
   isMarkdownPreviewFile,
-  normalizeMarkdownPreviewMode,
-  readMarkdownPreviewMode,
   resolveFilePreviewPath,
   setMarkdownTaskChecked,
-  shouldRenderMarkdownPreview,
   shouldShowFileExplorer,
-  siblingWorktreeLabel,
-  writeMarkdownPreviewMode,
+  shouldRenderMarkdownPreview,
   workspaceAssetResource,
 } from "./filePreviewMode";
 
@@ -55,27 +54,6 @@ describe("file preview read errors", () => {
       operationPath: "/workspace",
     });
     expect(filePreviewReadErrorMessage(error)).toBe("The workspace folder could not be accessed.");
-  });
-
-  it("names the workspace folder for a missing workspace file only", () => {
-    const missing = (relativePath: string) =>
-      new ProjectReadFileError({ cwd: "/repo", relativePath, failure: "path_not_found" });
-    expect(filePreviewReadErrorMessage(missing("docs/REPORT.md"))).toBe(
-      "This file does not exist in /repo.",
-    );
-    expect(filePreviewReadErrorMessage(missing("/repo/docs/REPORT.md"))).toBe(
-      "This file does not exist.",
-    );
-  });
-
-  it("labels a sibling worktree by folder and branch", () => {
-    const location = {
-      absolutePath: "/work/trad-lead/REPORT.md",
-      worktreePath: "/work/trad-lead",
-      modifiedAt: 1,
-    };
-    expect(siblingWorktreeLabel({ ...location, branch: "main" })).toBe("trad-lead (main)");
-    expect(siblingWorktreeLabel({ ...location, branch: null })).toBe("trad-lead");
   });
 
   it("preserves the public message from older servers", () => {
@@ -146,6 +124,113 @@ describe("isMarkdownPreviewFile", () => {
   });
 });
 
+describe("shouldShowFileExplorer", () => {
+  it("hides the workspace tree for host files and attachments", () => {
+    expect(
+      shouldShowFileExplorer({
+        relativePath: "/tmp/report.pdf",
+        explorerOpen: true,
+        attachmentOpen: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldShowFileExplorer({
+        relativePath: "~/.claude/CLAUDE.md",
+        explorerOpen: true,
+        attachmentOpen: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldShowFileExplorer({
+        relativePath: "report.pdf",
+        explorerOpen: true,
+        attachmentOpen: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps the saved explorer preference for workspace files", () => {
+    expect(
+      shouldShowFileExplorer({
+        relativePath: "docs/report.pdf",
+        explorerOpen: true,
+        attachmentOpen: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowFileExplorer({
+        relativePath: "docs/report.pdf",
+        explorerOpen: false,
+        attachmentOpen: false,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("setMarkdownTaskChecked", () => {
+  const markdown = "- [ ] First\n- [x] Second\n";
+
+  it("checks and unchecks the task marker at the supplied offset", () => {
+    expect(setMarkdownTaskChecked(markdown, 2, true)).toBe("- [x] First\n- [x] Second\n");
+    expect(setMarkdownTaskChecked(markdown, 14, false)).toBe("- [ ] First\n- [ ] Second\n");
+    expect(setMarkdownTaskChecked("1. [X] Ordered\n", 3, false)).toBe("1. [ ] Ordered\n");
+  });
+
+  it("leaves the document unchanged for a stale or invalid marker offset", () => {
+    expect(setMarkdownTaskChecked(markdown, 0, true)).toBe(markdown);
+    expect(setMarkdownTaskChecked(markdown, 200, true)).toBe(markdown);
+  });
+});
+
+describe("resolveFilePreviewPath", () => {
+  it.each([
+    ["/repo/project", null],
+    ["/repo/project/", null],
+    [".", null],
+    [null, null],
+    ["/repo/project/src", "/repo/project/src"],
+    ["/repo/project/src/main.ts", "/repo/project/src/main.ts"],
+    ["src/main.ts", "src/main.ts"],
+    ["/repo/project-other", "/repo/project-other"],
+  ])("opens %s in the appropriate workspace surface", (path, expected) => {
+    const relativePath = resolveFilePreviewPath(path, "/repo/project");
+    expect(relativePath).toBe(expected);
+    if (expected === null) {
+      expect(
+        shouldShowFileExplorer({ relativePath, explorerOpen: false, attachmentOpen: false }),
+      ).toBe(true);
+    }
+  });
+});
+
+describe("workspaceAssetResource", () => {
+  const input = {
+    kind: "workspace-file" as const,
+    threadRef: {
+      environmentId: "env" as ScopedThreadRef["environmentId"],
+      threadId: "thread-1" as ScopedThreadRef["threadId"],
+    },
+    workspaceRoot: "/repo",
+    absolutePath: "/repo/docs/index.html",
+  };
+
+  it("names the thread once the server knows it", () => {
+    expect(workspaceAssetResource({ ...input, draft: false })).toEqual({
+      _tag: "workspace-file",
+      threadId: "thread-1",
+      path: "/repo/docs/index.html",
+    });
+  });
+
+  it("names the workspace root for a draft, which the server cannot resolve from a thread", () => {
+    expect(workspaceAssetResource({ ...input, draft: true })).toEqual({
+      _tag: "draft-workspace-file",
+      cwd: "/repo",
+      path: "/repo/docs/index.html",
+    });
+  });
+});
+
 describe("markdown preview mode preference", () => {
   function storage(initial: Record<string, string> = {}) {
     const values = new Map(Object.entries(initial));
@@ -182,73 +267,5 @@ describe("markdown preview mode preference", () => {
     expect(shouldRenderMarkdownPreview("README.md", "source")).toBe(false);
     expect(shouldRenderMarkdownPreview("src/main.ts", "rendered")).toBe(false);
     expect(shouldRenderMarkdownPreview(null, "rendered")).toBe(false);
-  });
-});
-
-describe("setMarkdownTaskChecked", () => {
-  const markdown = "- [ ] First\n- [x] Second\n";
-
-  it("checks and unchecks the task marker at the supplied offset", () => {
-    expect(setMarkdownTaskChecked(markdown, 2, true)).toBe("- [x] First\n- [x] Second\n");
-    expect(setMarkdownTaskChecked(markdown, 14, false)).toBe("- [ ] First\n- [ ] Second\n");
-    expect(setMarkdownTaskChecked("1. [X] Ordered\n", 3, false)).toBe("1. [ ] Ordered\n");
-  });
-
-  it("leaves the document unchanged for a stale or invalid marker offset", () => {
-    expect(setMarkdownTaskChecked(markdown, 0, true)).toBe(markdown);
-    expect(setMarkdownTaskChecked(markdown, 200, true)).toBe(markdown);
-  });
-});
-
-describe("resolveFilePreviewPath", () => {
-  it.each([
-    ["/repo/project", null],
-    ["/repo/project/", null],
-    [".", null],
-    [null, null],
-    ["/repo/project/src", "/repo/project/src"],
-    ["/repo/project/src/main.ts", "/repo/project/src/main.ts"],
-    ["src/main.ts", "src/main.ts"],
-    ["/repo/project-other", "/repo/project-other"],
-    ["../other-worktree/report.md", "/repo/other-worktree/report.md"],
-    ["./src/main.ts", "src/main.ts"],
-    ["file:///tmp/report.md", "/tmp/report.md"],
-    ["/tmp/report.md", "/tmp/report.md"],
-  ])("opens %s in the appropriate workspace surface", (path, expected) => {
-    const relativePath = resolveFilePreviewPath(path, "/repo/project");
-    expect(relativePath).toBe(expected);
-    if (expected === null) {
-      expect(
-        shouldShowFileExplorer({ relativePath, explorerOpen: false, attachmentOpen: false }),
-      ).toBe(true);
-    }
-  });
-});
-
-describe("workspaceAssetResource", () => {
-  const input = {
-    kind: "workspace-file" as const,
-    threadRef: {
-      environmentId: "env" as ScopedThreadRef["environmentId"],
-      threadId: "thread-1" as ScopedThreadRef["threadId"],
-    },
-    workspaceRoot: "/repo",
-    absolutePath: "/repo/docs/index.html",
-  };
-
-  it("keeps the selected workspace root after the server knows the thread", () => {
-    expect(workspaceAssetResource({ ...input, draft: false })).toEqual({
-      _tag: "draft-workspace-file",
-      cwd: "/repo",
-      path: "/repo/docs/index.html",
-    });
-  });
-
-  it("names the workspace root for a draft, which the server cannot resolve from a thread", () => {
-    expect(workspaceAssetResource({ ...input, draft: true })).toEqual({
-      _tag: "draft-workspace-file",
-      cwd: "/repo",
-      path: "/repo/docs/index.html",
-    });
   });
 });

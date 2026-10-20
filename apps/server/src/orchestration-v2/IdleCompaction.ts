@@ -1,4 +1,10 @@
-import { ProjectId, RunId, ThreadId } from "@t3tools/contracts";
+import {
+  ProjectId,
+  ProviderInstanceId,
+  resolveProjectProviderInstanceEnabled,
+  RunId,
+  ThreadId,
+} from "@t3tools/contracts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -57,6 +63,7 @@ const make = Effect.gen(function* () {
       const rows = yield* sql<{
         thread_id: string;
         project_id: string;
+        provider_instance_id: string;
         run_id: string;
         used_tokens: number;
         idle_since: string;
@@ -67,7 +74,7 @@ const make = Effect.gen(function* () {
         item_work: number;
         subagent_work: number;
       }>`
-      SELECT t.thread_id, t.project_id, r.run_id, r.completed_at, p.status AS provider_status,
+      SELECT t.thread_id, t.project_id, t.provider_instance_id, r.run_id, r.completed_at, p.status AS provider_status,
         (SELECT max(reply.updated_at)
           FROM orchestration_v2_projection_turn_items reply
           JOIN orchestration_v2_projection_provider_turns reply_turn
@@ -154,6 +161,9 @@ const make = Effect.gen(function* () {
       WHERE (${threadId ?? null} IS NULL OR t.thread_id = ${threadId ?? null})
         AND t.deleted_at IS NULL AND t.archived_at IS NULL
         AND json_extract(t.payload_json, '$.settledOverride') IS NOT 'settled'
+        AND json_extract(t.payload_json, '$.settledAt') IS NULL
+        AND NOT EXISTS (SELECT 1 FROM orchestration_v2_projection_context_transfers transfer
+          WHERE transfer.target_thread_id = t.thread_id AND transfer.type = 'merge_back' AND transfer.status = 'pending')
         AND json_extract(t.payload_json, '$.snoozedUntil') IS NULL
         AND json_extract(t.payload_json, '$.lineage.relationshipToParent') IS NOT 'subagent'
         AND p.driver IN ('claudeAgent', 'codex')
@@ -221,7 +231,12 @@ const make = Effect.gen(function* () {
           Date.parse(allowBackground ? row.completed_at : row.idle_since),
           Number.isFinite(resultReceivedAt) ? resultReceivedAt : 0,
         );
-        return policy.idleCompactionEnabled &&
+        return resolveProjectProviderInstanceEnabled(
+          preferences,
+          ProjectId.make(row.project_id),
+          ProviderInstanceId.make(row.provider_instance_id),
+        ) &&
+          policy.idleCompactionEnabled &&
           Number.isFinite(idleSince) &&
           now - idleSince >= policy.idleCompactionMinutes * 60_000 &&
           Number.isFinite(row.used_tokens) &&

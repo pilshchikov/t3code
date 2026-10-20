@@ -260,7 +260,7 @@ export function NativeProjectFileTree(props: {
     const paths: string[] = [];
     const visit = (entries: readonly ProjectTreeNode[]) => {
       for (const node of entries) {
-        if (node.kind !== "directory") continue;
+        if (node.kind !== "directory" || node.ignored) continue;
         paths.push(node.path);
         visit(node.children);
       }

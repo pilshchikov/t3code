@@ -1,3 +1,4 @@
+import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import { CommandId, MessageId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -13,7 +14,7 @@ export const workerLive = Layer.effectDiscard(
     yield* scheduler.register(
       "idle-compaction",
       Effect.gen(function* () {
-        for (const candidate of yield* policy.due()) {
+        for (const candidate of yield* policy.due().pipe(NodeSqliteClient.readOnly)) {
           // Receipts deduplicate concurrent sweeps/restarts. The compact turn then
           // becomes the latest run, so it cannot trigger another compact by itself.
           const identity = `idle-compact:${candidate.threadId}:${candidate.runId}`;

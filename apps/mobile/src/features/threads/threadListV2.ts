@@ -154,7 +154,12 @@ export function threadHasUnseenCompletion(
 
 export function resolveThreadListV2Status(
   thread: Pick<EnvironmentThreadShell, "hasPendingApprovals" | "hasPendingUserInput" | "runtime"> &
-    Partial<Pick<EnvironmentThreadShell, "pendingBackgroundTasks" | "pendingSubagentRequest">>,
+    Partial<
+      Pick<
+        EnvironmentThreadShell,
+        "pendingBackgroundTasks" | "pendingSubagentRequest" | "blockedOnThreadWait"
+      >
+    >,
 ): ThreadListV2Status {
   if (thread.hasPendingApprovals || thread.pendingSubagentRequest === "approval") {
     return "approval";
@@ -468,7 +473,7 @@ export function buildThreadListV2ListItems(input: {
   const snoozedEnd = settledShelfHeaderIndex ?? threadItems.length;
   const workingEnd = snoozedShelfHeaderIndex ?? snoozedEnd;
   const activeEnd = workingShelfHeaderIndex ?? workingEnd;
-  const result: ThreadListV2ListItem[] = [...threadItems.slice(0, activeEnd), ...pendingItems];
+  const result: ThreadListV2ListItem[] = [...pendingItems, ...threadItems.slice(0, activeEnd)];
   const shelfDisabled = input.shelfPreferencesLoading === true;
   if (workingShelfHeaderIndex !== null && workingCount > 0) {
     result.push({

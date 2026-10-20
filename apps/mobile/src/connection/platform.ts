@@ -196,6 +196,10 @@ const layerCapabilities = Layer.effectContext(
           bearerToken: Effect.succeed(Option.none()),
         }),
       ),
+      // Fork policy: analytics never read the relay device identity.
+      Context.add(ClientCapabilities.AnalyticsDevice, {
+        id: Effect.succeed(Option.none()),
+      }),
       Context.add(
         ClientCapabilities.RelayDeviceIdentity,
         ClientCapabilities.RelayDeviceIdentity.of({

@@ -243,8 +243,8 @@ reports a usage-limit reset time. Change it in **Settings → General** on web a
 desktop, or **Settings → Thread behavior** on mobile. A saved Off preference is
 preserved, and you can cancel an individual continuation from its thread.
 The environment must be running when the reset arrives; it resumes overdue
-continuations after a restart. Sending a new message, archiving, or settling the
-thread prevents a pending continuation from starting.
+continuations after a restart. Stopping the thread, sending a new message,
+archiving, or settling it prevents a pending continuation from starting.
 
 Choose **Snooze until reset** to hide the thread until its allowance returns.
 Snooze and auto-resume are independent: snooze alone wakes the thread without
@@ -278,3 +278,6 @@ has replied and is waiting on background commands, subagents, monitors or respon
 watches. Monitoring threads remain in the Working section when that section is
 enabled, and their project activity dot stays visible. They switch back to Working
 when another agent turn starts, or become ready when their background work ends.
+A snoozed thread keeps working and stays hidden until its wake time, even while
+its agent wakes itself for background work. It comes back early only when it needs
+an approval or answer from you, when a run fails, or when you send it a message.

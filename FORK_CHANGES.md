@@ -1,5 +1,88 @@
 # Fork Changes
 
+## Daily upstream integration — 2026-10-20 (67c0fc0cda)
+
+- Merge target `67c0fc0cdaf963b103518862dd7b68a9c758ecf2`, fork parent
+  `adcc8c845f8d6ea95f1f9473a5b5fbfc0d3e6e48`. Merges all 613 incoming commits
+  after `34c5a6d446` with both histories intact. Reviewed upstream changes and the
+  fork delta, including all 232 overlapping paths and automatic merges. Resolved
+  80 conflicted files individually; no blanket strategy was used.
+- Keep the fork's configurable Claude/Codex automatic compaction and project overrides
+  as the single active policy, superseding upstream's separate cache-expiry beta toggle
+  and timer. Retain current native context measurements, actual-result/quota-recovery
+  guards, deterministic receipts and dispatch-time eligibility checks. Adopt upstream's
+  pending-merge-back and disabled-provider guards; candidate discovery uses the SQLite
+  reader worker, while dispatch rechecks remain serialized (`IdleCompaction.ts`,
+  `IdleCompactionWorker.ts`, `Orchestrator.ts`, `runtimeLayer.ts`, General/Maintenance settings).
+  Ordinary Send/Resume/Queue/Steer still never compact first.
+- Claude native forks preserve account/config-directory and HOME isolation, including
+  source history in another checkout of the same account. The SDK fast path is allowed
+  only when resolved account directories match the host; custom profiles use the history
+  worker, with source, packaged and executable entry points. Both paths retain the copied
+  head-message identity for upstream's first-run rollback fix. Task-list recovery uses the
+  selected account environment too. Worker effort hooks and child-specific model/effort
+  ingestion remain connected (`ClaudeAdapterV2.ts`, `claudeHistoryWorker.ts`, `ClaudeDriver.ts`).
+- Preserve native Files, multi-repository/worktree selectors and recovery, saved root
+  collapse/resize and checkout expansion, deletion/undo, dirty-editor/revision protection,
+  exact-root/sibling-worktree previews and editor navigation/Structure/Commit/Git History.
+  Upstream's successful missing-file response still triggers sibling-worktree recovery.
+  Adapt upstream's ignored-folder expand-all guard to the native renderer. Diff collapse
+  now uses upstream's session store while retaining the fork's repository selector and
+  list/detail layout; reopening refreshes both the file list and selected patch. Keep
+  root/multi-root Markdown explorer routing and add upstream repository-prefix recovery
+  only after confirming the literal path is absent. Math rendering and TeX clipboard
+  support coexist with Slack table copying, custom typography and collapsible images
+  (`DiffPanel.tsx`, Files components, `ChatMarkdown.tsx`, Markdown helpers).
+- New usage/cache/tier fields retain account/source/model identity and isolated history
+  scans, alphabetical pooled-account ordering, account accents and compact provider
+  trends. New foreground thread dependencies show Waiting; real background work remains
+  Monitoring, with idle empty sessions Ready and approvals/errors retaining priority.
+  Quiet PR polling retains a fresh host check before two-hour terminal-link removal.
+  Never-default exclusive settlement, open-PR protection, archived/shared/secondary-root
+  cleanup ownership and guarded thread expiry remain live. Register the new Codex usage
+  index and settlement timestamp repair as migrations 70 and 71; released IDs 1–69 and
+  atomic upstream-preview translation remain unchanged.
+- External analytics/OTLP stay disabled. The new analytics owner API is a no-op; remove
+  startup/login owner reads and disable client account/device hashing, ID storage and URL
+  announcements. Version lookup still gates the new installer-specific path before any
+  remote lookup. Provider refresh/manifest, desktop updates and Keychain retain opt-in
+  gates; stable desktop identity and encrypted local connection persistence remain active.
+  Typed WebSocket registration additionally splits workspace/files/peer methods to keep
+  the expanded protocol's inferred service requirements concrete (`ws.ts`, analytics,
+  connection capabilities, `maintenanceResolver.ts`). MCP replacement credentials still
+  revoke the same thread's previous grant while retaining other idle records for renewal.
+- Traced live mounts: `ChatView` → `ChatComposer` → `ComposerPrimaryActions` mounts
+  `ComposerActionOrb` for Orb, with saved send color for Send/Resume/Queue/Steer and saved
+  stop color for ordinary and pending-input Stop. Classic remains selectable. Existing
+  chats and draft heroes retain forced mobile expansion, disabled scroll/focus collapse,
+  one-line prompt minimum, keyboard/viewport handling and custom message/composer width.
+  Independent one-second scroll recovery/bottom following, first assistant text outside
+  settled folds, mixed-work disclosure labels and stable imported-thread identities remain.
+  Mounted V2 CLI resume, project rail/groups/status dots/colors, numbered slots/manual order/
+  picker sizing, app accent, global panel shortcuts and right-click tab closing remain.
+  Primary checkout binding/clearing still requires the validated initial preparing run with
+  queued-only follow-ups and no provider session, question or background work. Project
+  memory/workspace/peer/usage MCP registration, shared host routes, connected-environment
+  quota reads, communication viewer and durable peer-response watches remain connected.
+  Multiwork and machine sync remain retired; legacy usage/sync helpers remain superseded.
+  Upstream's explicit Add to another machine flow does not restore the removed sync service.
+- Validation: frozen-lockfile dependency installation succeeded with lifecycle scripts disabled.
+  Scoped `tsc-rs --noEmit` passed for server, web, mobile, desktop, contracts, shared,
+  client-runtime, provider-core, both Effect protocol packages, the seven provider/registry packages,
+  all seven source-control packages, SSH, Tailscale, relay, the lint plugin and scripts
+  (29 scopes). Non-failing Effect diagnostics remain. Changed-file lint scanned 1,465 files:
+  306 warnings and two errors; both errors were corrected. A 76-file integration rerun
+  passed with 106 warnings and no errors; the final WebSocket fixture and Files-query
+  follow-ups also passed (the query retains five dependency warnings). Warnings include
+  existing style, unused-binding and React dependency findings; no warning-free claim is made.
+  Integration files were formatted. Source whitespace checks pass; 57 whitespace findings
+  inside incoming dependency-patch context remain verbatim to preserve patch integrity.
+  No tests were independently added or run; imported test fixtures/expectations were adapted
+  for the fork's services and migration sequence. No builds, packaging, dev servers, runtime
+  UI checks, app installation/restart, process stops or live-userdata access were performed.
+  Fork preservation was reviewed through source, contracts and live call sites; runtime,
+  native compilation and visual behavior were not validated in this task.
+
 ## Claude conversation forks respect account history, 2026-10-19
 
 - Native Claude forks run the existing history worker with the selected provider instance's

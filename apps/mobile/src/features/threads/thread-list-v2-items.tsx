@@ -582,7 +582,14 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
 
   const status = resolveThreadListV2Status(thread);
   const isUnread = status === "ready" && threadHasUnseenCompletion(thread);
-  const workingLabel = STATUS_LABEL_BY_STATUS[status];
+  const baseStatusLabel = STATUS_LABEL_BY_STATUS[status];
+  const workingLabel =
+    status === "waiting" &&
+    thread.runtime?.status === "running" &&
+    thread.blockedOnThreadWait === true &&
+    baseStatusLabel
+      ? { ...baseStatusLabel, label: "Waiting" }
+      : baseStatusLabel;
   const statusLabel =
     (status === "working" && workingLabel !== undefined && thread.goal?.status === "active"
       ? { ...workingLabel, label: "Goal" }

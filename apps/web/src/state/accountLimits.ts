@@ -30,7 +30,7 @@ import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { useCallback, useMemo } from "react";
 
-import { getProviderInstanceEntry } from "../providerInstances";
+import { deriveProviderInstanceEntries } from "../providerInstances";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentPresentations } from "./presentation";
 import { serverEnvironment } from "./server";
@@ -139,9 +139,8 @@ export function mergeEnvironmentLimits(
       // contract (explicit name wins, non-default ids humanize, defaults
       // keep the brand label), so Limits names accounts the same way the
       // picker and provider settings do.
-      const entry = getProviderInstanceEntry(
-        status.providers ?? [],
-        ProviderInstanceId.make(instanceId),
+      const entry = deriveProviderInstanceEntries(status.providers ?? []).find(
+        (candidate) => candidate.instanceId === instanceId,
       );
       const rows = byProvider.get(snapshot.provider) ?? [];
       rows.push({

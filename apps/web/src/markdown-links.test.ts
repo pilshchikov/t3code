@@ -14,6 +14,11 @@ import {
   shouldOpenMarkdownFileLinkInBrowserByDefault,
   shouldOpenMarkdownFileLinkInEditor,
 } from "./markdown-links";
+import {
+  markdownFileCopyPaths,
+  markdownFileEditorTarget,
+  resolveMarkdownFileHostPath,
+} from "./markdownFileHostPath";
 
 describe("resolveMarkdownFilePanelTarget", () => {
   const roots = [
@@ -706,4 +711,44 @@ it("preserves a link to a different worktree as an absolute host file", () => {
       workspaceRoots: [{ path: "/Users/me/project" }],
     }),
   ).toEqual({ path: "/Users/me/worktrees/other/report.md" });
+});
+
+describe("chat file chip paths", () => {
+  const cwd = String.raw`C:\Users\alice\project`;
+
+  it("opens and copies the indexed file for a bare filename, preserving its line and column", async () => {
+    const meta = resolveMarkdownFileLinkMeta("user.ts:261:7", cwd);
+    if (!meta) throw new Error("Expected a file link");
+    const hostPath = await resolveMarkdownFileHostPath({
+      meta,
+      cwd,
+      findWorkspaceMatch: async () => "src/discord/events/user.ts",
+    });
+
+    expect(markdownFileEditorTarget(meta, hostPath)).toBe(
+      String.raw`C:\Users\alice\project\src\discord\events\user.ts:261:7`,
+    );
+    expect(markdownFileCopyPaths(meta, hostPath, cwd)).toEqual({
+      fullPath: String.raw`C:\Users\alice\project\src\discord\events\user.ts:261:7`,
+      relativePath: "src/discord/events/user.ts:261:7",
+    });
+  });
+
+  it("keeps the authored path and position when the workspace index has no match", async () => {
+    const meta = resolveMarkdownFileLinkMeta("missing.ts:12:3", cwd);
+    if (!meta) throw new Error("Expected a file link");
+    const hostPath = await resolveMarkdownFileHostPath({
+      meta,
+      cwd,
+      findWorkspaceMatch: async () => null,
+    });
+
+    expect(markdownFileEditorTarget(meta, hostPath)).toBe(
+      String.raw`C:\Users\alice\project\missing.ts:12:3`,
+    );
+    expect(markdownFileCopyPaths(meta, hostPath, cwd)).toEqual({
+      fullPath: String.raw`C:\Users\alice\project\missing.ts:12:3`,
+      relativePath: "missing.ts:12:3",
+    });
+  });
 });

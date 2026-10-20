@@ -153,6 +153,11 @@ export function createProjectEnvironmentAtoms<R, E>(
       // Visible file trees own the host watcher; stop it as soon as the last consumer unmounts.
       idleTtlMs: 0,
     }),
+    listIgnoredFiles: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:projects:list-ignored-files",
+      tag: WS_METHODS.projectsListIgnoredFiles,
+      staleTimeMs: 15_000,
+    }),
     readFile: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:projects:read-file",
       tag: WS_METHODS.projectsReadFile,
@@ -163,7 +168,10 @@ export function createProjectEnvironmentAtoms<R, E>(
       execute: (input) =>
         fileMetadata.seedAfterRead(
           request(WS_METHODS.projectsReadFile, input),
-          (result, isCurrent) => fileMetadata.rememberFile(input.cwd, result, isCurrent),
+          (result, isCurrent) =>
+            result.exists === false
+              ? Effect.void
+              : fileMetadata.rememberFile(input.cwd, result, isCurrent),
         ),
     }),
     locateFile: createEnvironmentRpcQueryAtomFamily(runtime, {

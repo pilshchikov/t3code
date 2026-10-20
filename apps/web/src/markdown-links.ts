@@ -48,6 +48,7 @@ const MARKDOWN_LINK_HREF_PATTERN =
 
 export interface MarkdownFileLinkMeta {
   filePath: string;
+  workspaceLookupPath: string | null;
   targetPath: string;
   displayPath: string;
   workspaceRelativePath: string | null;
@@ -577,6 +578,14 @@ export function resolveMarkdownFileLinkMeta(
   if (!targetPath) return null;
   const meta = buildFileLinkMetaFromTarget(targetPath, workspaceRoot);
   const source = safeDecode(normalizeMarkdownLinkDestination(href ?? ""));
+  meta.workspaceLookupPath =
+    isRelativePath(source) &&
+    !source.startsWith("~") &&
+    baseDir !== undefined &&
+    workspaceRoot !== undefined &&
+    comparableWorkspacePath(baseDir) === comparableWorkspacePath(workspaceRoot)
+      ? stripSearchAndHash(source).path
+      : null;
   if (
     source.startsWith("/") ||
     WINDOWS_DRIVE_PATH_PATTERN.test(source) ||
@@ -600,6 +609,7 @@ function buildFileLinkMetaFromTarget(
 
   return {
     filePath: path,
+    workspaceLookupPath: null,
     targetPath,
     displayPath: formatWorkspaceRelativePath(targetPath, workspaceRoot),
     workspaceRelativePath: workspaceRelativePath(path, workspaceRoot),
