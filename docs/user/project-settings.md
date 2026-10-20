@@ -1,5 +1,17 @@
 # Settings and project overrides
 
+## Project quick access
+
+On web and desktop, right-click a project in the narrow project rail and choose **Settle project**
+to hide its quick-access shortcut. The project stays in the sidebar's project dropdown and in
+the project picker for new threads. Its threads keep running normally.
+
+Use the rail's **Settled projects** archive icon to open one of those projects. To return its
+shortcut to the rail, choose it under **Unsettle project** in the same menu. These choices are
+saved on this device, together with your rail groups and order.
+
+## Settings scope
+
 On web and desktop, the "Applying settings for …" sentence at the top of Settings pages picks
 the project and environment a change applies to. Pages that only hold device preferences, such as
 Appearance, don't show it. They start at **All projects** and **All environments**

@@ -11,6 +11,14 @@ import { sanitizeRailGroups, type RailGroup } from "./projectRailGroups.logic";
 interface ProjectRailGroupsState {
   groups: ReadonlyArray<RailGroup>;
   setGroups: (groups: ReadonlyArray<RailGroup>) => void;
+  settledProjectKeys: ReadonlyArray<string>;
+  setProjectSettled: (projectKey: string, settled: boolean) => void;
+}
+
+function sanitizeSettledProjectKeys(value: unknown): string[] {
+  return Array.isArray(value)
+    ? [...new Set(value.filter((key): key is string => typeof key === "string" && key.length > 0))]
+    : [];
 }
 
 export const useProjectRailGroupsStore = create<ProjectRailGroupsState>()(
@@ -18,6 +26,13 @@ export const useProjectRailGroupsStore = create<ProjectRailGroupsState>()(
     (set) => ({
       groups: [],
       setGroups: (groups) => set({ groups: sanitizeRailGroups(groups) }),
+      settledProjectKeys: [],
+      setProjectSettled: (projectKey, settled) =>
+        set((state) => ({
+          settledProjectKeys: settled
+            ? sanitizeSettledProjectKeys([...state.settledProjectKeys, projectKey])
+            : state.settledProjectKeys.filter((key) => key !== projectKey),
+        })),
     }),
     {
       name: "t3code:project-rail-groups:v1",
@@ -25,11 +40,18 @@ export const useProjectRailGroupsStore = create<ProjectRailGroupsState>()(
       storage: createJSONStorage(() =>
         resolveStorage(typeof window !== "undefined" ? window.localStorage : undefined),
       ),
-      partialize: (state) => ({ groups: state.groups }),
-      merge: (persisted, current) => ({
-        ...current,
-        groups: sanitizeRailGroups((persisted as { groups?: unknown } | undefined)?.groups),
+      partialize: (state) => ({
+        groups: state.groups,
+        settledProjectKeys: state.settledProjectKeys,
       }),
+      merge: (persisted, current) => {
+        const saved = persisted as { groups?: unknown; settledProjectKeys?: unknown } | undefined;
+        return {
+          ...current,
+          groups: sanitizeRailGroups(saved?.groups),
+          settledProjectKeys: sanitizeSettledProjectKeys(saved?.settledProjectKeys),
+        };
+      },
     },
   ),
 );

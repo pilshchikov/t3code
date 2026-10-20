@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/core";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import {
+  ArchiveIcon,
   ChevronDownIcon,
   ChevronsLeftIcon,
   ChevronsRightIcon,
@@ -64,8 +65,6 @@ import {
   createRailGroup,
   findRailGroupOf,
   flattenRailModel,
-  moveRailGroup,
-  moveRailProject,
   moveRailTokenToEnd,
   nextRailGroupColor,
   placeRailProject,
@@ -93,6 +92,7 @@ import {
   buildRailBackgroundMenu,
   buildRailGroupMenu,
   buildRailProjectMenu,
+  buildSettledProjectsMenu,
   railGroupSwatchHex,
 } from "./projectRailMenus";
 import {
@@ -433,7 +433,7 @@ function RailFooterButton({
   buttonRef,
 }: {
   label: string;
-  onClick: () => void;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
   children: ReactNode;
   buttonRef?: React.Ref<HTMLButtonElement>;
 }) {
@@ -503,6 +503,8 @@ export const ProjectRail = memo(function ProjectRail() {
   const threads = useThreadShells();
   const railGroups = useProjectRailGroupsStore((state) => state.groups);
   const setRailGroups = useProjectRailGroupsStore((state) => state.setGroups);
+  const settledProjectKeys = useProjectRailGroupsStore((state) => state.settledProjectKeys);
+  const setProjectSettled = useProjectRailGroupsStore((state) => state.setProjectSettled);
   const [persistedProjectScopeKey, setProjectScopeKey] = useSidebarProjectScope();
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const router = useRouter();
@@ -552,7 +554,7 @@ export const ProjectRail = memo(function ProjectRail() {
       ),
     [projectGroups, statuses],
   );
-  const entries = useMemo(
+  const fullEntries = useMemo(
     () =>
       buildRailLayout(
         projectGroups.map((project) => project.projectKey),
@@ -560,7 +562,40 @@ export const ProjectRail = memo(function ProjectRail() {
       ),
     [projectGroups, railGroups],
   );
-  const model = useMemo(() => railModelFromLayout(entries, railGroups), [entries, railGroups]);
+  const settledKeys = useMemo(() => new Set(settledProjectKeys), [settledProjectKeys]);
+  const settledProjects = useMemo(
+    () => projectGroups.filter((project) => settledKeys.has(project.projectKey)),
+    [projectGroups, settledKeys],
+  );
+  const activeProjects = useMemo(
+    () => projectGroups.filter((project) => !settledKeys.has(project.projectKey)),
+    [projectGroups, settledKeys],
+  );
+  const entries = useMemo(
+    () =>
+      buildRailLayout(
+        projectGroups.map((project) => project.projectKey),
+        railGroups,
+        settledKeys,
+      ),
+    [projectGroups, railGroups, settledKeys],
+  );
+  // Mutations retain settled members and their positions; only presentation is filtered.
+  const model = useMemo(
+    () => railModelFromLayout(fullEntries, railGroups),
+    [fullEntries, railGroups],
+  );
+  const visibleModel = useMemo(
+    () =>
+      railModelFromLayout(
+        entries,
+        railGroups.map((group) => ({
+          ...group,
+          members: group.members.filter((key) => !settledKeys.has(key)),
+        })),
+      ),
+    [entries, railGroups, settledKeys],
+  );
 
   if (isMobile || !visible || projectGroups.length === 0) return null;
 
@@ -580,6 +615,24 @@ export const ProjectRail = memo(function ProjectRail() {
     const placed = new Set(physical);
     const rest = useUiStateStore.getState().projectOrder.filter((key) => !placed.has(key));
     useUiStateStore.setState({ projectOrder: [...physical, ...rest] });
+  };
+
+  const moveProject = (projectKey: string, direction: -1 | 1) => {
+    const group = findRailGroupOf(visibleModel, projectKey);
+    const items = group ? group.members : visibleModel.order;
+    const token = group ? projectKey : `p:${projectKey}`;
+    const target = items[items.indexOf(token) + direction];
+    if (!target) return;
+    commit(
+      group
+        ? placeRailProject(model, projectKey, target, direction > 0)
+        : placeRailToken(model, token, target, direction > 0),
+    );
+  };
+  const moveGroup = (groupId: string, direction: -1 | 1) => {
+    const token = `g:${groupId}`;
+    const target = visibleModel.order[visibleModel.order.indexOf(token) + direction];
+    if (target) commit(placeRailToken(model, token, target, direction > 0));
   };
 
   const selectScope = (nextScopeKey: string | null) => {
@@ -623,8 +676,8 @@ export const ProjectRail = memo(function ProjectRail() {
       buildRailProjectMenu({
         group,
         groups: shownGroups,
-        canMoveUp: canMoveRailProject(model, projectKey, -1),
-        canMoveDown: canMoveRailProject(model, projectKey, 1),
+        canMoveUp: canMoveRailProject(visibleModel, projectKey, -1),
+        canMoveDown: canMoveRailProject(visibleModel, projectKey, 1),
         hasPath: project.workspaceRoot.length > 0,
       }),
       position,
@@ -650,7 +703,10 @@ export const ProjectRail = memo(function ProjectRail() {
         return;
       case "move-up":
       case "move-down":
-        commit(moveRailProject(model, projectKey, clicked === "move-up" ? -1 : 1));
+        moveProject(projectKey, clicked === "move-up" ? -1 : 1);
+        return;
+      case "settle-project":
+        setProjectSettled(projectKey, true);
         return;
       case "copy-path":
         try {
@@ -685,12 +741,12 @@ export const ProjectRail = memo(function ProjectRail() {
         group,
         summary: railGroupStatusSummary(memberStatuses),
         isScoped: projectScopeKey === scopeKey,
-        addableProjects: projectGroups
+        addableProjects: activeProjects
           .filter((project) => !group.members.includes(project.projectKey))
           .map((project) => ({ key: project.projectKey, label: project.displayName })),
         hasOtherGroups: shownGroups.length > 1,
-        canMoveUp: canMoveRailGroup(model, group.id, -1),
-        canMoveDown: canMoveRailGroup(model, group.id, 1),
+        canMoveUp: canMoveRailGroup(visibleModel, group.id, -1),
+        canMoveDown: canMoveRailGroup(visibleModel, group.id, 1),
       }),
       position,
     );
@@ -718,13 +774,20 @@ export const ProjectRail = memo(function ProjectRail() {
         return;
       case "move-up":
       case "move-down":
-        commit(moveRailGroup(model, group.id, clicked === "move-up" ? -1 : 1));
+        moveGroup(group.id, clicked === "move-up" ? -1 : 1);
         return;
       case "ungroup":
         if (projectScopeKey === scopeKey) selectScope(null);
         commit(ungroupRailGroup(model, group.id));
         return;
     }
+  };
+
+  const openSettledProjects = async (position: { x: number; y: number }) => {
+    const clicked = await showMenu(buildSettledProjectsMenu(settledProjects), position);
+    if (clicked?.startsWith("open:")) selectScope(clicked.slice("open:".length));
+    if (clicked?.startsWith("unsettle:"))
+      setProjectSettled(clicked.slice("unsettle:".length), false);
   };
 
   const openBackgroundMenu = async (position: { x: number; y: number }) => {
@@ -894,7 +957,7 @@ export const ProjectRail = memo(function ProjectRail() {
         drop={dropFor(`p:${projectKey}`)}
         onSelect={() => selectScope(projectKey)}
         onContextMenu={(position) => void openProjectMenu(projectKey, position)}
-        onMove={(direction) => commit(moveRailProject(model, projectKey, direction))}
+        onMove={(direction) => moveProject(projectKey, direction)}
       />
     );
   };
@@ -1011,9 +1074,17 @@ export const ProjectRail = memo(function ProjectRail() {
       <div
         className={cn(
           "flex shrink-0 gap-1 border-t border-sidebar-border pt-1.5",
-          named ? "flex-row items-center px-1.5" : "flex-col items-center",
+          named ? "flex-row flex-wrap items-center px-1.5" : "flex-col items-center",
         )}
       >
+        {settledProjects.length > 0 ? (
+          <RailFooterButton
+            label="Settled projects"
+            onClick={(event) => void openSettledProjects(menuPosition(event))}
+          >
+            <ArchiveIcon className="size-4.5" />
+          </RailFooterButton>
+        ) : null}
         {named ? (
           <>
             <button
@@ -1102,7 +1173,7 @@ export const ProjectRail = memo(function ProjectRail() {
       <RailNewGroupPopover
         open={newGroupOpen}
         anchor={() => newGroupButtonRef.current}
-        projects={projectGroups}
+        projects={activeProjects}
         groupOf={(projectKey) => findRailGroupOf(model, projectKey)}
         initialColor={nextRailGroupColor(railGroups)}
         onClose={() => setNewGroupOpen(false)}

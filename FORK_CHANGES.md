@@ -1,5 +1,25 @@
 # Fork Changes
 
+## Settled projects in quick access — 2026-10-20
+
+- The project rail's context menu adds **Settle project**. A device-local persisted list hides
+  those shortcuts only; project records, running threads, the sidebar project dropdown and
+  new-thread project selection retain every project. Opening a settled project keeps it settled.
+  An archive button lists settled projects and provides an explicit **Unsettle project** submenu
+  (`ProjectRail.tsx`, `projectRailMenus.ts`, `projectRailGroupsStore.ts`).
+- Hide empty rail groups while retaining group membership and the complete manual-order model.
+  Restoration returns the project to that layout. Keyboard/context-menu moves skip hidden
+  projects while preserving them in saved groups; the settled menu remains reachable when every
+  project is settled. Older group preferences hydrate with no projects settled
+  (`projectRailGroups.logic.ts`). Web and packaged desktop share this client-only behavior;
+  mobile has no separate project rail and keeps its existing complete project lists.
+- Validation: 23 focused unit tests and seven isolated Chromium component checks pass, including
+  persistence/rehydration, selection without restoration, explicit restoration, all-settled state
+  and moves around settled members. Converted the existing rail browser fixtures to disposable
+  rendering. Web typechecking and changed-file lint pass, with one existing style warning.
+  Running installed desktop/server processes remain unchanged; the rebuilt update is staged for
+  later activation at the owner's request.
+
 ## Upstream integration and staged desktop update — 2026-10-20 (fe27e8e3dc)
 
 - Merge all 28 new upstream commits through `fe27e8e3dc` into fork parent `ad205edae7`.

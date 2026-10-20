@@ -37,6 +37,23 @@ const model = (keys: string[], groups: RailGroup[]): RailModel =>
 const flat = (next: RailModel, keys: string[]) => flattenRailModel(next, new Set(keys));
 
 describe("buildRailLayout", () => {
+  it("hides settled projects and empty groups without changing saved membership or order", () => {
+    const keys = ["a", "b", "c", "d"];
+    const groups = [group("g", ["c", "b"])];
+    const original = buildRailLayout(keys, groups);
+    expect(buildRailLayout(keys, groups, new Set(["b", "c"]))).toEqual([
+      { kind: "project", key: "a" },
+      { kind: "project", key: "d" },
+    ]);
+    expect(buildRailLayout(keys, groups, new Set(["c"]))).toEqual([
+      { kind: "project", key: "a" },
+      { kind: "group", group: groups[0], members: ["b"] },
+      { kind: "project", key: "d" },
+    ]);
+    expect(buildRailLayout(keys, groups)).toEqual(original);
+    expect(groups[0]?.members).toEqual(["c", "b"]);
+  });
+
   it("places a group at its first member and keeps member order", () => {
     const entries = buildRailLayout(["a", "b", "c", "d"], [group("g", ["c", "b"])]);
     expect(entries).toEqual([

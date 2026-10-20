@@ -111,8 +111,9 @@ export function nextRailGroupColor(groups: ReadonlyArray<RailGroup>): RailGroupC
 export function buildRailLayout(
   projectKeys: ReadonlyArray<string>,
   groups: ReadonlyArray<RailGroup>,
+  settledProjectKeys: ReadonlySet<string> = new Set(),
 ): RailEntry[] {
-  const known = new Set(projectKeys);
+  const known = new Set(projectKeys.filter((key) => !settledProjectKeys.has(key)));
   const owner = new Map<string, RailGroup>();
   for (const group of groups) {
     for (const member of group.members) if (!owner.has(member)) owner.set(member, group);
@@ -120,6 +121,7 @@ export function buildRailLayout(
   const emitted = new Set<string>();
   const entries: RailEntry[] = [];
   for (const key of projectKeys) {
+    if (!known.has(key)) continue;
     const group = owner.get(key);
     if (!group) {
       entries.push({ kind: "project", key });

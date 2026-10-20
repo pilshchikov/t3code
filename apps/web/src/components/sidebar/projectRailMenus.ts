@@ -64,6 +64,28 @@ export function buildRailProjectMenu(input: {
       icon: "settings",
       ...(input.hasPath ? {} : { separatorBefore: true }),
     },
+    { id: "settle-project", label: "Settle project", icon: "archive", separatorBefore: true },
+  ];
+}
+
+export function buildSettledProjectsMenu(
+  projects: ReadonlyArray<{ readonly projectKey: string; readonly displayName: string }>,
+): ContextMenuItem[] {
+  return [
+    { id: "header", label: "Settled projects", header: true },
+    ...projects.map((project) => ({
+      id: `open:${project.projectKey}`,
+      label: project.displayName,
+    })),
+    {
+      id: "unsettle",
+      label: "Unsettle project",
+      separatorBefore: true,
+      children: projects.map((project) => ({
+        id: `unsettle:${project.projectKey}`,
+        label: project.displayName,
+      })),
+    },
   ];
 }
 
