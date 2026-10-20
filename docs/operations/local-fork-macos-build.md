@@ -138,6 +138,17 @@ test -x "$staged_app/Contents/Resources/resource-monitor/t3-resource-monitor"
 The display name must be `T3 Code (Beta)`, the version must equal `$app_version`, and the main
 executable must be arm64.
 
+### Install without restarting
+
+When the owner asks to keep the app running, stop after verifying the staged bundle. Leave it
+installed alongside the active app at `/Applications/T3 Code (Beta)-new-<commit>.app` and report
+that exact path and revision. Do not quit, relaunch, rename or overwrite the active bundle:
+its desktop and server processes can still load resources from the original path while working.
+Eject the installer volume and confirm the original desktop/server PIDs remain running.
+
+The new build takes effect only after the owner later requests activation. At that point, continue
+with the quit, backup and replacement steps below using the verified staged revision.
+
 ## 6. Quit, replace, and relaunch
 
 Restarting can interrupt running agent turns. Only do this when the owner explicitly requested a

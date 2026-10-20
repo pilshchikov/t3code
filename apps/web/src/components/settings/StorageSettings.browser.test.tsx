@@ -1,3 +1,4 @@
+import { act, render } from "../../../test/render";
 import { RegistryProvider } from "@effect/atom-react";
 import {
   DEFAULT_SERVER_SETTINGS,
@@ -5,9 +6,8 @@ import {
   ThreadId,
   type StorageCleanupReport,
 } from "@t3tools/contracts";
-import { act, type ReactNode } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
+import { type ReactNode } from "react";
+import { expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 
 const state = vi.hoisted(() => ({
@@ -92,10 +92,7 @@ vi.mock(import("../ui/toast"), async (original) => {
 
 import { StorageSettingsPanel } from "./StorageSettings";
 
-let root: Root;
-let container: HTMLDivElement;
-
-beforeEach(() => {
+function setup() {
   state.settings = {
     ...DEFAULT_SERVER_SETTINGS,
     storageCleanup: {
@@ -115,32 +112,22 @@ beforeEach(() => {
   };
   state.report = null;
   state.run.mockReset();
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-});
+}
 
-afterEach(async () => {
-  await act(async () => root.unmount());
-  container.remove();
-});
-
-async function render() {
-  await act(async () =>
-    root.render(
-      <RegistryProvider>
-        <StorageSettingsPanel />
-      </RegistryProvider>,
-    ),
-  );
-  return Array.from(container.querySelectorAll("button")).find(
+const panel = () => (
+  <RegistryProvider>
+    <StorageSettingsPanel />
+  </RegistryProvider>
+);
+const deleteButton = (container: HTMLElement) =>
+  Array.from(container.querySelectorAll("button")).find(
     (button) => button.textContent === "Delete now",
   )!;
-}
 
 it.each(["machine-wide immediate", "project custom"])(
   "runs cleanup when only %s settled retention is enabled",
   async (scope) => {
+    setup();
     if (scope === "machine-wide immediate") {
       state.settings = {
         ...state.settings,
@@ -170,7 +157,8 @@ it.each(["machine-wide immediate", "project custom"])(
     };
     let complete!: (result: { _tag: "Success"; value: StorageCleanupReport }) => void;
     state.run.mockImplementation(() => new Promise((resolve) => (complete = resolve)));
-    const button = await render();
+    await using screen = await render(panel());
+    const button = deleteButton(screen.container);
 
     expect(button.disabled).toBe(false);
     await act(async () => button.click());
@@ -185,7 +173,9 @@ it.each(["machine-wide immediate", "project custom"])(
 );
 
 it("keeps cleanup disabled when settled retention and all other rules are off", async () => {
-  const button = await render();
+  setup();
+  await using screen = await render(panel());
+  const button = deleteButton(screen.container);
 
   expect(button.disabled).toBe(true);
   await act(async () => button.click());
@@ -193,6 +183,7 @@ it("keeps cleanup disabled when settled retention and all other rules are off", 
 });
 
 it("shows orphan sizes and identifies failed worktrees with one connected machine", async () => {
+  setup();
   state.settings = {
     ...state.settings,
     storageCleanup: { ...state.settings.storageCleanup, worktreeSettledAfterDays: 0 },
@@ -229,7 +220,8 @@ it("shows orphan sizes and identifies failed worktrees with one connected machin
     omittedCount: 0,
     bytesFreed: 0,
   };
-  await render();
+  await using screen = await render(panel());
+  const { container } = screen;
   const lastRun = Array.from(container.querySelectorAll("button")).find((button) =>
     button.textContent?.includes("Last run"),
   )!;

@@ -1,5 +1,30 @@
 # Fork Changes
 
+## Upstream integration and staged desktop update — 2026-10-20 (fe27e8e3dc)
+
+- Merge all 28 new upstream commits through `fe27e8e3dc` into fork parent `ad205edae7`.
+  Reviewed the 23 overlapping paths; resolved seven conflicted files individually. Keep the
+  released fork migration IDs 1–71 and register webhook deduplication/coalescing as migration 72.
+  A new real SQLite upgrade regression preserves project memory and account-colored usage
+  history while applying only the new migration (`persistence/Migrations.ts`, `Migrations.test.ts`).
+- Adopt webhook filters, replay/coalescing, settings serialization repair, REST GitCafe support,
+  mobile navigation/composer/update fixes, Markdown alignment/scrollbars and usage pace ticks.
+  Preserve alphabetical account columns, account colors at zero allowance and the Trends view.
+  Convert the conflicted browser fixtures to disposable rendering while retaining native Files,
+  Git History and the fork's work-log/scroll-recovery behavior. Correct stale test expectations
+  for alphabetical ordering, conservative local-file retention and Claude's same-account history
+  fallback; these do not change the fork's runtime policies.
+- Verified the native Files/worktree recovery services, Claude profile/HOME isolation, custom
+  compaction, project memory/communication/connected-usage MCP tools, composer customization and
+  privacy boundaries remain connected. Saved collector URL strings remain ordinary settings;
+  effective CLI configuration still disables every OTLP export and analytics remains a no-op.
+- Validation: frozen-lockfile install; nine scoped typechecks (server, web, desktop, mobile,
+  contracts, shared, client-runtime, GitCafe provider and scripts); **848 tests passed, one
+  skipped** across 28 focused files. Changed-file lint passes with existing advisory warnings.
+  Browser/UI and native mobile runtime verification were not performed. Build the arm64 DMG and
+  stage its verified bundle alongside the active installation; activation requires a later owner
+  restart request (`docs/operations/local-fork-macos-build.md`).
+
 ## Daily upstream integration — 2026-10-20 (67c0fc0cda)
 
 - Merge target `67c0fc0cdaf963b103518862dd7b68a9c758ecf2`, fork parent

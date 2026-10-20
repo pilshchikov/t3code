@@ -379,7 +379,10 @@ it.effect.each(["readable", "unreadable"] as const)(
       assert.deepEqual(fork.mock.calls, [
         ["source-session", { dir: "/workspace", upToMessageId: "source-assistant" }],
       ]);
-      assert.deepEqual(read.mock.calls, [["forked-session", { dir: "/workspace" }]]);
+      assert.deepEqual(read.mock.calls, [
+        ["forked-session", { dir: "/workspace" }],
+        ...(transcript === "unreadable" ? [["forked-session"] as [string]] : []),
+      ]);
     }).pipe(Effect.provide(realQueryRunner)),
 );
 

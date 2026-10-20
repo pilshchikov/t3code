@@ -472,8 +472,8 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         },
       });
 
-      assert.equal(next.observability.otlpTracesUrl, "");
-      assert.equal(next.observability.otlpMetricsUrl, "");
+      assert.equal(next.observability.otlpTracesUrl, "http://localhost:4318/v1/traces");
+      assert.equal(next.observability.otlpMetricsUrl, "http://localhost:4318/v1/metrics");
       assert.deepEqual(
         next.textGenerationModelSelection,
         createModelSelection(
@@ -1403,6 +1403,29 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           },
         },
         automaticGitFetchInterval: 10_000,
+      });
+    }).pipe(Effect.provide(layerServerSettings())),
+  );
+
+  it.effect("saves a writing style whose other fields are defaults", () =>
+    Effect.gen(function* () {
+      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
+      const serverConfig = yield* ServerConfig.ServerConfig;
+      const fileSystem = yield* FileSystem.FileSystem;
+      yield* serverSettings.updateSettings({
+        sourceControlWritingStyle: { mode: "conventional_commits" },
+      });
+      yield* serverSettings.updateSettings({ addProjectBaseDirectory: "~/Development" });
+
+      const raw = yield* fileSystem.readFileString(serverConfig.settingsPath);
+      assert.deepEqual(JSON.parse(raw), {
+        addProjectBaseDirectory: "~/Development",
+        sourceControlWritingStyle: { mode: "conventional_commits" },
+      });
+      assert.deepEqual((yield* serverSettings.getSettings).sourceControlWritingStyle, {
+        mode: "conventional_commits",
+        customInstructions: "",
+        followChangeRequestTemplates: true,
       });
     }).pipe(Effect.provide(layerServerSettings())),
   );

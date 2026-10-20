@@ -75,6 +75,7 @@ describe("V2 preview upgrade", () => {
         [69, "CanonicalizeThreadPullRequestLinks"],
         [70, "CodexUsageNativeTurnIndex"],
         [71, "RepairClientSettlementTimestamps"],
+        [72, "WebhookDedupe"],
       ]);
       assert.deepStrictEqual(yield* runMigrations(), []);
       assert.deepStrictEqual(yield* sql`SELECT * FROM orchestration_v2_legacy_imports`, imports);
@@ -165,6 +166,7 @@ describe("V2 preview upgrade", () => {
         [69, "CanonicalizeThreadPullRequestLinks"],
         [70, "CodexUsageNativeTurnIndex"],
         [71, "RepairClientSettlementTimestamps"],
+        [72, "WebhookDedupe"],
       ]);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );

@@ -26,6 +26,27 @@ const v2TableCount = Effect.gen(function* () {
 });
 
 describe("runMigrations", () => {
+  it.effect("adds webhook dedupe to released fork databases without replacing fork data", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* runMigrations({ toMigrationInclusive: 71 });
+      yield* sql`INSERT INTO project_memories (project_id, name, description, content, updated_at)
+        VALUES ('project', 'guide', 'Private guide', 'Keep fork behavior', '2026-10-20T00:00:00Z')`;
+      yield* sql`INSERT INTO usage_limit_history
+        (account_id, label, color, window_id, window_label, bucket, measured_at, remaining_percent, resets_at)
+        VALUES ('work', 'Work account', '#123456', 'weekly', 'Weekly', 1, '2026-10-20T00:00:00Z', 25, NULL)`;
+      const beforeHistory = yield* history;
+      const memories = yield* sql`SELECT * FROM project_memories`;
+      const usage = yield* sql`SELECT * FROM usage_limit_history`;
+
+      assert.deepStrictEqual(yield* runMigrations(), [[72, "WebhookDedupe"]]);
+      assert.deepStrictEqual(yield* history, [...beforeHistory, [72, "WebhookDedupe"]]);
+      assert.deepStrictEqual(yield* sql`SELECT * FROM project_memories`, memories);
+      assert.deepStrictEqual(yield* sql`SELECT * FROM usage_limit_history`, usage);
+      assert.deepStrictEqual(yield* runMigrations(), []);
+    }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+  );
+
   it.effect("migrates a fresh database through the whole manifest", () =>
     Effect.gen(function* () {
       yield* runMigrations();
