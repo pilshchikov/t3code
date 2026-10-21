@@ -14,7 +14,6 @@ import {
   formatResetsIn,
   limitsNotice,
   paceOf,
-  paceRemainingPercent,
   remainingPercent,
 } from "@t3tools/shared/usageLimits";
 import { type ReactNode, useEffect, useEffectEvent, useRef, useState } from "react";
@@ -46,19 +45,10 @@ function WindowRow(props: {
 }) {
   const { window, now } = props;
   const remaining = remainingPercent(window);
-  const timeLeft = paceRemainingPercent(window, now);
   const pace = paceOf(window, now);
   const resetsIn = formatResetsIn(window, now);
-  const [barWidth, setBarWidth] = useState(0);
-  const tickX =
-    timeLeft === null || barWidth < 6
-      ? null
-      : Math.min(Math.max((barWidth * timeLeft) / 100, 3), barWidth - 3);
   const bar = (
-    <View
-      className="h-1.5 flex-row overflow-hidden rounded-full bg-subtle"
-      style={barWidth > 0 ? { width: barWidth } : undefined}
-    >
+    <View className="h-1.5 flex-row overflow-hidden rounded-full bg-subtle">
       <View
         className={
           remaining <= 10
@@ -83,38 +73,7 @@ function WindowRow(props: {
           {remaining}% left
         </Text>
       </View>
-      <View
-        className="h-3 justify-center"
-        onLayout={(event) => setBarWidth(event.nativeEvent.layout.width)}
-      >
-        {tickX === null ? (
-          bar
-        ) : (
-          <View className="h-1.5">
-            {/* Clip the same full-width bar so neither fill proportions nor corner radii change. */}
-            {(
-              [
-                [0, tickX - 3],
-                [tickX + 3, barWidth],
-              ] as const
-            ).map(([start, end]) => (
-              <View
-                key={start}
-                className="absolute top-0 bottom-0 overflow-hidden"
-                style={{ left: start, width: end - start }}
-              >
-                <View style={{ marginLeft: -start }}>{bar}</View>
-              </View>
-            ))}
-          </View>
-        )}
-        {tickX !== null ? (
-          <View
-            className="absolute top-px bottom-px w-0.5 rounded-full bg-foreground"
-            style={{ left: tickX - 1 }}
-          />
-        ) : null}
-      </View>
+      <View className="h-3 justify-center">{bar}</View>
       {pace || resetsIn ? (
         <View className="flex-row justify-between gap-3">
           <Text className="text-xs text-foreground-tertiary">{pace ? PACE_LABEL[pace] : ""}</Text>

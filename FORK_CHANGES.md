@@ -1,5 +1,15 @@
 # Fork Changes
 
+## Continuous usage bars without pace markers — 2026-10-20
+
+- Remove the vertical even-spending ticks and their transparent gaps from individual and pooled
+  usage bars on web/desktop and native mobile. Remove the marker-only resize subscriptions and
+  obsolete marker tests (`UsageLimits.tsx`, `UsageLimitsPooled.tsx`, mobile `UsageLimitsSection.tsx`).
+  Keep quota fills, reset estimates/hatching, account colors, reset-credit controls and pace
+  information in account details. Future upstream merges must preserve the continuous bars.
+- Validation: five existing pooled-limits Chromium checks pass; web/mobile typechecks and
+  changed-file lint pass. Removed tests specific to the retired ticks and gap geometry.
+
 ## Settled projects in quick access — 2026-10-20
 
 - The project rail's context menu adds **Settle project**. A device-local persisted list hides

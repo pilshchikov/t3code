@@ -41,53 +41,6 @@ function accountName(account: LimitAccount) {
   return `${local[0] ?? ""}${domain[0] ?? ""}`.toUpperCase() || "Account";
 }
 
-// Same gap-and-tick as the Limits rows: two clipped copies of the segment leave a see-through gap.
-function PaceGap({
-  timeLeft,
-  children,
-}: {
-  readonly timeLeft: number | null;
-  readonly children: ReactNode;
-}) {
-  const [width, setWidth] = useState(0);
-  const tickX =
-    timeLeft === null || width < 6
-      ? null
-      : Math.min(Math.max((width * timeLeft) / 100, 3), width - 3);
-  return (
-    <View
-      pointerEvents="none"
-      className="absolute inset-0"
-      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-    >
-      {tickX === null
-        ? children
-        : (
-            [
-              [0, tickX - 3],
-              [tickX + 3, width],
-            ] as const
-          ).map(([start, end]) => (
-            <View
-              key={start}
-              className="absolute top-0 bottom-0 overflow-hidden"
-              style={{ left: start, width: end - start }}
-            >
-              <View className="absolute top-0 bottom-0" style={{ left: -start, width }}>
-                {children}
-              </View>
-            </View>
-          ))}
-      {tickX !== null ? (
-        <View
-          className="absolute top-0.5 bottom-0.5 w-0.5 rounded-full bg-foreground"
-          style={{ left: tickX - 1 }}
-        />
-      ) : null}
-    </View>
-  );
-}
-
 function AccountSegment({
   remaining,
   color,
@@ -204,7 +157,7 @@ function PoolWindowCard({
               onPress={() => openAccount(account)}
               className="h-7 min-w-0 flex-1 rounded-md"
             >
-              <PaceGap timeLeft={timeLeft}>
+              <View pointerEvents="none" className="absolute inset-0">
                 <View className="absolute inset-0 rounded-md bg-subtle" />
                 <View className="absolute inset-0 overflow-hidden rounded-md">
                   <AccountSegment
@@ -213,7 +166,7 @@ function PoolWindowCard({
                     refillPercent={window.resetsAt ? member.refillPercent : 0}
                   />
                 </View>
-              </PaceGap>
+              </View>
               <View
                 pointerEvents="none"
                 className="absolute inset-0 items-center justify-center overflow-hidden rounded-md"
