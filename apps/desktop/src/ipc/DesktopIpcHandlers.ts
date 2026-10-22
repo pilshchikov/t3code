@@ -20,6 +20,8 @@ import {
   setTailscaleServeEnabled,
 } from "./methods/serverExposure.ts";
 import {
+  getBundledServerRuntime,
+  updateBundledSshServer,
   bootstrapSshBearerSession,
   disconnectSshEnvironment,
   discoverSshHosts,
@@ -125,6 +127,8 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(discoverSshHosts);
   yield* ipc.handle(resolveSshHost);
   yield* ipc.handle(ensureSshEnvironment);
+  yield* ipc.handle(getBundledServerRuntime);
+  yield* ipc.handle(updateBundledSshServer);
   yield* ipc.handle(disconnectSshEnvironment);
   yield* ipc.handle(fetchSshEnvironmentDescriptor);
   yield* ipc.handle(bootstrapSshBearerSession);

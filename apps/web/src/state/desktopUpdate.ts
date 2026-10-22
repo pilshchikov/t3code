@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { DesktopBridge, DesktopUpdateState } from "@t3tools/contracts";
+import type { BundledServerRuntime, DesktopBridge, DesktopUpdateState } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
@@ -83,4 +83,15 @@ const desktopUpdateStateAtom = createDesktopUpdateStateAtom(getDesktopUpdateBrid
 
 export function useDesktopUpdateState(): DesktopUpdateState | null {
   return AsyncResult.getOrElse(useAtomValue(desktopUpdateStateAtom), () => null);
+}
+
+const bundledServerRuntimeAtom = Atom.make(
+  Effect.tryPromise(async () =>
+    typeof window === "undefined"
+      ? null
+      : ((await window.desktopBridge?.getBundledServerRuntime?.()) ?? null),
+  ),
+).pipe(Atom.keepAlive);
+export function useBundledServerRuntime(): BundledServerRuntime | null {
+  return AsyncResult.getOrElse(useAtomValue(bundledServerRuntimeAtom), () => null);
 }

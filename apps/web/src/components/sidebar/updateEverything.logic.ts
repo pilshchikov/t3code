@@ -1,3 +1,4 @@
+import type { BundledServerRuntime, DesktopSshEnvironmentTarget } from "@t3tools/contracts";
 import type { ServerUpdateState } from "@t3tools/client-runtime/state/server";
 import type { EnvironmentId, ServerConfig } from "@t3tools/contracts";
 import { cliReleaseChannelOf } from "@t3tools/shared/cliRelease";
@@ -20,6 +21,7 @@ export interface UpdateEverythingMachine {
   readonly connected: boolean;
   readonly hostedByThisApp: boolean;
   readonly canMaintain: boolean;
+  readonly sshTarget?: DesktopSshEnvironmentTarget | undefined;
   readonly updateState: ServerUpdateState;
 }
 
@@ -69,13 +71,31 @@ export interface SkippedMachine {
 export function collectServerUpdateTargets(
   machines: ReadonlyArray<UpdateEverythingMachine>,
   targetVersion: string,
+  bundledRuntime?: BundledServerRuntime | null,
 ): { readonly targets: ServerUpdateTarget[]; readonly skipped: SkippedMachine[] } {
   const targets: ServerUpdateTarget[] = [];
   const skipped: SkippedMachine[] = [];
   for (const machine of machines) {
     const config = machine.serverConfig;
     if (machine.hostedByThisApp) continue;
+    const bundle =
+      bundledRuntime &&
+      machine.sshTarget &&
+      config?.environment.platform.os === bundledRuntime.os &&
+      config.environment.platform.arch === bundledRuntime.arch
+        ? bundledRuntime
+        : null;
+    if (bundledRuntime && machine.sshTarget && config !== null && bundle === null) {
+      skipped.push({
+        environmentId: machine.environmentId,
+        label: machine.label,
+        reason: "no bundled runtime for this platform",
+      });
+      continue;
+    }
+    if (bundle && config?.environment.serverBuildId === bundle.buildId) continue;
     if (
+      !bundle &&
       config !== null &&
       resolveVersionMismatch(config.environment.serverVersion, targetVersion) === null
     ) {
@@ -97,16 +117,17 @@ export function collectServerUpdateTargets(
     }
     const selfUpdate = resolveServerSelfUpdateCapability(config);
     const desktopAppUpdate = supportsDesktopAppUpdate(config);
-    if (selfUpdate === null) {
+    if (!bundle && selfUpdate === null) {
       skip("needs a manual update");
       continue;
     }
-    if (selfUpdate === "desktop-managed" && !desktopAppUpdate) {
+    if (!bundle && selfUpdate === "desktop-managed" && !desktopAppUpdate) {
       skip("needs a newer desktop app");
       continue;
     }
     const serverVersion = config.environment.serverVersion;
     if (
+      !bundle &&
       selfUpdate !== "desktop-managed" &&
       cliReleaseChannelOf(serverVersion) !== cliReleaseChannelOf(targetVersion)
     ) {
@@ -121,7 +142,16 @@ export function collectServerUpdateTargets(
       desktopAppUpdate,
       threadContinuation: supportsServerUpdateThreadContinuation(config),
       continueThreadsAfterServerUpdate: config.settings.continueThreadsAfterServerUpdate ?? false,
-      targetVersion,
+      targetVersion: bundle?.version ?? targetVersion,
+      ...(bundle && machine.sshTarget
+        ? {
+            bundledRuntime: {
+              runtime: bundle,
+              target: machine.sshTarget,
+              fromVersion: serverVersion,
+            },
+          }
+        : {}),
     });
   }
   return { targets, skipped };

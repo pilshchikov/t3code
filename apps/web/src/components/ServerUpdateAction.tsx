@@ -1,3 +1,5 @@
+import type { BundledServerRuntime, DesktopSshEnvironmentTarget } from "@t3tools/contracts";
+import { updateBundledServer } from "~/state/bundledServerUpdate";
 import { useAtomValue } from "@effect/atom-react";
 import {
   AuthEnvironmentMaintainScope,
@@ -47,6 +49,11 @@ function updateFailureMessage(error: unknown): string {
 }
 
 export interface ServerUpdateTarget {
+  readonly bundledRuntime?: {
+    readonly runtime: BundledServerRuntime;
+    readonly target: DesktopSshEnvironmentTarget;
+    readonly fromVersion: string;
+  };
   readonly environmentId: EnvironmentId;
   readonly serverLabel: string;
   readonly selfUpdate: ServerSelfUpdateCapability | null;
@@ -69,6 +76,7 @@ export type ServerUpdateOutcome =
 /** Toasts its success or failure unless `quiet`; never rejects. */
 export function useServerUpdate() {
   const updateServer = useAtomCommand(serverEnvironment.updateServer, { reportFailure: false });
+  const updateBundled = useAtomCommand(updateBundledServer, { reportFailure: false });
   return async (
     target: ServerUpdateTarget,
     { quiet = false }: { readonly quiet?: boolean } = {},
@@ -80,15 +88,23 @@ export function useServerUpdate() {
     )
       return { status: "skipped" };
     pendingUpdateEnvironmentIds.add(environmentId);
-    const result = await updateServer({
-      environmentId,
-      input: {
-        targetVersion,
-        ...(target.threadContinuation && target.continueThreadsAfterServerUpdate
-          ? { continueRunningThreads: true }
-          : {}),
-      },
-    });
+    const result = target.bundledRuntime
+      ? await updateBundled({
+          target: target.bundledRuntime.target,
+          environmentId,
+          buildId: target.bundledRuntime.runtime.buildId,
+          version: target.bundledRuntime.runtime.version,
+          fromVersion: target.bundledRuntime.fromVersion,
+        })
+      : await updateServer({
+          environmentId,
+          input: {
+            targetVersion,
+            ...(target.threadContinuation && target.continueThreadsAfterServerUpdate
+              ? { continueRunningThreads: true }
+              : {}),
+          },
+        });
     pendingUpdateEnvironmentIds.delete(environmentId);
     if (result._tag === "Failure") {
       if (isAtomCommandInterrupted(result)) return { status: "skipped" };
@@ -108,8 +124,8 @@ export function useServerUpdate() {
         title: `${serverLabel} updated`,
         description:
           selfUpdate === "desktop-managed"
-            ? `Desktop app relaunched on ${result.value.targetVersion}.`
-            : `Reconnected on t3@${result.value.targetVersion}.`,
+            ? `Desktop app relaunched on ${targetVersion}.`
+            : `Reconnected on t3@${targetVersion}.`,
       });
     }
     return { status: "updated" };
@@ -130,8 +146,9 @@ export function ServerUpdatesAction({
   const [isPending, setIsPending] = useState(false);
   const eligible = targets.filter(
     (target) =>
-      target.selfUpdate !== null &&
-      (target.selfUpdate !== "desktop-managed" || target.desktopAppUpdate),
+      target.bundledRuntime !== undefined ||
+      (target.selfUpdate !== null &&
+        (target.selfUpdate !== "desktop-managed" || target.desktopAppUpdate)),
   );
   const handleUpdate = async () => {
     if (pending.current) return;
@@ -208,6 +225,7 @@ export function ServerUpdateAction({
   selfUpdate,
   installation,
   desktopAppUpdate = false,
+  bundledRuntime,
   threadContinuation = false,
   targetVersion,
   label = "Update",
@@ -271,6 +289,7 @@ export function ServerUpdateAction({
       threadContinuation,
       targetVersion,
       continueThreadsAfterServerUpdate,
+      ...(bundledRuntime ? { bundledRuntime } : {}),
     });
   };
 
@@ -283,7 +302,9 @@ export function ServerUpdateAction({
   }
 
   const manualCommand =
-    selfUpdate === null ? manualServerUpdateCommand(targetVersion, installation) : null;
+    selfUpdate === null && !bundledRuntime
+      ? manualServerUpdateCommand(targetVersion, installation)
+      : null;
   const actionLabel =
     manualCommand !== null
       ? installation?.kind === "npm-global"
@@ -368,7 +389,7 @@ export function OutdatedServerUpdateAction({
     toastManager.add({
       type: "success",
       title: `${serverLabel} updated`,
-      description: `Reconnected on t3@${result.value.targetVersion}.`,
+      description: `Reconnected on t3@${targetVersion}.`,
     });
   };
   return (

@@ -142,3 +142,73 @@ describe("runUpdateEverything", () => {
     expect(result.localReady).toBe(false);
   });
 });
+
+describe("bundled fork server updates", () => {
+  const runtime = {
+    version: "0.1.1",
+    buildId: "a".repeat(64),
+    os: "darwin" as const,
+    arch: "arm64" as const,
+    sha256: "b".repeat(64),
+  };
+  const sshTarget = { alias: "mini", hostname: "mini.test", username: "developer", port: 22 };
+  function sshMachine(id: string, buildId?: string) {
+    const item = machine(id, "0.1.1", undefined, { sshTarget });
+    return {
+      ...item,
+      serverConfig: {
+        ...item.serverConfig!,
+        environment: {
+          ...item.serverConfig!.environment,
+          platform: { os: "darwin" as const, arch: "arm64" as const },
+          ...(buildId ? { serverBuildId: buildId } : {}),
+        },
+      },
+    };
+  }
+  it("offers the installed fork for an older or unidentified build with the same version", () => {
+    const { targets } = collectServerUpdateTargets(
+      [sshMachine("old", "c".repeat(64)), sshMachine("legacy")],
+      runtime.version,
+      runtime,
+    );
+    expect(
+      targets.map((target) => [
+        target.serverLabel,
+        target.targetVersion,
+        target.bundledRuntime?.runtime.buildId,
+      ]),
+    ).toEqual([
+      ["old", "0.1.1", runtime.buildId],
+      ["legacy", "0.1.1", runtime.buildId],
+    ]);
+  });
+  it("does not offer an update for the exact bundled build or the local app", () => {
+    const local = { ...sshMachine("local"), hostedByThisApp: true };
+    expect(
+      collectServerUpdateTargets([sshMachine("current", runtime.buildId), local], "0.1.2", runtime)
+        .targets,
+    ).toEqual([]);
+  });
+  it("keeps unsupported SSH platforms off the public release update path", () => {
+    const { targets, skipped } = collectServerUpdateTargets(
+      [machine("linux", "0.1.0", "boot-service", { sshTarget })],
+      runtime.version,
+      runtime,
+    );
+    expect(targets).toEqual([]);
+    expect(skipped[0]?.reason).toBe("no bundled runtime for this platform");
+  });
+  it("keeps permission and connection checks for bundled updates", () => {
+    const { targets, skipped } = collectServerUpdateTargets(
+      [
+        { ...sshMachine("offline"), connected: false },
+        { ...sshMachine("no-scope"), canMaintain: false },
+      ],
+      runtime.version,
+      runtime,
+    );
+    expect(targets).toEqual([]);
+    expect(skipped.map((entry) => entry.reason)).toEqual(["not connected", "no permission"]);
+  });
+});

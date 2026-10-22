@@ -80,6 +80,12 @@ rustup target add aarch64-apple-darwin
 
 ## 4. Build the packaged app
 
+Use the Node version pinned in the root `package.json`. macOS packaging also builds a standalone
+SSH server executable, which needs that Node toolchain even though the desktop uses Electron.
+The resulting app carries `Contents/Resources/server-runtime/runtime.tar.gz` and its fingerprint
+manifest. Those files let the installed app update matching SSH environments from this fork.
+Rebuild normally; `--skip-build` requires a CLI executable staged for the same revision and target.
+
 ```sh
 rust_toolchain_bin="$(dirname "$(rustup which rustc)")"
 PATH="$rust_toolchain_bin:$PATH" pnpm dist:desktop:dmg:arm64
@@ -132,6 +138,8 @@ Check the staged bundle before replacing anything:
 /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$staged_app/Contents/Info.plist"
 file "$staged_app/Contents/MacOS/T3 Code (Beta)"
 test -f "$staged_app/Contents/Resources/app.asar"
+test -f "$staged_app/Contents/Resources/server-runtime/runtime.tar.gz"
+test -f "$staged_app/Contents/Resources/server-runtime/manifest.json"
 test -x "$staged_app/Contents/Resources/resource-monitor/t3-resource-monitor"
 ```
 

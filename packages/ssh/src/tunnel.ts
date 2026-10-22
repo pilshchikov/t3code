@@ -1,3 +1,5 @@
+import { bundledRuntimeUploadScript, bundledRuntimeActivationScript } from "./bundledRuntime.ts";
+import type { BundledServerRuntime, EnvironmentId } from "@t3tools/contracts";
 import type {
   DesktopSshEnvironmentBootstrap,
   DesktopSshEnvironmentTarget,
@@ -67,10 +69,17 @@ export interface RemoteT3RunnerOptions {
   readonly nodeScriptPath?: string | null;
   readonly nodeEngineRange?: string | null;
   readonly archiveVersion?: string | null;
+  readonly forkBuildId?: string;
   readonly releaseBaseUrl?: string | null;
 }
 
+export interface BundledSshRuntimeAsset {
+  readonly metadata: BundledServerRuntime;
+  readonly archivePath: string;
+}
+
 export interface SshEnvironmentManagerOptions {
+  readonly resolveBundledRuntime?: Effect.Effect<BundledSshRuntimeAsset | null>;
   readonly resolveCliRunner?: Effect.Effect<RemoteT3RunnerOptions>;
 }
 
@@ -141,6 +150,11 @@ interface SshAuthAttemptInput<T> extends SshAuthOperationInput<T> {
 }
 
 export interface SshEnvironmentManagerShape {
+  readonly updateBundledRuntime: (
+    target: DesktopSshEnvironmentTarget,
+    environmentId: EnvironmentId,
+    buildId: string,
+  ) => Effect.Effect<BundledServerRuntime, SshEnvironmentEffectError, SshEnvironmentEffectContext>;
   readonly ensureEnvironment: (
     target: DesktopSshEnvironmentTarget,
     options?: { readonly issuePairingToken?: boolean },
@@ -443,6 +457,11 @@ if [ -n "$T3_NODE_SCRIPT_PATH" ]; then
   exec node "$T3_NODE_SCRIPT_PATH" "$@"
 fi
 T3_ARCHIVE_VERSION=@@T3_ARCHIVE_VERSION@@
+T3_FORK_BUILD_ID=@@T3_FORK_BUILD_ID@@
+if [ -n "$T3_FORK_BUILD_ID" ]; then
+  export T3CODE_SERVER_BUILD_ID="$T3_FORK_BUILD_ID"
+  exec "$HOME/.t3/runtime/forks/$T3_FORK_BUILD_ID/t3" "$@"
+fi
 if [ -z "$T3_ARCHIVE_VERSION" ]; then
   printf 'No t3 release version was provided for the remote runtime.\\n' >&2
   exit 1
@@ -547,6 +566,23 @@ LOG_FILE="$STATE_DIR/server.log"
 RUNNER_FILE="$STATE_DIR/run-t3.sh"
 RUNNER_NEXT="$STATE_DIR/run-t3.next.$$"
 mkdir -p "$STATE_DIR"
+T3_FORK_BUILD_ID=@@T3_FORK_BUILD_ID@@
+if [ -n "$T3_FORK_BUILD_ID" ]; then
+  T3_BUNDLED_RUNNER="$HOME/.t3/runtime/forks/$T3_FORK_BUILD_ID/t3"
+  T3_RUNNING_INFO="$("$T3_BUNDLED_RUNNER" __ssh-helper runtime-port "$DEFAULT_RUNTIME_FILE" 2>/dev/null || true)"
+  if [ -n "$T3_RUNNING_INFO" ]; then
+    T3_RUNNING_PID="\${T3_RUNNING_INFO%% *}"
+    T3_RUNNING_PORT="\${T3_RUNNING_INFO#* }"
+    if "$T3_BUNDLED_RUNNER" __ssh-helper wait-ready "$T3_RUNNING_PORT" 30000 2000 >/dev/null 2>&1; then
+      T3_RUNNING_KIND=external
+      if [ "$(cat "$PID_FILE" 2>/dev/null || true)" = "$T3_RUNNING_PID" ] && [ "$(cat "$MANAGED_FILE" 2>/dev/null || true)" = managed ]; then T3_RUNNING_KIND=managed; fi
+      printf '{"remotePort":%s,"serverKind":"%s"}\\n' "$T3_RUNNING_PORT" "$T3_RUNNING_KIND"
+      exit 0
+    fi
+    echo 'The existing server is still running; reconnect after it becomes ready.' >&2
+    exit 1
+  fi
+fi
 cleanup_runner_next() {
   rm -f "$RUNNER_NEXT"
 }
@@ -804,6 +840,9 @@ export class SshMissingRunnerError extends Schema.TaggedError<SshMissingRunnerEr
 export function buildRemoteT3RunnerScript(input?: RemoteT3RunnerOptions): string {
   const nodeScriptPath = input?.nodeScriptPath?.trim() || "";
   const archiveVersion = input?.archiveVersion?.trim() || "";
+  if (input?.forkBuildId !== undefined && !/^[0-9a-f]{12,64}$/.test(input.forkBuildId)) {
+    throw new SshInvalidArchiveVersionError({ archiveVersion: input.forkBuildId });
+  }
   if (nodeScriptPath === "" && archiveVersion === "") {
     throw new SshMissingRunnerError();
   }
@@ -818,6 +857,7 @@ export function buildRemoteT3RunnerScript(input?: RemoteT3RunnerOptions): string
     applyScriptPlaceholders(REMOTE_RUNNER_SCRIPT, {
       T3_NODE_SCRIPT_PATH: shellSingleQuote(nodeScriptPath),
       T3_ARCHIVE_VERSION: shellSingleQuote(archiveVersion),
+      T3_FORK_BUILD_ID: shellSingleQuote(input?.forkBuildId ?? ""),
       T3_RELEASE_BASE_URL: shellSingleQuote(releaseBaseUrl),
       T3_ARCHIVE_LOCK_WAIT_SECONDS: String(REMOTE_ARCHIVE_LOCK_WAIT_SECONDS),
       T3_ARCHIVE_DOWNLOAD_SECONDS: String(REMOTE_ARCHIVE_DOWNLOAD_SECONDS),
@@ -836,9 +876,10 @@ export function buildRemoteNodeEnvScript(input?: RemoteT3RunnerOptions): string 
   );
 }
 
-function buildRemoteLaunchScript(input?: RemoteT3RunnerOptions): string {
+export function buildRemoteLaunchScript(input?: RemoteT3RunnerOptions): string {
   return applyScriptPlaceholders(REMOTE_LAUNCH_SCRIPT, {
     T3_ARCHIVE_MODE: isNodeScriptRunner(input) ? "0" : "1",
+    T3_FORK_BUILD_ID: shellSingleQuote(input?.forkBuildId ?? ""),
     T3_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
     T3_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteT3RunnerScript(input)),
     T3_PICK_PORT_SCRIPT: stripTrailingNewlines(REMOTE_PICK_PORT_SCRIPT),
@@ -1388,7 +1429,13 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
 
   yield* Scope.addFinalizer(
     managerScope,
-    Effect.sync(() => [...tunnels.values()]).pipe(
+    Effect.sync(() => {
+      const entries = [...tunnels.values()];
+      // A desktop restart must not turn staging a fork update into a remote shutdown.
+      // Explicit disconnect still owns stopRemoteServer and reports its failure.
+      if (options.resolveBundledRuntime !== undefined) tunnels.clear();
+      return entries;
+    }).pipe(
       Effect.flatMap((entries) =>
         Effect.forEach(entries, closeTunnelEntry, { concurrency: "unbounded" }),
       ),
@@ -1680,6 +1727,92 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     );
   });
 
+  const uploadBundledRuntime = Effect.fn("ssh/tunnel.uploadBundledRuntime")(function* (
+    key: string,
+    target: DesktopSshEnvironmentTarget,
+    asset: BundledSshRuntimeAsset,
+  ) {
+    const present = yield* runWithSshAuth({
+      key,
+      target,
+      operation: (authOptions) =>
+        runSshCommand(target, {
+          ...authOptions,
+          remoteCommandArgs: [
+            "sh",
+            "-c",
+            shellSingleQuote(
+              `if [ "$(cat "$HOME/.t3/runtime/forks/${asset.metadata.buildId}/.bundle-sha256" 2>/dev/null)" = '${asset.metadata.sha256}' ]; then printf present; fi`,
+            ),
+          ],
+        }),
+    });
+    if (present.stdout === "present") return;
+    yield* runWithSshAuth({
+      key,
+      target,
+      operation: (authOptions) =>
+        runSshCommand(target, {
+          ...authOptions,
+          remoteCommandArgs: [
+            "sh",
+            "-c",
+            shellSingleQuote(bundledRuntimeUploadScript(asset.metadata)),
+          ],
+          stdinFile: asset.archivePath,
+          timeoutMs: 300_000,
+        }),
+    });
+  });
+
+  const updateBundledRuntime = Effect.fn("ssh/tunnel.updateBundledRuntime")(function* (
+    target: DesktopSshEnvironmentTarget,
+    environmentId: EnvironmentId,
+    buildId: string,
+  ) {
+    const asset =
+      options.resolveBundledRuntime === undefined ? null : yield* options.resolveBundledRuntime;
+    if (asset === null || asset.metadata.buildId !== buildId) {
+      return yield* new SshLaunchError({
+        stdout: "",
+        message: "The requested runtime is not bundled with this desktop app.",
+      });
+    }
+    const resolved = yield* resolveSshTarget(target.alias || target.hostname);
+    const resolvedTarget = {
+      ...resolved,
+      username: target.username ?? resolved.username,
+      port: target.port ?? resolved.port,
+    };
+    const key = targetConnectionKey(resolvedTarget);
+    return yield* withTargetLock(
+      key,
+      Effect.gen(function* () {
+        yield* uploadBundledRuntime(key, resolvedTarget, asset);
+        const stateKey = yield* remoteStateKey(resolvedTarget);
+        yield* runWithSshAuth({
+          key,
+          target: resolvedTarget,
+          operation: (authOptions) =>
+            runSshCommand(resolvedTarget, {
+              ...authOptions,
+              remoteCommandArgs: ["sh", "-l", "-s"],
+              stdin: bundledRuntimeActivationScript({
+                runtime: asset.metadata,
+                stateKey,
+                environmentId,
+              }),
+              timeoutMs: 600_000,
+            }),
+        });
+        const entry = tunnels.get(key);
+        if (entry !== undefined)
+          yield* waitForHttpReady({ baseUrl: entry.httpBaseUrl, timeoutMs: 30_000 });
+        return asset.metadata;
+      }),
+    );
+  });
+
   const ensureEnvironment = Effect.fn("ssh/tunnel.ensureEnvironment")(function* (
     target: DesktopSshEnvironmentTarget,
     requestOptions?: { readonly issuePairingToken?: boolean },
@@ -1703,8 +1836,13 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
       ...sshTargetLogFields(resolvedTarget),
       key,
     });
-    const runner =
+    const defaultRunner =
       options.resolveCliRunner === undefined ? undefined : yield* options.resolveCliRunner;
+    let runner = defaultRunner;
+    let bundled =
+      options.resolveBundledRuntime === undefined ? null : yield* options.resolveBundledRuntime;
+    if (bundled !== null)
+      runner = { archiveVersion: bundled.metadata.version, forkBuildId: bundled.metadata.buildId };
     yield* Effect.logDebug("ssh.environment.runner.resolved", {
       ...sshTargetLogFields(resolvedTarget),
       ...sshRunnerLogFields(runner),
@@ -1713,6 +1851,25 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     return yield* withTargetLock(
       key,
       Effect.gen(function* () {
+        if (bundled !== null && !tunnels.has(key)) {
+          const platform = yield* runWithSshAuth({
+            key,
+            target: resolvedTarget,
+            operation: (authOptions) =>
+              runSshCommand(resolvedTarget, {
+                ...authOptions,
+                remoteCommandArgs: ["uname", "-sm"],
+              }),
+          });
+          const expectedPlatform = `Darwin ${bundled.metadata.arch === "arm64" ? "arm64" : "x86_64"}`;
+          if (getLastNonEmptyOutputLine(platform.stdout) === expectedPlatform) {
+            yield* uploadBundledRuntime(key, resolvedTarget, bundled);
+          } else {
+            // Preserve connection support for hosts outside this app's bundled platform.
+            bundled = null;
+            runner = defaultRunner;
+          }
+        }
         const entry = yield* ensureTunnelEntry(key, resolvedTarget, runner);
 
         const pairingResult = requestOptions?.issuePairingToken
@@ -1785,7 +1942,11 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     );
   });
 
-  return SshEnvironmentManager.of({ ensureEnvironment, disconnectEnvironment });
+  return SshEnvironmentManager.of({
+    ensureEnvironment,
+    disconnectEnvironment,
+    updateBundledRuntime,
+  });
 });
 
 /**

@@ -504,6 +504,11 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         undefined,
       );
 
+      assert.deepInclude(release.extraResources, {
+        from: "apps/desktop/prod-resources/server-runtime",
+        to: "server-runtime",
+      });
+      assert.include(release.files, "!apps/desktop/prod-resources/server-runtime/**/*");
       assert.isNull(preview.publish);
       assert.isNull(previewChannel.publish);
       assert.deepStrictEqual(release.publish, [

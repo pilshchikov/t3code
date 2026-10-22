@@ -193,6 +193,21 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
     }),
   );
 
+  it.effect("reports the installed fork payload identity without changing its environment id", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const baseDir = yield* fs.makeTempDirectoryScoped();
+      const buildId = "a".repeat(64);
+      const descriptor = yield* Effect.gen(function* () {
+        return yield* (yield* ServerEnvironment.ServerEnvironment).getDescriptor;
+      }).pipe(
+        Effect.provide(layerServerEnvironment(baseDir)),
+        Effect.provideService(HostProcess.Environment, { T3CODE_SERVER_BUILD_ID: buildId }),
+      );
+      expect(descriptor.serverBuildId).toBe(buildId);
+    }),
+  );
+
   it.effect("persists the environment id across service restarts", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

@@ -660,7 +660,7 @@ export class MissingDesktopBuildInputError extends Schema.TaggedError<MissingDes
   {
     artifact: DesktopBuildInputArtifact,
     artifactPath: Schema.String,
-    buildCommand: Schema.Literal("vp run build:desktop"),
+    buildCommand: Schema.String,
   },
 ) {
   override get message(): string {
@@ -1000,6 +1000,8 @@ export const DESKTOP_FILE_EXCLUSIONS = [
   // Windows stages the server sidecar below prod-resources so electron-builder
   // can copy it using project-relative extraResources matchers. Keep those
   // staging inputs out of app.asar; they are emitted once at resources/.
+  "!apps/desktop/prod-resources/server-runtime",
+  "!apps/desktop/prod-resources/server-runtime/**/*",
   "!apps/desktop/prod-resources/windows-server",
   "!apps/desktop/prod-resources/windows-server/**/*",
   "!apps/desktop/prod-resources/wsl-runtime.tar.gz",
@@ -1864,6 +1866,7 @@ const buildDesktopBundlesUnlocked = Effect.fn("buildDesktopBundlesUnlocked")(fun
   repoRoot: string,
   appVersion: string,
   verbose: boolean,
+  bundledServerTarget?: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -1894,6 +1897,28 @@ const buildDesktopBundlesUnlocked = Effect.fn("buildDesktopBundlesUnlocked")(fun
           }),
           { label: "vp run build:desktop", verbose },
         ).pipe(Effect.scoped);
+        if (bundledServerTarget !== undefined) {
+          yield* runCommand(
+            ChildProcess.make(
+              "node",
+              ["apps/server/scripts/cli.ts", "build-exe", "--target", bundledServerTarget],
+              {
+                cwd: repoRoot,
+                env: { APP_VERSION: appVersion },
+                extendEnv: true,
+              },
+            ),
+            { label: "build bundled SSH server executable", verbose },
+          ).pipe(Effect.scoped);
+          yield* fs.writeFileString(
+            path.join(repoRoot, "apps/server/dist-exe/bundled-build.json"),
+            yield* encodeJsonString({
+              version: appVersion,
+              buildId: yield* resolveGitCommitHash(repoRoot),
+              target: bundledServerTarget,
+            }),
+          );
+        }
       }),
     (originals, exit) =>
       Effect.gen(function* () {
@@ -2852,6 +2877,9 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       : {}),
     extraResources: [
       ...DESKTOP_EXTRA_RESOURCES,
+      ...(platform === "mac"
+        ? [{ from: "apps/desktop/prod-resources/server-runtime", to: "server-runtime" }]
+        : []),
       ...(platform === "linux" ? LINUX_CAPTURE_EXTRA_RESOURCES : []),
       ...(platform === "linux" ? LINUX_BROWSER_SECRET_EXTRA_RESOURCES : []),
       ...(platform === "win" ? WINDOWS_SERVER_EXTRA_RESOURCES : []),
@@ -3681,6 +3709,12 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
       }),
   });
 
+  const bundledServerArch =
+    options.arch === "universal"
+      ? (yield* HostProcess.Architecture) === "arm64"
+        ? "arm64"
+        : "x64"
+      : options.arch;
   const appVersion = options.version ?? serverPackageJson.version;
   const iconAssets = resolveDesktopBuildIconAssets(appVersion);
   const commitHash = yield* resolveGitCommitHash(repoRoot);
@@ -3700,7 +3734,12 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
 
   if (!options.skipBuild) {
     yield* Effect.log("[desktop-artifact] Building desktop/server/web artifacts...");
-    yield* buildDesktopBundlesUnlocked(repoRoot, appVersion, options.verbose);
+    yield* buildDesktopBundlesUnlocked(
+      repoRoot,
+      appVersion,
+      options.verbose,
+      options.platform === "mac" ? `darwin-${bundledServerArch}` : undefined,
+    );
   }
 
   const requiredBuildInputs = [
@@ -3844,6 +3883,62 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
   // electron-builder is filtering out stageResourcesDir directory in the AppImage for production
   const stageProdResourcesDir = path.join(stageAppDir, "apps/desktop/prod-resources");
   yield* fs.copy(stageResourcesDir, stageProdResourcesDir);
+
+  if (options.platform === "mac") {
+    const runtimeDir = path.join(stageProdResourcesDir, "server-runtime");
+    const infoPath = path.join(repoRoot, "apps/server/dist-exe/bundled-build.json");
+    const expectedInfo = yield* encodeJsonString({
+      version: appVersion,
+      buildId: commitHash,
+      target: `darwin-${bundledServerArch}`,
+    });
+    if (!(yield* fs.exists(infoPath)) || (yield* fs.readFileString(infoPath)) !== expectedInfo) {
+      return yield* new MissingDesktopBuildInputError({
+        artifact: "server-dist",
+        artifactPath: infoPath,
+        buildCommand: `vp run dist:desktop:dmg:${bundledServerArch} (without --skip-build)`,
+      });
+    }
+    yield* fs.makeDirectory(runtimeDir, { recursive: true });
+    yield* runCommand(
+      ChildProcess.make(
+        "node",
+        [
+          "scripts/build-cli-archive.ts",
+          "--platform",
+          "mac",
+          "--arch",
+          bundledServerArch,
+          "--version",
+          appVersion,
+          "--output-dir",
+          runtimeDir,
+          "--resource-monitor-dir",
+          path.join(stageProdResourcesDir, "resource-monitor"),
+        ],
+        { cwd: repoRoot },
+      ),
+      { label: "package bundled SSH server runtime", verbose: options.verbose },
+    );
+    const archivePath = path.join(
+      runtimeDir,
+      `t3-${appVersion}-darwin-${bundledServerArch}.tar.gz`,
+    );
+    yield* fs.rename(archivePath, path.join(runtimeDir, "runtime.tar.gz"));
+    const sha256 = NodeCrypto.createHash("sha256")
+      .update(yield* fs.readFile(path.join(runtimeDir, "runtime.tar.gz")))
+      .digest("hex");
+    yield* fs.writeFileString(
+      path.join(runtimeDir, "manifest.json"),
+      yield* encodeJsonString({
+        version: appVersion,
+        buildId: sha256,
+        os: "darwin",
+        arch: bundledServerArch,
+        sha256,
+      }),
+    );
+  }
 
   const configuredMacPasskeySigning =
     options.platform === "mac" && options.signed

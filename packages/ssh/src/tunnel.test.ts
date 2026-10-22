@@ -368,3 +368,47 @@ describe("ssh tunnel scripts", () => {
 // desktop app with network access on) listens on *:<port>. Linux refuses that
 // bind unless both sockets set SO_REUSEPORT, so on Linux the preload adds it to
 // the picker's probe and the holder sets it too.
+
+it.effect.each([false, true])(
+  "keeps a bundled desktop's remote server until an explicit disconnect (%s)",
+  (disconnect) =>
+    Effect.gen(function* () {
+      let remoteStops = 0;
+      let localStops = 0;
+      const spawner = ChildProcessSpawner.make((command) => {
+        const args = commandArgs(command);
+        if (args.includes("-G")) return Effect.succeed(makeSuccessfulProcess("hostname devbox\n"));
+        if (args.includes("-N"))
+          return Effect.succeed(
+            makeRunningProcess(() => {
+              localStops++;
+            }),
+          );
+        if (args.includes("-l"))
+          return Effect.succeed(
+            makeSuccessfulProcess('{"remotePort":3773,"serverKind":"managed"}\n'),
+          );
+        remoteStops++;
+        return Effect.succeed(makeSuccessfulProcess('{"stopped":true}\n'));
+      });
+      const layer = Layer.mergeAll(
+        NodeServices.layer,
+        Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        Layer.succeed(HttpClient.HttpClient, testHttpClient),
+        Layer.succeed(NetService.NetService, testNetService),
+        SshAuth.SshPasswordPrompt.disabledLayer,
+        SshTunnel.SshEnvironmentManager.layer({
+          resolveCliRunner: Effect.succeed(ARCHIVE),
+          resolveBundledRuntime: Effect.succeed(null),
+        }),
+      );
+      yield* Effect.gen(function* () {
+        const manager = yield* SshTunnel.SshEnvironmentManager;
+        const target = { alias: "devbox", hostname: "devbox", username: null, port: null };
+        yield* manager.ensureEnvironment(target);
+        if (disconnect) yield* manager.disconnectEnvironment(target);
+      }).pipe(Effect.provide(layer), Effect.scoped);
+      assert.isAbove(localStops, 0);
+      assert.strictEqual(remoteStops, disconnect ? 1 : 0);
+    }),
+);

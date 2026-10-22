@@ -491,6 +491,21 @@ export const DesktopDiscoveredSshHostSchema = Schema.Struct({
   source: DesktopSshHostSourceSchema,
 });
 
+export const BundledServerRuntime = Schema.Struct({
+  version: TrimmedNonEmptyString,
+  buildId: Schema.String.check(Schema.isPattern(/^[0-9a-f]{12,64}$/)),
+  os: Schema.Literal("darwin"),
+  arch: Schema.Literals(["arm64", "x64"]),
+  sha256: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)),
+});
+export type BundledServerRuntime = typeof BundledServerRuntime.Type;
+export const DesktopBundledServerUpdateInput = Schema.Struct({
+  target: DesktopSshEnvironmentTargetSchema,
+  environmentId: EnvironmentId,
+  buildId: Schema.String.check(Schema.isPattern(/^[0-9a-f]{12,64}$/)),
+});
+export type DesktopBundledServerUpdateInput = typeof DesktopBundledServerUpdateInput.Type;
+
 export interface DesktopSshEnvironmentBootstrap {
   target: DesktopSshEnvironmentTarget;
   httpBaseUrl: string;
@@ -1152,6 +1167,10 @@ export interface DesktopBridge {
   getConnectionCatalog?: () => Promise<string | null>;
   setConnectionCatalog?: (catalog: string) => Promise<boolean>;
   clearConnectionCatalog?: () => Promise<void>;
+  getBundledServerRuntime?: () => Promise<BundledServerRuntime | null>;
+  updateBundledSshServer?: (
+    input: DesktopBundledServerUpdateInput,
+  ) => Promise<BundledServerRuntime>;
   discoverSshHosts: () => Promise<readonly DesktopDiscoveredSshHost[]>;
   resolveSshHost: (alias: string) => Promise<DesktopSshEnvironmentTarget>;
   requestSnapShotPermissions?: (includeAccessibility: boolean) => Promise<void>;

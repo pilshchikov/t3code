@@ -7,6 +7,8 @@ import {
 } from "@t3tools/client-runtime/authorization";
 import { fetchRemoteEnvironmentDescriptor } from "@t3tools/client-runtime/environment";
 import {
+  BundledServerRuntime,
+  DesktopBundledServerUpdateInput,
   EnvironmentAuthInvalidError,
   DesktopDiscoveredSshHostSchema,
   DesktopSshBearerBootstrapInputSchema,
@@ -229,5 +231,22 @@ export const resolveSshPasswordPrompt = DesktopIpc.makeIpcMethod({
   }) {
     const prompts = yield* DesktopSshPasswordPrompts.DesktopSshPasswordPrompts;
     yield* prompts.resolve({ requestId, password });
+  }),
+});
+
+export const getBundledServerRuntime = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.BUNDLED_SERVER_RUNTIME_CHANNEL,
+  payload: Schema.Void,
+  result: Schema.NullOr(BundledServerRuntime),
+  handler: Effect.fn("desktop.ipc.sshEnvironment.getBundledRuntime")(function* () {
+    return yield* (yield* DesktopSshEnvironment.DesktopSshEnvironment).getBundledRuntime;
+  }),
+});
+export const updateBundledSshServer = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.UPDATE_BUNDLED_SSH_SERVER_CHANNEL,
+  payload: DesktopBundledServerUpdateInput,
+  result: BundledServerRuntime,
+  handler: Effect.fn("desktop.ipc.sshEnvironment.updateBundledRuntime")(function* (input) {
+    return yield* (yield* DesktopSshEnvironment.DesktopSshEnvironment).updateBundledRuntime(input);
   }),
 });

@@ -125,3 +125,6 @@ export const RECEIVE_PROVIDER_AUTH_CALLBACK_CHANNEL = "desktop:receive-provider-
 export const CANCEL_PROVIDER_AUTH_CALLBACK_CHANNEL = "desktop:cancel-provider-auth-callback";
 export const TAKE_LEGACY_LOCAL_STORAGE_CHANNEL = "desktop:take-legacy-local-storage";
 export const COMPLETE_LEGACY_LOCAL_STORAGE_CHANNEL = "desktop:complete-legacy-local-storage";
+
+export const BUNDLED_SERVER_RUNTIME_CHANNEL = "desktop:bundled-server-runtime";
+export const UPDATE_BUNDLED_SSH_SERVER_CHANNEL = "desktop:update-bundled-ssh-server";

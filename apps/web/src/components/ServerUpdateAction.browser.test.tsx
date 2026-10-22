@@ -85,10 +85,8 @@ const currentSession = {
 const success = (method: "boot-service" | "desktop-app" = "boot-service", version = "0.0.31") =>
   AsyncResult.success({ targetVersion: version, method });
 
-let sessionAtom: Atom.Writable<SessionResult>;
-
 function setSession(session: SessionResult) {
-  appAtomRegistry.set(sessionAtom, session);
+  appAtomRegistry.set(testState.sessionAtom as Atom.Writable<SessionResult>, session);
 }
 
 function setup(): Disposable {
@@ -96,7 +94,7 @@ function setup(): Disposable {
   testState.toast.mockReset();
   testState.clipboard.mockReset();
   testState.continueThreadsAfterServerUpdate = false;
-  sessionAtom = Atom.make<SessionResult>(AsyncResult.success(currentSession));
+  const sessionAtom = Atom.make<SessionResult>(AsyncResult.success(currentSession));
   testState.sessionAtom = sessionAtom;
   resetConfirmDialogForTests();
   return { [Symbol.dispose]: resetConfirmDialogForTests };
@@ -227,5 +225,42 @@ describe("ServerUpdatesAction", () => {
       expect.objectContaining({ type: "success", title: "Office updated" }),
     );
     expect(button(screen, "Update all")!.disabled).toBe(false);
+  });
+});
+
+describe("bundled fork update", () => {
+  it("uploads the app's runtime for a managed SSH environment instead of copying a public install command", async () => {
+    using _state = setup();
+    const runtime = {
+      version: "0.1.1",
+      buildId: "a".repeat(64),
+      os: "darwin" as const,
+      arch: "arm64" as const,
+      sha256: "b".repeat(64),
+    };
+    const target = {
+      alias: "stepan-mac-mini",
+      hostname: "mini.test",
+      username: "developer",
+      port: 22,
+    };
+    testState.updateServer.mockResolvedValue(AsyncResult.success(runtime));
+    await using screen = await renderAction({
+      selfUpdate: null,
+      targetVersion: runtime.version,
+      bundledRuntime: { runtime, target, fromVersion: "0.1.0" },
+    });
+    await click(screen, "Update");
+    expect(testState.clipboard).not.toHaveBeenCalled();
+    expect(testState.updateServer).toHaveBeenCalledWith({
+      environmentId: "env-test",
+      target,
+      buildId: runtime.buildId,
+      version: runtime.version,
+      fromVersion: "0.1.0",
+    });
+    expect(testState.toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Test server updated" }),
+    );
   });
 });

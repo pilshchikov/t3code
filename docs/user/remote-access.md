@@ -213,10 +213,10 @@ is disabled. The local key stays in the T3 data directory with owner-only access
 Back up the complete data directory, including `local-secrets`, to restore saved
 connections later. Existing Keychain-encrypted connection data is retained.
 
-The remote host must be Linux or an Apple Silicon Mac with `curl` or `wget`,
-`tar`, `sha256sum` or `shasum`, and [provider setup](./install.md#providers).
-The first launch downloads T3 Code's server to `~/.t3/runtime` on the host, so
-it takes longer than later ones.
+The remote host must have [provider setup](./install.md#providers) and the archive tools
+`tar` and `sha256sum` or `shasum`. A macOS desktop package uploads its bundled server to a
+matching Mac; the remote does not need Node or npm. Other supported hosts use the existing
+release-download path and also need `curl` or `wget`. First setup takes longer than reconnecting.
 Provider CLIs must be on the `PATH` of a non-interactive login shell there;
 check with:
 
@@ -224,7 +224,8 @@ check with:
 ssh user@example.com 'sh -lc "command -v claude codex"'
 ```
 
-If SSH reconnecting fails after an app update, retry the launch once. Removing
+Closing or restarting the desktop app leaves its remote servers running. If SSH reconnecting
+fails after an app update, retry the launch once. Removing
 the connection stops a server that T3 Code launched; a server that was already
 running is left alone.
 
@@ -236,6 +237,12 @@ again on its next connect.
 
 For Antigravity's Google callback on a remote host, see
 [remote sign-in](./providers-antigravity.md#sign-in-from-a-remote-device).
+
+On macOS, the desktop app can update its SSH-managed servers from its bundled runtime. After
+installing and reopening a newer app, use the sidebar update action to bring an older environment
+onto the same build. Reconnecting alone leaves the running server in place. This also detects
+changes between fork builds that share a version number. The remote must match the architecture
+of the bundled runtime; manually started servers keep their existing update method.
 
 ## Browser on a remote environment
 

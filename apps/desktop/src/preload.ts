@@ -143,6 +143,9 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   clearConnectionCatalog: () => ipcRenderer.invoke(IpcChannels.CLEAR_CONNECTION_CATALOG_CHANNEL),
   discoverSshHosts: () => ipcRenderer.invoke(IpcChannels.DISCOVER_SSH_HOSTS_CHANNEL),
   resolveSshHost: (alias) => ipcRenderer.invoke(IpcChannels.RESOLVE_SSH_HOST_CHANNEL, alias),
+  getBundledServerRuntime: () => ipcRenderer.invoke(IpcChannels.BUNDLED_SERVER_RUNTIME_CHANNEL),
+  updateBundledSshServer: (input) =>
+    ipcRenderer.invoke(IpcChannels.UPDATE_BUNDLED_SSH_SERVER_CHANNEL, input),
   ensureSshEnvironment: async (target, options) =>
     unwrapEnsureSshEnvironmentResult(
       await ipcRenderer.invoke(IpcChannels.ENSURE_SSH_ENVIRONMENT_CHANNEL, {

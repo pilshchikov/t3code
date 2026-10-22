@@ -1,3 +1,5 @@
+import * as Option from "effect/Option";
+import { useBundledServerRuntime } from "~/state/desktopUpdate";
 import { isHostPrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
 import { useAtomValue } from "@effect/atom-react";
 import { PROVIDER_DISPLAY_NAMES } from "@t3tools/contracts";
@@ -39,6 +41,7 @@ export type ReportLocalUpdateError = (title: string, description: string) => voi
 
 export function useUpdateEverything(localUpdateVersion: string | null) {
   const targetVersion = localUpdateVersion ?? APP_VERSION;
+  const bundledRuntime = useBundledServerRuntime();
   const { environments } = useEnvironments();
   const environmentIds = environmentIdsKey(environments.map(({ environmentId }) => environmentId));
   const sessionStates = useAtomValue(environmentSessionStatesAtom(environmentIds));
@@ -52,16 +55,24 @@ export function useUpdateEverything(localUpdateVersion: string | null) {
       isElectron &&
       (isHostPrimaryConnectionTarget(environment.entry.target) ||
         isDesktopLocalConnectionTarget(environment.entry.target)),
+    sshTarget: [environment.entry, ...(environment.entry.alternateRoutes ?? [])].flatMap((route) =>
+      Option.isSome(route.profile) && route.profile.value._tag === "SshConnectionProfile"
+        ? [route.profile.value.target]
+        : [],
+    )[0],
     canMaintain: canUpdateServer(sessionStates[index]!),
     updateState: updateStates[index]!,
   }));
   const { targets: behindServers, skipped: unreachable } = collectServerUpdateTargets(
     machines,
     targetVersion,
+    bundledRuntime,
   );
   // A desktop-managed server installs from its own app's update feed, so only
   // servers that download t3 from npm wait for npm to publish the version.
-  const needsNpm = behindServers.some((server) => server.selfUpdate !== "desktop-managed");
+  const needsNpm = behindServers.some(
+    (server) => !server.bundledRuntime && server.selfUpdate !== "desktop-managed",
+  );
   const servers = behindServers;
   const skipped: ReadonlyArray<SkippedMachine> = unreachable;
   const restarts = collectRestartingMachines(machines, servers, localUpdateVersion !== null);

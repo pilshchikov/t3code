@@ -1,5 +1,29 @@
 # Fork Changes
 
+## Bundled fork updates for SSH environments — 2026-10-22
+
+- macOS desktop packages include a self-contained server archive and a SHA-256 manifest in
+  `resources/server-runtime`. The sidebar offers the installed app's exact payload for connected,
+  authorized SSH environments on its supported architecture, including forks with the same version
+  but a different payload fingerprint. It does not substitute an upstream npm/GitHub runtime.
+- SSH reconnect stages missing payloads and reuses a healthy running server. Restarting the desktop
+  therefore leaves the remote's work running until its update action is selected. App shutdown
+  closes its local SSH forwards without stopping the remote; explicit disconnect retains the stop.
+  An explicit
+  update checks the environment identity and managed PID/port, verifies the archive and executable,
+  preserves the previous runner/database snapshot and rolls back a trial that fails readiness.
+  The client then requires the requested build identity on the reconnected server.
+- Existing web/mobile update paths and unrelated external servers remain under their existing
+  owners. The packaged runtime currently targets macOS and its bundled architecture; an unsupported
+  SSH platform is shown as unavailable rather than offered a public replacement.
+- Relevant owners: `scripts/build-desktop-artifact.ts`, `packages/ssh/src/bundledRuntime.ts`,
+  `packages/ssh/src/tunnel.ts`, desktop SSH IPC/services, `ServerEnvironment.ts`, and the sidebar's
+  existing update-everything flow. Validation: `check:changed HEAD` passes with 91 tests in 11 files,
+  all 29 affected package typechecks, format, lint, knip and generated GraphQL checks. Seven isolated
+  Chromium cases cover update actions; subprocess fixtures cover staging, identity/ownership checks,
+  reconnect without activation, successful replacement and failed-trial recovery. This change does
+  not install or restart either live environment.
+
 ## Upstream integration — 2026-10-22 (f05599504a)
 
 - Merge 254 incoming upstream commits through `f05599504ae10c395a6a39f5e7db31b7810ac239`

@@ -38,6 +38,7 @@ export interface RunSshCommandOptions extends SshAuthOptions {
   readonly preHostArgs?: ReadonlyArray<string>;
   readonly remoteCommandArgs?: ReadonlyArray<string>;
   readonly stdin?: string;
+  readonly stdinFile?: string;
   readonly timeoutMs?: number;
   /** Keep the end of long failed-command stdout, where the final cause usually is. */
   readonly keepErrorOutputTail?: boolean;
@@ -212,16 +213,20 @@ const runSshCommandInScope = Effect.fn("ssh/command.runSshCommand.inScope")(func
   yield* Effect.logDebug("ssh.command.start", {
     ...sshTargetLogFields(target),
     command: [sshCommand, ...args],
-    hasStdin: input.stdin !== undefined,
+    hasStdin: input.stdin !== undefined || input.stdinFile !== undefined,
     timeoutMs: input.timeoutMs ?? DEFAULT_SSH_COMMAND_TIMEOUT_MS,
   });
+  const fileSystem = yield* FileSystem.FileSystem;
   const child = yield* spawner
     .spawn(
       ChildProcess.make(sshCommand, args, {
         env: environment,
         extendEnv: true,
         stdin: {
-          stream: stdinStream(input.stdin),
+          stream:
+            input.stdinFile === undefined
+              ? stdinStream(input.stdin)
+              : fileSystem.stream(input.stdinFile),
           endOnDone: true,
         },
       }),
@@ -315,7 +320,7 @@ export const runSshCommand = Effect.fn("ssh/command.runSshCommand")(function* (
               timeoutMs: input.timeoutMs ?? DEFAULT_SSH_COMMAND_TIMEOUT_MS,
               remoteCommandArgs: input.remoteCommandArgs ?? [],
               preHostArgs: input.preHostArgs ?? [],
-              hasStdin: input.stdin !== undefined,
+              hasStdin: input.stdin !== undefined || input.stdinFile !== undefined,
             });
             return yield* new SshCommandError({
               command: ["ssh"],
