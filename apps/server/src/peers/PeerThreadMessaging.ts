@@ -232,8 +232,8 @@ const make = Effect.gen(function* () {
       .pipe(Effect.mapError(dispatchFailure), Effect.asVoid, Effect.uninterruptible);
   };
 
-  const worker = (caller: ThreadId, id: string) =>
-    Effect.gen(function* () {
+  const worker = Effect.fn("PeerThreadMessaging.worker")(
+    function* (caller: ThreadId, id: string) {
       while (true) {
         const shell = yield* threads.getThreadShell(caller).pipe(Effect.mapError(unavailable));
         const watch = shell?.peerThreadWatches?.find((watch) => watch.id === id);
@@ -274,16 +274,16 @@ const make = Effect.gen(function* () {
           return;
         } else yield* Effect.sleep("30 seconds");
       }
-    }).pipe(
-      Effect.tapError((error) =>
-        Effect.logWarning("Peer response watch could not progress", { tag: error._tag }),
-      ),
-      Effect.retry(Schedule.spaced("30 seconds")),
-    );
+    },
+    Effect.tapError((error) =>
+      Effect.logWarning("Peer response watch could not progress", { tag: error._tag }),
+    ),
+    Effect.retry(Schedule.spaced("30 seconds")),
+  );
 
   const started = yield* Ref.make(false);
-  const start: PeerThreadMessaging["Service"]["start"] = () =>
-    Effect.gen(function* () {
+  const start: PeerThreadMessaging["Service"]["start"] = Effect.fn("PeerThreadMessaging.start")(
+    function* () {
       if (yield* Ref.getAndSet(started, true)) return;
       yield* forkParked(
         Effect.scoped(
@@ -342,7 +342,8 @@ const make = Effect.gen(function* () {
           Effect.retry(Schedule.spaced("30 seconds")),
         ),
       );
-    });
+    },
+  );
 
   return PeerThreadMessaging.of({
     request,

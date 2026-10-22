@@ -31,16 +31,6 @@ const baseState: ThreadActionMenuState = {
   accentColor: null,
 };
 
-function ids(state: ThreadActionMenuState): string[] {
-  return buildThreadActionMenuItems(state).map((item) => item.id);
-}
-
-function allIds(state: ThreadActionMenuState): string[] {
-  const flatten = (items: ReturnType<typeof buildThreadActionMenuItems>): string[] =>
-    items.flatMap((item) => [item.id, ...(item.children ? flatten(item.children) : [])]);
-  return flatten(buildThreadActionMenuItems(state));
-}
-
 describe("buildThreadActionMenuItems", () => {
   it.each([false, true])(
     "disables both lifecycle directions without permission (reversed: %s)",
@@ -60,6 +50,7 @@ describe("buildThreadActionMenuItems", () => {
             "rename",
             "regenerate-title",
             "auto-settle",
+            "color",
             "archive",
             "delete",
           ]
@@ -70,6 +61,7 @@ describe("buildThreadActionMenuItems", () => {
             "rename",
             "regenerate-title",
             "auto-settle",
+            "color",
             "archive",
             "delete",
           ];
@@ -270,3 +262,13 @@ describe("buildDraftActionMenuItems", () => {
     expect(items.at(-1)).toMatchObject({ label: "Discard draft", destructive: true });
   });
 });
+
+function ids(state: ThreadActionMenuState): string[] {
+  return buildThreadActionMenuItems(state).map((item) => item.id);
+}
+
+function allIds(state: ThreadActionMenuState): string[] {
+  const flatten = (items: ReturnType<typeof buildThreadActionMenuItems>): string[] =>
+    items.flatMap((item) => [item.id, ...(item.children ? flatten(item.children) : [])]);
+  return flatten(buildThreadActionMenuItems(state));
+}

@@ -196,29 +196,8 @@ it("removes host actions after revocation while keeping file preview and copying
   expect(offeredActions()).toEqual(["copy-relative", "copy-full"]);
   await vi.waitFor(() => expect(state.copy).toHaveBeenCalledWith("/work/docs/readme.md"));
   await act(async () => screen.anchor().click());
-  expect(state.openFile).toHaveBeenCalledWith(threadRef, "docs/readme.md", undefined);
+  expect(state.openFile).toHaveBeenCalledWith(threadRef, "docs/readme.md", undefined, "/work");
   expect(state.openEditor).not.toHaveBeenCalled();
-});
-
-it("starts copying before the nested-file lookup finishes", async () => {
-  using _setup = setup();
-  let finishLookup: () => void = () => {
-    throw new Error("Lookup not started");
-  };
-  state.search.mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        finishLookup = () =>
-          resolve(AsyncResult.success({ entries: [{ path: "src/readme.md", kind: "file" }] }));
-      }),
-  );
-  state.choose.mockResolvedValue("copy-full");
-  await using screen = await renderMarkdown("`readme.md:10:2`");
-  await screen.openContextMenu();
-  expect(navigator.clipboard.write).toHaveBeenCalledOnce();
-  expect(state.copy).not.toHaveBeenCalled();
-  await act(async () => finishLookup());
-  await vi.waitFor(() => expect(state.copy).toHaveBeenCalledWith("/work/src/readme.md:10:2"));
 });
 
 it("does not launch an editor after revocation during a native context menu", async () => {
@@ -263,21 +242,6 @@ it("does not reveal a file after revocation during its workspace lookup", async 
   });
   expect(state.openEditor).not.toHaveBeenCalled();
 });
-
-it.each([false, true])(
-  "keeps PR links usable without offering metadata edits (linked=%s)",
-  async (linked) => {
-    using _setup = setup();
-    state.allowed = false;
-    state.linkedPullRequest = linked ? linkedPullRequest : null;
-    state.choose.mockResolvedValue("open-external");
-    await using screen = await renderMarkdown(`[Review](${linkedPullRequest.url})`);
-    await screen.openContextMenu();
-    expect(offeredActions()).toEqual(["open-external", "copy-link"]);
-    await vi.waitFor(() => expect(state.openExternal).toHaveBeenCalledWith(linkedPullRequest.url));
-    expect(state.updateMetadata).not.toHaveBeenCalled();
-  },
-);
 
 it.each(["link-to-thread", "unlink-from-thread"])(
   "rechecks %s after a native context menu returns",

@@ -35,7 +35,7 @@ export function DiffFilesTreeNavigator(props: {
         <div key={`directory:${node.path}`}>
           <button
             type="button"
-            className="group flex w-full items-center gap-1.5 rounded-md py-1 pe-2 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="group flex w-full items-center gap-1.5 rounded-md py-1 pe-2 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             style={{ paddingLeft }}
             onClick={() => toggleDirectory(node.path)}
           >
@@ -60,35 +60,42 @@ export function DiffFilesTreeNavigator(props: {
     }
 
     return (
-      <button
-        key={`file:${node.path}`}
-        type="button"
-        title={node.path}
-        className={cn(
-          "group flex w-full items-center gap-1.5 rounded-md py-1 pe-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          props.selectedPath === node.path
-            ? "bg-accent text-accent-foreground"
-            : "hover:bg-accent/60",
-        )}
-        style={{ paddingLeft: paddingLeft + 18 }}
-        onClick={() => props.onSelectFile(node.path)}
-      >
-        <PierreEntryIcon
-          pathValue={node.path}
-          kind="file"
-          theme={props.resolvedTheme}
-          className="size-3.5"
+      <Tooltip key={`file:${node.path}`}>
+        <TooltipTrigger
+          render={
+            <button
+              key={`file:${node.path}`}
+              type="button"
+
+              className={cn(
+                "group flex w-full items-center gap-1.5 rounded-md py-1 pe-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                props.selectedPath === node.path
+                  ? "bg-accent text-accent-foreground"
+                  : "hover:bg-accent/60",
+              )}
+              style={{ paddingLeft: paddingLeft + 18 }}
+              onClick={() => props.onSelectFile(node.path)}
+            >
+              <PierreEntryIcon
+                pathValue={node.path}
+                kind="file"
+                theme={props.resolvedTheme}
+                className="size-3.5"
+              />
+              <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground group-hover:text-foreground">
+                {node.name}
+              </span>
+              {node.stat ? (
+                <span className="shrink-0 font-mono text-[9px] tabular-nums">
+                  <span className="text-green-600 dark:text-green-400">+{node.stat.additions}</span>{" "}
+                  <span className="text-red-600 dark:text-red-400">-{node.stat.deletions}</span>
+                </span>
+              ) : null}
+            </button>
+          }
         />
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground group-hover:text-foreground">
-          {node.name}
-        </span>
-        {node.stat ? (
-          <span className="shrink-0 font-mono text-[9px] tabular-nums">
-            <span className="text-green-600 dark:text-green-400">+{node.stat.additions}</span>{" "}
-            <span className="text-red-600 dark:text-red-400">-{node.stat.deletions}</span>
-          </span>
-        ) : null}
-      </button>
+        <TooltipPopup>{node.path}</TooltipPopup>
+      </Tooltip>
     );
   };
 

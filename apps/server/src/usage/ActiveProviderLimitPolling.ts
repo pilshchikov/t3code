@@ -44,34 +44,36 @@ export const layer = Layer.effectDiscard(
     const schedule = new ActiveProviderLimitSchedule();
     const inFlight = new Set<ProviderInstanceId>();
     const trailing = new Set<ProviderInstanceId>();
-    const refresh = (id: ProviderInstanceId, boundary = false) =>
-      Effect.gen(function* () {
-        if (inFlight.has(id)) {
-          if (boundary) trailing.add(id);
-          return;
-        }
-        inFlight.add(id);
-        schedule.requested(id, DateTime.toEpochMillis(yield* DateTime.now));
-        yield* Effect.gen(function* () {
-          do {
+    const refresh = Effect.fn("ActiveProviderLimitPolling.refresh")(function* (
+      id: ProviderInstanceId,
+      boundary = false,
+    ) {
+      if (inFlight.has(id)) {
+        if (boundary) trailing.add(id);
+        return;
+      }
+      inFlight.add(id);
+      schedule.requested(id, DateTime.toEpochMillis(yield* DateTime.now));
+      yield* Effect.gen(function* () {
+        do {
+          trailing.delete(id);
+          yield* providers.refreshInstance(id).pipe(
+            Effect.flatMap((snapshots) =>
+              history.record(providerHistoryPoints(snapshots.filter((p) => p.instanceId === id))),
+            ),
+            Effect.ignoreCause({ log: true }),
+          );
+        } while (trailing.has(id));
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            inFlight.delete(id);
             trailing.delete(id);
-            yield* providers.refreshInstance(id).pipe(
-              Effect.flatMap((snapshots) =>
-                history.record(providerHistoryPoints(snapshots.filter((p) => p.instanceId === id))),
-              ),
-              Effect.ignoreCause({ log: true }),
-            );
-          } while (trailing.has(id));
-        }).pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              inFlight.delete(id);
-              trailing.delete(id);
-            }),
-          ),
-          Effect.forkIn(scope),
-        );
-      });
+          }),
+        ),
+        Effect.forkIn(scope),
+      );
+    });
     yield* service.streamDomainEvents.pipe(
       Stream.filter(
         (event) =>

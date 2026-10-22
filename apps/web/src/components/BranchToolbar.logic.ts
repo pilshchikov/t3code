@@ -30,7 +30,7 @@ export const EnvMode = Schema.Literals(["local", "worktree"]);
 export type EnvMode = typeof EnvMode.Type;
 
 /** Env modes that provision a dedicated, isolated workspace (worktree). */
-export function isIsolatedEnvMode(mode: EnvMode): boolean {
+function isIsolatedEnvMode(mode: EnvMode): boolean {
   return mode === "worktree";
 }
 

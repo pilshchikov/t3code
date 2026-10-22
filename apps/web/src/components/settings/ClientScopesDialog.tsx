@@ -37,16 +37,19 @@ export function ClientScopesDialog(props: {
       <DialogTrigger render={<Button size="xs" variant="outline" disabled={props.disabled} />}>
         Edit permissions
       </DialogTrigger>
-      <DialogPopup>
-        <DialogHeader>
-          <DialogTitle>Edit client permissions</DialogTitle>
-          <DialogDescription>
-            {props.label}. Changes apply to this environment and reconnect the client automatically.
-            No new pairing link is needed.
-          </DialogDescription>
-        </DialogHeader>
-        {open ? <ScopeEditor {...props} onClose={() => setOpen(false)} /> : null}
-      </DialogPopup>
+      {/* Canceled edits must unmount even when closed popup content is retained. */}
+      {open ? (
+        <DialogPopup>
+          <DialogHeader>
+            <DialogTitle>Edit client permissions</DialogTitle>
+            <DialogDescription>
+              {props.label}. Changes apply to this environment and reconnect the client
+              automatically. No new pairing link is needed.
+            </DialogDescription>
+          </DialogHeader>
+          <ScopeEditor {...props} onClose={() => setOpen(false)} />
+        </DialogPopup>
+      ) : null}
     </Dialog>
   );
 }

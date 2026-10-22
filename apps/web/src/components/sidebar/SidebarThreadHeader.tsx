@@ -154,7 +154,7 @@ export function SidebarThreadHeader({
   );
 }
 
-export function SidebarHeaderIconButton({
+function SidebarHeaderIconButton({
   label,
   tooltip = label,
   className,

@@ -1,11 +1,9 @@
-import { act, useState } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { act, render } from "../../../test/render";
+import { useState } from "react";
+import { describe, expect, it } from "vite-plus/test";
 import { AuthGrantScope, type AuthEnvironmentScope } from "@t3tools/contracts";
 import { ClientScopesDialog } from "./ClientScopesDialog";
 
-let root: Root;
-let container: HTMLDivElement;
 function button(label: string) {
   const matches = [...document.querySelectorAll<HTMLButtonElement>("button")].filter(
     (b) => b.textContent?.trim() === label,
@@ -18,16 +16,6 @@ async function click(label: string) {
 }
 
 describe("editing authorized client permissions", () => {
-  beforeEach(() => {
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-  });
-  afterEach(async () => {
-    await act(async () => root.unmount());
-    container.remove();
-  });
   it("saves all available permissions and reopens with the saved grant", async () => {
     function Settings() {
       const [scopes, save] = useState<ReadonlyArray<AuthEnvironmentScope>>(["orchestration:read"]);
@@ -45,7 +33,8 @@ describe("editing authorized client permissions", () => {
         </>
       );
     }
-    await act(async () => root.render(<Settings />));
+    // These dialog fixtures do not navigate.
+    await using screen = await render(<Settings />, { router: false });
     await click("Edit permissions");
     await click("All available");
     await click("Save permissions");
@@ -63,17 +52,17 @@ describe("editing authorized client permissions", () => {
     );
   });
   it("keeps edits open on save failure and leaves saved permissions unchanged when cancelled", async () => {
-    await act(async () =>
-      root.render(
-        <ClientScopesDialog
-          label="iPhone Safari"
-          scopes={["orchestration:read"]}
-          delegatableScopes={AuthGrantScope.literals}
-          onSave={async () => {
-            throw new Error("Connection lost. Try again.");
-          }}
-        />,
-      ),
+    // These dialog fixtures do not navigate.
+    await using screen = await render(
+      <ClientScopesDialog
+        label="iPhone Safari"
+        scopes={["orchestration:read"]}
+        delegatableScopes={AuthGrantScope.literals}
+        onSave={async () => {
+          throw new Error("Connection lost. Try again.");
+        }}
+      />,
+      { router: false },
     );
     await click("Edit permissions");
     await click("All available");
@@ -88,17 +77,17 @@ describe("editing authorized client permissions", () => {
   });
   it("lets a limited manager remove higher permissions without granting unavailable ones", async () => {
     let saved: ReadonlyArray<AuthGrantScope> = [];
-    await act(async () =>
-      root.render(
-        <ClientScopesDialog
-          label="Phone"
-          scopes={["orchestration:read", "filesystem:write"]}
-          delegatableScopes={["orchestration:read", "access:write"]}
-          onSave={async (next) => {
-            saved = next;
-          }}
-        />,
-      ),
+    // These dialog fixtures do not navigate.
+    await using screen = await render(
+      <ClientScopesDialog
+        label="Phone"
+        scopes={["orchestration:read", "filesystem:write"]}
+        delegatableScopes={["orchestration:read", "access:write"]}
+        onSave={async (next) => {
+          saved = next;
+        }}
+      />,
+      { router: false },
     );
     await click("Edit permissions");
     expect(button("Save permissions").disabled).toBe(true);

@@ -62,17 +62,18 @@ const make = Effect.gen(function* () {
             }),
       ),
     );
-  const checkSession = (input: typeof ThreadWorkspaceInspectInput.Type & Guard) =>
-    Effect.gen(function* () {
-      if (
-        input.providerSessionId !== undefined &&
-        (yield* mcpSessions.read(input.threadId))?.providerSessionId !== input.providerSessionId
-      ) {
-        return yield* fail(
-          "This MCP session is no longer active. Retry from the current provider session.",
-        );
-      }
-    });
+  const checkSession = Effect.fn("ThreadWorkspaces.checkSession")(function* (
+    input: typeof ThreadWorkspaceInspectInput.Type & Guard,
+  ) {
+    if (
+      input.providerSessionId !== undefined &&
+      (yield* mcpSessions.read(input.threadId))?.providerSessionId !== input.providerSessionId
+    ) {
+      return yield* fail(
+        "This MCP session is no longer active. Retry from the current provider session.",
+      );
+    }
+  });
   const context = Effect.fn("ThreadWorkspaces.context")(function* (
     input: typeof ThreadWorkspaceInspectInput.Type & Guard,
   ) {

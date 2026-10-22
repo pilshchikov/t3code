@@ -30,15 +30,8 @@ describe("isNpmReleasePublished", () => {
     expect(result).toBe(true);
   });
 
-  it("reports a version npm does not have as unpublished", async () => {
-    fetchMock.mockImplementation(async () => new Response(null, { status: 404 }));
-
-    const result = await isNpmReleasePublished(version);
-
-    expect(result).toBe(false);
-  });
-
-  it("rejects a failed check so the update caller can report it", async () => {
+  // regression: #18709 update-everything skipped npm-installed servers
+  it("leaves a failed first check unknown, which callers read as unpublished", async () => {
     fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
 
     await expect(isNpmReleasePublished(version)).rejects.toThrow();

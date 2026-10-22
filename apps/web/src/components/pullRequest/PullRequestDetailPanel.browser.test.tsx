@@ -406,7 +406,7 @@ describe.each([
     "Fix findings in this thread",
     "Fix check",
     "Add to agent",
-  ])("%s writes to the correct composer", { timeout: 30_000 }, async (action) => {
+  ])("%s writes to the correct composer", async (action) => {
     setup();
     // Cover both a host without inline comments and an account that cannot write them.
     currentDetail =

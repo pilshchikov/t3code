@@ -18,20 +18,23 @@ export function AgentCommunicationDialog(props: { children: (onClose: () => void
         <MessagesSquareIcon aria-hidden />
         Agent communication
       </DialogTrigger>
-      <DialogPopup
-        size="large"
-        bottomStickOnMobile={false}
-        className="h-[min(48rem,calc(100dvh-2rem))]"
-        data-agent-communication-dialog
-      >
-        <DialogHeader className="shrink-0">
-          <DialogTitle>Agent communication</DialogTitle>
-          <DialogDescription className="sr-only md:not-sr-only">
-            Assignments, replies, and conversations connected to this thread.
-          </DialogDescription>
-        </DialogHeader>
-        {open ? props.children(() => setOpen(false)) : null}
-      </DialogPopup>
+      {/* The viewer owns live subscriptions; closing must release it immediately. */}
+      {open ? (
+        <DialogPopup
+          size="large"
+          bottomStickOnMobile={false}
+          className="h-[min(48rem,calc(100dvh-2rem))]"
+          data-agent-communication-dialog
+        >
+          <DialogHeader className="shrink-0">
+            <DialogTitle>Agent communication</DialogTitle>
+            <DialogDescription className="sr-only md:not-sr-only">
+              Assignments, replies, and conversations connected to this thread.
+            </DialogDescription>
+          </DialogHeader>
+          {props.children(() => setOpen(false))}
+        </DialogPopup>
+      ) : null}
     </Dialog>
   );
 }

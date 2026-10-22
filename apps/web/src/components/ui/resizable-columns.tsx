@@ -60,7 +60,7 @@ export function ResizableColumns(props: {
         aria-valuemax={85}
         aria-valuenow={Math.round(ratio * 100)}
         tabIndex={0}
-        className="group relative z-10 cursor-col-resize touch-none outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="group relative z-10 cursor-col-resize touch-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId);
           updateFromClientX(event.clientX);

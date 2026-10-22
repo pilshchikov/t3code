@@ -24,7 +24,8 @@ import { serverEnvironment } from "../../state/server";
 import { PullRequestLinkPreview } from "../pullRequest/PullRequestLinkPreview";
 import { Tooltip, TooltipPopup, TooltipScrollDismissArea, TooltipTrigger } from "../ui/tooltip";
 import { act, render } from "../../../test/render";
-import { MessagesTimeline, remarkThoughtPreview } from "./MessagesTimeline";
+import { MessagesTimeline } from "./MessagesTimeline";
+import { remarkThoughtPreview } from "./TimelineWorkEntryRow.logic";
 import { parseMarkdownWithMath } from "@t3tools/shared/markdownMath";
 import { readTimelinePosition, rememberTimelinePosition } from "./timelineScrollAnchoring";
 import { useComposerFocusState } from "./useComposerFocusState";
@@ -700,10 +701,13 @@ describe("MessagesTimeline messages", () => {
       await using screen = await renderTimeline([
         message("Review this area", { createdBy: "agent", creationSource: "provider" }),
       ]);
-      expect(screen.text()).toContain("Sent by another agent");
+      const header = screen.button(/^Agent.*Review this area$/);
+      expect(header.getAttribute("aria-expanded")).toBe("false");
+      await click(header);
+      expect(header.getAttribute("aria-expanded")).toBe("true");
     }
     await using screen = await renderTimeline([message("Review this area")]);
-    expect(screen.text()).not.toContain("Sent by another agent");
+    expect(screen.buttons(/^Agent/)).toHaveLength(0);
   });
 
   it("shows steer intent ahead of committed user messages", async () => {
@@ -978,6 +982,7 @@ describe("MessagesTimeline history and thread links", () => {
       ...baseProps(),
       timelineEntries: [
         message("Investigate the issue.", { runId }, "citation-prompt"),
+        message("I will investigate the issue.", { role: "assistant", runId }, "citation-intro"),
         message(quote, { role: "assistant", runId }, "citation-source"),
         message("Investigation complete.", { role: "assistant", runId }, "citation-answer"),
       ],
@@ -1535,7 +1540,13 @@ describe("MessagesTimeline scroll position", () => {
     });
 
     const timeline = (routeThreadKey: string) => (
-      <MessagesTimeline {...props} routeThreadKey={routeThreadKey} timelineEntries={tallEntries} />
+      <MessagesTimeline
+        {...props}
+        routeThreadKey={routeThreadKey}
+        timelineEntries={tallEntries}
+        // ChatView restores this flag from the same remembered position when changing routes.
+        liveFollowEnabled={readTimelinePosition(routeThreadKey)?.atEnd !== false}
+      />
     );
     await using screen = await renderElement(timeline(props.routeThreadKey));
     const reopenedViewport = await waitForList(props);
@@ -1557,6 +1568,7 @@ describe("MessagesTimeline scroll position", () => {
 
   it("restores the composer after closing tool output only at the end", async () => {
     const props = baseProps();
+    const cancelRestore = createRef<(() => void) | null>();
     function Thread() {
       const composer = useComposerFocusState();
       return (
@@ -1565,6 +1577,7 @@ describe("MessagesTimeline scroll position", () => {
           <output>{composer.isComposerScrollCollapsed ? "collapsed" : "resting"}</output>
           <MessagesTimeline
             {...props}
+            cancelPositionRestoreRef={cancelRestore}
             onToolOutputCollapsedAtEnd={composer.restoreAfterTimelineReachedEnd}
             timelineEntries={[
               ...tallEntries,
@@ -1582,8 +1595,15 @@ describe("MessagesTimeline scroll position", () => {
     await using screen = await renderElement(<Thread />);
     const composerState = () => screen.container.querySelector("output")!.textContent;
     const viewport = await waitForList(props);
-    // The fork keeps recovering the opening position for a second after mount.
-    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    await act(async () => {
+      await props.listRef.current?.scrollToEnd({ animated: false });
+    });
+    await vi.waitFor(() =>
+      expect(
+        viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop,
+      ).toBeLessThanOrEqual(40),
+    );
+    await act(() => cancelRestore.current?.());
     await click(screen.button("Collapse"));
     const toggle = () => screen.button("Command output");
     await click(toggle());
@@ -1594,8 +1614,7 @@ describe("MessagesTimeline scroll position", () => {
     await userEvent.wheel(viewport, { delta: { y: -2000 } });
     await click(toggle());
     await click(toggle());
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    expect(composerState()).toBe("collapsed");
+    await vi.waitFor(() => expect(composerState()).toBe("collapsed"));
   });
 });
 
@@ -1625,7 +1644,7 @@ describe("MessagesTimeline send anchor", () => {
         onAnchorReady,
       },
     );
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await vi.waitFor(() => expect(_screen.text()).toContain("Newest prompt."));
     expect(onAnchorReady).not.toHaveBeenCalled();
   });
 });

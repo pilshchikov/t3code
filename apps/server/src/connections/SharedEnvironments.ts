@@ -102,11 +102,13 @@ const ignoredRequestHeaders = new Set([
   "accept-encoding",
   DELEGATED_PERMISSIONS_HEADER,
 ]);
-const pump = (source: Socket.Socket, sink: Socket.Writer) =>
-  Effect.gen(function* () {
-    const { pull } = yield* source.reader;
-    while (true) yield* sink.writeAll(yield* pull);
-  });
+const pump = Effect.fn("SharedEnvironments.pump")(function* (
+  source: Socket.Socket,
+  sink: Socket.Writer,
+) {
+  const { pull } = yield* source.reader;
+  while (true) yield* sink.writeAll(yield* pull);
+});
 
 const make = Effect.gen(function* () {
   const auth = yield* EnvironmentAuth.EnvironmentAuth;

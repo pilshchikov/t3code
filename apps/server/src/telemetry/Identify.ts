@@ -178,7 +178,7 @@ const readIdentityFile = (
  * The OpenAI account id in a ChatGPT id_token, read without verifying it:
  * analytics needs only a stable id. Codex CLI and T3's own sign-in both use it.
  */
-export const openAiUserId = (idToken: string) => {
+const openAiUserId = (idToken: string) => {
   const payload = Base64Url.decodeString(idToken.split(".")[1] ?? "");
   return Result.isSuccess(payload)
     ? Option.map(
@@ -299,10 +299,7 @@ export const getTelemetryIdentityForHome = Effect.fn("getTelemetryIdentityForHom
   };
 });
 
-export const getTelemetryIdentity = Effect.flatMap(
-  HostProcess.HomeDirectory,
-  getTelemetryIdentityForHome,
-);
+const getTelemetryIdentity = Effect.flatMap(HostProcess.HomeDirectory, getTelemetryIdentityForHome);
 
 /**
  * Owners the server can read without a client: the linked T3 Connect account
@@ -343,4 +340,4 @@ export const getServerOwnersForHome = Effect.fn("getServerOwnersForHome")(functi
   );
 });
 
-export const getServerOwners = Effect.flatMap(HostProcess.HomeDirectory, getServerOwnersForHome);
+const getServerOwners = Effect.flatMap(HostProcess.HomeDirectory, getServerOwnersForHome);

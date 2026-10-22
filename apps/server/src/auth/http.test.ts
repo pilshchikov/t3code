@@ -1,23 +1,23 @@
+import * as Option from "effect/Option";
+import { RelayClientTracer } from "@t3tools/shared/relayTracing";
+import { EnvironmentAuthenticatedAuth } from "@t3tools/contracts";
+import { AuthSessionId } from "@t3tools/contracts";
+import { HttpServerRequest } from "effect/http";
+import * as Tracer from "effect/Tracer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
-  AuthSessionId,
   AuthTokenExchangeGrantType,
   AuthEnvironmentBootstrapTokenType,
   AuthAccessTokenType,
-  EnvironmentAuthenticatedAuth,
   EnvironmentHttpApi,
 } from "@t3tools/contracts";
-import { RelayClientTracer } from "@t3tools/shared/relayTracing";
 import { expect, it } from "@effect/vitest";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import * as Tracer from "effect/Tracer";
-import { HttpServerRequest } from "effect/http";
 import * as Etag from "effect/http/Etag";
 import * as HttpPlatform from "effect/http/HttpPlatform";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";

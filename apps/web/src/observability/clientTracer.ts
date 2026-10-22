@@ -7,7 +7,7 @@ export function setDelegate(next: Tracer.Tracer | null): void {
   delegate = next;
 }
 
-export function hasDelegate(): boolean {
+function hasDelegate(): boolean {
   return delegate !== null;
 }
 

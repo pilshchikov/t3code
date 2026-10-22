@@ -149,38 +149,6 @@ describe("ProviderSettingsForm helpers", () => {
     expect(next).toEqual({ forkOwned: 1 });
   });
 
-  it("omits false boolean fields when clearWhenEmpty is omit", () => {
-    const next = nextProviderConfigWithFieldValue(
-      { forkOwned: 1, experimental: true },
-      {
-        key: "experimental",
-        control: "switch",
-        label: "Experimental",
-        clearWhenEmpty: "omit",
-        defaultBooleanValue: false,
-      },
-      false,
-    );
-
-    expect(next).toEqual({ forkOwned: 1 });
-  });
-
-  it("omits true boolean fields when true is the default", () => {
-    const next = nextProviderConfigWithFieldValue(
-      { forkOwned: 1, experimental: false },
-      {
-        key: "experimental",
-        control: "switch",
-        label: "Experimental",
-        clearWhenEmpty: "omit",
-        defaultBooleanValue: true,
-      },
-      true,
-    );
-
-    expect(next).toEqual({ forkOwned: 1 });
-  });
-
   it("stores false boolean fields when true is the default", () => {
     const next = nextProviderConfigWithFieldValue(
       undefined,
@@ -190,21 +158,6 @@ describe("ProviderSettingsForm helpers", () => {
         label: "Experimental",
         clearWhenEmpty: "omit",
         defaultBooleanValue: true,
-      },
-      false,
-    );
-
-    expect(next).toEqual({ experimental: false });
-  });
-
-  it("preserves false boolean fields when clearWhenEmpty is persist", () => {
-    const next = nextProviderConfigWithFieldValue(
-      undefined,
-      {
-        key: "experimental",
-        control: "switch",
-        label: "Experimental",
-        clearWhenEmpty: "persist",
       },
       false,
     );

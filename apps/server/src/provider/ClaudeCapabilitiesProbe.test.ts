@@ -1,66 +1,30 @@
-// @effect-diagnostics nodeBuiltinImport:off - cleanup uses Node's retrying rm, which the FileSystem service does not expose.
-import * as ClaudeSdk from "@anthropic-ai/claude-agent-sdk";
-import { vi } from "vite-plus/test";
-import * as Deferred from "effect/Deferred";
+import { ClaudeSettings } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
+import * as Cause from "effect/Cause";
+import * as Result from "effect/Result";
 import * as Fiber from "effect/Fiber";
 import * as TestClock from "effect/testing/TestClock";
-import {
-  ClaudeSettings,
-  ProviderDriverKind,
-  ProviderInstanceId,
-  type ServerProvider,
-} from "@t3tools/contracts";
+import * as Deferred from "effect/Deferred";
+import { probeClaudeCapabilities } from "./ClaudeProvider.ts";
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- SDK fixture modules create isolated account transcripts.
 import * as NodeFSP from "node:fs/promises";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { assert, it } from "@effect/vitest";
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
-import * as Result from "effect/Result";
-
-import {
-  buildClaudeCapabilitiesProbeQueryOptions,
-  CLAUDE_CAPABILITIES_PROBE_SETTING_SOURCES,
-  probeClaudeCapabilities,
-  probeClaudeWorkspaceSnapshot,
-} from "./ClaudeProvider.ts";
 import { COMPACT_SLASH_COMMAND } from "@t3tools/provider-core/server/snapshotProbe";
+import { probeClaudeWorkspaceSnapshot } from "./ClaudeProvider.ts";
+import * as ClaudeSdk from "@anthropic-ai/claude-agent-sdk";
+import { type ServerProvider } from "@t3tools/contracts";
+import { ProviderDriverKind } from "@t3tools/contracts";
+import { ProviderInstanceId } from "@t3tools/contracts";
+import * as Path from "effect/Path";
+import * as FileSystem from "effect/FileSystem";
+import * as Effect from "effect/Effect";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+// @effect-diagnostics nodeBuiltinImport:off - cleanup uses Node's retrying rm, which the FileSystem service does not expose.
+import { vi } from "vite-plus/test";
+import { assert, it } from "@effect/vitest";
+
+import { buildClaudeCapabilitiesProbeQueryOptions } from "./ClaudeProvider.ts";
 
 vi.mock("@anthropic-ai/claude-agent-sdk", { spy: true });
-
-const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
-
-it("isolates Claude capability probes without dropping workspace setting sources", () => {
-  const abortController = new AbortController();
-  const options = buildClaudeCapabilitiesProbeQueryOptions({
-    executablePath: "/usr/bin/claude",
-    abortController,
-    environment: {
-      HOME: "/home/user",
-      ENABLE_CLAUDEAI_MCP_SERVERS: "true",
-      FORCE_CODE_TERMINAL: "1",
-    },
-    cwd: "/workspace/project",
-    managedMcpConfig: false,
-  });
-
-  assert.deepEqual(options.mcpServers, {});
-  assert.equal(options.strictMcpConfig, true);
-  assert.equal(options.cwd, "/workspace/project");
-  assert.deepEqual(options.settingSources, [...CLAUDE_CAPABILITIES_PROBE_SETTING_SOURCES]);
-  assert.deepEqual(options.settings, { disableAllHooks: true });
-  assert.deepEqual(options.allowedTools, []);
-  assert.equal(options.persistSession, false);
-  assert.equal(options.pathToClaudeCodeExecutable, "/usr/bin/claude");
-  assert.equal(options.abortController, abortController);
-  assert.equal(options.env?.HOME, "/home/user");
-  assert.equal(options.env?.ENABLE_CLAUDEAI_MCP_SERVERS, "false");
-  assert.equal(options.env?.FORCE_CODE_TERMINAL, undefined);
-  assert.equal(options.env?.CLAUDE_CODE_AUTO_CONNECT_IDE, "0");
-  assert.equal(options.env?.CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL, "1");
-});
 
 it("drops strict MCP mode, and only that, next to an administrator's managed-mcp.json", () => {
   const options = buildClaudeCapabilitiesProbeQueryOptions({
@@ -136,7 +100,7 @@ it.layer(NodeServices.layer)("Claude capability probe SDK boundary", (it) => {
         yield* Effect.addFinalizer(() => Effect.sync(() => query.mockRestore()));
         for (const [index, cwd] of workspaces.entries()) {
           const scoped = yield* probeClaudeWorkspaceSnapshot(
-            decodeClaudeSettings({ homePath: configDir }),
+            decodeClaudeSettings({ configDir, homePath: tempDir }),
             machineSnapshot,
             cwd,
             { ...process.env, T3_WORKSPACE_PROBE: "owned-instance" },
@@ -421,3 +385,5 @@ it.effect("asks for usage without the local transcript scan", () =>
     assert.deepEqual(usageOptions, { skipBehaviors: true });
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
+
+const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);

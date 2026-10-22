@@ -57,7 +57,7 @@ function resolveBaseDirectory(path: Path.Path, raw: string): string {
   return trimmed;
 }
 
-export const make = Effect.fn("makeMultiworkService")(function* () {
+const make = Effect.fn("makeMultiworkService")(function* () {
   const git = yield* GitVcsDriver;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;

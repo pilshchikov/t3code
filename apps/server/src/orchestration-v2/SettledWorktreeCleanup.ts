@@ -2,7 +2,7 @@ import type { OrchestrationV2ThreadShell } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import { threadHasQueuedTurnStart } from "./ThreadSettlementService.ts";
 
-export const SETTLED_WORKTREE_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
+const SETTLED_WORKTREE_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
 
 /** Metadata refreshes and new activity restart the fork's seven-day retention. */
 export function isSettledWorktreeExpired(thread: OrchestrationV2ThreadShell, now: number): boolean {

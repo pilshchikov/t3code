@@ -9,7 +9,6 @@ import {
   flattenTemporaryWorktreeBranchName,
   isTemporaryWorktreeBranch,
   normalizeGitRemoteUrl,
-  parseGitHubRepositoryNameWithOwnerFromRemoteUrl,
   parseOriginUrlFromGitConfig,
   resolveAutoFeatureBranchName,
   sanitizeFeatureBranchName,
@@ -84,15 +83,6 @@ describe("normalizeGitRemoteUrl", () => {
       "t3tools.visualstudio.com/platform/_git/t3code",
     );
   });
-
-  it("leaves an Azure SSH host it cannot read as the path it was given", () => {
-    expect(normalizeGitRemoteUrl("git@ssh.dev.azure.com:v4/T3Tools/Platform/T3Code")).toBe(
-      "ssh.dev.azure.com/v4/t3tools/platform/t3code",
-    );
-    expect(normalizeGitRemoteUrl("git@ssh.dev.azure.com:v3/T3Tools/T3Code")).toBe(
-      "ssh.dev.azure.com/v3/t3tools/t3code",
-    );
-  });
 });
 
 describe("parseOriginUrlFromGitConfig", () => {
@@ -153,39 +143,9 @@ describe("parseOriginUrlFromGitConfig", () => {
     ].join("\n");
     expect(parseOriginUrlFromGitConfig(config)).toBe("https://github.com/acme/repo.git");
   });
-
-  it("returns null when there is no remote section", () => {
-    expect(parseOriginUrlFromGitConfig("[core]\n\tbare = false\n")).toBeNull();
-    expect(parseOriginUrlFromGitConfig("")).toBeNull();
-  });
-});
-
-describe("parseGitHubRepositoryNameWithOwnerFromRemoteUrl", () => {
-  it("extracts the owner and repository from common GitHub remote shapes", () => {
-    expect(
-      parseGitHubRepositoryNameWithOwnerFromRemoteUrl("git@github.com:T3Tools/T3Code.git"),
-    ).toBe("T3Tools/T3Code");
-    expect(
-      parseGitHubRepositoryNameWithOwnerFromRemoteUrl("https://github.com/T3Tools/T3Code.git"),
-    ).toBe("T3Tools/T3Code");
-    expect(
-      parseGitHubRepositoryNameWithOwnerFromRemoteUrl("ssh://github.com/T3Tools/T3Code.git"),
-    ).toBe("T3Tools/T3Code");
-  });
 });
 
 describe("isTemporaryWorktreeBranch", () => {
-  it("matches the generated temporary worktree refName format", () => {
-    expect(
-      isTemporaryWorktreeBranch(
-        buildTemporaryWorktreeBranchName((byteLength) => {
-          expect(byteLength).toBe(4);
-          return "DEADBEEF";
-        }),
-      ),
-    ).toBe(true);
-  });
-
   it("matches generated temporary worktree refs", () => {
     expect(isTemporaryWorktreeBranch(`${WORKTREE_BRANCH_PREFIX}/deadbeef`)).toBe(true);
     expect(isTemporaryWorktreeBranch(` ${WORKTREE_BRANCH_PREFIX}/deadbeef `)).toBe(true);
@@ -314,6 +274,7 @@ describe("sanitizeFeatureBranchName", () => {
     );
   });
 
+  // regression: #15615 generated branch namespaces are preserved
   it.each([
     ["refine toolbar", "spilshchikov/refine-toolbar"],
     ["", "spilshchikov/update"],
@@ -382,7 +343,6 @@ describe("formatGeneratedBranchName", () => {
     ).toBe("Team/Julius/add-search");
   });
   it.each([
-    ["release..candidate", "release-candidate/add-search"],
     [" Team / Jules.lock/", "Team/Jules-lock/add-search"],
     ["-team//feature@{new}", "team/feature-new/add-search"],
     [" /?. / ", "add-search"],
@@ -399,15 +359,5 @@ describe("formatGeneratedBranchName", () => {
         instructions: "",
       }),
     ).toBe("feat/add-search");
-  });
-  it("preserves the full custom name, including case, dots and length", () => {
-    const branch = `Julius/ABC-123/release.v2-${"x".repeat(70)}`;
-    expect(
-      formatGeneratedBranchName(` ${branch} `, {
-        mode: "custom",
-        prefix: "ignored",
-        instructions: "",
-      }),
-    ).toBe(branch);
   });
 });

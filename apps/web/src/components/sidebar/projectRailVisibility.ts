@@ -10,7 +10,7 @@ export const PROJECT_RAIL_SHORT_WIDTH = 52;
 export const PROJECT_RAIL_SNAP_WIDTH = 110;
 export const PROJECT_RAIL_MIN_NAMED_WIDTH = 168;
 export const PROJECT_RAIL_MAX_NAMED_WIDTH = 360;
-export const PROJECT_RAIL_DEFAULT_NAMED_WIDTH = 224;
+const PROJECT_RAIL_DEFAULT_NAMED_WIDTH = 224;
 
 const ProjectRailLayout = Schema.Struct({
   named: Schema.Boolean,

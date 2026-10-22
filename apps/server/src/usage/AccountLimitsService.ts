@@ -96,7 +96,7 @@ export class AccountLimitsService extends Context.Service<
 >()("t3/usage/AccountLimitsService") {}
 
 /** Empty cache, for suites that only need the RPC surface to resolve. */
-export const layerTest = Layer.succeed(
+const layerTest = Layer.succeed(
   AccountLimitsService,
   AccountLimitsService.of({
     readSummary: () =>
@@ -166,7 +166,7 @@ export function planCodexTranscriptSeeds(
   return [...byDir.values()].flatMap((owners) => (owners.length === 1 ? owners : []));
 }
 
-export const make = Effect.gen(function* () {
+const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const config = yield* ServerConfig;

@@ -327,22 +327,21 @@ export const make = Effect.gen(function* () {
     return Option.isNone(row) ? Option.none() : Option.some(yield* hydrate(row.value));
   });
 
-  const normalizeRoots = (
+  const normalizeRoots = Effect.fn("ProjectService.normalizeRoots")(function* (
     projectId: ProjectId,
     primary: string,
     roots: ReadonlyArray<ProjectWorkspace>,
-  ) =>
-    Effect.gen(function* () {
-      const normalized = yield* Effect.forEach(roots, (root) =>
-        normalizeWorkspaceRoot({ projectId, workspaceRoot: root.path }).pipe(
-          Effect.map((path) => ({ ...root, path })),
-        ),
-      );
-      const first = normalized.find((root) => root.path === primary) ?? { path: primary };
-      const byPath = new Map(normalized.map((root) => [root.path, root]));
-      byPath.delete(primary);
-      return [first, ...byPath.values()];
-    });
+  ) {
+    const normalized = yield* Effect.forEach(roots, (root) =>
+      normalizeWorkspaceRoot({ projectId, workspaceRoot: root.path }).pipe(
+        Effect.map((path) => ({ ...root, path })),
+      ),
+    );
+    const first = normalized.find((root) => root.path === primary) ?? { path: primary };
+    const byPath = new Map(normalized.map((root) => [root.path, root]));
+    byPath.delete(primary);
+    return [first, ...byPath.values()];
+  });
 
   const create: ProjectService["Service"]["create"] = Effect.fn("ProjectService.create")(
     function* (input) {

@@ -1,3 +1,4 @@
+import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 /**
  * Account rate-limit views: the sidebar hover card and the usage page's
@@ -128,10 +129,6 @@ function RowCaption({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Sidebar hover card
-// ---------------------------------------------------------------------------
-
 function HoverWindowRow({
   window,
   color,
@@ -143,12 +140,16 @@ function HoverWindowRow({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span
-        className="w-9 shrink-0 truncate whitespace-nowrap text-[10px] text-muted-foreground"
-        title={window.label}
-      >
-        {window.label}
-      </span>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span className="w-9 shrink-0 truncate whitespace-nowrap text-[10px] text-muted-foreground">
+              {window.label}
+            </span>
+          }
+        />
+        <TooltipPopup>{window.label}</TooltipPopup>
+      </Tooltip>
       <LimitMeter window={window} color={color} />
       <span
         className={cn(
@@ -239,10 +240,6 @@ export function AccountLimitsHoverCard() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Usage page section
-// ---------------------------------------------------------------------------
-
 function SectionWindowRow({
   window,
   color,
@@ -255,12 +252,16 @@ function SectionWindowRow({
   const resetAt = formatResetAt(window.resetsAt, nowMs);
   return (
     <div className="flex items-center gap-3">
-      <span
-        className="w-10 shrink-0 truncate whitespace-nowrap text-xs text-muted-foreground"
-        title={window.label}
-      >
-        {window.label}
-      </span>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span className="w-10 shrink-0 truncate whitespace-nowrap text-xs text-muted-foreground">
+              {window.label}
+            </span>
+          }
+        />
+        <TooltipPopup>{window.label}</TooltipPopup>
+      </Tooltip>
       <LimitMeter window={window} color={color} />
       <span
         className={cn(
@@ -278,7 +279,7 @@ function SectionWindowRow({
 }
 
 /** The "Limits" strip above the analytics: one column per provider. */
-export function AccountLimitsSection() {
+function AccountLimitsSection() {
   const { byProvider, reportingEnvironments, isSettling } = useAccountLimits();
   const nowMs = useNowMs();
 

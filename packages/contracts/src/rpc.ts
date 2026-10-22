@@ -998,7 +998,7 @@ const WsServerGetUsageSummaryRpc = Rpc.make(WS_METHODS.serverGetUsageSummary, {
   error: Schema.Union([EnvironmentAuthorizationError, UsageReadError]),
 });
 
-export const WsServerGetAccountLimitsRpc = Rpc.make(WS_METHODS.serverGetAccountLimits, {
+const WsServerGetAccountLimitsRpc = Rpc.make(WS_METHODS.serverGetAccountLimits, {
   payload: Schema.Struct({}),
   success: AccountLimitsSummary,
   error: EnvironmentAuthorizationError,
@@ -1011,7 +1011,7 @@ const WsServerGetUsageLimitHistoryRpc = Rpc.make(WS_METHODS.serverGetUsageLimitH
 });
 
 /** Refetches the model rate table ahead of its daily TTL. */
-export const WsServerRefreshUsageRatesRpc = Rpc.make(WS_METHODS.serverRefreshUsageRates, {
+const WsServerRefreshUsageRatesRpc = Rpc.make(WS_METHODS.serverRefreshUsageRates, {
   payload: Schema.Struct({}),
   success: UsagePricing,
   error: EnvironmentAuthorizationError,
@@ -1364,25 +1364,25 @@ const WsProjectsSearchContentsRpc = Rpc.make(WS_METHODS.projectsSearchContents, 
   error: Schema.Union([ProjectSearchContentsError, EnvironmentAuthorizationError]),
 });
 
-export const WsSessionsListResumableRpc = Rpc.make(WS_METHODS.sessionsListResumable, {
+const WsSessionsListResumableRpc = Rpc.make(WS_METHODS.sessionsListResumable, {
   payload: ListResumableSessionsInput,
   success: ListResumableSessionsResult,
   error: Schema.Union([ListResumableSessionsError, EnvironmentAuthorizationError]),
 });
 
-export const WsProjectsSearchCodeRpc = Rpc.make(WS_METHODS.projectsSearchCode, {
+const WsProjectsSearchCodeRpc = Rpc.make(WS_METHODS.projectsSearchCode, {
   payload: ProjectSearchCodeInput,
   success: ProjectSearchCodeResult,
   error: Schema.Union([ProjectSearchCodeError, EnvironmentAuthorizationError]),
 });
 
-export const WsProjectsListEntriesRpc = Rpc.make(WS_METHODS.projectsListEntries, {
+const WsProjectsListEntriesRpc = Rpc.make(WS_METHODS.projectsListEntries, {
   payload: ProjectListEntriesInput,
   success: ProjectListEntriesResult,
   error: Schema.Union([ProjectListEntriesError, EnvironmentAuthorizationError]),
 });
 
-export const WsProjectsWatchEntriesRpc = Rpc.make(WS_METHODS.projectsWatchEntries, {
+const WsProjectsWatchEntriesRpc = Rpc.make(WS_METHODS.projectsWatchEntries, {
   payload: ProjectListEntriesInput,
   success: ProjectEntriesChangedEvent,
   error: Schema.Union([ProjectListEntriesError, EnvironmentAuthorizationError]),
@@ -1401,20 +1401,20 @@ const WsProjectsReadFileRpc = Rpc.make(WS_METHODS.projectsReadFile, {
   error: Schema.Union([ProjectReadFileError, EnvironmentAuthorizationError]),
 });
 
-export const WsProjectsLocateFileRpc = Rpc.make(WS_METHODS.projectsLocateFile, {
+const WsProjectsLocateFileRpc = Rpc.make(WS_METHODS.projectsLocateFile, {
   payload: ProjectLocateFileInput,
   success: ProjectLocateFileResult,
   error: Schema.Union([ProjectLocateFileError, EnvironmentAuthorizationError]),
 });
 
-export const WsProjectsWatchFileRpc = Rpc.make(WS_METHODS.projectsWatchFile, {
+const WsProjectsWatchFileRpc = Rpc.make(WS_METHODS.projectsWatchFile, {
   payload: ProjectReadFileInput,
   success: ProjectFileChangedEvent,
   error: Schema.Union([ProjectReadFileError, EnvironmentAuthorizationError]),
   stream: true,
 });
 
-export const WsProjectsDeleteEntryRpc = Rpc.make(WS_METHODS.projectsDeleteEntry, {
+const WsProjectsDeleteEntryRpc = Rpc.make(WS_METHODS.projectsDeleteEntry, {
   payload: ProjectDeleteEntryInput,
   success: ProjectDeleteEntryResult,
   error: Schema.Union([ProjectDeleteEntryError, EnvironmentAuthorizationError]),
@@ -1443,7 +1443,7 @@ const WsProjectsCreateNewRpc = Rpc.make(WS_METHODS.projectsCreateNew, {
   error: Schema.Union([OrchestrationDispatchCommandError, EnvironmentAuthorizationError]),
 });
 
-export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
+const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: LaunchEditorInput,
   error: Schema.Union([ExternalLauncherError, EnvironmentAuthorizationError]),
 });
@@ -1542,13 +1542,13 @@ const WsVcsPullRpc = Rpc.make(WS_METHODS.vcsPull, {
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
-export const WsVcsFetchRpc = Rpc.make(WS_METHODS.vcsFetch, {
+const WsVcsFetchRpc = Rpc.make(WS_METHODS.vcsFetch, {
   payload: VcsFetchInput,
   success: VcsFetchResult,
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
-export const WsVcsRefreshStatusRpc = Rpc.make(WS_METHODS.vcsRefreshStatus, {
+const WsVcsRefreshStatusRpc = Rpc.make(WS_METHODS.vcsRefreshStatus, {
   payload: VcsStatusInput,
   success: VcsStatusResult,
   error: Schema.Union([GitManagerServiceError, EnvironmentAuthorizationError]),
@@ -1586,73 +1586,73 @@ const WsGitPreparePullRequestThreadRpc = Rpc.make(WS_METHODS.gitPreparePullReque
   error: Schema.Union([GitManagerServiceError, EnvironmentAuthorizationError]),
 });
 
-export const WsGitDetailedStatusRpc = Rpc.make(WS_METHODS.gitDetailedStatus, {
+const WsGitDetailedStatusRpc = Rpc.make(WS_METHODS.gitDetailedStatus, {
   payload: VcsStatusInput,
   success: GitDetailedStatusResult,
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
-export const WsGitStageFilesRpc = Rpc.make(WS_METHODS.gitStageFiles, {
+const WsGitStageFilesRpc = Rpc.make(WS_METHODS.gitStageFiles, {
   payload: GitStageFilesInput,
   success: GitDetailedStatusResult,
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
-export const WsGitUnstageFilesRpc = Rpc.make(WS_METHODS.gitUnstageFiles, {
+const WsGitUnstageFilesRpc = Rpc.make(WS_METHODS.gitUnstageFiles, {
   payload: GitUnstageFilesInput,
   success: GitDetailedStatusResult,
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
-export const WsGitDiscardChangesRpc = Rpc.make(WS_METHODS.gitDiscardChanges, {
+const WsGitDiscardChangesRpc = Rpc.make(WS_METHODS.gitDiscardChanges, {
   payload: GitDiscardChangesInput,
   success: GitDetailedStatusResult,
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
-export const WsGitResolveConflictRpc = Rpc.make(WS_METHODS.gitResolveConflict, {
+const WsGitResolveConflictRpc = Rpc.make(WS_METHODS.gitResolveConflict, {
   payload: GitResolveConflictInput,
   success: GitDetailedStatusResult,
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
-export const WsGitCommitStagedRpc = Rpc.make(WS_METHODS.gitCommitStaged, {
+const WsGitCommitStagedRpc = Rpc.make(WS_METHODS.gitCommitStaged, {
   payload: GitCommitStagedInput,
   success: GitCommitStagedResult,
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
-export const WsGitGenerateCommitMessageRpc = Rpc.make(WS_METHODS.gitGenerateCommitMessage, {
+const WsGitGenerateCommitMessageRpc = Rpc.make(WS_METHODS.gitGenerateCommitMessage, {
   payload: VcsStatusInput,
   success: GitGenerateCommitMessageResult,
   error: Schema.Union([GitManagerServiceError, EnvironmentAuthorizationError]),
 });
 
-export const WsGitFileDiffRpc = Rpc.make(WS_METHODS.gitFileDiff, {
+const WsGitFileDiffRpc = Rpc.make(WS_METHODS.gitFileDiff, {
   payload: GitFileDiffInput,
   success: GitFileDiffResult,
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
-export const WsGitHistoryRpc = Rpc.make(WS_METHODS.gitHistory, {
+const WsGitHistoryRpc = Rpc.make(WS_METHODS.gitHistory, {
   payload: GitHistoryInput,
   success: GitHistoryResult,
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
-export const WsGitCommitDetailsRpc = Rpc.make(WS_METHODS.gitCommitDetails, {
+const WsGitCommitDetailsRpc = Rpc.make(WS_METHODS.gitCommitDetails, {
   payload: GitCommitDetailsInput,
   success: GitCommitDetailsResult,
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
-export const WsGitCommitDiffRpc = Rpc.make(WS_METHODS.gitCommitDiff, {
+const WsGitCommitDiffRpc = Rpc.make(WS_METHODS.gitCommitDiff, {
   payload: GitCommitDiffInput,
   success: GitCommitDiffResult,
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
-export const WsVcsListRefsRpc = Rpc.make(WS_METHODS.vcsListRefs, {
+const WsVcsListRefsRpc = Rpc.make(WS_METHODS.vcsListRefs, {
   payload: VcsListRefsInput,
   success: VcsListRefsResult,
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),

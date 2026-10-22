@@ -1,7 +1,6 @@
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { act, type ReactElement } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { act, render } from "../../../test/render";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
 const { select, queries, pages, refresh } = vi.hoisted(() => ({
@@ -38,18 +37,9 @@ const root = (name: string) => ({
   branch: "main",
   primary: name === "frontend",
 });
-let reactRoot: Root | undefined;
-let container: HTMLDivElement;
-async function render(element: ReactElement) {
-  container = document.body.appendChild(document.createElement("div"));
-  reactRoot = createRoot(container);
-  await act(async () => reactRoot!.render(element));
-}
 async function openMenu(name: string) {
-  await act(async () =>
-    userEvent.click(
-      container.querySelector<HTMLElement>(`[aria-label="Select checkout for ${name}"]`)!,
-    ),
+  await userEvent.click(
+    document.querySelector<HTMLElement>(`[aria-label="Select checkout for ${name}"]`)!,
   );
 }
 async function findMenuItem(role: string, text: string) {
@@ -62,8 +52,7 @@ async function findMenuItem(role: string, text: string) {
   });
 }
 
-beforeEach(() => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+function setup() {
   select.mockReset().mockResolvedValue({ _tag: "Success", value: { cwd: "/backend/task" } });
   queries.mockClear();
   pages.clear();
@@ -76,34 +65,30 @@ beforeEach(() => {
       ],
       nextCursor: null,
     });
-});
-afterEach(async () => {
-  await act(async () => reactRoot?.unmount());
-  reactRoot = undefined;
-  document.body.replaceChildren();
-  vi.unstubAllGlobals();
-});
+}
 
 describe("repository checkout controls", () => {
   it("allows recovering from a deleted selected checkout using the configured repository", async () => {
+    setup();
     pages.set("/backend/deleted:0", { isRepo: false, refs: [], nextCursor: null });
-    await render(
+    await using screen = await render(
       <FileWorktreeToolbar
         environmentId={environmentId}
         threadRef={threadRef}
         root={{ ...root("backend"), path: "/backend/deleted" }}
       />,
     );
-    expect(container.textContent).toContain("deleted");
+    expect(screen.container.textContent).toContain("deleted");
     await openMenu("backend");
-    await act(async () => userEvent.click(await findMenuItem("menuitemradio", "/backend/task")));
+    await userEvent.click(await findMenuItem("menuitemradio", "/backend/task"));
     expect(select).toHaveBeenCalledExactlyOnceWith({
       environmentId,
       input: { threadId: threadRef.threadId, workspaceRoot: "/backend", path: "/backend/task" },
     });
   });
   it("sends the selected repository identity and leaves the primary control unchanged", async () => {
-    await render(
+    setup();
+    await using screen = await render(
       <>
         <FileWorktreeToolbar
           environmentId={environmentId}
@@ -119,25 +104,26 @@ describe("repository checkout controls", () => {
     );
     await openMenu("backend");
     const task = await findMenuItem("menuitemradio", "/backend/task");
-    await act(async () => userEvent.click(task));
+    await userEvent.click(task);
     expect(select).toHaveBeenCalledExactlyOnceWith({
       environmentId,
       input: { threadId: threadRef.threadId, workspaceRoot: "/backend", path: "/backend/task" },
     });
     expect(
-      container.querySelector('[data-file-worktree-selector="/frontend"]')?.textContent,
+      screen.container.querySelector('[data-file-worktree-selector="/frontend"]')?.textContent,
     ).not.toContain("task");
     expect(queries).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/backend" }));
     expect(document.body.textContent).not.toContain("Multiwork");
   });
   it("loads additional branch pages and selects a branch by repository", async () => {
+    setup();
     pages.set("/backend:0", { ...pages.get("/backend:0"), nextCursor: 200 });
     pages.set("/backend:200", {
       isRepo: true,
       refs: [{ name: "older", current: false, worktreePath: null }],
       nextCursor: null,
     });
-    await render(
+    await using screen = await render(
       <FileWorktreeToolbar
         environmentId={environmentId}
         threadRef={threadRef}
@@ -145,9 +131,9 @@ describe("repository checkout controls", () => {
       />,
     );
     await openMenu("backend");
-    await act(async () => userEvent.click(await findMenuItem("menuitem", "Load more branches")));
+    await userEvent.click(await findMenuItem("menuitem", "Load more branches"));
     expect(queries).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/backend", cursor: 200 }));
-    await act(async () => userEvent.click(await findMenuItem("menuitem", "older")));
+    await userEvent.click(await findMenuItem("menuitem", "older"));
     expect(select).toHaveBeenCalledWith({
       environmentId,
       input: { threadId: threadRef.threadId, workspaceRoot: "/backend", branch: "older" },

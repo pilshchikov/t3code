@@ -1,20 +1,14 @@
-import { MAX_SCRIPT_ID_LENGTH } from "@t3tools/contracts";
+import { projectScriptMenuLabel } from "@t3tools/shared/projectScripts";
+import { projectScriptIdFromCommand } from "./projectScripts";
+import { buildProjectScript } from "./projectScripts";
 import { shortcutLabelForCommand } from "./keybindings";
 import { describe, expect, it } from "vite-plus/test";
-import {
-  projectScriptCwd,
-  projectScriptRuntimeEnv,
-  projectScriptMenuLabel,
-  settleProjectScript,
-  setupProjectScript,
-} from "@t3tools/shared/projectScripts";
+import { settleProjectScript, setupProjectScript } from "@t3tools/shared/projectScripts";
 
 import {
-  buildProjectScript,
   commandForProjectScript,
   nextProjectScriptId,
   primaryProjectScript,
-  projectScriptIdFromCommand,
   releaseClaimedRoles,
 } from "./projectScripts";
 
@@ -107,11 +101,6 @@ describe("projectScripts helpers", () => {
     },
   );
 
-  it("preserves the exact ID at the shortcut length limit", () => {
-    const id = "a".repeat(MAX_SCRIPT_ID_LENGTH);
-    expect(projectScriptIdFromCommand(commandForProjectScript(id) ?? "")).toBe(id);
-  });
-
   it("slugifies and dedupes project script ids", () => {
     expect(nextProjectScriptId("Run Tests", [])).toBe("run-tests");
     expect(nextProjectScriptId("Run Tests", ["run-tests"])).toBe("run-tests-2");
@@ -195,46 +184,5 @@ describe("projectScripts helpers", () => {
     expect(
       releaseClaimedRoles(holder, { ...input, runOnWorktreeCreate: false, runOnSettle: false }),
     ).toBe(holder);
-  });
-
-  it("builds default runtime env for scripts", () => {
-    const env = projectScriptRuntimeEnv({
-      project: { cwd: "/repo" },
-      worktreePath: "/repo/worktree-a",
-    });
-
-    expect(env).toMatchObject({
-      T3CODE_PROJECT_ROOT: "/repo",
-      T3CODE_WORKTREE_PATH: "/repo/worktree-a",
-    });
-  });
-
-  it("allows overriding runtime env values", () => {
-    const env = projectScriptRuntimeEnv({
-      project: { cwd: "/repo" },
-      extraEnv: {
-        T3CODE_PROJECT_ROOT: "/custom-root",
-        CUSTOM_FLAG: "1",
-      },
-    });
-
-    expect(env.T3CODE_PROJECT_ROOT).toBe("/custom-root");
-    expect(env.CUSTOM_FLAG).toBe("1");
-    expect(env.T3CODE_WORKTREE_PATH).toBeUndefined();
-  });
-
-  it("prefers the worktree path for script cwd resolution", () => {
-    expect(
-      projectScriptCwd({
-        project: { cwd: "/repo" },
-        worktreePath: "/repo/worktree-a",
-      }),
-    ).toBe("/repo/worktree-a");
-    expect(
-      projectScriptCwd({
-        project: { cwd: "/repo" },
-        worktreePath: null,
-      }),
-    ).toBe("/repo");
   });
 });

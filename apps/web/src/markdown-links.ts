@@ -105,7 +105,7 @@ function unwrapMarkdownLinkDestination(value: string): string {
   return value.startsWith("<") && value.endsWith(">") ? value.slice(1, -1) : value;
 }
 
-export function normalizeMarkdownLinkDestination(value: string): string {
+function normalizeMarkdownLinkDestination(value: string): string {
   return unwrapMarkdownLinkDestination(value.trim());
 }
 

@@ -50,7 +50,7 @@ export function useGitDetailedStatus(
   };
 }
 
-export function refreshGitDetailedStatus(environmentId: EnvironmentId, cwd: string): void {
+function refreshGitDetailedStatus(environmentId: EnvironmentId, cwd: string): void {
   appAtomRegistry.refresh(getGitDetailedStatusAtom(environmentId, cwd));
 }
 

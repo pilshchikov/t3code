@@ -197,7 +197,7 @@ function statusFromMtime(mtimeMs: number, now: number): ResumableSession["status
   return now - mtimeMs <= ACTIVE_WINDOW_MS ? "active" : "idle";
 }
 
-export const make: Effect.Effect<
+const make: Effect.Effect<
   ResumableSessionDiscoveryShape,
   never,
   ServerSettingsService | FileSystem.FileSystem | Path.Path
@@ -387,8 +387,8 @@ export const make: Effect.Effect<
     return sessions;
   });
 
-  const list: ResumableSessionDiscoveryShape["list"] = (input) =>
-    Effect.gen(function* () {
+  const list: ResumableSessionDiscoveryShape["list"] = Effect.fn("ResumableSessionDiscovery.list")(
+    function* (input) {
       const now = input.now ?? (yield* Clock.currentTimeMillis);
       const cwd = input.cwd;
       const [claude, codex] = yield* Effect.all(
@@ -406,7 +406,8 @@ export const make: Effect.Effect<
         sessions: truncated ? merged.slice(0, RESUMABLE_SESSIONS_MAX_LIMIT) : merged,
         truncated,
       };
-    });
+    },
+  );
 
   return ResumableSessionDiscovery.of({ list });
 });

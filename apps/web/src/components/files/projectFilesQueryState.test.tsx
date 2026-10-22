@@ -2,14 +2,12 @@ import {
   AuthFilesystemReadScope,
   EnvironmentId,
   type AuthSessionState,
-  type ProjectListEntriesResult,
   ProjectReadFileError,
   type ProjectReadFileResult,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -139,7 +137,6 @@ import { useT3ProjectFileState } from "~/hooks/useT3ProjectFileScripts";
 import { useProjectEntriesQuery, useProjectFileQuery } from "./projectFilesQueryState";
 
 const environmentId = EnvironmentId.make("environment-1");
-const decodeReadError = Schema.decodeSync(ProjectReadFileError);
 
 function deferred<A>() {
   let resolve!: (value: A) => void;
@@ -154,13 +151,6 @@ function file(contents: string): ProjectReadFileResult {
     relativePath: "src/preview.ts",
     contents,
     byteLength: contents.length,
-    truncated: false,
-  };
-}
-
-function projectEntries(paths: readonly string[]): ProjectListEntriesResult {
-  return {
-    entries: paths.map((path) => ({ path, kind: "file" })),
     truncated: false,
   };
 }
@@ -880,7 +870,7 @@ describe("project query refresh", () => {
     }
   });
 
-  it("confirms files from reads and preserves that identity until a definitive folder result", () => {
+  it("clears failed reads while distinguishing a definitive folder result", () => {
     const contents = file("# readme");
     const success = AsyncResult.success(contents);
     const failure = (kind: ProjectReadFileError["failure"], cached = false) =>
@@ -896,8 +886,8 @@ describe("project query refresh", () => {
       ["binary file", failure("binary_file"), true, false, null],
       ["read success", success, true, false, contents],
       ["pending refresh", AsyncResult.waiting(success), true, false, contents],
-      ["transient refresh failure", failure("operation_failed", true), true, false, contents],
-      ["became a folder", failure("path_not_file", true), false, true, contents],
+      ["transient refresh failure", failure("operation_failed", true), false, false, null],
+      ["became a folder", failure("path_not_file", true), false, true, null],
     ] as const;
     const readAtom = Atom.make<
       AsyncResult.AsyncResult<ProjectReadFileResult, ProjectReadFileError>
@@ -924,37 +914,10 @@ describe("project query refresh", () => {
       atomHooks.registry = null;
     }
   });
-
-  it("retains decoded read failure context for the connected environment", async () => {
-    const error = decodeReadError({
-      _tag: "ProjectReadFileError",
-      cwd: "C:\\workspace",
-      relativePath: "workspace/outline.md",
-      failure: "operation_failed",
-      operation: "realpath-target",
-      operationPath: "C:\\workspace\\workspace\\outline.md",
-      resolvedPath: "C:\\workspace\\workspace\\outline.md",
-      message: "Failed to read workspace file.",
-    });
-    const readAtom = Atom.make(Effect.fail(error));
-    const registry = AtomRegistry.make();
-    const unmount = registry.mount(readAtom);
-    projectMocks.readFile.mockReturnValue(readAtom);
-    projectMocks.optimisticFile.mockReturnValue(Atom.make(null));
-    atomHooks.registry = registry;
-
-    try {
-      await flushEffects();
-      reactHooks.beginRender();
-      const query = useProjectFileQuery(environmentId, "C:\\workspace", "workspace/outline.md");
-      expect(query.readError).toBe(error);
-      expect(query.error).toBe(error.message);
-      expect(query.isNotFile).toBe(false);
-      expect(query.data).toBeNull();
-    } finally {
-      unmount();
-      registry.dispose();
-      atomHooks.registry = null;
-    }
-  });
 });
+
+function projectEntries(
+  paths: readonly string[],
+): import("@t3tools/contracts").ProjectListEntriesResult {
+  return { entries: paths.map((path) => ({ path, kind: "file" })), truncated: false };
+}

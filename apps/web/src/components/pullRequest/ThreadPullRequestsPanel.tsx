@@ -53,7 +53,7 @@ import {
 } from "./pullRequestPresentation";
 import { PullRequestGlyph } from "./pullRequestIcons";
 import { pullRequestQuickActions } from "./pullRequestList.logic";
-import { PullRequestSpeedActions } from "./PullRequestSpeedActions";
+import { PullRequestSpeedActions, PullRequestSpeedModeContext } from "./PullRequestSpeedActions";
 
 const SOURCE_LABELS: Record<ThreadPullRequestLink["source"], string> = {
   manual: "Linked by you",
@@ -281,11 +281,7 @@ function LinkRowImpl({
         />
       </a>
       {actionEntry !== null ? (
-        <PullRequestSpeedActions
-          entry={actionEntry}
-          hostActions={linkHostActions}
-          visible={speedMode}
-        />
+        <PullRequestSpeedActions entry={actionEntry} hostActions={linkHostActions} />
       ) : null}
       <span
         className={cn(
@@ -464,85 +460,90 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="flex flex-col gap-2 border-b border-border/60 p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-medium">{overview.totals.linked} linked pull requests</h2>
-          <Button size="xs" variant="ghost" onClick={openLinkDialog}>
-            <PlusIcon className="size-3.5" />
-            Link
-          </Button>
-        </div>
-        <Tooltip>
-          <TooltipTrigger render={<p className="text-xs text-muted-foreground" />}>
-            {overview.groups.length} {overview.groups.length === 1 ? "repository" : "repositories"}{" "}
-            · {overview.totals.branches} known branches
-          </TooltipTrigger>
-          <TooltipPopup>
-            Source and target branches, counted separately for each repository
-          </TooltipPopup>
-        </Tooltip>
-        <div
-          className="flex flex-wrap gap-x-3 gap-y-1 text-xs"
-          aria-label="Linked pull request status totals"
-        >
-          <span>{overview.totals.open} open</span>
-          <span>{overview.totals.merged} merged</span>
-          <span>{overview.totals.closed} closed</span>
-          {overview.totals.unknown > 0 ? (
-            <span className="text-muted-foreground">{overview.totals.unknown} awaiting status</span>
-          ) : null}
-          {overview.totals.attention > 0 ? (
-            <span className="text-destructive">{overview.totals.attention} need attention</span>
-          ) : null}
-        </div>
-      </header>
-      <LegendList
-        data={rows}
-        keyExtractor={(row) => `${row.kind}:${row.key}`}
-        extraData={rowInputs}
-        renderItem={({ item }) =>
-          item.kind === "group" ? (
-            <div className="px-2 py-2" aria-label={`${item.group.host}/${item.group.repository}`}>
-              <h3 className="break-all text-xs font-medium">
-                {item.group.host}/{item.group.repository}
-              </h3>
-              <p className="text-2xs text-muted-foreground">
-                {item.group.links.length} PRs · {item.group.branches.length} known branches
-              </p>
-            </div>
-          ) : (
-            <LinkRow
-              line={item.line}
-              threadRef={threadRef}
-              projectId={
-                capabilities?.pullRequests === true
-                  ? (findProjectForChangeRequest(environmentProjects, item.line.link)?.id ??
-                    thread?.projectId ??
-                    null)
-                  : null
-              }
-              speedMode={speedMode}
-              onUnlink={handleUnlink}
-              onSetWatching={supportsWatch ? handleSetWatching : null}
-            />
-          )
-        }
-        estimatedItemSize={44}
-        drawDistance={440}
-        className="min-h-0 flex-1 overscroll-contain p-1.5"
-      />
-      <footer className="flex items-center justify-between border-t border-border/60 px-2 py-1.5 text-2xs text-muted-foreground">
-        <span>
-          {lastSynced ? (
-            <>
-              Latest sync <RelativeTime timestamp={lastSynced} />
-            </>
-          ) : (
-            "Awaiting host status"
-          )}
-        </span>
-      </footer>
-    </div>
+    <PullRequestSpeedModeContext value={speedMode}>
+      <div className="flex h-full min-h-0 flex-col">
+        <header className="flex flex-col gap-2 border-b border-border/60 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-medium">{overview.totals.linked} linked pull requests</h2>
+            <Button size="xs" variant="ghost" onClick={openLinkDialog}>
+              <PlusIcon className="size-3.5" />
+              Link
+            </Button>
+          </div>
+          <Tooltip>
+            <TooltipTrigger render={<p className="text-xs text-muted-foreground" />}>
+              {overview.groups.length}{" "}
+              {overview.groups.length === 1 ? "repository" : "repositories"} ·{" "}
+              {overview.totals.branches} known branches
+            </TooltipTrigger>
+            <TooltipPopup>
+              Source and target branches, counted separately for each repository
+            </TooltipPopup>
+          </Tooltip>
+          <div
+            className="flex flex-wrap gap-x-3 gap-y-1 text-xs"
+            aria-label="Linked pull request status totals"
+          >
+            <span>{overview.totals.open} open</span>
+            <span>{overview.totals.merged} merged</span>
+            <span>{overview.totals.closed} closed</span>
+            {overview.totals.unknown > 0 ? (
+              <span className="text-muted-foreground">
+                {overview.totals.unknown} awaiting status
+              </span>
+            ) : null}
+            {overview.totals.attention > 0 ? (
+              <span className="text-destructive">{overview.totals.attention} need attention</span>
+            ) : null}
+          </div>
+        </header>
+        <LegendList
+          data={rows}
+          keyExtractor={(row) => `${row.kind}:${row.key}`}
+          extraData={rowInputs}
+          renderItem={({ item }) =>
+            item.kind === "group" ? (
+              <div className="px-2 py-2" aria-label={`${item.group.host}/${item.group.repository}`}>
+                <h3 className="break-all text-xs font-medium">
+                  {item.group.host}/{item.group.repository}
+                </h3>
+                <p className="text-2xs text-muted-foreground">
+                  {item.group.links.length} PRs · {item.group.branches.length} known branches
+                </p>
+              </div>
+            ) : (
+              <LinkRow
+                line={item.line}
+                threadRef={threadRef}
+                projectId={
+                  capabilities?.pullRequests === true
+                    ? (findProjectForChangeRequest(environmentProjects, item.line.link)?.id ??
+                      thread?.projectId ??
+                      null)
+                    : null
+                }
+                speedMode={speedMode}
+                onUnlink={handleUnlink}
+                onSetWatching={supportsWatch ? handleSetWatching : null}
+              />
+            )
+          }
+          estimatedItemSize={44}
+          drawDistance={440}
+          className="min-h-0 flex-1 overscroll-contain p-1.5"
+        />
+        <footer className="flex items-center justify-between border-t border-border/60 px-2 py-1.5 text-2xs text-muted-foreground">
+          <span>
+            {lastSynced ? (
+              <>
+                Latest sync <RelativeTime timestamp={lastSynced} />
+              </>
+            ) : (
+              "Awaiting host status"
+            )}
+          </span>
+        </footer>
+      </div>
+    </PullRequestSpeedModeContext>
   );
 }

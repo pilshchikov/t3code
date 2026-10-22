@@ -30,7 +30,7 @@ export class AnalyticsService extends Context.Service<
   );
 }
 
-export const make = Effect.succeed(
+const make = Effect.succeed(
   AnalyticsService.of({
     record: () => Effect.void,
     flush: Effect.void,

@@ -1,12 +1,10 @@
 export {
   buildProjectGroups,
-  deriveLogicalProjectKey,
   deriveLogicalProjectKeyFromSettings,
   derivePhysicalProjectKey,
   derivePhysicalProjectKeyFromPath,
   deriveProjectGroupingOverrideKey,
   getProjectOrderKey,
-  resolveProjectGroupingMode,
   selectProjectGroupingSettings,
   withProjectLink,
   type ProjectGroupingMode,

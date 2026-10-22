@@ -1,6 +1,6 @@
-import { act, useEffect, useState, type Dispatch, type SetStateAction } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { act, render, stubGlobal } from "../../../test/render";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import type {
   CommunicationSelection,
@@ -55,10 +55,6 @@ const model: ThreadCommunication = {
     },
   ],
 };
-const originalMatchMedia = Object.getOwnPropertyDescriptor(window, "matchMedia");
-let shortPhone = false;
-let root: Root;
-let container: HTMLDivElement;
 function button(label: string) {
   const matches = [...document.querySelectorAll<HTMLButtonElement>("button")].filter(
     (b) => b.getAttribute("aria-label") === label || b.textContent?.trim() === label,
@@ -75,31 +71,18 @@ function Viewer() {
 }
 
 describe("communication dialog interactions", () => {
-  beforeEach(() => {
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-    shortPhone = false;
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: (media: string) => ({
-        media,
-        matches: shortPhone,
-        addEventListener() {},
-        removeEventListener() {},
-      }),
-    });
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-  });
-  afterEach(async () => {
-    await act(async () => root.unmount());
-    container.remove();
-    if (originalMatchMedia) Object.defineProperty(window, "matchMedia", originalMatchMedia);
-    else Reflect.deleteProperty(window, "matchMedia");
-  });
   it("opens from its panel button, filters a sibling connection, hides the map and closes", async () => {
-    await act(async () =>
-      root.render(<AgentCommunicationDialog>{() => <Viewer />}</AgentCommunicationDialog>),
+    let shortPhone = false;
+    using _viewport = stubGlobal("matchMedia", (media: string) => ({
+      media,
+      matches: shortPhone,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    // These dialog fixtures do not navigate.
+    await using screen = await render(
+      <AgentCommunicationDialog>{() => <Viewer />}</AgentCommunicationDialog>,
+      { router: false },
     );
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     await click("Agent communication");
@@ -117,6 +100,13 @@ describe("communication dialog interactions", () => {
     await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
   });
   it("receives new exchanges while open, preserves the chosen connection, and releases its viewer on close", async () => {
+    let shortPhone = false;
+    using _viewport = stubGlobal("matchMedia", (media: string) => ({
+      media,
+      matches: shortPhone,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
     let mountedViewers = 0;
     let publish: Dispatch<SetStateAction<ThreadCommunication>> | undefined;
     function LiveViewer() {
@@ -132,8 +122,10 @@ describe("communication dialog interactions", () => {
       }, []);
       return <AgentCommunicationView model={current} selection={selection} onSelect={select} />;
     }
-    await act(async () =>
-      root.render(<AgentCommunicationDialog>{() => <LiveViewer />}</AgentCommunicationDialog>),
+    // These dialog fixtures do not navigate.
+    await using screen = await render(
+      <AgentCommunicationDialog>{() => <LiveViewer />}</AgentCommunicationDialog>,
+      { router: false },
     );
     expect(mountedViewers).toBe(0);
     await click("Agent communication");
@@ -163,17 +155,26 @@ describe("communication dialog interactions", () => {
     expect(messages.textContent).toContain("What happens if the connection closes?");
     expect(messages.textContent).not.toContain("Check the reconnect behavior.");
     await click("Close");
-    expect(mountedViewers).toBe(0);
+    await vi.waitFor(() => expect(mountedViewers).toBe(0));
     expect(publish).toBeUndefined();
     await click("Agent communication");
     expect(mountedViewers).toBe(1);
     await click("Close");
-    expect(mountedViewers).toBe(0);
+    await vi.waitFor(() => expect(mountedViewers).toBe(0));
   });
   it("keeps messages readable on a short phone and lets the user expand its map", async () => {
+    let shortPhone = false;
+    using _viewport = stubGlobal("matchMedia", (media: string) => ({
+      media,
+      matches: shortPhone,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
     shortPhone = true;
-    await act(async () =>
-      root.render(<AgentCommunicationDialog>{() => <Viewer />}</AgentCommunicationDialog>),
+    // These dialog fixtures do not navigate.
+    await using screen = await render(
+      <AgentCommunicationDialog>{() => <Viewer />}</AgentCommunicationDialog>,
+      { router: false },
     );
     await click("Agent communication");
     expect(document.querySelector('[aria-label="Agents in the map"]')).toBeNull();
@@ -186,18 +187,25 @@ describe("communication dialog interactions", () => {
     expect(document.querySelector('[aria-label="Agents in the map"]')).toBeNull();
   });
   it("opens an empty thread without requiring a setting or an existing exchange", async () => {
-    await act(async () =>
-      root.render(
-        <AgentCommunicationDialog>
-          {() => (
-            <AgentCommunicationView
-              model={{ rootId: "parent", participants: [], messages: [] }}
-              selection={{ kind: "all" }}
-              onSelect={() => {}}
-            />
-          )}
-        </AgentCommunicationDialog>,
-      ),
+    let shortPhone = false;
+    using _viewport = stubGlobal("matchMedia", (media: string) => ({
+      media,
+      matches: shortPhone,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    // These dialog fixtures do not navigate.
+    await using screen = await render(
+      <AgentCommunicationDialog>
+        {() => (
+          <AgentCommunicationView
+            model={{ rootId: "parent", participants: [], messages: [] }}
+            selection={{ kind: "all" }}
+            onSelect={() => {}}
+          />
+        )}
+      </AgentCommunicationDialog>,
+      { router: false },
     );
     await click("Agent communication");
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
@@ -205,6 +213,13 @@ describe("communication dialog interactions", () => {
     );
   });
   it("keeps every agent in place while selecting cards, connections and the parent", async () => {
+    let shortPhone = false;
+    using _viewport = stubGlobal("matchMedia", (media: string) => ({
+      media,
+      matches: shortPhone,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
     const children = Array.from({ length: 9 }, (_, index) => ({
       ...model.participants[1]!,
       id: `child-${index}`,
@@ -221,9 +236,10 @@ describe("communication dialog interactions", () => {
       const [selection, select] = useState<CommunicationSelection>({ kind: "all" });
       return <AgentCommunicationView model={many} selection={selection} onSelect={select} />;
     }
-    await act(async () => root.render(<ManyAgents />));
+    // These dialog fixtures do not navigate.
+    await using screen = await render(<ManyAgents />, { router: false });
     const order = () =>
-      [...container.querySelectorAll("[data-communication-agent]")].map((element) =>
+      [...screen.container.querySelectorAll("[data-communication-agent]")].map((element) =>
         element.getAttribute("data-communication-agent"),
       );
     await click("Show map");
@@ -233,7 +249,7 @@ describe("communication dialog interactions", () => {
     await click("Read exchanges with Task 9");
     expect(order()).toEqual(initial);
     expect(
-      container.querySelector('[aria-label="Messages between agents"]')?.textContent,
+      screen.container.querySelector('[aria-label="Messages between agents"]')?.textContent,
     ).toContain("Check the reconnect behavior.");
     await click("Read exchanges with Task 2");
     expect(order()).toEqual(initial);
@@ -241,11 +257,18 @@ describe("communication dialog interactions", () => {
     expect(order()).toEqual(initial);
     await click("Read exchanges with Lead agent");
     expect(order()).toEqual(initial);
-    expect(container.querySelector('nav [aria-pressed="true"]')?.textContent).toContain(
+    expect(screen.container.querySelector('nav [aria-pressed="true"]')?.textContent).toContain(
       "All conversations",
     );
   });
   it("shows actual nested parentage and separates reply counts from assigned tasks", async () => {
+    let shortPhone = false;
+    using _viewport = stubGlobal("matchMedia", (media: string) => ({
+      media,
+      matches: shortPhone,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
     const nested: ThreadCommunication = {
       ...model,
       participants: [
@@ -271,9 +294,10 @@ describe("communication dialog interactions", () => {
       const [selection, select] = useState<CommunicationSelection>({ kind: "all" });
       return <AgentCommunicationView model={nested} selection={selection} onSelect={select} />;
     }
-    await act(async () => root.render(<NestedAgents />));
+    // These dialog fixtures do not navigate.
+    await using screen = await render(<NestedAgents />, { router: false });
     await click("Show map");
-    const branch = container.querySelector('[aria-label="Tasks delegated by Auditor"]');
+    const branch = screen.container.querySelector('[aria-label="Tasks delegated by Auditor"]');
     expect(branch?.querySelector('[data-communication-agent="recorder"]')).not.toBeNull();
     expect(button("Read connection between Lead agent and Auditor").textContent).toContain(
       "1 task",
@@ -282,10 +306,17 @@ describe("communication dialog interactions", () => {
       "1 reply",
     );
     await click("Read connection between Lead agent and Auditor");
-    const messages = container.querySelector('[aria-label="Messages between agents"]');
+    const messages = screen.container.querySelector('[aria-label="Messages between agents"]');
     expect(messages?.querySelectorAll("article")).toHaveLength(2);
   });
   it("keeps unrelated and cyclic records visible without inventing a coordinator link", async () => {
+    let shortPhone = false;
+    using _viewport = stubGlobal("matchMedia", (media: string) => ({
+      media,
+      matches: shortPhone,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
     const inconsistent: ThreadCommunication = {
       ...model,
       participants: [
@@ -294,21 +325,30 @@ describe("communication dialog interactions", () => {
         { ...model.participants[2]!, parentId: "auditor" },
       ],
     };
-    await act(async () =>
-      root.render(
-        <AgentCommunicationView
-          model={inconsistent}
-          selection={{ kind: "all" }}
-          onSelect={() => {}}
-        />,
-      ),
+    // These dialog fixtures do not navigate.
+    await using screen = await render(
+      <AgentCommunicationView
+        model={inconsistent}
+        selection={{ kind: "all" }}
+        onSelect={() => {}}
+      />,
+      { router: false },
     );
     await click("Show map");
-    expect(container.querySelectorAll("[data-communication-agent]")).toHaveLength(3);
-    expect(container.querySelector('[aria-label="Tasks delegated by Lead agent"]')).toBeNull();
-    expect(container.textContent).toContain("Other threads");
+    expect(screen.container.querySelectorAll("[data-communication-agent]")).toHaveLength(3);
+    expect(
+      screen.container.querySelector('[aria-label="Tasks delegated by Lead agent"]'),
+    ).toBeNull();
+    expect(screen.container.textContent).toContain("Other threads");
   });
   it("pages a long task history newest first and loads older exchanges below the latest", async () => {
+    let shortPhone = false;
+    using _viewport = stubGlobal("matchMedia", (media: string) => ({
+      media,
+      matches: shortPhone,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
     const tasks = Array.from({ length: 75 }, (_, i) => ({
       ...model.participants[1]!,
       id: `task-${i}`,
@@ -331,9 +371,10 @@ describe("communication dialog interactions", () => {
       const [selection, select] = useState<CommunicationSelection>({ kind: "all" });
       return <AgentCommunicationView model={history} selection={selection} onSelect={select} />;
     }
-    await act(async () => root.render(<History />));
+    // These dialog fixtures do not navigate.
+    await using screen = await render(<History />, { router: false });
     const taskIds = () =>
-      [...container.querySelectorAll("nav [data-communication-task]")].map((element) =>
+      [...screen.container.querySelectorAll("nav [data-communication-task]")].map((element) =>
         element.getAttribute("data-communication-task"),
       );
     expect(taskIds()).toHaveLength(50);
@@ -341,15 +382,22 @@ describe("communication dialog interactions", () => {
     await click("Show 25 more tasks");
     expect(taskIds()).toHaveLength(75);
     expect(taskIds().at(-1)).toBe("task-0");
-    const feed = container.querySelector('[aria-label="Messages between agents"]')!;
+    const feed = screen.container.querySelector('[aria-label="Messages between agents"]')!;
     expect(feed.querySelectorAll("article")).toHaveLength(30);
     expect(feed.querySelector("article")?.textContent).toContain("Exchange 74");
     await click("Show 30 older messages");
     expect(feed.querySelectorAll("article")).toHaveLength(60);
     expect(feed.querySelector("article")?.textContent).toContain("Exchange 74");
-    expect(container.querySelectorAll("[data-communication-agent]").length).toBeLessThan(10);
+    expect(screen.container.querySelectorAll("[data-communication-agent]").length).toBeLessThan(10);
   });
   it("formats Markdown and switches between compact, preview and full messages without losing task selection", async () => {
+    let shortPhone = false;
+    using _viewport = stubGlobal("matchMedia", (media: string) => ({
+      media,
+      matches: shortPhone,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
     const formatted = {
       ...model,
       messages: [
@@ -362,16 +410,16 @@ describe("communication dialog interactions", () => {
         },
       ],
     };
-    await act(async () =>
-      root.render(
-        <AgentCommunicationView
-          model={formatted}
-          selection={{ kind: "participant", id: "auditor" }}
-          onSelect={() => {}}
-        />,
-      ),
+    // These dialog fixtures do not navigate.
+    await using screen = await render(
+      <AgentCommunicationView
+        model={formatted}
+        selection={{ kind: "participant", id: "auditor" }}
+        onSelect={() => {}}
+      />,
+      { router: false },
     );
-    const feed = container.querySelector('[aria-label="Messages between agents"]')!;
+    const feed = screen.container.querySelector('[aria-label="Messages between agents"]')!;
     expect(feed.querySelector("h2")?.textContent).toBe("Findings");
     expect(feed.querySelector("strong")?.textContent).toBe("Confirmed");
     expect(feed.querySelector("table")).not.toBeNull();
@@ -388,10 +436,19 @@ describe("communication dialog interactions", () => {
     await click("Expand all");
     expect(feed.textContent).toContain("Final evidence marker");
     expect(
-      container.querySelector('[data-communication-task="auditor"]')?.getAttribute("aria-pressed"),
+      screen.container
+        .querySelector('[data-communication-task="auditor"]')
+        ?.getAttribute("aria-pressed"),
     ).toBe("true");
   });
   it("offers expansion only for clipped messages and shows compact rows without Markdown syntax", async () => {
+    let shortPhone = false;
+    using _viewport = stubGlobal("matchMedia", (media: string) => ({
+      media,
+      matches: shortPhone,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
     const mixed = {
       ...model,
       messages: [
@@ -399,12 +456,12 @@ describe("communication dialog interactions", () => {
         { ...model.messages[2]!, text: "Long evidence.\n".repeat(200) },
       ],
     };
-    await act(async () =>
-      root.render(
-        <AgentCommunicationView model={mixed} selection={{ kind: "all" }} onSelect={() => {}} />,
-      ),
+    // These dialog fixtures do not navigate.
+    await using screen = await render(
+      <AgentCommunicationView model={mixed} selection={{ kind: "all" }} onSelect={() => {}} />,
+      { router: false },
     );
-    const feed = container.querySelector('[aria-label="Messages between agents"]')!;
+    const feed = screen.container.querySelector('[aria-label="Messages between agents"]')!;
     const [long, short] = feed.querySelectorAll("article");
     expect(long?.querySelector("button")?.textContent).toBe("Show full message");
     expect(short?.querySelector("button")).toBeNull();

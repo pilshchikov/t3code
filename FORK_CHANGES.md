@@ -1,5 +1,56 @@
 # Fork Changes
 
+## Upstream integration — 2026-10-22 (f05599504a)
+
+- Merge 254 incoming upstream commits through `f05599504ae10c395a6a39f5e7db31b7810ac239`
+  into fork parent `3e9b42341231`, preserving both histories. Review all 210 overlapping paths
+  and resolve conflicts individually. Accept upstream's chat/sidebar/settings component extraction,
+  provider and Git fixes, SSH runtime cleanup, webhook array filters, Business quota messaging,
+  folded agent messages, RTL support and mobile navigation improvements.
+- Port the fork's native file preview retention and root identity, Git History controls,
+  project grouping/slots/picker sizing, manual thread order and accent colors into the extracted
+  owners. Keep settled project shortcuts, complete project pickers, per-root workspace recovery,
+  file revisions and dirty-editor protection, custom composer controls/width/typography,
+  collapsible images and Slack table copying. Mobile communication sheets adopt upstream's current
+  sheet options, and draft file selection keeps its project and directory without a null thread id.
+- Keep independent bounded conversation-position recovery in `useTimelinePositionRestore.ts`,
+  first assistant text outside settled folds, and the fork's latest-entry work disclosure.
+  Combine that policy with upstream's separate folds after a steer; never emit a duplicate or
+  empty whole-turn fold after the steer. Citation fixtures use a middle response so they still
+  test opening hidden history rather than trying to hide the intentionally visible first reply.
+- Ordinary Send/Resume/Queue/Steer never compact first, including upstream's extracted
+  `planComposerTurn` path. Retain the existing project-aware compaction worker as the sole timer.
+  Decode upstream's legacy/mode fields for compatibility, but hide its competing provider control
+  and default native return compaction off. Keep automatic recovery and settlement fork defaults.
+- Preserve Claude account/HOME history isolation and custom compaction; project memory,
+  workspace/peer communication and connected-environment usage tools remain registered.
+  Analytics stays a no-op and effective external OTLP exports stay disabled. Released fork
+  migration IDs 1–72 remain unchanged. Upstream's new Node 26.12.1, pnpm 12.14.0 and TypeScript
+  drop-in toolchain are adopted; regenerate the lockfile against the merged fork manifests.
+- Preserve middle-click tab closing and immediately release the communication viewer on close;
+  upstream popup-content retention must not retain its live subscriptions. Canceled client-scope
+  edits also unmount on close so reopening starts from the saved permissions. Convert older fork
+  browser fixtures to disposable rendering, and rename the previously undiscovered editor
+  navigation fixture to `.browser.test.tsx`. Remove unused legacy Files/Pierre-tree and V1 resume
+  seed helpers; native Files, editable previews and V2 CLI-session resume remain mounted.
+- Keep worker effort tied to observed SDK runtime hooks, without inferring it from a parent or
+  Agent launch arguments; update older fixtures to test that policy alongside the positive hook
+  regression. Retain startup provider discovery while periodic refreshes and version lookups stay
+  opt-in. Keep the fork's conservative local-file retention and independent panel maximization.
+  Mark unused implementation exports private without changing RPC groups or their wire methods.
+- Keep the fork's cumulative review previews consistent between overview and individual files,
+  including untracked files when comparing against the base. Update cleanup fixture snapshots for
+  the new archive response, isolate their worktree rules from the fork's independent settled-thread expiry, and keep test
+  provider version lookups explicitly opted in. Retain the isolated Claude SDK probe executable
+  when accepting upstream's test-fixture pruning.
+- Keep fork-specific regression tests during upstream's test pruning and update retained fixtures
+  for the extracted APIs. Focused unit/service checks and isolated Chromium checks cover the
+  preserved behaviors; scoped typechecks cover all four clients, contracts, shared and client-runtime.
+  Validation includes the 264-file fork-delta sweep and a 64-file integration follow-up; all reported
+  failures are corrected and pass focused reruns. Formatting, changed-file lint, knip, generated
+  GraphQL and all 32 affected package typechecks pass. Existing advisory style warnings remain.
+  This merge does not rebuild, install or restart either running environment.
+
 ## Continuous usage bars without pace markers — 2026-10-20
 
 - Remove the vertical even-spending ticks and their transparent gaps from individual and pooled
@@ -626,7 +677,7 @@
   show-all and focus-selection controls; focusing preserves the overall discovered-agent count.
   Map scrolling and minimum transcript height keep small phone conversations readable.
 - Sources: `apps/web/src/components/chat/{AgentCommunicationMap,AgentCommunicationView,
-AgentCommunicationControl}.tsx`, `agentCommunicationStyles.ts`,
+  AgentCommunicationControl}.tsx`, `agentCommunicationStyles.ts`,
   `packages/client-runtime/src/state/threadCommunication.ts` and native
   `apps/mobile/src/features/threads/ThreadCommunicationSheet.tsx`.
 - Validation: 18 focused extraction/retention/order and DOM interaction tests passed. An isolated
@@ -3184,7 +3235,7 @@ fork-specific behavior so future upstream syncs are easier to review.
 ## Review panel driven by a file list rather than one large patch
 
 - The review diff overview now asks the server for the changed-file list alone (`includePatch:
-false`) and fetches a patch only for the file on screen. `git diff --numstat -z` produces that
+  false`) and fetches a patch only for the file on screen. `git diff --numstat -z` produces that
   list, so it is complete even when a patch would have hit the 120 KB preview cap. Untracked files
   are listed from `ls-files --others`; their line counts are reported as unknown rather than guessed,
   because counting them means reading every file.

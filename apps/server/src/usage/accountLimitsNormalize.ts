@@ -87,10 +87,6 @@ export function accountWindowsFromProviderUpdate(value: unknown): AccountLimitsW
   return sortWindows(windows);
 }
 
-// ---------------------------------------------------------------------------
-// Claude
-// ---------------------------------------------------------------------------
-
 /**
  * Windows we receive but deliberately do not surface: the oauth-apps bucket
  * and the opus/sonnet scoped weeklies are noise next to the three windows
@@ -308,10 +304,6 @@ export function claudeWindowsFromRateLimitEvent(value: unknown): AccountLimitsWi
     },
   ];
 }
-
-// ---------------------------------------------------------------------------
-// Codex
-// ---------------------------------------------------------------------------
 
 export interface CodexRateLimitsSnapshot {
   readonly limitId: string | null;

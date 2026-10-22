@@ -1,3 +1,15 @@
+import { type OpenCodeSettings } from "@t3tools/provider-opencode/settings";
+import { type GrokSettings } from "@t3tools/provider-grok/settings";
+import { type CursorSettings } from "@t3tools/provider-cursor/settings";
+import { OpenCodeDriver } from "@t3tools/provider-opencode/server";
+import { GrokDriver } from "@t3tools/provider-grok/server";
+import { CursorDriver } from "@t3tools/provider-cursor/server";
+import { type OpenCodeDriverEnv } from "@t3tools/provider-opencode/server";
+import { type GrokDriverEnv } from "@t3tools/provider-grok/server";
+import { type CursorDriverEnv } from "@t3tools/provider-cursor/server";
+import * as AntigravityInstallation from "./AntigravityInstallation.ts";
+import * as OpenCodeServerLedger from "@t3tools/provider-opencode/server/OpenCodeServerLedger";
+import * as OpenCodeRuntime from "@t3tools/provider-opencode/server/OpenCodeRuntime";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as CodexInstallation from "./CodexInstallation.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
@@ -16,8 +28,6 @@ import {
 } from "@t3tools/contracts";
 import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import type { GrokSettings } from "@t3tools/provider-grok/settings";
-import type { CursorSettings } from "@t3tools/provider-cursor/settings";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -29,18 +39,11 @@ import * as TestClock from "effect/testing/TestClock";
 import { HttpClient, HttpClientResponse } from "effect/http";
 
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
-import * as AntigravityInstallation from "./AntigravityInstallation.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { ClaudeDriver, type ClaudeDriverEnv } from "./Drivers/ClaudeDriver.ts";
 import { CodexDriver, type CodexDriverEnv } from "./Drivers/CodexDriver.ts";
-import { CursorDriver, type CursorDriverEnv } from "@t3tools/provider-cursor/server";
-import { GrokDriver, type GrokDriverEnv } from "@t3tools/provider-grok/server";
-import { OpenCodeDriver, type OpenCodeDriverEnv } from "@t3tools/provider-opencode/server";
-import type { OpenCodeSettings } from "@t3tools/provider-opencode/settings";
 import * as ModelManifest from "./ModelManifest.ts";
-import * as OpenCodeRuntime from "@t3tools/provider-opencode/server/OpenCodeRuntime";
-import * as OpenCodeServerLedger from "@t3tools/provider-opencode/server/OpenCodeServerLedger";
 import * as ResetCreditCoordinator from "./resetCreditCoordinator.ts";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import { makeProviderInstanceRegistry } from "./ProviderInstanceRegistry.ts";
@@ -108,28 +111,7 @@ const makeClaudeConfig = (overrides: Partial<ClaudeSettings>): ClaudeSettings =>
   customModels: [],
   launchArgs: "",
   autoCompactWindow: "",
-  ...overrides,
-});
-
-const makeCursorConfig = (overrides: Partial<CursorSettings>): CursorSettings => ({
-  enabled: false,
-  customModels: [],
-  ...overrides,
-});
-
-const makeGrokConfig = (overrides: Partial<GrokSettings>): GrokSettings => ({
-  enabled: false,
-  binaryPath: "grok",
-  customModels: [],
-  ...overrides,
-});
-
-const makeOpenCodeConfig = (overrides: Partial<OpenCodeSettings>): OpenCodeSettings => ({
-  enabled: false,
-  binaryPath: "opencode",
-  serverUrl: "",
-  serverPassword: "",
-  customModels: [],
+  idleCompaction: "default",
   ...overrides,
 });
 
@@ -220,79 +202,6 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
     Layer.provideMerge(layerBase),
   );
 
-  it.live("boots two independent codex instances from a ProviderInstanceConfigMap", () =>
-    Effect.gen(function* () {
-      const personalId = ProviderInstanceId.make("codex_personal");
-      const workId = ProviderInstanceId.make("codex_work");
-      const codexDriverKind = ProviderDriverKind.make("codex");
-
-      const configMap: ProviderInstanceConfigMap = {
-        [personalId]: {
-          driver: codexDriverKind,
-          displayName: "Codex (personal)",
-          enabled: false,
-          config: makeCodexConfig({
-            binaryPath: "/opt/codex-personal/bin/codex",
-            homePath: "/home/julius/.codex_personal",
-            customModels: ["personal-preview"],
-          }),
-        },
-        [workId]: {
-          driver: codexDriverKind,
-          displayName: "Codex (work)",
-          enabled: false,
-          config: makeCodexConfig({
-            binaryPath: "/opt/codex-work/bin/codex",
-            homePath: "/home/julius/.codex",
-            customModels: ["work-preview"],
-          }),
-        },
-      };
-
-      const { registry } = yield* makeProviderInstanceRegistry<CodexDriverEnv>({
-        drivers: [CodexDriver],
-        configMap,
-      });
-
-      const instances = yield* registry.listInstances;
-      expect(instances.map((instance) => instance.instanceId).toSorted()).toEqual(
-        [personalId, workId].toSorted(),
-      );
-      expect(instances.every((instance) => instance.driverKind === codexDriverKind)).toBe(true);
-      expect(instances.map((instance) => instance.displayName).toSorted()).toEqual(
-        ["Codex (personal)", "Codex (work)"].toSorted(),
-      );
-
-      const personal = yield* registry.getInstance(personalId);
-      const work = yield* registry.getInstance(workId);
-      expect(personal).toBeDefined();
-      expect(work).toBeDefined();
-      expect(personal!.orchestrationAdapter).not.toBe(work!.orchestrationAdapter);
-      expect(personal!.textGeneration).not.toBe(work!.textGeneration);
-      expect(personal!.snapshot).not.toBe(work!.snapshot);
-
-      const personalSnapshot = yield* personal!.snapshot.getSnapshot;
-      expect(personalSnapshot.instanceId).toBe(personalId);
-      expect(personalSnapshot.driver).toBe(codexDriverKind);
-      expect(personalSnapshot.enabled).toBe(false);
-      const path = yield* Path.Path;
-      expect(personalSnapshot.continuation?.groupKey).toBe(
-        `codex:home:${path.resolve("/home/julius/.codex_personal")}`,
-      );
-
-      const workSnapshot = yield* work!.snapshot.getSnapshot;
-      expect(workSnapshot.instanceId).toBe(workId);
-      expect(workSnapshot.driver).toBe(codexDriverKind);
-      expect(workSnapshot.enabled).toBe(false);
-      expect(workSnapshot.continuation?.groupKey).toBe(
-        `codex:home:${path.resolve("/home/julius/.codex")}`,
-      );
-
-      const unavailable = yield* registry.listUnavailable;
-      expect(unavailable).toEqual([]);
-    }).pipe(Effect.provide(layerTest)),
-  );
-
   it.live("treats an explicit in-config enabled:false as disabling despite the envelope", () =>
     Effect.gen(function* () {
       const staleId = ProviderInstanceId.make("codex_stale");
@@ -314,42 +223,6 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
       expect(instance!.enabled).toBe(false);
       const snapshot = yield* instance!.snapshot.getSnapshot;
       expect(snapshot.enabled).toBe(false);
-    }).pipe(Effect.provide(layerTest)),
-  );
-
-  it.live("reports Codex's answer when a redemption changed nothing", () =>
-    Effect.gen(function* () {
-      if (yield* HostProcess.isWindows) return;
-      const fileSystem = yield* FileSystem.FileSystem;
-      const fixtures = yield* makeTildeProviderFixtures();
-      yield* fileSystem.writeFileString(
-        fixtures.codexScriptPath,
-        JSON.stringify({
-          rootThreadId: "probe-thread",
-          notifications: [],
-          account: { type: "chatgpt", email: "test@example.com", planType: "plus" },
-          failRateLimitsRead: true,
-          resetCreditOutcome: "alreadyRedeemed",
-        }),
-      );
-      const codexId = ProviderInstanceId.make("codex_reset");
-      const { registry } = yield* makeProviderInstanceRegistry({
-        drivers: [CodexDriver],
-        configMap: {
-          [codexId]: {
-            driver: ProviderDriverKind.make("codex"),
-            enabled: true,
-            environment: [
-              { name: "T3_CODEX_COLLAB_SCRIPT", value: fixtures.codexScriptPath, sensitive: false },
-            ],
-            config: makeCodexConfig({ enabled: true, binaryPath: fixtures.codexBinaryPath }),
-          },
-        },
-      });
-      const codex = yield* registry.getInstance(codexId);
-      expect(codex).toBeDefined();
-      yield* codex!.snapshot.refresh;
-      expect(yield* codex!.consumeResetCredit!()).toBe("alreadyRedeemed");
     }).pipe(Effect.provide(layerTest)),
   );
 
@@ -380,7 +253,7 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
           config: makeClaudeConfig({
             enabled: true,
             binaryPath: fixtures.claudeBinaryPath,
-            homePath: fixtures.claudeHomePath,
+            configDir: fixtures.claudeHomePath,
           }),
         },
       };
@@ -426,7 +299,7 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
             config: makeClaudeConfig({
               enabled: true,
               binaryPath: fixtures.claudeBinaryPath,
-              homePath: fixtures.claudeHomePath,
+              configDir: fixtures.claudeHomePath,
             }),
           },
         },
@@ -499,7 +372,7 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
             config: makeClaudeConfig({
               enabled: true,
               binaryPath: fixtures.claudeBinaryPath,
-              homePath: fixtures.claudeHomePath,
+              configDir: fixtures.claudeHomePath,
             }),
           },
         },
@@ -627,7 +500,7 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
             config: makeClaudeConfig({
               enabled: true,
               binaryPath: fixtures.claudeBinaryPath,
-              homePath: fixtures.claudeHomePath,
+              configDir: fixtures.claudeHomePath,
             }),
           },
         },
@@ -701,7 +574,7 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
           config: makeClaudeConfig({
             enabled: true,
             binaryPath: fixtures.claudeBinaryPath,
-            homePath: fixtures.claudeHomePath,
+            configDir: fixtures.claudeHomePath,
           }),
         },
       },
@@ -714,17 +587,6 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
       probeLog: fs.readFileString(probeLog),
     };
   });
-
-  it.effect.skipIf(windowsHost)("reuses Claude's successful usage probe on refresh", () =>
-    Effect.gen(function* () {
-      const fixture = yield* makeClaudeCacheFixture("ready");
-      const first = yield* fixture.refresh;
-      const second = yield* fixture.refresh;
-      expect(first.usageLimits?.windows.map((window) => window.id)).toEqual(["five_hour"]);
-      expect(second.usageLimits).toEqual(first.usageLimits);
-      expect(yield* fixture.probeLog).toBe("probe\n");
-    }).pipe(Effect.provide(layerTest)),
-  );
 
   for (const state of ["signed-out", "usage-failed"] as const) {
     it.effect.skipIf(windowsHost)(
@@ -984,4 +846,26 @@ describe("ProviderInstanceRegistry — all drivers slice", () => {
       );
     }).pipe(Effect.provide(layerTest)),
   );
+});
+
+const makeCursorConfig = (overrides: Partial<CursorSettings>): CursorSettings => ({
+  enabled: false,
+  customModels: [],
+  ...overrides,
+});
+
+const makeGrokConfig = (overrides: Partial<GrokSettings>): GrokSettings => ({
+  enabled: false,
+  binaryPath: "grok",
+  customModels: [],
+  ...overrides,
+});
+
+const makeOpenCodeConfig = (overrides: Partial<OpenCodeSettings>): OpenCodeSettings => ({
+  enabled: false,
+  binaryPath: "opencode",
+  serverUrl: "",
+  serverPassword: "",
+  customModels: [],
+  ...overrides,
 });

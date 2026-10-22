@@ -168,7 +168,7 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
 }
 
 /** Four stops from one accent: dark body, mass, lit fold, glint. */
-export function orbPalette(hex: string): OrbPalette {
+function orbPalette(hex: string): OrbPalette {
   const [h, s, l] = rgbToHsl(hexToRgb(hex));
   const sat = Math.max(0.45, Math.min(1, s));
   return {

@@ -1,3 +1,4 @@
+import * as Context from "effect/Context";
 import * as ThreadWorkspaces from "../../../workspace/ThreadWorkspaces.ts";
 import * as SqlitePersistence from "../../../persistence/Sqlite.ts";
 import * as Orchestrator from "../../../orchestration-v2/Orchestrator.ts";
@@ -96,7 +97,18 @@ const decodeToolsListPayload = Schema.decodeUnknownEffect(ToolsListPayload);
 it.effect("production mcp layer lists worktree tools over http", () =>
   Effect.scoped(
     Effect.gen(function* () {
-      const layerRoutes = McpHttpServer.layer.pipe(Layer.provide(McpSessionRegistry.layer));
+      const registryContext = yield* Layer.build(
+        McpSessionRegistry.layer.pipe(
+          Layer.provide(
+            Layer.mock(ServerEnvironment.ServerEnvironment)({
+              getEnvironmentId: Effect.succeed("environment-scratch" as never),
+            }),
+          ),
+        ),
+      );
+      const layerRoutes = McpHttpServer.layer.pipe(
+        Layer.provide(Layer.succeedContext(registryContext)),
+      );
       yield* HttpRouter.serve(layerRoutes, {
         disableListenLog: true,
         disableLogger: true,
@@ -113,7 +125,7 @@ it.effect("production mcp layer lists worktree tools over http", () =>
         Layer.build,
       );
 
-      const registry = McpSessionRegistry.issueActiveMcpCredential({
+      const registry = Context.get(registryContext, McpSessionRegistry.McpSessionRegistry).issue({
         threadId: ThreadId.make("thread-scratch"),
         providerInstanceId: ProviderInstanceId.make("claudeAgent"),
       });

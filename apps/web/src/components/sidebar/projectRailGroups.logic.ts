@@ -31,7 +31,7 @@ export interface RailModel {
   readonly groups: ReadonlyArray<RailGroup>;
 }
 
-export const RAIL_GROUP_SCOPE_PREFIX = "rail-group:";
+const RAIL_GROUP_SCOPE_PREFIX = "rail-group:";
 
 export function railGroupScopeKey(groupId: string): string {
   return `${RAIL_GROUP_SCOPE_PREFIX}${groupId}`;
@@ -43,7 +43,7 @@ export function railGroupIdFromScopeKey(key: string | null): string | null {
     : null;
 }
 
-export function isRailGroupColor(value: unknown): value is RailGroupColor {
+function isRailGroupColor(value: unknown): value is RailGroupColor {
   return typeof value === "string" && (RAIL_GROUP_COLORS as ReadonlyArray<string>).includes(value);
 }
 
@@ -398,7 +398,7 @@ export function placeRailToken(
   return { ...next, order };
 }
 
-export function moveRailProjectToEnd(model: RailModel, projectKey: string): RailModel {
+function moveRailProjectToEnd(model: RailModel, projectKey: string): RailModel {
   const next = detach(model, projectKey);
   return { ...next, order: [...next.order, `p:${projectKey}`] };
 }

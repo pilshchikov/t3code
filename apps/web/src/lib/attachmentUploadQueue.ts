@@ -649,6 +649,6 @@ export function releaseDraftAttachments(
 }
 
 /** Compatibility alias for the fork's image-only composer cleanup path. */
-export function releaseAttachmentUploads(images: ReadonlyArray<ComposerImageAttachment>): void {
+function releaseAttachmentUploads(images: ReadonlyArray<ComposerImageAttachment>): void {
   releaseDraftAttachments(images);
 }

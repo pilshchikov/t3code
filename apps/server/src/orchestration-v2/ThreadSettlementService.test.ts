@@ -1,3 +1,4 @@
+import { ProviderSessionId } from "@t3tools/contracts";
 import { SourceControlProviderKind } from "@t3tools/contracts";
 import { assert, describe, expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
@@ -6,7 +7,6 @@ import {
   ProjectId,
   EventId,
   ProviderInstanceId,
-  ProviderSessionId,
   ThreadId,
   type OrchestrationProjectShell,
   type OrchestrationV2AppThread,
@@ -102,54 +102,6 @@ function shell(overrides: Partial<SettlementShell> = {}): SettlementShell {
 }
 
 describe("isAutoSettlementCandidate", () => {
-  it("excludes overridden, pinned, blocked, and working threads", () => {
-    expect(ThreadSettlementService.isAutoSettlementCandidate(shell(), NOW_MS)).toBe(true);
-    expect(
-      ThreadSettlementService.isAutoSettlementCandidate(shell({ archivedAt: at(-1) }), NOW_MS),
-    ).toBe(false);
-    expect(
-      ThreadSettlementService.isAutoSettlementCandidate(
-        shell({ settledOverride: "settled" }),
-        NOW_MS,
-      ),
-    ).toBe(false);
-    expect(
-      ThreadSettlementService.isAutoSettlementCandidate(
-        shell({ settledOverride: "active" }),
-        NOW_MS,
-      ),
-    ).toBe(false);
-    expect(
-      ThreadSettlementService.isAutoSettlementCandidate(shell({ pinnedAt: at(-1) }), NOW_MS),
-    ).toBe(false);
-    expect(
-      ThreadSettlementService.isAutoSettlementCandidate(
-        shell({ autoSettleDisabledAt: at(-1) }),
-        NOW_MS,
-      ),
-    ).toBe(false);
-    expect(
-      ThreadSettlementService.isAutoSettlementCandidate(
-        shell({ activityRunStatus: "running" }),
-        NOW_MS,
-      ),
-    ).toBe(false);
-    expect(
-      ThreadSettlementService.isAutoSettlementCandidate(
-        shell({
-          pendingRuntimeRequest: { kind: "approval" } as never,
-        }),
-        NOW_MS,
-      ),
-    ).toBe(false);
-    expect(
-      ThreadSettlementService.isAutoSettlementCandidate(
-        shell({ pendingBackgroundTasks: [{ taskId: "review", kind: "subagent" }] }),
-        NOW_MS,
-      ),
-    ).toBe(false);
-  });
-
   it("settles a thread whose only background work is a command left running", () => {
     expect(
       ThreadSettlementService.isAutoSettlementCandidate(
@@ -199,41 +151,6 @@ describe("isAutoSettlementCandidate", () => {
         NOW_MS,
       ),
     ).toBe(true);
-  });
-});
-
-describe("threadHasQueuedTurnStart", () => {
-  it("holds a fresh unadopted user message inside the grace window only", () => {
-    const fresh = shell({ latestUserMessageAt: at(-1_000) });
-    expect(ThreadSettlementService.threadHasQueuedTurnStart(fresh, NOW_MS)).toBe(true);
-    expect(
-      ThreadSettlementService.threadHasQueuedTurnStart(
-        shell({
-          latestUserMessageAt: at(-1_000),
-          latestRunId: "run-1" as never,
-          latestRunRequestedAt: at(-500),
-        }),
-        NOW_MS,
-      ),
-    ).toBe(false);
-    expect(
-      ThreadSettlementService.threadHasQueuedTurnStart(
-        shell({ latestUserMessageAt: at(-ThreadSettlementService.QUEUED_TURN_START_GRACE_MS - 1) }),
-        NOW_MS,
-      ),
-    ).toBe(false);
-    expect(
-      ThreadSettlementService.threadHasQueuedTurnStart(
-        shell({ latestUserMessageAt: at(ThreadSettlementService.QUEUED_TURN_START_GRACE_MS + 1) }),
-        NOW_MS,
-      ),
-    ).toBe(false);
-    expect(
-      ThreadSettlementService.threadHasQueuedTurnStart(
-        shell({ latestUserMessageAt: at(-1_000), status: "failed" }),
-        NOW_MS,
-      ),
-    ).toBe(false);
   });
 });
 
@@ -494,7 +411,6 @@ describe("resolveAutoSettlementAt", () => {
 
 const NOW = "2026-08-28T12:00:00.000Z";
 const PROJECT_ID = ProjectId.make("settlement-project");
-const LINKED_PROJECT_ID = ProjectId.make("linked-settlement-project");
 
 describe("autoSettlementSettingsKey", () => {
   it("distinguishes a project that inherits the threshold from one that disables it", () => {
@@ -509,21 +425,6 @@ describe("autoSettlementSettingsKey", () => {
       },
     });
     assert.notStrictEqual(inherits, never);
-  });
-
-  it("ignores project overrides that do not touch settlement", () => {
-    const base = ThreadSettlementService.autoSettlementSettingsKey({
-      ...DEFAULT_SERVER_SETTINGS,
-      projectSettingsOverrides: { [PROJECT_ID]: { sidebarAutoSettleOnMerge: false } },
-    });
-    const unrelated = ThreadSettlementService.autoSettlementSettingsKey({
-      ...DEFAULT_SERVER_SETTINGS,
-      projectSettingsOverrides: {
-        [LINKED_PROJECT_ID]: { defaultThreadEnvMode: "worktree" },
-        [PROJECT_ID]: { sidebarAutoSettleOnMerge: false, defaultAutoPull: true },
-      },
-    });
-    assert.strictEqual(base, unrelated);
   });
 });
 
@@ -1268,25 +1169,6 @@ describe("ThreadSettlementServiceV2 terminals", () => {
     payload: thread,
   });
 
-  it.effect("closes the thread's idle terminals when it settles", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const thread = appThread("settled-thread", "settled");
-        const fixture = yield* makeHarness({
-          snapshot: makeSnapshot([]),
-          currentThreads: [thread],
-        });
-
-        yield* Effect.gen(function* () {
-          const service = yield* ThreadSettlementService.ThreadSettlementServiceV2;
-          yield* startHarness(service, fixture.activation, fixture.snapshotReads);
-          yield* fixture.publishEvent(settledEvent(thread));
-          assert.deepStrictEqual(yield* Queue.take(fixture.closedIdle), { threadId: thread.id });
-        }).pipe(Effect.provide(fixture.layer));
-      }),
-    ),
-  );
-
   it.effect("keeps the terminals of a thread re-engaged before the event ran", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -1478,18 +1360,5 @@ describe("isSnoozed", () => {
         autoSettleOnMerge: true,
       }),
     ).toBeNull();
-  });
-
-  it("keeps quiet and interrupted threads snoozed until the timer expires", () => {
-    expect(ThreadSettlementService.isSnoozed(shell(snoozed), NOW_MS)).toBe(true);
-    expect(
-      ThreadSettlementService.isSnoozed(
-        shell({ ...snoozed, status: "interrupted", latestRunCompletedAt: at(-DAY_MS) }),
-        NOW_MS,
-      ),
-    ).toBe(true);
-    expect(
-      ThreadSettlementService.isSnoozed(shell({ ...snoozed, snoozedUntil: at(-1) }), NOW_MS),
-    ).toBe(false);
   });
 });

@@ -1,3 +1,4 @@
+import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import type { ProjectCodeSearchMatch } from "@t3tools/contracts";
 import { Braces, FileCode2, Search } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -155,20 +156,26 @@ export function SymbolNavigationDialog(props: SymbolNavigationDialogProps) {
                   ) : (
                     <FileCode2 className="size-4 shrink-0 text-sky-500" />
                   )}
-                  <span
-                    className="flex w-52 shrink-0 items-baseline gap-1.5"
-                    title={`${match.path}:${match.lineNumber}`}
-                  >
-                    <span className="truncate text-sm text-foreground">{fileName(match.path)}</span>
-                    {directory ? (
-                      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                        {directory}
-                      </span>
-                    ) : null}
-                    <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">
-                      {match.lineNumber}
-                    </span>
-                  </span>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <span className="flex w-52 shrink-0 items-baseline gap-1.5">
+                          <span className="truncate text-sm text-foreground">
+                            {fileName(match.path)}
+                          </span>
+                          {directory ? (
+                            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                              {directory}
+                            </span>
+                          ) : null}
+                          <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">
+                            {match.lineNumber}
+                          </span>
+                        </span>
+                      }
+                    />
+                    <TooltipPopup>{`${match.path}:${match.lineNumber}`}</TooltipPopup>
+                  </Tooltip>
                   <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
                     <HighlightedSnippet snippet={match.snippet} symbol={props.symbol} />
                   </span>
