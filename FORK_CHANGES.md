@@ -1,5 +1,63 @@
 # Fork Changes
 
+## Daily upstream integration — 2026-10-23 (66ee628e08)
+
+- Merge all 68 incoming commits through `66ee628e0875b2b735b199f42e6151e347833637`
+  into fork parent `1e54d6170a931e37290d39f1df7a60bcdd6c8cd8` with a real merge,
+  preserving both histories. Review the incoming changes and all 92 overlapping paths,
+  including automatic merges; resolve the 17 conflicted paths individually.
+- Keep ordinary Send/Resume/Queue/Steer free of compact-first dispatch. Upstream's instructed
+  `/compact` fix needs no extra dispatch here: an explicit command already runs once through
+  the ordinary path (`ChatView.logic.ts`). Retain the project-aware idle-compaction worker,
+  native-context measurements, project overrides and quota-recovery/dispatch guards.
+- Integrate upstream screen-reader announcements alongside the fork's timeline typography,
+  independent one-second position recovery, bottom following, first assistant text outside
+  settled folds, mixed-work labels and stable imported-thread identities (`MessagesTimeline.tsx`).
+  Live `ChatView` → `ChatComposer` → `ComposerPrimaryActions` still mounts `ComposerActionOrb`
+  for Orb, with the saved send color for Send/Resume/Queue/Steer and saved stop color for
+  ordinary and pending-input Stop. Classic remains available. Existing chats and draft heroes
+  retain forced mobile expansion, disabled scroll/focus collapse, custom widths and viewport/
+  keyboard handling; native mobile keeps measured composer layout with upstream Android fixes.
+- Retain disabled external analytics/OTLP, the disabled exporter settings/probe, network refresh/
+  manifest/version opt-ins, update and Keychain gates, stable desktop identity and encrypted local
+  connections. Decode upstream endpoint-source metadata without enabling effective URLs.
+  Remove the obsolete launch-update environment hook along with upstream's launch notifications;
+  explicit bundled SSH runtime updates, reconnect staging and remote-work preservation remain live.
+- Keep the fork's four typed RPC registration groups while adding upstream's subagent transcript
+  filter to both replay and live shell streams (`ws.ts`). Preserve the validated initial preparing
+  run as the only ordinary primary-checkout busy-guard exception, with queued-only follow-ups
+  and no provider session, pending input or background work. Register upstream's stop-request
+  index as migration **73**, leaving released fork IDs 1–72 and preview translation unchanged.
+- Accept managed Codex native token renewal/profile binding, delegated Stop and process cleanup,
+  Claude child approval feedback, proxy usage headers, inherited Codex request accounting,
+  PR-check refresh/rate-limit fixes and thread-title instructions. Preserve Claude HOME/config
+  isolation, worker runtime effort hooks, account/source/model usage rows, alphabetical colored
+  pooled limits, continuous bars and compact account trends. Retain current settings patch APIs;
+  remove residual assertions for upstream's deleted, unused settings-mismatch helper.
+- Trace live mounts/services for project rail/groups/settled shortcuts/status dots/colors, project
+  slots/order/picker sizing, native Files/per-repository checkout recovery and collapse/resize/
+  expansion state, revision/dirty-editor protection, deletion/undo, Structure/Commit/Git History,
+  navigation and global panel shortcuts. V2 CLI resume remains mounted; project-root/multi-root
+  Markdown links route to the explorer. Project notes/workspace/peer/connected-usage MCP tools,
+  communication viewer/shared-host routing, durable response watches, Never-default settlement,
+  two-hour terminal-PR unlinking and guarded cleanup remain connected. Multiwork and machine sync
+  stay retired; superseded usage/sync helpers are not restored.
+- Validation: frozen-lockfile installation passed with lifecycle scripts disabled. Formatting
+  passed for 309 changed files; changed-file lint passed for 286 code files with zero errors
+  and 60 advisory warnings (React/style/unused-binding and existing test-polling findings).
+  Scoped typechecks passed for all 29 affected workspaces/dependents: server, web, mobile,
+  desktop, contracts/shared/client-runtime, both Effect protocol packages, all eight provider
+  packages, seven source-control packages, SSH, Tailscale, relay, scripts and the lint plugin.
+  Initial failures from deleted-helper references and a missing token-broker fixture dependency
+  were corrected; failed/unfinished scopes passed reruns. Non-failing Effect suggestions remain.
+  Checks use native tsc-rs 0.8.0 and host
+  Node 24.18.0; the repository pins Node 26.12.1. No runtime/native compilation or visual
+  behavior was validated. No independently added or executed tests; incoming fixtures are
+  retained/adapted, including migration expectations, duplicate declarations and an existing
+  provider-probe polling loop changed to await its status stream. No builds,
+  packaging, dev servers, browser/device/runtime verification, installed-app/live-userdata access,
+  process stops, push, PR, external messages, subagents, main/other-worktree edits or schedule changes.
+
 ## Bundled fork updates for SSH environments — 2026-10-22
 
 - macOS desktop packages include a self-contained server archive and a SHA-256 manifest in

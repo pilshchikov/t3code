@@ -26,7 +26,7 @@ const v2TableCount = Effect.gen(function* () {
 });
 
 describe("runMigrations", () => {
-  it.effect("adds webhook dedupe to released fork databases without replacing fork data", () =>
+  it.effect("adds pending migrations to released fork databases without replacing fork data", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* runMigrations({ toMigrationInclusive: 71 });
@@ -39,8 +39,15 @@ describe("runMigrations", () => {
       const memories = yield* sql`SELECT * FROM project_memories`;
       const usage = yield* sql`SELECT * FROM usage_limit_history`;
 
-      assert.deepStrictEqual(yield* runMigrations(), [[72, "WebhookDedupe"]]);
-      assert.deepStrictEqual(yield* history, [...beforeHistory, [72, "WebhookDedupe"]]);
+      assert.deepStrictEqual(yield* runMigrations(), [
+        [72, "WebhookDedupe"],
+        [73, "ShellStopRequestIndex"],
+      ]);
+      assert.deepStrictEqual(yield* history, [
+        ...beforeHistory,
+        [72, "WebhookDedupe"],
+        [73, "ShellStopRequestIndex"],
+      ]);
       assert.deepStrictEqual(yield* sql`SELECT * FROM project_memories`, memories);
       assert.deepStrictEqual(yield* sql`SELECT * FROM usage_limit_history`, usage);
       assert.deepStrictEqual(yield* runMigrations(), []);

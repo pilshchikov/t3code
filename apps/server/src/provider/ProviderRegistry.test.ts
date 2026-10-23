@@ -4,6 +4,7 @@ import * as Path from "effect/Path";
 import { vi } from "vite-plus/test";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as CodexInstallation from "./CodexInstallation.ts";
+import * as CodexManagedTokenBroker from "./CodexManagedTokenBroker.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, it, assert, expect } from "@effect/vitest";
@@ -16,6 +17,7 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
@@ -311,6 +313,9 @@ const awaitPersistedProvider = (
 const layerTestNodeServices = Layer.mergeAll(
   ProviderLatestVersions.layer,
   NodeServices.layer,
+  Layer.mock(CodexManagedTokenBroker.CodexManagedTokenBroker)({
+    endpoint: Effect.succeed("unused-private-pipe"),
+  }),
   Layer.mock(CodexInstallation.CodexInstallation)({
     managedDirectory: "unused-managed-installation",
   }),
@@ -400,6 +405,10 @@ it.layer(
           status.message,
           "Codex CLI is not authenticated. Run `codex login` and try again.",
         );
+        assert.deepStrictEqual(status.usageLimits?.unavailable, {
+          reason: "probeFailed",
+          message: "Codex CLI is not authenticated. Run `codex login` and try again.",
+        });
       }),
     );
 
@@ -1996,17 +2005,19 @@ it.layer(
 
         yield* Effect.gen(function* () {
           const registry = yield* ProviderRegistry.ProviderRegistry;
-          let providers = yield* registry.getProviders;
-          for (
-            let attempts = 0;
-            attempts < 50 &&
-            providers.find((provider) => provider.instanceId === "codex_personal")?.status !==
-              "error";
-            attempts += 1
-          ) {
-            yield* Effect.yieldNow;
-            providers = yield* registry.getProviders;
-          }
+          const hasProbeFailure = (providers: ReadonlyArray<ServerProvider>) =>
+            providers.some(
+              (provider) => provider.instanceId === "codex_personal" && provider.status === "error",
+            );
+          const probeFailure = yield* registry.streamChanges.pipe(
+            Stream.filter(hasProbeFailure),
+            Stream.runHead,
+            Effect.forkChild({ startImmediately: true }),
+          );
+          const current = yield* registry.getProviders;
+          const providers = hasProbeFailure(current)
+            ? current
+            : Option.getOrElse(yield* Fiber.join(probeFailure), () => current);
           const codexPersonal = providers.find(
             (provider) => provider.instanceId === "codex_personal",
           );
