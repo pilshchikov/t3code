@@ -330,6 +330,7 @@ const PROVIDER_FALLBACK_LABEL: Record<UsageProviderKind, string> = {
   codex: "Codex",
   cursor: "Cursor",
   grok: "Grok",
+  muse: "Muse Code",
   opencode: "OpenCode",
   pi: "Pi",
 };

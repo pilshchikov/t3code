@@ -74,8 +74,11 @@ function NumberLink({
               if (event.button === 1) void readLocalApi()?.shell.openExternal(detail.url);
             }}
             onContextMenu={(event) => openNumberContextMenu(event, detail)}
-            className={cn("shrink-0 font-medium underline-offset-2 hover:underline", toneClassName)}
-            aria-label={`Open pull request #${detail.number} on host`}
+            className={cn(
+              "inline-flex shrink-0 cursor-pointer items-center gap-0.5 font-medium underline-offset-2 hover:underline",
+              toneClassName,
+            )}
+            aria-label={`Open ${sourceControlClients.get(detail.provider).changeRequest.singular} #${detail.number} on host`}
           >
             #{detail.number}
           </button>

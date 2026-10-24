@@ -4,7 +4,7 @@ import {
   pullRequestListLines,
   resolveThreadPullRequestChains,
   visibleThreadPullRequests,
-} from "@t3tools/shared/threadPullRequests";
+} from "@t3tools/client-runtime/thread-pull-requests";
 
 export function threadPullRequestsOverview(input: readonly ThreadPullRequestLink[]) {
   const unique = new Map<string, ThreadPullRequestLink>();

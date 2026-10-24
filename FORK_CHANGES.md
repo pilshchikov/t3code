@@ -1,5 +1,73 @@
 # Fork Changes
 
+## Daily upstream integration — 2026-10-24 (d53873b6a4)
+
+- Merge all 60 incoming commits through `d53873b6a4799e87afd63c8d288ef0089f5a3748`
+  into fork parent `414e1e30a32e844163365bc3f89ec7f14434251b` with a real merge,
+  preserving both histories. Review the upstream changes and all 90 overlapping paths,
+  including automatic merges; resolve the 14 conflicted paths individually.
+- Adopt upstream's shared forge definitions, host-owned PR capabilities/media/listing/SSH
+  behavior, host terminology and filter search. Adapt the fork's repository-grouped PR
+  overview to the live client registry and keep its explicit Open on host action, now
+  using the registry's host name. Keep two-hour terminal-link removal connected to its
+  shared timestamp helper after identity helpers move into registry-bound modules
+  (`threadPullRequestsOverview.ts`, `pullRequestLinkContextMenu.ts`, `PullRequestSyncReactor.ts`).
+- Register indexed message search as migration **74**, preserving released fork IDs 1–73,
+  project memory/usage history and atomic preview-ledger translation. Accept local thread
+  ranking/open counters, message jumps and accessibility announcements without enabling
+  external analytics. Keep the fork's four typed WebSocket registration groups and add
+  the host-filter RPC and generic source-control media asset path (`Migrations.ts`, `ws.ts`).
+- Integrate deleted-parent/subagent checkout cleanup while retaining archived and secondary
+  repository ownership, fresh settlement/activity checks, settle-now precedence, expiry,
+  dirty/ignored-file protection and session/terminal guards (`storageCleanup.ts`). The
+  validated initial preparing run remains the sole ordinary busy-guard exception: only
+  queued follow-ups, no provider session, pending question or background work.
+- Accept Muse transcript usage and current Codex plan names. Extend the fork's usage label
+  fallback for Muse while preserving account/source/model identity, isolated Claude HOME/
+  config directories, alphabetical colored pooled limits, continuous bars and compact
+  account trends (`usageMerge.ts`). Retain fork CLI-specific Git fixtures alongside the
+  incoming forge-neutral harness; adapt imported migration and local-telemetry expectations.
+- Trace mounted `ChatView` → `ChatComposer` → `ComposerPrimaryActions`: Orb mounts
+  `ComposerActionOrb`, with saved send color for Send/Resume/Queue/Steer and saved stop
+  color for normal and pending-input Stop; Classic remains available. Existing chats and
+  draft heroes retain forced mobile expansion, disabled scroll/focus collapse, custom
+  widths, one-line minimum and viewport/keyboard handling. Ordinary sends never compact
+  first. Independent one-second recovery/bottom following, first assistant text outside
+  settled folds, mixed-work labels and stable imported-thread folds remain connected.
+  Native mobile retains measured composer/inset guards alongside upstream navigation,
+  Duo layout and UI-thread keyboard-aware question-card sizing.
+- Trace project rail/groups/settled shortcuts/status dots/colors, slots/manual ordering/
+  picker sizing; per-repository Files/checkout recovery, saved collapse/resize/expansion,
+  revision/dirty-editor protection, deletion/undo, editor navigation/Structure/Commit/Git
+  History and global panel shortcuts. CLI resume remains mounted with V2 native refs;
+  project-root/multi-root Markdown links still open the explorer. Project notes/workspace/
+  peer/connected-usage MCP tools, communication viewer/shared-host routing, durable response
+  watches, project-aware compaction/current native usage/quota guards, worker effort hooks,
+  automatic limit recovery and Never-default settlement remain live. Multiwork and machine
+  sync remain retired; superseded usage/sync helpers are not restored.
+- Keep external analytics/OTLP disabled, including unpackaged desktop runs. Provider
+  refresh/version/manifest requests, desktop updates and Keychain retain opt-in gates;
+  stable desktop identity, encrypted local connections and bundled fork SSH updates remain
+  connected. Incoming exporter metadata never installs an exporter.
+- Validation: frozen-lockfile installation passed with lifecycle scripts disabled (pnpm
+  12.14.0). All **29 scoped typechecks** passed: server/web/mobile/desktop, relay,
+  contracts/shared/client-runtime, all nine provider packages, all nine source-control
+  packages, SSH, Tailscale and scripts. Initial failures from the Muse label, moved
+  terminal-link helper imports and retained CLI-fixture decoder dependencies were fixed;
+  affected scopes passed reruns. An early relay check saw an incompletely installed
+  Alchemy dependency and passed after installation completed. Non-failing Effect
+  suggestions remain. Checks use native tsc-rs 0.8.0 on Node 24; the repository pins
+  Node 26.12.1.
+- Changed-file lint passed for **590 code files**, with **zero errors and 154 advisory
+  warnings** in the initial scan (React dependencies/memoization, styling and unused
+  bindings among others). Integration follow-ups passed; the final two-file server
+  scan retains one existing unused-binding warning. Integration files were formatted
+  and complete source/document/patch whitespace checks pass.
+- No tests independently added or executed. No builds, packaging, dev servers, browser/
+  device/runtime checks, installed-app/live-userdata access, process stops, push, PR,
+  external messages, subagents, main/other-worktree edits or schedule changes. Static
+  integration does not establish runtime, native compilation or visual behavior.
+
 ## Daily upstream integration — 2026-10-23 (66ee628e08)
 
 - Merge all 68 incoming commits through `66ee628e0875b2b735b199f42e6151e347833637`

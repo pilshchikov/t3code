@@ -93,6 +93,7 @@ import {
   FilesystemBrowseError,
   AssetWorkspaceContextNotFoundError,
   AssetWorkspaceContextResolutionError,
+  SOURCE_CONTROL_MEDIA_ASSET,
   ChatAttachmentId,
   PersistChatAttachmentsError,
   RpcClientId,
@@ -2602,6 +2603,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
       ),
     [WS_METHODS.pullRequestsList]: (input) => pullRequests.list(input),
     [WS_METHODS.pullRequestsListStats]: (input) => pullRequests.listStats(input),
+    [WS_METHODS.pullRequestsFilterOptions]: (input) => pullRequests.filterOptions(input),
     [WS_METHODS.pullRequestsRoutingIdentity]: (input) => pullRequests.routingIdentity(input),
     [WS_METHODS.pullRequestsRouting]: (input) => pullRequests.routing(input),
     [WS_METHODS.pullRequestsSummary]: (input) =>
@@ -2872,7 +2874,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
           input.resource._tag === "attachment" ||
           input.resource._tag === "native-app-icon" ||
           input.resource._tag === "tool-output-image" ||
-          input.resource._tag === "github-media" ||
+          input.resource._tag === SOURCE_CONTROL_MEDIA_ASSET ||
           (input.resource._tag === "media-file" && path.isAbsolute(input.resource.path))
         ) {
           return yield* issueAssetUrl({ resource: input.resource });

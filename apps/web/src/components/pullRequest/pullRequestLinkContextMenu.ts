@@ -1,6 +1,7 @@
 import type { ContextMenuItem } from "@t3tools/contracts";
 import {
-  type SourceControlClientDefinition,
+  sourceControlClients,
+  type SourceControlDefinition,
   UNKNOWN_SOURCE_CONTROL_CLIENT,
 } from "@t3tools/client-runtime/source-control-clients";
 
@@ -11,18 +12,14 @@ import { toastManager } from "../ui/toast";
 
 export type PullRequestLinkContextMenuAction = "copy-link" | "open-external";
 
-export const openOnHostLabel = (host: SourceControlClientDefinition): string =>
+export const openOnHostLabel = (host: SourceControlDefinition): string =>
   host === UNKNOWN_SOURCE_CONTROL_CLIENT ? "Open on host" : `Open on ${host.label}`;
 
-const HOST_DISPLAY_NAMES: Partial<Record<string, string>> = {
-  github: "GitHub",
-  gitlab: "GitLab",
-  bitbucket: "Bitbucket",
-  "azure-devops": "Azure DevOps",
-};
-
 /** The host's own name, for a control that has room for a word but not a sentence. */
-export const hostDisplayName = (provider: string): string => HOST_DISPLAY_NAMES[provider] ?? "host";
+export const hostDisplayName = (provider: string): string => {
+  const host = sourceControlClients.get(provider);
+  return host === UNKNOWN_SOURCE_CONTROL_CLIENT ? "host" : host.label;
+};
 
 /** Copy first: it is the reason to right-click a number rather than click it. */
 function pullRequestLinkContextMenuItems(
