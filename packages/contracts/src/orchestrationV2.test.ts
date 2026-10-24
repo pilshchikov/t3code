@@ -4,6 +4,7 @@ import * as Schema from "effect/Schema";
 
 import { NodeId, RunAttemptId, TrimmedNonEmptyString } from "./index.ts";
 import {
+  idleCompactionOf,
   latestProviderTurnForAttempt,
   OrchestrationV2ProviderCapabilities,
   OrchestrationV2ProviderThread,
@@ -35,6 +36,22 @@ const decodeOrchestrationV2ProviderCapabilities = Schema.decodeUnknownSync(
 );
 
 describe("orchestration V2 contracts", () => {
+  it("recognizes historical fork compactions without treating manual commands as automatic", () => {
+    const message = { role: "user", text: "/compact", attachments: [] };
+    expect(idleCompactionOf({ ...message, createdBy: "system", creationSource: "server" })).toBe(
+      "idleTimeout",
+    );
+    expect(idleCompactionOf({ ...message, createdBy: "agent", creationSource: "server" })).toBe(
+      "beforeCacheExpires",
+    );
+    expect(
+      idleCompactionOf({ ...message, createdBy: "user", creationSource: "web" }),
+    ).toBeUndefined();
+    expect(
+      idleCompactionOf({ ...message, createdBy: "system", creationSource: "mcp" }),
+    ).toBeUndefined();
+  });
+
   it("decodes thread event types from a newer server as skippable items", () => {
     const decodeWireItems = Schema.decodeUnknownSync(
       Schema.toCodecJson(Schema.Array(OrchestrationV2RpcSchemas.subscribeThread.output)),

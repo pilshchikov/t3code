@@ -1,5 +1,31 @@
 # Fork Changes
 
+## Upstream follow-up integration — 2026-10-24 (bf5c483cbe)
+
+- Merge six newer upstream commits through `bf5c483cbe298032fe5f97b05f31f8458aab0031`
+  into `bb215abd7184b0c5beb0eb7d8d63ab8ab65fe945`, retaining both histories. Review all
+  14 overlapping paths and resolve both conflicts in favor of the fork's behavior.
+- Keep `IdleCompactionWorker.ts` as the sole timer and ordinary sends free of compact-first
+  dispatch. Adopt upstream's single compaction row, failure detail and quiet routine notifications
+  across web/desktop/mobile, carrying its metadata through the fork's worker and dispatch guards.
+  Add `idleTimeout` attribution so configurable fork timeouts are not mislabeled as cache expiry.
+  Recognize historical system-created fork compactions in both SQL and in-memory shell projections;
+  manual commands remain distinct and failed compactions still notify (`orchestrationV2.ts`,
+  `ProjectionStore.ts`, `userMessage.ts`).
+- Retain first assistant text outside settled folds, mixed-work disclosure and independent
+  conversation-position recovery. Accept GitCafe latest-check selection and mobile icons, HTML
+  preview theme selection, foreign-key-safe dev snapshots and mobile Markdown block renderers.
+  Adapt incoming timeline fixtures to the fork's renderer and the pre-V2 snapshot fixture to
+  released fork migration 59; no migration IDs or live database state are changed.
+  Files/worktree recovery, project rail settlement/groups, account usage, Claude history isolation,
+  bundled fork SSH updates and disabled external analytics/OTLP remain connected.
+- Validation: frozen-lockfile installation passed on pinned Node 26.12.1/pnpm 12.14.0. The new
+  historical-compaction contract and SQL/memory projection cases both fail before the integration
+  fix and pass afterward. `check:changed bb215abd71` passes: 716 tests across 24 files
+  (three existing skips), all 33 affected package typechecks, formatting, lint, both knip passes,
+  generated GraphQL and unused-patch checks. Existing advisory lint/Effect suggestions remain.
+  Running applications and servers are not rebuilt or restarted by this merge.
+
 ## Daily upstream integration — 2026-10-24 (d53873b6a4)
 
 - Merge all 60 incoming commits through `d53873b6a4799e87afd63c8d288ef0089f5a3748`

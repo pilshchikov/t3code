@@ -1,5 +1,5 @@
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
-import { CommandId, MessageId } from "@t3tools/contracts";
+import { CommandId, IDLE_COMPACTION_TEXT, MessageId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Scheduler from "../scheduling/Scheduler.ts";
@@ -25,7 +25,8 @@ export const workerLive = Layer.effectDiscard(
               messageId: MessageId.make(identity),
               threadId: candidate.threadId,
               idleCompactionOfRunId: candidate.runId,
-              text: "/compact",
+              idleCompaction: "idleTimeout",
+              text: IDLE_COMPACTION_TEXT,
               attachments: [],
               dispatchMode: { type: "start_immediately" },
               createdBy: "system",
