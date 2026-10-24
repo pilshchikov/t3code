@@ -1,5 +1,19 @@
 # Fork Changes
 
+## Bundled server update entry points and reconnect ownership — 2026-10-24
+
+- Resolve the installed desktop's bundled SSH runtime in the shared server update action, so
+  Connections, composer notices and bulk actions upload the fork instead of copying an upstream
+  `npx` relaunch command. Reuse SSH route resolution with the bottom-left updater, including
+  alternate routes. Connections also offers an update for a changed payload at the same version.
+- Serialize remote launch and bundled activation with the same lifecycle lock. Reconnects during
+  an update defer until it finishes, preventing a second launcher from taking the server port and
+  leaving the SSH-managed PID record stale. External servers retain their existing update path.
+- Owners: `state/bundledServerUpdate*`, `ServerUpdateAction.tsx`, `SavedEnvironmentRows.tsx`,
+  `sidebar/useUpdateEverything.ts`, `packages/ssh/src/bundledRuntime.ts` and `tunnel.ts`.
+- Regression cases reproduce both the upstream command fallback and competing reconnect on the
+  prior revision; focused Chromium and isolated subprocess fixtures verify the corrected paths.
+
 ## Cross-environment thread dashboard — 2026-10-24
 
 - Add `/dashboard` with the approved Status board and Project lanes layouts, selected through

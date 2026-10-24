@@ -566,6 +566,13 @@ LOG_FILE="$STATE_DIR/server.log"
 RUNNER_FILE="$STATE_DIR/run-t3.sh"
 RUNNER_NEXT="$STATE_DIR/run-t3.next.$$"
 mkdir -p "$STATE_DIR"
+if [ -d "$STATE_DIR/update.lock" ]; then
+  echo 'An SSH server update is in progress. Reconnect after it finishes.' >&2
+  exit 1
+fi
+LIFECYCLE_LOCK="$STATE_DIR/lifecycle.lock"
+mkdir "$LIFECYCLE_LOCK" 2>/dev/null || { echo 'An SSH server launch or update is in progress. Reconnect after it finishes.' >&2; exit 1; }
+trap 'rmdir "$LIFECYCLE_LOCK"' EXIT
 T3_FORK_BUILD_ID=@@T3_FORK_BUILD_ID@@
 if [ -n "$T3_FORK_BUILD_ID" ]; then
   T3_BUNDLED_RUNNER="$HOME/.t3/runtime/forks/$T3_FORK_BUILD_ID/t3"
@@ -585,6 +592,7 @@ if [ -n "$T3_FORK_BUILD_ID" ]; then
 fi
 cleanup_runner_next() {
   rm -f "$RUNNER_NEXT"
+  rmdir "$LIFECYCLE_LOCK"
 }
 trap cleanup_runner_next EXIT
 cat >"$RUNNER_NEXT" <<'SH'

@@ -17,6 +17,19 @@ import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { connectionAtomRuntime } from "../connection/runtime";
+import { useBundledServerRuntime } from "./desktopUpdate";
+import { useEnvironments } from "./environments";
+import { resolveBundledServerUpdate } from "./bundledServerUpdate.logic";
+
+export function useResolveBundledServerUpdate() {
+  const runtime = useBundledServerRuntime();
+  const { environments } = useEnvironments();
+  return (environmentId: DesktopBundledServerUpdateInput["environmentId"]) =>
+    resolveBundledServerUpdate(
+      environments.find((environment) => environment.environmentId === environmentId) ?? null,
+      runtime,
+    );
+}
 
 class BundledServerReconnectError extends Data.TaggedError("BundledServerReconnectError")<{}> {
   override get message() {

@@ -45,12 +45,15 @@ ROOT="$HOME/.t3/runtime/forks/${runtime.buildId}"
 PID="$(cat "$STATE/pid")"
 PORT="$(cat "$STATE/port")"
 case "$PID:$PORT" in *[!0-9:]*|:*|*:) echo 'Invalid managed server state.' >&2; exit 1;; esac
+LIFECYCLE_LOCK="$STATE/lifecycle.lock"
+mkdir "$LIFECYCLE_LOCK" 2>/dev/null || { echo 'An SSH server launch or update is in progress. Reconnect before updating.' >&2; exit 1; }
+trap 'rmdir "$LIFECYCLE_LOCK"' EXIT
 # The runtime record must still belong to the PID we are about to replace.
 INFO="$("$ROOT/t3" __ssh-helper runtime-port "$HOME/.t3/userdata/server-runtime.json")"
 [ "$INFO" = "$PID $PORT" ] || { echo 'Managed server ownership changed. Reconnect before updating.' >&2; exit 1; }
 LOCK="$STATE/update.lock"
 mkdir "$LOCK" 2>/dev/null || { echo 'An SSH server update is already running.' >&2; exit 1; }
-trap 'rmdir "$LOCK"' EXIT HUP INT TERM
+trap 'rmdir "$LOCK" "$LIFECYCLE_LOCK"' EXIT HUP INT TERM
 BACKUP="$(mktemp -d "$STATE/.previous-XXXXXX")"
 cp "$STATE/run-t3.sh" "$BACKUP/run-t3.sh"
 STOPPED=0
@@ -71,7 +74,7 @@ recover() {
     COUNT=0
     while [ -n "$NEW_PID" ] && kill -0 "$NEW_PID" 2>/dev/null; do
       case "$(ps -o stat= -p "$NEW_PID" 2>/dev/null || true)" in *Z*) break;; esac
-      COUNT=$((COUNT + 1)); [ "$COUNT" -lt 120 ] || { echo 'Trial did not stop; previous runtime retained for recovery.' >&2; rmdir "$LOCK"; exit 1; }
+      COUNT=$((COUNT + 1)); [ "$COUNT" -lt 120 ] || { echo 'Trial did not stop; previous runtime retained for recovery.' >&2; rmdir "$LOCK" "$LIFECYCLE_LOCK"; exit 1; }
       sleep 1
     done
     if [ "$SNAPSHOT_READY" = 1 ]; then
@@ -85,7 +88,7 @@ recover() {
     start_server
     echo 'Update failed; restored the previous server and database snapshot.' >&2
   fi
-  rmdir "$LOCK"
+  rmdir "$LOCK" "$LIFECYCLE_LOCK"
   exit "$RESULT"
 }
 trap recover EXIT HUP INT TERM

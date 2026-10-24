@@ -57,6 +57,8 @@ import {
   usePrimaryEnvironmentId,
 } from "~/state/environments";
 import { APP_VERSION } from "~/branding";
+import { useBundledServerRuntime } from "~/state/desktopUpdate";
+import { resolveBundledServerUpdate } from "~/state/bundledServerUpdate.logic";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { serverEnvironment } from "~/state/server";
 import {
@@ -164,6 +166,10 @@ export function SavedBackendListRow({
     },
   });
   const versionMismatch = resolveServerConfigVersionMismatch(environment.serverConfig);
+  const bundledRuntime = resolveBundledServerUpdate(environment, useBundledServerRuntime());
+  const bundledUpdateAvailable =
+    bundledRuntime !== undefined &&
+    environment.serverConfig?.environment.serverBuildId !== bundledRuntime.runtime.buildId;
   const serverUpdateState = useAtomValue(serverEnvironment.updateStateAtom(environmentId));
   const resumingServerUpdate =
     serverUpdateState.status === "running" && serverUpdateState.stage === "resuming";
@@ -219,7 +225,7 @@ export function SavedBackendListRow({
   const showUpdateAction =
     enabled &&
     isConnected &&
-    versionMismatch !== null &&
+    (versionMismatch !== null || bundledUpdateAvailable) &&
     (serverUpdateState.status === "idle" || serverUpdateState.status === "failed");
 
   const statusTooltip = `${
@@ -229,9 +235,11 @@ export function SavedBackendListRow({
         ? connectionStatusText(environment.connection)
         : "Switched off"
   }${
-    versionMismatch
-      ? `\nUpdate available: ${versionMismatch.serverVersion} → ${versionMismatch.clientVersion}`
-      : ""
+    bundledUpdateAvailable
+      ? `\nUpdate available: this app's bundled server ${bundledRuntime.runtime.version}`
+      : versionMismatch
+        ? `\nUpdate available: ${versionMismatch.serverVersion} → ${versionMismatch.clientVersion}`
+        : ""
   }`;
 
   return (
@@ -372,7 +380,10 @@ export function SavedBackendListRow({
           installation={environment.serverConfig?.environment.capabilities.serverInstallation}
           desktopAppUpdate={supportsDesktopAppUpdate(environment.serverConfig)}
           threadContinuation={supportsServerUpdateThreadContinuation(environment.serverConfig)}
-          targetVersion={versionMismatch.clientVersion}
+          targetVersion={
+            bundledRuntime?.runtime.version ?? versionMismatch?.clientVersion ?? APP_VERSION
+          }
+          {...(bundledRuntime ? { bundledRuntime } : {})}
           label={serverUpdateState.status === "failed" ? "Retry update" : "Update"}
           appearance="icon"
         />

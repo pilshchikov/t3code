@@ -1,5 +1,5 @@
 import type { BundledServerRuntime, DesktopSshEnvironmentTarget } from "@t3tools/contracts";
-import { updateBundledServer } from "~/state/bundledServerUpdate";
+import { updateBundledServer, useResolveBundledServerUpdate } from "~/state/bundledServerUpdate";
 import { useAtomValue } from "@effect/atom-react";
 import {
   AuthEnvironmentMaintainScope,
@@ -75,26 +75,29 @@ export type ServerUpdateOutcome =
 
 /** Toasts its success or failure unless `quiet`; never rejects. */
 export function useServerUpdate() {
+  const resolveBundled = useResolveBundledServerUpdate();
   const updateServer = useAtomCommand(serverEnvironment.updateServer, { reportFailure: false });
   const updateBundled = useAtomCommand(updateBundledServer, { reportFailure: false });
   return async (
     target: ServerUpdateTarget,
     { quiet = false }: { readonly quiet?: boolean } = {},
   ): Promise<ServerUpdateOutcome> => {
-    const { environmentId, serverLabel, selfUpdate, targetVersion } = target;
+    const bundledRuntime = target.bundledRuntime ?? resolveBundled(target.environmentId);
+    const { environmentId, serverLabel, selfUpdate } = target;
+    const targetVersion = bundledRuntime?.runtime.version ?? target.targetVersion;
     if (
       !canUpdateServer(appAtomRegistry.get(environmentSession.sessionStateAtom(environmentId))) ||
       pendingUpdateEnvironmentIds.has(environmentId)
     )
       return { status: "skipped" };
     pendingUpdateEnvironmentIds.add(environmentId);
-    const result = target.bundledRuntime
+    const result = bundledRuntime
       ? await updateBundled({
-          target: target.bundledRuntime.target,
+          target: bundledRuntime.target,
           environmentId,
-          buildId: target.bundledRuntime.runtime.buildId,
-          version: target.bundledRuntime.runtime.version,
-          fromVersion: target.bundledRuntime.fromVersion,
+          buildId: bundledRuntime.runtime.buildId,
+          version: bundledRuntime.runtime.version,
+          fromVersion: bundledRuntime.fromVersion,
         })
       : await updateServer({
           environmentId,
@@ -122,8 +125,9 @@ export function useServerUpdate() {
       toastManager.add({
         type: "success",
         title: `${serverLabel} updated`,
-        description:
-          selfUpdate === "desktop-managed"
+        description: bundledRuntime
+          ? `Reconnected on this app's bundled server ${targetVersion}.`
+          : selfUpdate === "desktop-managed"
             ? `Desktop app relaunched on ${targetVersion}.`
             : `Reconnected on t3@${targetVersion}.`,
       });
@@ -142,14 +146,20 @@ export function ServerUpdatesAction({
   readonly targets: ReadonlyArray<ServerUpdateTarget>;
 }) {
   const update = useServerUpdate();
+  const resolveBundled = useResolveBundledServerUpdate();
   const pending = useRef(false);
   const [isPending, setIsPending] = useState(false);
-  const eligible = targets.filter(
-    (target) =>
-      target.bundledRuntime !== undefined ||
-      (target.selfUpdate !== null &&
-        (target.selfUpdate !== "desktop-managed" || target.desktopAppUpdate)),
-  );
+  const eligible = targets
+    .map((target) => {
+      const bundledRuntime = target.bundledRuntime ?? resolveBundled(target.environmentId);
+      return bundledRuntime ? { ...target, bundledRuntime } : target;
+    })
+    .filter(
+      (target) =>
+        target.bundledRuntime !== undefined ||
+        (target.selfUpdate !== null &&
+          (target.selfUpdate !== "desktop-managed" || target.desktopAppUpdate)),
+    );
   const handleUpdate = async () => {
     if (pending.current) return;
     pending.current = true;
@@ -158,7 +168,9 @@ export function ServerUpdatesAction({
       const available = eligible.filter(
         (target) => !pendingUpdateEnvironmentIds.has(target.environmentId),
       );
-      const desktopTargets = available.filter((target) => target.selfUpdate === "desktop-managed");
+      const desktopTargets = available.filter(
+        (target) => !target.bundledRuntime && target.selfUpdate === "desktop-managed",
+      );
       if (desktopTargets.length > 0) {
         const confirmed =
           (await requestConfirmDialog(
@@ -225,7 +237,7 @@ export function ServerUpdateAction({
   selfUpdate,
   installation,
   desktopAppUpdate = false,
-  bundledRuntime,
+  bundledRuntime: suppliedBundledRuntime,
   threadContinuation = false,
   targetVersion,
   label = "Update",
@@ -234,7 +246,9 @@ export function ServerUpdateAction({
   className,
   appearance = "button",
 }: Omit<ServerUpdateTarget, "continueThreadsAfterServerUpdate"> & UpdateButtonProps) {
-  const isDesktopAppUpdate = selfUpdate === "desktop-managed";
+  const resolveBundled = useResolveBundledServerUpdate();
+  const bundledRuntime = suppliedBundledRuntime ?? resolveBundled(environmentId);
+  const isDesktopAppUpdate = !bundledRuntime && selfUpdate === "desktop-managed";
   const sessionStateAtom = environmentSession.sessionStateAtom(environmentId);
   const canUpdate = canUpdateServer(useAtomValue(sessionStateAtom));
   const continueThreadsAfterServerUpdate = useEnvironmentSettings(
@@ -293,7 +307,7 @@ export function ServerUpdateAction({
     });
   };
 
-  if (selfUpdate === "desktop-managed" && !desktopAppUpdate) {
+  if (isDesktopAppUpdate && !desktopAppUpdate) {
     return (
       <span className="text-muted-foreground text-xs">
         Update the desktop app on that machine to update this server.

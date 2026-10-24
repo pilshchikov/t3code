@@ -56,6 +56,8 @@ async function fixture() {
 const fs = require('node:fs');
 const base = process.env.HOME + '/.t3';
 const args = process.argv.slice(2);
+if (args[0] === '--version') { process.stdout.write('t3 v0.1.1'); process.exit(0); }
+if (args[0] === '__ssh-helper' && args[1] === 'pick-port') { process.stdout.write('4173'); process.exit(0); }
 if (args[0] === '__ssh-helper' && args[1] === 'runtime-port') {
  const info = JSON.parse(fs.readFileSync(args[2])); process.kill(info.pid, 0); process.stdout.write(info.pid + ' ' + info.port); process.exit(0);
 }
@@ -112,6 +114,11 @@ if (args[0] === '__ssh-helper' && args[1] === 'wait-ready') {
     state,
     userdata,
     root,
+    async stopServer() {
+      const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+      child.kill("SIGTERM");
+      await exited;
+    },
     async [Symbol.asyncDispose]() {
       const pid = Number(
         await NodeFSP.readFile(NodePath.join(state, "pid"), "utf8").catch(() => "0"),
@@ -130,6 +137,20 @@ if (args[0] === '__ssh-helper' && args[1] === 'wait-ready') {
 }
 
 describe("bundled SSH runtime", () => {
+  it("does not launch a competing server while a bundled update owns the restart", async () => {
+    await using f = await fixture();
+    const pid = await NodeFSP.readFile(NodePath.join(f.state, "pid"), "utf8");
+    await NodeFSP.mkdir(NodePath.join(f.state, "update.lock"));
+    await f.stopServer();
+    const result = await run(
+      "set -- test\n" +
+        buildRemoteLaunchScript({ archiveVersion: runtime.version, forkBuildId: runtime.buildId }),
+      f.home,
+    );
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain("update is in progress");
+    expect(await NodeFSP.readFile(NodePath.join(f.state, "pid"), "utf8")).toBe(pid);
+  });
   it("reconnects to an older healthy server without activating the newly staged runner", async () => {
     await using f = await fixture();
     const pid = await NodeFSP.readFile(NodePath.join(f.state, "pid"), "utf8");

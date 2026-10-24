@@ -1,4 +1,4 @@
-import * as Option from "effect/Option";
+import { sshServerUpdateTarget } from "~/state/bundledServerUpdate.logic";
 import { useBundledServerRuntime } from "~/state/desktopUpdate";
 import { isHostPrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
 import { useAtomValue } from "@effect/atom-react";
@@ -55,11 +55,7 @@ export function useUpdateEverything(localUpdateVersion: string | null) {
       isElectron &&
       (isHostPrimaryConnectionTarget(environment.entry.target) ||
         isDesktopLocalConnectionTarget(environment.entry.target)),
-    sshTarget: [environment.entry, ...(environment.entry.alternateRoutes ?? [])].flatMap((route) =>
-      Option.isSome(route.profile) && route.profile.value._tag === "SshConnectionProfile"
-        ? [route.profile.value.target]
-        : [],
-    )[0],
+    sshTarget: sshServerUpdateTarget(environment.entry),
     canMaintain: canUpdateServer(sessionStates[index]!),
     updateState: updateStates[index]!,
   }));
