@@ -68,7 +68,7 @@ export function buildRailProjectMenu(input: {
   ];
 }
 
-export function buildSettledProjectsMenu(
+function buildSettledProjectsMenu(
   projects: ReadonlyArray<{ readonly projectKey: string; readonly displayName: string }>,
 ): ContextMenuItem[] {
   return [
@@ -142,10 +142,21 @@ export function buildRailGroupMenu(input: {
 export function buildRailBackgroundMenu(input: {
   readonly named: boolean;
   readonly hasGroups: boolean;
+  readonly settledProjects: ReadonlyArray<{
+    readonly projectKey: string;
+    readonly displayName: string;
+  }>;
 }): ContextMenuItem[] {
   return [
-    { id: "new-group", label: "New group" },
-    { id: "add-project", label: "Add project" },
+    { id: "new-group", label: "New group", icon: "folder-tree" },
+    { id: "add-project", label: "Add project", icon: "folder" },
+    {
+      id: "settled-projects",
+      label: "Settled projects",
+      icon: "archive",
+      disabled: input.settledProjects.length === 0,
+      children: buildSettledProjectsMenu(input.settledProjects),
+    },
     {
       id: "expand-all",
       label: "Expand all groups",

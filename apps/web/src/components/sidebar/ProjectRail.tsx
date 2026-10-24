@@ -18,17 +18,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
-import {
-  ArchiveIcon,
-  ChevronDownIcon,
-  ChevronsLeftIcon,
-  ChevronsRightIcon,
-  FolderPlusIcon,
-  LayersIcon,
-  LayoutDashboardIcon,
-  PanelLeftCloseIcon,
-  PlusIcon,
-} from "lucide-react";
+import { ChevronDownIcon, LayersIcon, LayoutDashboardIcon, EllipsisIcon } from "lucide-react";
 import type { ContextMenuItem } from "@t3tools/contracts";
 
 import { openCommandPalette } from "../../commandPaletteBus";
@@ -93,7 +83,6 @@ import {
   buildRailBackgroundMenu,
   buildRailGroupMenu,
   buildRailProjectMenu,
-  buildSettledProjectsMenu,
   railGroupSwatchHex,
 } from "./projectRailMenus";
 import {
@@ -433,7 +422,11 @@ function RailFooterButton({
   children,
   buttonRef,
   active = false,
+  named = false,
+  opensMenu = false,
 }: {
+  named?: boolean;
+  opensMenu?: boolean;
   active?: boolean;
   label: string;
   onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -449,10 +442,12 @@ function RailFooterButton({
             type="button"
             aria-label={label}
             aria-current={active ? "page" : undefined}
-            className={ITEM_CLASS}
+            aria-haspopup={opensMenu ? "menu" : undefined}
+            className={named ? ROW_CLASS : ITEM_CLASS}
             onClick={onClick}
           >
             <span className={ICON_BOX_CLASS}>{children}</span>
+            {named ? <span className="min-w-0 flex-1 truncate">{label}</span> : null}
           </button>
         }
       />
@@ -518,7 +513,7 @@ export const ProjectRail = memo(function ProjectRail() {
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [newGroupOpen, setNewGroupOpen] = useState(false);
-  const newGroupButtonRef = useRef<HTMLButtonElement | null>(null);
+  const actionsButtonRef = useRef<HTMLButtonElement | null>(null);
   // A short threshold, so a click still selects rather than starting a drag.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -788,18 +783,19 @@ export const ProjectRail = memo(function ProjectRail() {
     }
   };
 
-  const openSettledProjects = async (position: { x: number; y: number }) => {
-    const clicked = await showMenu(buildSettledProjectsMenu(settledProjects), position);
-    if (clicked?.startsWith("open:")) selectScope(clicked.slice("open:".length));
-    if (clicked?.startsWith("unsettle:"))
-      setProjectSettled(clicked.slice("unsettle:".length), false);
-  };
-
   const openBackgroundMenu = async (position: { x: number; y: number }) => {
     const clicked = await showMenu(
-      buildRailBackgroundMenu({ named, hasGroups: shownGroups.length > 0 }),
+      buildRailBackgroundMenu({ named, hasGroups: shownGroups.length > 0, settledProjects }),
       position,
     );
+    if (clicked?.startsWith("open:")) {
+      selectScope(clicked.slice("open:".length));
+      return;
+    }
+    if (clicked?.startsWith("unsettle:")) {
+      setProjectSettled(clicked.slice("unsettle:".length), false);
+      return;
+    }
     switch (clicked) {
       case "new-group":
         setNewGroupOpen(true);
@@ -1102,64 +1098,21 @@ export const ProjectRail = memo(function ProjectRail() {
       <div
         className={cn(
           "flex shrink-0 gap-1 border-t border-sidebar-border pt-1.5",
-          named ? "flex-row flex-wrap items-center px-1.5" : "flex-col items-center",
+          named ? "px-1.5" : "items-center",
         )}
       >
-        {settledProjects.length > 0 ? (
-          <RailFooterButton
-            label="Settled projects"
-            onClick={(event) => void openSettledProjects(menuPosition(event))}
-          >
-            <ArchiveIcon className="size-4.5" />
-          </RailFooterButton>
-        ) : null}
-        {named ? (
-          <>
-            <button
-              type="button"
-              className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md px-2 text-xs text-sidebar-foreground outline-none transition-colors hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-              onClick={() => openCommandPalette({ open: "add-project" })}
-            >
-              <PlusIcon aria-hidden className="size-4" />
-              Project
-            </button>
-            <button
-              ref={newGroupButtonRef}
-              type="button"
-              className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md px-2 text-xs text-sidebar-foreground outline-none transition-colors hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-              onClick={() => setNewGroupOpen(true)}
-            >
-              <FolderPlusIcon aria-hidden className="size-4" />
-              Group
-            </button>
-            <span className="flex-1" />
-            <RailFooterButton label="Hide names" onClick={() => setNamed(false)}>
-              <ChevronsLeftIcon className="size-4.5" />
-            </RailFooterButton>
-          </>
-        ) : (
-          <>
-            <RailFooterButton
-              label="Add project"
-              onClick={() => openCommandPalette({ open: "add-project" })}
-            >
-              <PlusIcon className="size-4.5" />
-            </RailFooterButton>
-            <RailFooterButton
-              label="New group"
-              buttonRef={newGroupButtonRef}
-              onClick={() => setNewGroupOpen(true)}
-            >
-              <FolderPlusIcon className="size-4.5" />
-            </RailFooterButton>
-            <RailFooterButton label="Show names" onClick={() => setNamed(true)}>
-              <ChevronsRightIcon className="size-4.5" />
-            </RailFooterButton>
-            <RailFooterButton label="Hide project rail" onClick={() => setVisible(false)}>
-              <PanelLeftCloseIcon className="size-4.5" />
-            </RailFooterButton>
-          </>
-        )}
+        <RailFooterButton
+          label="Project actions"
+          buttonRef={actionsButtonRef}
+          named={named}
+          opensMenu
+          onClick={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            void openBackgroundMenu({ x: rect.right + 4, y: rect.bottom });
+          }}
+        >
+          <EllipsisIcon className="size-4.5" />
+        </RailFooterButton>
       </div>
 
       <div
@@ -1200,7 +1153,7 @@ export const ProjectRail = memo(function ProjectRail() {
       />
       <RailNewGroupPopover
         open={newGroupOpen}
-        anchor={() => newGroupButtonRef.current}
+        anchor={() => actionsButtonRef.current}
         projects={activeProjects}
         groupOf={(projectKey) => findRailGroupOf(model, projectKey)}
         initialColor={nextRailGroupColor(railGroups)}

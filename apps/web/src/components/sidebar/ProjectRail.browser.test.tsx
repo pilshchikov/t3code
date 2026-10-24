@@ -133,7 +133,8 @@ it("switches between the short and the named rail", async () => {
   using _state = setup();
   await using screen = await renderRail();
   expect(rail(screen.container).dataset.named).toBe("false");
-  await userEvent.click(screen.getByRole("button", { name: "Show names", exact: true }));
+  await userEvent.click(screen.getByRole("button", { name: "Project actions", exact: true }));
+  await userEvent.click(page.getByRole("button", { name: "Show names", exact: true }));
   expect(rail(screen.container).dataset.named).toBe("true");
   expect(
     [...screen.container.querySelectorAll('[data-rail="row"]')].map((row) => row.textContent),
@@ -169,8 +170,9 @@ it("settles the selected project without changing its selection or manual order,
   await useProjectRailGroupsStore.persist.rehydrate();
   await using remounted = await renderRail();
   expect(project(remounted.container, "alpha")).toBeNull();
+  await userEvent.click(remounted.getByRole("button", { name: "Project actions", exact: true }));
   await expect
-    .element(remounted.getByRole("button", { name: "Settled projects", exact: true }))
+    .element(page.getByRole("button", { name: "Settled projects", exact: true }))
     .toBeVisible();
 });
 
@@ -179,17 +181,19 @@ it("opens a settled project without restoring it, and restores it explicitly fro
   await using screen = await renderRail();
   await settle(screen.container, "beta");
   const groups = useProjectRailGroupsStore.getState().groups;
-  await userEvent.click(screen.getByRole("button", { name: "Settled projects", exact: true }));
+  await userEvent.click(screen.getByRole("button", { name: "Project actions", exact: true }));
+  await userEvent.click(page.getByRole("button", { name: "Settled projects", exact: true }));
   await userEvent.click(page.getByRole("button", { name: "beta", exact: true }));
   await vi.waitFor(() =>
     expect(JSON.parse(localStorage.getItem("t3code:sidebar-project-scope:v1")!)).toBe("local:beta"),
   );
   expect(project(screen.container, "beta")).toBeNull();
-  await userEvent.click(screen.getByRole("button", { name: "Settled projects", exact: true }));
+  await userEvent.click(screen.getByRole("button", { name: "Project actions", exact: true }));
+  await userEvent.click(page.getByRole("button", { name: "Settled projects", exact: true }));
   await userEvent.click(page.getByRole("button", { name: "Unsettle project", exact: true }));
   await userEvent.click(
     page
-      .elementLocator(document.querySelector('[data-level="1"]')!)
+      .elementLocator(document.querySelector('[data-level="2"]')!)
       .getByRole("button", { name: "beta", exact: true }),
   );
   await vi.waitFor(() => expect(project(screen.container, "beta")).not.toBeNull());
@@ -203,7 +207,8 @@ it("keeps the rail and restore menu usable when every project is settled", async
   for (const name of ["alpha", "beta", "gamma"]) await settle(screen.container, name);
   expect(groupHead(screen.container)).toBeNull();
   expect(rail(screen.container)).not.toBeNull();
-  await userEvent.click(screen.getByRole("button", { name: "Settled projects", exact: true }));
+  await userEvent.click(screen.getByRole("button", { name: "Project actions", exact: true }));
+  await userEvent.click(page.getByRole("button", { name: "Settled projects", exact: true }));
   for (const name of ["alpha", "beta", "gamma"])
     await expect.element(page.getByRole("button", { name, exact: true })).toBeVisible();
 });

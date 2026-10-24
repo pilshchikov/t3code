@@ -1,5 +1,18 @@
 # Fork Changes
 
+## Compact project-rail actions — 2026-10-24
+
+- Replace the stacked/footer controls with one ellipsis **Project actions** button in both rail
+  widths. Reuse the existing themed rail menu for project/group creation, expanding/collapsing
+  groups, showing/hiding names and hiding the rail. Include settled projects as a submenu with
+  the existing open/restore actions. Keep new-group editing anchored to the persistent button.
+- Owners: `components/sidebar/ProjectRail.tsx` and `projectRailMenus.ts`. Web and desktop share
+  this rail; native mobile is unaffected. No provider, server or contract changes.
+- Validation: adapt the eight existing rail browser cases to the consolidated menu; retain
+  settlement persistence, selection and restoration coverage. Isolated full-app checks cover
+  both widths, keyboard access, project/group creation entry points and hiding persistence;
+  before/after captures provide the visual proof.
+
 ## Bundled server update entry points and reconnect ownership — 2026-10-24
 
 - Resolve the installed desktop's bundled SSH runtime in the shared server update action, so
