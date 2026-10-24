@@ -219,6 +219,18 @@ describe("resolveIdleCompaction", () => {
   });
 });
 
+describe("ClientSettings dashboard layout", () => {
+  it("keeps old settings on the status board and round-trips the project lanes choice", () => {
+    expect(decodeClientSettings({}).dashboardLayout).toBe("board");
+    const settings = decodeClientSettings({ dashboardLayout: "projects" });
+    expect(encodeClientSettings(settings).dashboardLayout).toBe("projects");
+    expect(decodeClientSettingsPatch({ dashboardLayout: "projects" }).dashboardLayout).toBe(
+      "projects",
+    );
+    expect(() => decodeClientSettingsPatch({ dashboardLayout: "inbox" })).toThrow();
+  });
+});
+
 describe("ClientSettings notifications", () => {
   it("requires opt-in when existing settings omit notification preferences", () => {
     expect(decodeClientSettings({}).notificationMode).toBe("off");

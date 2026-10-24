@@ -1,5 +1,32 @@
 # Fork Changes
 
+## Cross-environment thread dashboard — 2026-10-24
+
+- Add `/dashboard` with the approved Status board and Project lanes layouts, selected through
+  the device-local **Dashboard layout** setting in Appearance. Use themed custom Select menus
+  for all filters, with saved project favicons/icons in the project selector and thread cards.
+- Aggregate existing quiet thread shells across environments without opening every transcript.
+  Preserve logical project grouping and environment-scoped thread identities. Separate active
+  foreground turns, background monitoring and unread completions; retain actionable failures and
+  pending approvals/input. Server visit watermarks remain authoritative, including mark-unread,
+  with local fallback only for older servers. Routine compaction completions stay quiet.
+- Cards navigate through the normal environment/thread route and select the owning sidebar
+  project without changing settlement. Archived/deleted threads and subagent duplicates stay
+  out of the deck. Unread results remain until read; optional Recently reviewed covers 24 hours.
+  Offline environments show last-known activity explicitly. Add Dashboard above All projects
+  in both rail widths, mobile web navigation and the command palette; preserve Back behavior.
+- Owners: `components/dashboard/`, `routes/dashboard.tsx`, the project rail/sidebar navigation,
+  Appearance settings/search, and `ClientSettingsSchema`. Web and packaged desktop share the
+  dashboard; native mobile keeps its existing thread UI. Existing thread APIs remain available
+  to agents; no new server mutation or background polling is introduced.
+- Validation: `check:changed HEAD` passes with 151 tests in seven files, all 30 affected
+  package typechecks, formatting, lint and both knip passes. Browser component cases cover
+  custom project/environment menus, combined filters, scoped navigation, server visit updates,
+  rail placement and layout selection. An isolated full app with a pruned read-only copy of
+  real data verifies Mark unread → Ready → normal thread visit → Recently reviewed, project
+  selection, both layouts, Appearance persistence after reload, icon menus and 390px layout.
+  The live app, its data and the Mac mini server are not used for these mutations.
+
 ## Upstream follow-up integration — 2026-10-24 (bf5c483cbe)
 
 - Merge six newer upstream commits through `bf5c483cbe298032fe5f97b05f31f8458aab0031`

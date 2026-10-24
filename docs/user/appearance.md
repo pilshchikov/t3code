@@ -21,6 +21,20 @@ Android uses **Material You Layout** by default unless you have turned it off in
 It changes shapes, spacing, and controls independently
 of the selected theme.
 
+## Thread dashboard
+
+On web and desktop, open **Dashboard** above All projects in the project rail, or choose
+**Open dashboard** in the command palette. On deck combines active turns, background monitoring
+and unread results from all your projects and environments. Opening a card selects its project
+and conversation; the normal thread read tracking moves its completed result out of Ready.
+Settled project shortcuts still appear here. Offline environments are labeled with their last
+known activity.
+
+Choose **Status board** or **Project lanes** under **Settings → Appearance → Dashboard layout**.
+The choice is saved on this device. Filter by project or environment, search threads, and enable
+**Recently reviewed** to include completed results from the last 24 hours that you already opened.
+Unread results remain available until read.
+
 ## Composer context
 
 Git-backed projects show branch and worktree controls below the composer while you create a thread.

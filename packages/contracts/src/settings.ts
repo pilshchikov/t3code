@@ -190,6 +190,10 @@ export type ComposerActionStyle = typeof ComposerActionStyle.Type;
 export const DEFAULT_COMPOSER_ACTION_STYLE: ComposerActionStyle = "orb";
 export const DEFAULT_COMPOSER_ORB_SEND_COLOR = "#8b5cff";
 export const DEFAULT_COMPOSER_ORB_STOP_COLOR = "#e2323a";
+export const DashboardLayout = Schema.Literals(["board", "projects"]);
+export type DashboardLayout = typeof DashboardLayout.Type;
+export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = "board";
+
 export const ProjectRailGroupStyle = Schema.Literals(["edge", "well", "outline", "label", "solid"]);
 export type ProjectRailGroupStyle = typeof ProjectRailGroupStyle.Type;
 export const DEFAULT_PROJECT_RAIL_GROUP_STYLE: ProjectRailGroupStyle = "edge";
@@ -455,6 +459,9 @@ export const ClientSettingsSchema = Schema.Struct({
   ),
   composerActionStyle: ComposerActionStyle.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_COMPOSER_ACTION_STYLE)),
+  ),
+  dashboardLayout: DashboardLayout.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_DASHBOARD_LAYOUT)),
   ),
   projectRailGroupStyle: ProjectRailGroupStyle.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROJECT_RAIL_GROUP_STYLE)),
@@ -1880,6 +1887,7 @@ export const ClientSettingsPatch = Schema.Struct({
   diffLayout: Schema.optionalKey(DiffLayout),
   environmentIdentificationMode: Schema.optionalKey(EnvironmentIdentificationMode),
   composerActionStyle: Schema.optionalKey(ComposerActionStyle),
+  dashboardLayout: Schema.optionalKey(DashboardLayout),
   projectRailGroupStyle: Schema.optionalKey(ProjectRailGroupStyle),
   composerOrbSendColor: Schema.optionalKey(AccentColorPreference),
   composerOrbStopColor: Schema.optionalKey(AccentColorPreference),

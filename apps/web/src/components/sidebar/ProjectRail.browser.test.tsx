@@ -38,9 +38,10 @@ vi.mock(import("../../hooks/useMediaQuery"), async (original) => ({
 vi.mock(import("../ProjectFavicon"), () => ({
   ProjectFavicon: () => <span data-testid="favicon" />,
 }));
+const navigation = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock(import("@tanstack/react-router"), async (original) => ({
   ...(await original()),
-  useRouter: (() => ({ navigate: async () => {} })) as never,
+  useRouter: (() => ({ navigate: navigation })) as never,
   useLocation: (() => "/") as never,
 }));
 
@@ -50,6 +51,7 @@ import { useUiStateStore } from "../../uiStateStore";
 import { dismissContextMenu } from "../../contextMenuFallback";
 
 function setup() {
+  navigation.mockClear();
   const storageKeys = [
     "t3code:project-rail-groups:v1",
     "t3code:sidebar:project-rail-layout",
@@ -241,4 +243,18 @@ it("moves visible projects past settled ones while preserving their group member
       button.getAttribute("aria-label"),
     ),
   ).toEqual(["gamma", "alpha"]);
+});
+
+it("places Dashboard above All projects and opens its route", async () => {
+  using _state = setup();
+  await using screen = await renderRail();
+  const dashboard = screen.container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Dashboard"]',
+  )!;
+  const all = screen.container.querySelector<HTMLButtonElement>(
+    'button[aria-label="All projects"]',
+  )!;
+  expect(dashboard.compareDocumentPosition(all) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await userEvent.click(screen.getByRole("button", { name: "Dashboard", exact: true }));
+  expect(navigation).toHaveBeenCalledWith({ to: "/dashboard" });
 });

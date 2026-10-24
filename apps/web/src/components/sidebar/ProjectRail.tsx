@@ -25,6 +25,7 @@ import {
   ChevronsRightIcon,
   FolderPlusIcon,
   LayersIcon,
+  LayoutDashboardIcon,
   PanelLeftCloseIcon,
   PlusIcon,
 } from "lucide-react";
@@ -431,7 +432,9 @@ function RailFooterButton({
   onClick,
   children,
   buttonRef,
+  active = false,
 }: {
+  active?: boolean;
   label: string;
   onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
   children: ReactNode;
@@ -445,6 +448,7 @@ function RailFooterButton({
             ref={buttonRef}
             type="button"
             aria-label={label}
+            aria-current={active ? "page" : undefined}
             className={ITEM_CLASS}
             onClick={onClick}
           >
@@ -637,7 +641,8 @@ export const ProjectRail = memo(function ProjectRail() {
 
   const selectScope = (nextScopeKey: string | null) => {
     setProjectScopeKey(nextScopeKey);
-    if (pathname.startsWith("/settings")) void router.navigate({ to: "/" });
+    if (pathname.startsWith("/settings") || pathname === "/dashboard")
+      void router.navigate({ to: "/" });
   };
   const setNamed = (nextNamed: boolean) =>
     setLayout((current) => ({ ...current, named: nextNamed }));
@@ -988,7 +993,30 @@ export const ProjectRail = memo(function ProjectRail() {
         <div className="px-1.5">
           <button
             type="button"
-            aria-current={projectScopeKey === null}
+            className={ROW_CLASS}
+            aria-current={pathname === "/dashboard" ? "page" : undefined}
+            onClick={() => void router.navigate({ to: "/dashboard" })}
+          >
+            <span className={ICON_BOX_CLASS}>
+              <LayoutDashboardIcon className="size-4.5" />
+            </span>
+            <span className="min-w-0 flex-1 truncate">Dashboard</span>
+          </button>
+        </div>
+      ) : (
+        <RailFooterButton
+          label="Dashboard"
+          active={pathname === "/dashboard"}
+          onClick={() => void router.navigate({ to: "/dashboard" })}
+        >
+          <LayoutDashboardIcon className="size-4.5" />
+        </RailFooterButton>
+      )}
+      {named ? (
+        <div className="px-1.5">
+          <button
+            type="button"
+            aria-current={projectScopeKey === null && pathname !== "/dashboard"}
             className={ROW_CLASS}
             onClick={() => selectScope(null)}
           >

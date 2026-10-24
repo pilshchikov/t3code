@@ -1,3 +1,4 @@
+import { LayoutDashboardIcon } from "lucide-react";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { type Project } from "../types";
 import { isHostPrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
@@ -1719,6 +1720,17 @@ function OpenCommandPaletteDialog(props: {
       },
     });
   }
+
+  actionItems.push({
+    kind: "action",
+    value: "action:dashboard",
+    searchTerms: ["dashboard", "on deck", "working", "monitoring", "ready", "unread", "projects"],
+    title: "Open dashboard",
+    icon: <LayoutDashboardIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/dashboard" });
+    },
+  });
 
   actionItems.push({
     kind: "action",

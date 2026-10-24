@@ -1,4 +1,9 @@
-import { ArrowLeftIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ChartNoAxesColumnIcon,
+  SettingsIcon,
+  LayoutDashboardIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { memo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
@@ -209,6 +214,16 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
         </SidebarMenuItem>
       ) : (
         <>
+          {isMobile ? (
+            <SidebarUtilityItem
+              icon={<LayoutDashboardIcon />}
+              label="Dashboard"
+              onClick={() => {
+                closeMobileSidebar();
+                void navigate({ to: "/dashboard" });
+              }}
+            />
+          ) : null}
           <SidebarUtilityItem
             icon={<SettingsIcon />}
             label="Settings"
