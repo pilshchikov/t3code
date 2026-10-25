@@ -1,3 +1,10 @@
+import * as Option from "effect/Option";
+import { useSelectedThreadDetailState } from "../../../state/use-thread-detail";
+import { useThreadMergeBack } from "../useThreadMergeBack";
+import { useThreadProjectTools } from "../../terminal/useThreadProjectTools";
+import { projectScriptMenuLabel } from "@t3tools/shared/projectScripts";
+import { ThreadColorPicker } from "../ThreadColorPicker";
+import { useEnvironmentScope } from "../../../state/session";
 import * as Dialog from "../../../components/ui/Dialog";
 import { SheetHeader } from "../../../components/ui/SheetHeader";
 import { useOpenPullRequest } from "../../../native/useOpenPullRequest";
@@ -7,7 +14,12 @@ import {
   getGitActionDisabledReason,
   requiresDefaultBranchConfirmation,
 } from "@t3tools/client-runtime/state/vcs";
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import {
+  AuthTerminalReadScope,
+  AuthTerminalOperateScope,
+  EnvironmentId,
+  ThreadId,
+} from "@t3tools/contracts";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import {
   CommonActions,
@@ -81,8 +93,14 @@ function GitOverviewSheetContent(props: GitOverviewSheetProps) {
   const isInspector = presentation === "inspector";
   const environmentId = EnvironmentId.make(props.route.params.environmentId);
   const threadId = ThreadId.make(props.route.params.threadId);
+  const canReadTerminal = useEnvironmentScope(environmentId, AuthTerminalReadScope);
+  const canOperateTerminal = useEnvironmentScope(environmentId, AuthTerminalOperateScope);
+  const { projectScripts, runProjectScript } = useThreadProjectTools();
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const { selectedThread, selectedThreadProject, selectedEnvironmentRuntime } =
     useThreadSelection();
+  const detail = useSelectedThreadDetailState();
+  const onMergeBack = useThreadMergeBack(selectedThread, Option.getOrNull(detail.data));
   const openPullRequest = useOpenPullRequest({
     replace: presentation === "sheet",
     context: selectedThread ?? undefined,
@@ -315,6 +333,54 @@ function GitOverviewSheetContent(props: GitOverviewSheetProps) {
             onPress={linkedPrActions.promptLink}
           />
         ) : null}
+      </ListSection>
+
+      <ListSection title="Tools">
+        {onMergeBack ? (
+          <ListRow
+            icon="point.topleft.down.curvedto.point.bottomright.up"
+            label="Merge back to source"
+            description="Bring this thread's latest turn into its source"
+            onPress={onMergeBack}
+          />
+        ) : null}
+        {colorPickerOpen ? (
+          <ThreadColorPicker
+            threadKey={`${environmentId}:${threadId}`}
+            title={selectedThread?.title ?? "Thread"}
+            onClose={() => setColorPickerOpen(false)}
+          />
+        ) : null}
+        <ListRow
+          icon="paintbrush"
+          label="Thread color"
+          description="Mark this thread with a color"
+          onPress={() => setColorPickerOpen(true)}
+        />
+        {projectScripts.map((script) => (
+          <ListRow
+            key={script.id}
+            icon="play"
+            label={projectScriptMenuLabel(script)}
+            description={script.command}
+            disabled={!canOperateTerminal}
+            onPress={() => runProjectScript(script)}
+          />
+        ))}
+        <ListRow
+          icon="terminal"
+          label="Terminal"
+          description="Open this thread's terminal sessions"
+          disabled={
+            !selectedThreadProject?.workspaceRoot || (!canReadTerminal && !canOperateTerminal)
+          }
+          onPress={() =>
+            navigation.navigate("ThreadTerminal", {
+              environmentId: String(environmentId),
+              threadId: String(threadId),
+            })
+          }
+        />
       </ListSection>
 
       {linkedPrLines.length > 0 ? (

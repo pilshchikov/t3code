@@ -1,59 +1,25 @@
-import type {
-  NativeStackHeaderItem,
-  NativeStackHeaderItemMenu,
-} from "@react-navigation/native-stack";
-
-import type { HomeListFilterMenu } from "../home/home-list-filter-menu";
+import type { NativeStackHeaderItem } from "@react-navigation/native-stack";
 import { withNativeGlassHeaderItem } from "../layout/native-glass-header-items";
 
-type NativeHeaderMenuItems = NativeStackHeaderItemMenu["menu"]["items"];
-type NativeHeaderIcon = NonNullable<Extract<NativeStackHeaderItem, { type: "button" }>["icon"]>;
-
-function sfSymbolIcon(name: string): NativeHeaderIcon {
-  return { type: "sfSymbol", name: name as never };
-}
-
-function toNativeHeaderMenuItems(items: HomeListFilterMenu["items"]): NativeHeaderMenuItems {
-  return items.map((item) =>
-    item.type === "action"
-      ? {
-          type: "action" as const,
-          label: item.title,
-          description: item.subtitle,
-          onPress: item.onPress,
-          state: item.state === "on" ? ("on" as const) : undefined,
-        }
-      : {
-          type: "submenu" as const,
-          label: item.title,
-          items: toNativeHeaderMenuItems(item.items),
-        },
-  );
-}
-
 export function createSidebarHeaderItems(input: {
-  readonly filterIcon: string;
-  readonly filterMenu: HomeListFilterMenu;
+  readonly onOpenProjects: () => void;
   readonly onOpenSettings: () => void;
 }): NativeStackHeaderItem[] {
   return [
     withNativeGlassHeaderItem({
-      type: "menu",
+      type: "button",
       axisBehavior: "horizontalOnly",
-      label: "",
-      accessibilityLabel: "Filter threads",
-      icon: sfSymbolIcon(input.filterIcon),
-      menu: {
-        title: input.filterMenu.title,
-        items: toNativeHeaderMenuItems(input.filterMenu.items),
-      },
+      label: "Projects",
+      accessibilityLabel: "Choose project",
+      icon: { type: "sfSymbol" as const, name: "sidebar.left" as const },
+      onPress: input.onOpenProjects,
     }),
     withNativeGlassHeaderItem({
       type: "button",
       axisBehavior: "horizontalOnly",
       label: "Settings",
       accessibilityLabel: "Open settings",
-      icon: sfSymbolIcon("gearshape"),
+      icon: { type: "sfSymbol" as const, name: "gearshape" as const },
       onPress: input.onOpenSettings,
     }),
   ];

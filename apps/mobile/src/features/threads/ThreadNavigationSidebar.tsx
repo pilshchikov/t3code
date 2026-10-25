@@ -1,3 +1,8 @@
+import {
+  ProjectNavigationPanel,
+  ProjectNavigationEdge,
+  type ProjectNavigationMode,
+} from "../home/ProjectNavigationPanel";
 import { useActiveNewTask } from "../../state/active-new-task";
 import { ThreadUndoNotice } from "../home/ThreadUndoNotice";
 import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
@@ -8,10 +13,7 @@ import type {
   EnvironmentProject,
   EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
-import {
-  threadSearchMatchKey,
-  type EnvironmentThreadSearchMatch,
-} from "@t3tools/client-runtime/state/thread-search";
+import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
 import { AnimatedLegendList } from "@legendapp/list/reanimated";
 import { THREAD_SIDEBAR_ROW_LAYOUT } from "./threadListAnimations";
 import type { MenuAction } from "@react-native-menu/menu";
@@ -26,7 +28,6 @@ import type { SearchBarCommands } from "react-native-screens";
 
 import { AppText as Text } from "../../components/ui/AppText";
 import { CompactBrandTitle } from "../../components/CompactBrandTitle";
-import { Menu } from "../../components/ui/Menu";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
@@ -45,7 +46,6 @@ import { useThreadJumpShortcuts } from "../keyboard/threadKeyboardShortcuts";
 import { requestThreadMessageJump } from "./threadMessageJump";
 import { useThreadListSearchMatches } from "./useThreadListSearchMatches";
 import { useHomeListOptions } from "../home/home-list-options";
-import { buildHomeListFilterMenu } from "../home/home-list-filter-menu";
 import { buildHomeProjectScopes } from "../home/homeThreadList";
 import { SwipeableScrollGateProvider, useSwipeableScrollGate } from "../home/thread-swipe-actions";
 import { usePendingTaskListActions } from "../home/usePendingTaskListActions";
@@ -142,6 +142,9 @@ function ThreadNavigationSidebarPane(
   const { environments: workspaceEnvironments, state: catalogState } = useWorkspaceState();
   const { savedConnectionsById } = useSavedRemoteConnections();
   const searchInputRef = useRef<TextInputInstance>(null);
+  const [projectNavigationMode, setProjectNavigationMode] = useState<ProjectNavigationMode | null>(
+    null,
+  );
   const searchBarRef = useRef<SearchBarCommands>(null);
   const openSwipeableRef = useRef<SwipeableMethods | null>(null);
   const sidebarScrollGesture = useNativeGesture();
@@ -728,19 +731,23 @@ function ThreadNavigationSidebarPane(
   const filterIcon = filterCustomized
     ? "line.3.horizontal.decrease.circle.fill"
     : "line.3.horizontal.decrease.circle";
-  const filterMenu = buildHomeListFilterMenu({
-    environments,
-    projects: projectFilterOptions,
-    selectedEnvironmentId: options.selectedEnvironmentId,
-    selectedProjectKey,
-    onEnvironmentChange: setSelectedEnvironmentId,
-    onProjectChange: setSelectedProjectKey,
-  });
   const nativeHeaderItems = createSidebarHeaderItems({
-    filterIcon,
-    filterMenu,
+    onOpenProjects: () => setProjectNavigationMode("projects"),
     onOpenSettings: props.onOpenSettings,
   });
+  const projectNavigation =
+    projectNavigationMode !== null ? (
+      <ProjectNavigationPanel
+        mode={projectNavigationMode}
+        environments={environments}
+        projects={projectScopes}
+        selectedEnvironmentId={options.selectedEnvironmentId}
+        selectedProjectKey={selectedProjectKey}
+        onEnvironmentChange={setSelectedEnvironmentId}
+        onProjectChange={setSelectedProjectKey}
+        onClose={() => setProjectNavigationMode(null)}
+      />
+    ) : null;
   const listEmpty = (
     <Text
       className={
@@ -829,6 +836,8 @@ function ThreadNavigationSidebarPane(
               />
             </GestureDetector>
           </SwipeableScrollGateProvider>
+          {projectNavigation}
+          <ProjectNavigationEdge onOpen={() => setProjectNavigationMode("projects")} />
           <ThreadUndoNotice visible={props.visible} />
         </View>
       </>
@@ -932,9 +941,11 @@ function ThreadNavigationSidebarPane(
               }
             />
             <View className="flex-row items-center gap-2.5">
-              <Menu actions={listMenuActions} onPressAction={handleListMenuAction}>
-                <SidebarFilterButton accessibilityLabel="Filter threads" icon={filterIcon} />
-              </Menu>
+              <SidebarFilterButton
+                accessibilityLabel="Choose project"
+                icon={filterIcon}
+                onPress={() => setProjectNavigationMode("projects")}
+              />
               <SidebarHeaderActions onOpenSettings={props.onOpenSettings} />
             </View>
           </View>
@@ -965,6 +976,10 @@ function ThreadNavigationSidebarPane(
           </View>
         </View>
       )}
+      {projectNavigation}
+      {Platform.OS === "ios" ? (
+        <ProjectNavigationEdge onOpen={() => setProjectNavigationMode("projects")} />
+      ) : null}
       <ThreadUndoNotice visible={props.visible} />
     </View>
   );

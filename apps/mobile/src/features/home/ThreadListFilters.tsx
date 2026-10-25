@@ -1,97 +1,78 @@
+import type { EnvironmentId } from "@t3tools/contracts";
 import { Pressable, ScrollView } from "react-native";
+import { ProjectFavicon } from "../../components/ProjectFavicon";
 import { SymbolView } from "../../components/ui/AppSymbol";
-import { ListFilterMenu } from "../workspace/ListFilterMenu";
-import type { HomeHeaderProps } from "./HomeHeader.types";
+import { AppText } from "../../components/ui/AppText";
+import type { HomeListFilterMenuEnvironment } from "./home-list-filter-menu";
+import { findHomeProjectScope, type HomeProjectScope } from "./homeThreadList";
+import type { ProjectNavigationMode } from "./ProjectNavigationPanel";
 
-export function ThreadListFilters(
-  props: Pick<
-    HomeHeaderProps,
-    | "environments"
-    | "projects"
-    | "selectedEnvironmentId"
-    | "selectedProjectKey"
-    | "onEnvironmentChange"
-    | "onProjectChange"
-  >,
-) {
-  const selectedEnvironment = props.environments.find(
-    (environment) => environment.environmentId === props.selectedEnvironmentId,
+export function ThreadListFilters(props: {
+  readonly environments: ReadonlyArray<HomeListFilterMenuEnvironment>;
+  readonly projects: ReadonlyArray<HomeProjectScope>;
+  readonly selectedEnvironmentId: EnvironmentId | null;
+  readonly selectedProjectKey: string | null;
+  readonly onOpen: (mode: ProjectNavigationMode) => void;
+  readonly onReset: () => void;
+}) {
+  const environment = props.environments.find(
+    (item) => item.environmentId === props.selectedEnvironmentId,
   );
-  const selectedProject = props.projects.find(
-    (project) => project.key === props.selectedProjectKey,
-  );
+  const scope = findHomeProjectScope(props.projects, props.selectedProjectKey);
+  const project = scope?.representative;
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 2, paddingBottom: 10, gap: 8 }}
     >
-      <ListFilterMenu
-        label={selectedEnvironment?.label ?? "All environments"}
-        accessibilityLabel="Filter threads by environment"
-        active={selectedEnvironment !== undefined}
-        actions={[
-          {
-            id: "all",
-            title: "All environments",
-            state: props.selectedEnvironmentId === null ? "on" : "off",
-          },
-          ...props.environments.map((environment) => ({
-            id: JSON.stringify(environment.environmentId),
-            title: environment.label,
-            state:
-              environment.environmentId === props.selectedEnvironmentId
-                ? ("on" as const)
-                : ("off" as const),
-          })),
-        ]}
-        onSelect={(id) => {
-          if (id === "all") props.onEnvironmentChange(null);
-          else {
-            const environment = props.environments.find(
-              (candidate) => JSON.stringify(candidate.environmentId) === id,
-            );
-            if (environment) props.onEnvironmentChange(environment.environmentId);
-          }
-        }}
-      />
-      <ListFilterMenu
-        label={selectedProject?.label ?? "All projects"}
-        accessibilityLabel="Filter threads by project"
-        active={selectedProject !== undefined}
-        actions={[
-          {
-            id: "all",
-            title: "All projects",
-            state: props.selectedProjectKey === null ? "on" : "off",
-          },
-          ...props.projects.map((project) => ({
-            id: JSON.stringify(project.key),
-            title: project.label,
-            state: project.key === props.selectedProjectKey ? ("on" as const) : ("off" as const),
-          })),
-        ]}
-        onSelect={(id) => {
-          if (id === "all") props.onProjectChange(null);
-          else {
-            const project = props.projects.find(
-              (candidate) => JSON.stringify(candidate.key) === id,
-            );
-            if (project) props.onProjectChange(project.key);
-          }
-        }}
-      />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Choose environment"
+        onPress={() => props.onOpen("environments")}
+        className="min-h-11 flex-row items-center gap-2 rounded-xl border border-border bg-input px-3"
+      >
+        <SymbolView name="desktopcomputer" size={15} tintColorClassName="accent-foreground-muted" />
+        <AppText className="text-sm" numberOfLines={1}>
+          {environment?.label ?? "All environments"}
+        </AppText>
+        <SymbolView name="chevron.down" size={10} tintColorClassName="accent-foreground-muted" />
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Choose project"
+        accessibilityHint="You can also swipe right from the left edge"
+        onPress={() => props.onOpen("projects")}
+        className="min-h-11 flex-row items-center gap-2 rounded-xl border border-border bg-input px-3"
+      >
+        {project && scope ? (
+          <ProjectFavicon
+            environmentId={project.environmentId}
+            projectTitle={scope.title}
+            workspaceRoot={project.workspaceRoot}
+            faviconPath={project.faviconPath}
+            projectIcon={project.projectIcon}
+            size={20}
+          />
+        ) : (
+          <SymbolView name="sidebar.left" size={16} tintColorClassName="accent-foreground-muted" />
+        )}
+        <AppText className="text-sm" numberOfLines={1}>
+          {scope?.title ?? "All projects"}
+        </AppText>
+      </Pressable>
       {props.selectedEnvironmentId !== null || props.selectedProjectKey !== null ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Reset thread filters"
-          className="h-8 w-8 items-center justify-center"
-          onPress={() => {
-            props.onEnvironmentChange(null);
-            props.onProjectChange(null);
-          }}
+          onPress={props.onReset}
+          className="min-h-11 min-w-11 items-center justify-center"
         >
-          <SymbolView name="xmark.circle.fill" size={18} tintColorClassName="accent-icon-muted" />
+          <SymbolView
+            name="xmark.circle.fill"
+            size={18}
+            tintColorClassName="accent-foreground-muted"
+          />
         </Pressable>
       ) : null}
     </ScrollView>

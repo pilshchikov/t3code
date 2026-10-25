@@ -45,6 +45,37 @@ function makeThread(
 }
 
 describe("home project scopes", () => {
+  it("retains each host's project icon and scoped identity when filtering", () => {
+    const local = EnvironmentId.make("local");
+    const remote = EnvironmentId.make("remote");
+    const projects = [local, remote].map((environmentId) =>
+      makeProject({
+        environmentId,
+        id: ProjectId.make("same-id"),
+        title: "App",
+        workspaceRoot: `/hosts/${environmentId}/app`,
+        projectIcon: { kind: "emoji", emoji: environmentId === local ? "🏠" : "☁️" },
+      }),
+    );
+    const scopes = buildHomeProjectScopes({
+      projects,
+      environmentId: null,
+      projectGroupingMode: "separate",
+    });
+    expect(scopes).toHaveLength(2);
+    const remoteScopes = buildHomeProjectScopes({
+      projects,
+      environmentId: remote,
+      projectGroupingMode: "separate",
+    });
+    expect(remoteScopes).toHaveLength(1);
+    expect(remoteScopes[0]?.representative.projectIcon).toEqual({ kind: "emoji", emoji: "☁️" });
+    expect(remoteScopes[0]?.projectRefs).toEqual([
+      { environmentId: remote, projectId: ProjectId.make("same-id") },
+    ]);
+    expect(findHomeProjectScope(scopes, "remote:same-id")).toEqual(remoteScopes[0]);
+  });
+
   it("filters threads across both scratch hosts while retaining the selected environment boundary", () => {
     const localEnvironmentId = EnvironmentId.make("local");
     const remoteEnvironmentId = EnvironmentId.make("remote");

@@ -1,3 +1,8 @@
+import {
+  ProjectNavigationPanel,
+  ProjectNavigationEdge,
+  type ProjectNavigationMode,
+} from "./ProjectNavigationPanel";
 import { useActiveNewTask } from "../../state/active-new-task";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
@@ -10,10 +15,7 @@ import {
   type EnvironmentProject,
   type EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
-import {
-  threadSearchMatchKey,
-  type EnvironmentThreadSearchMatch,
-} from "@t3tools/client-runtime/state/thread-search";
+import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
 import { type EnvironmentId, type SidebarProjectGroupingMode } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { useFocusEffect } from "@react-navigation/native";
@@ -250,6 +252,9 @@ function renderHomeScrollView(props: ScrollViewProps) {
 export function HomeScreen(props: HomeScreenProps) {
   const usesNativeWorkspaceColumns = useNativeWorkspaceColumnsSupported();
   const workspace = useWorkspaceTabs();
+  const [projectNavigationMode, setProjectNavigationMode] = useState<ProjectNavigationMode | null>(
+    null,
+  );
   const [initialScrollOffset] = useState(() => workspace?.getScrollOffset("threads") ?? 0);
   const primaryColumn = use(NativePrimaryColumnContext);
   const contentBackground = primaryColumn ? "bg-drawer" : "bg-screen";
@@ -793,14 +798,17 @@ export function HomeScreen(props: HomeScreenProps) {
   const v2ListHeader = (
     <>
       {listHeader}
-      {Platform.OS === "ios" && workspace ? (
+      {Platform.OS === "ios" ? (
         <ThreadListFilters
           environments={props.environments}
-          projects={projectScopes.map((scope) => ({ key: scope.key, label: scope.title }))}
+          projects={projectScopes}
           selectedEnvironmentId={props.selectedEnvironmentId}
           selectedProjectKey={props.selectedProjectKey}
-          onEnvironmentChange={props.onEnvironmentChange}
-          onProjectChange={props.onProjectChange}
+          onOpen={setProjectNavigationMode}
+          onReset={() => {
+            props.onEnvironmentChange(null);
+            props.onProjectChange(null);
+          }}
         />
       ) : null}
     </>
@@ -915,7 +923,22 @@ export function HomeScreen(props: HomeScreenProps) {
             />
           </GestureDetector>
         </SwipeableScrollGateProvider>
+        {Platform.OS === "ios" ? (
+          <ProjectNavigationEdge onOpen={() => setProjectNavigationMode("projects")} />
+        ) : null}
       </View>
+      {projectNavigationMode !== null ? (
+        <ProjectNavigationPanel
+          mode={projectNavigationMode}
+          environments={props.environments}
+          projects={projectScopes}
+          selectedEnvironmentId={props.selectedEnvironmentId}
+          selectedProjectKey={props.selectedProjectKey}
+          onEnvironmentChange={props.onEnvironmentChange}
+          onProjectChange={props.onProjectChange}
+          onClose={() => setProjectNavigationMode(null)}
+        />
+      ) : null}
     </View>
   );
 }

@@ -1,3 +1,23 @@
+## iOS project drawer and desktop-style thread controls — 2026-10-24
+
+- Replace native environment/project filter menus in the compact thread list and split-view
+  sidebar with `ProjectNavigationPanel`, a React Native drawer with environment filters,
+  project search, saved project icons, and environment labels. Swipe right from the left gutter
+  to open projects; close with a left swipe, backdrop, or close button. Existing grouped scopes
+  and host-scoped project references retain multi-environment discovery and filtering.
+- Add device-local thread colors in `ThreadColorPicker` and mobile preferences, available from
+  a row's context menu and the More screen, including read-only connections. The mobile and web
+  clients share the palette and color validation in `packages/shared/src/accentColors.ts`.
+- Reduce the iOS chat header to Files and More. More opens the existing detail surface directly
+  and includes terminal sessions, project scripts, thread color, Git actions, and merge-back.
+  `useThreadProjectTools` and `useThreadMergeBack` share those actions with the existing routes.
+- Keep the desktop's existing saved active/pinned ordering. Regression coverage verifies that
+  message activity cannot reshuffle active threads and matching IDs on different hosts remain
+  distinct, and that project filtering retains each host's saved icon.
+- Validation: `vp run check:changed` (format, lint, knip, affected typechecks and adjacent tests),
+  focused preference/color and terminal-launch regressions. Device-panel UI verification is
+  unavailable because agent device access is disabled on this environment.
+
 # Fork Changes
 
 ## Native mobile environments through the desktop host — 2026-10-24

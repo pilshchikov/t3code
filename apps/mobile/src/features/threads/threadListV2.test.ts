@@ -281,6 +281,43 @@ describe("search lists ranked matches", () => {
 });
 
 describe("sortThreadsForListV2", () => {
+  it("keeps desktop order across hosts when thread activity changes", () => {
+    const local = EnvironmentId.make("local");
+    const remote = EnvironmentId.make("remote");
+    const threads = [
+      makeThread({
+        environmentId: remote,
+        id: ThreadId.make("shared-id"),
+        title: "Remote",
+        activeOrderKey: "t",
+      }),
+      makeThread({
+        environmentId: local,
+        id: ThreadId.make("shared-id"),
+        title: "Local",
+        activeOrderKey: "f",
+      }),
+      makeThread({
+        environmentId: remote,
+        id: ThreadId.make("new"),
+        title: "New",
+        createdAt: "2026-06-01T13:00:00.000Z",
+      }),
+    ];
+    const list = (rows: typeof threads, environment: EnvironmentId | null = null) =>
+      buildThreadListV2Items({
+        threads: rows,
+        environmentId: environment,
+        searchQuery: "",
+        now: NOW,
+      }).items.map((item) => `${item.thread.environmentId}:${item.thread.id}`);
+    expect(list(threads)).toEqual(["remote:new", "local:shared-id", "remote:shared-id"]);
+    expect(
+      list(threads.map((thread) => ({ ...thread, updatedAt: NOW, latestUserMessageAt: NOW }))),
+    ).toEqual(list(threads));
+    expect(list(threads, remote)).toEqual(["remote:new", "remote:shared-id"]);
+  });
+
   it("honors a saved active order and leaves new threads above it", () => {
     const sorted = sortThreadsForListV2([
       { id: "newer-arranged", createdAt: "2026-06-01T12:00:00.000Z", activeOrderKey: "t" },

@@ -8,12 +8,14 @@ export type SidebarFilterButtonIcon =
 export function SidebarFilterButton(props: {
   readonly accessibilityLabel: string;
   readonly icon: SidebarFilterButtonIcon;
+  readonly onPress?: () => void;
 }) {
   return (
     <Pressable
       className="size-11 cursor-pointer items-center justify-center rounded-full bg-subtle active:opacity-70"
       accessibilityLabel={props.accessibilityLabel}
       accessibilityRole="button"
+      onPress={props.onPress}
       hitSlop={4}
     >
       <SymbolView

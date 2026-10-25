@@ -1,0 +1,54 @@
+import { useNavigation } from "@react-navigation/native";
+import { resolveMergeBackTargetThreadId } from "@t3tools/client-runtime/state/thread-relationships";
+import { resolveLatestMergeBackRun } from "@t3tools/client-runtime/state/thread-workflows";
+import {
+  AuthOrchestrationOperateScope,
+  type OrchestrationV2ThreadProjection,
+} from "@t3tools/contracts";
+import { useRef } from "react";
+
+import { useEnvironmentScope } from "../../state/session";
+import { threadEnvironment } from "../../state/threads";
+import { useAtomCommand } from "../../state/use-atom-command";
+import type { useThreadSelection } from "../../state/use-thread-selection";
+
+type Selection = ReturnType<typeof useThreadSelection>;
+export function useThreadMergeBack(
+  thread: Selection["selectedThread"],
+  detail: OrchestrationV2ThreadProjection | null,
+) {
+  const navigation = useNavigation();
+  const mergeBack = useAtomCommand(threadEnvironment.mergeBack, "merge thread back");
+  const canOperate = useEnvironmentScope(
+    thread?.environmentId ?? null,
+    AuthOrchestrationOperateScope,
+  );
+  const targetThreadId = resolveMergeBackTargetThreadId(detail);
+  const run = detail === null ? null : resolveLatestMergeBackRun(detail);
+  const busyRef = useRef(false);
+  const onMergeBack = async () => {
+    if (busyRef.current || !canOperate || !thread || !targetThreadId || !run) return;
+    busyRef.current = true;
+    try {
+      const result = await mergeBack({
+        environmentId: thread.environmentId,
+        input: {
+          sourceThreadId: thread.id,
+          targetThreadId,
+          runId: run.id,
+          creationSource: "mobile",
+        },
+      });
+      if (result._tag === "Success")
+        navigation.navigate("Thread", {
+          environmentId: thread.environmentId,
+          threadId: targetThreadId,
+        });
+    } finally {
+      busyRef.current = false;
+    }
+  };
+  return canOperate && targetThreadId !== null && run !== null
+    ? () => void onMergeBack()
+    : undefined;
+}

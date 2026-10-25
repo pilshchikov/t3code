@@ -1,3 +1,4 @@
+import { ThreadColorPicker, useThreadAccentColor } from "./ThreadColorPicker";
 import * as Dialog from "../../components/ui/Dialog";
 import type { ThreadRowProviderInstance } from "./thread-provider-instance";
 import {
@@ -598,6 +599,16 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     onSetThreadAutoSettle,
     onMoveThread,
   } = props;
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const accentColor = useThreadAccentColor(`${thread.environmentId}:${thread.id}`);
+  const accentStyle =
+    accentColor === null
+      ? undefined
+      : {
+          borderLeftWidth: 3,
+          borderLeftColor: accentColor,
+          ...(props.selected ? {} : { backgroundColor: `${accentColor}1c` }),
+        };
   const snoozedRow = props.snoozed === true;
   const pinnedRow = props.pinned === true;
   const dormant = useSwipeRowDormant(props.activationKey);
@@ -884,6 +895,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       if (nativeEvent.event === "archive") handleArchive();
       if (nativeEvent.event === "rename") handleRename();
       if (nativeEvent.event === "regenerate-title") handleRegenerateTitle();
+      if (nativeEvent.event === "thread-color") setColorPickerOpen(true);
       if (nativeEvent.event === "copy-thread-id") {
         copyTextWithHaptic(thread.id, { target: "thread-id" });
       }
@@ -1267,7 +1279,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           close();
           selectThread();
         }}
-        style={rowAppearance.cardStyle}
+        style={[rowAppearance.cardStyle, accentStyle]}
       >
         {sidebarPane ? (
           fadedCardContent
@@ -1296,7 +1308,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           close();
           selectThread();
         }}
-        style={rowAppearance.style}
+        style={[rowAppearance.style, accentStyle]}
       >
         <View
           className={cn(
@@ -1357,11 +1369,33 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       </RowPressable>
     );
 
+  const colorPicker = colorPickerOpen ? (
+    <ThreadColorPicker
+      threadKey={`${thread.environmentId}:${thread.id}`}
+      title={thread.title}
+      onClose={() => setColorPickerOpen(false)}
+    />
+  ) : null;
   if (!canOperateThread)
-    return <View style={rowAppearance.swipeContainerStyle}>{rowContent(() => {})}</View>;
+    return (
+      <View style={rowAppearance.swipeContainerStyle}>
+        {colorPicker}
+        <Menu
+          actions={[
+            { id: "thread-color", title: "Thread color", image: "paintpalette" },
+            { id: "copy-thread-id", title: "Copy thread ID", image: "doc.on.doc" },
+          ]}
+          onPressAction={handleMenuAction}
+          shouldOpenOnLongPress
+        >
+          {rowContent(() => {})}
+        </Menu>
+      </View>
+    );
 
   return (
     <View collapsable={false}>
+      {colorPicker}
       {customSnoozeOpen && (
         <CustomSnoozeSheet onClose={() => setCustomSnoozeOpen(false)} onSnooze={handleSnooze} />
       )}
@@ -1395,6 +1429,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
                     },
                   ]
                 : []),
+              { id: "thread-color", title: "Thread color", image: "paintpalette" },
               { id: "copy-thread-id", title: "Copy thread ID", image: "doc.on.doc" },
               ...(snoozedRow
                 ? snoozedMenuActions
