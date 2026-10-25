@@ -10,6 +10,7 @@ import {
   connectionRouteLabel,
   connectionRoutes,
   isLearned,
+  isSharedHostConnectionTarget,
 } from "@t3tools/client-runtime/connection";
 import { type EnvironmentId, sessionGrantsScope } from "@t3tools/contracts";
 import { AUTH_SCOPE_OPTIONS } from "@t3tools/shared/authScopeOptions";
@@ -80,6 +81,7 @@ export function EnvironmentRoutesSection({
   const [drops, setDrops] = useState(0);
   if (entry === undefined) return null;
 
+  const shared = isSharedHostConnectionTarget(entry.target);
   const byId = new Map(saved.map((route) => [connectionRouteId(route.target), route]));
   const routes = order.flatMap((id) => byId.get(id) ?? []);
   const activeRouteId =
@@ -132,7 +134,7 @@ export function EnvironmentRoutesSection({
     <SettingsSection
       title="Routes"
       trailing={
-        routes.length > 1 ? (
+        routes.length > 1 && !shared ? (
           <Button
             label={editing ? "Done" : "Edit"}
             tone="text"
@@ -212,7 +214,13 @@ export function EnvironmentRoutesSection({
           />
         );
       })}
-      <SettingsActionRow icon="plus" label="Add route" onPress={onAddRoute} />
+      {shared ? (
+        <Text className="px-4 py-3 text-sm text-foreground-muted">
+          This route is shared by your desktop host.
+        </Text>
+      ) : (
+        <SettingsActionRow icon="plus" label="Add route" onPress={onAddRoute} />
+      )}
     </SettingsSection>
   );
 }

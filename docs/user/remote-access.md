@@ -400,12 +400,18 @@ history, and saved connections are kept, and you keep working through pairing, T
 Switch **Local environment** back on in the same place to restart with your previous local
 settings.
 
-## See the desktop's environments in a phone browser
+## See the desktop's environments on your phone
 
 In this fork, open the Mac desktop host's usual web address on your phone (for example over
 Tailscale). After pairing with that host, the browser also discovers environments connected in
 the desktop app, including SSH connections. Keep the desktop app open and connected. No SSH
 setup, remote pairing link, or separate T3 Connect subscription is needed on the phone.
+
+In the native fork app, pair with the desktop host once. Its shared environments are discovered
+automatically too, using the phone’s existing host credential. These connections are labeled
+**Shared through desktop host** and managed on the desktop. Existing environments paired directly
+on the phone keep their own connections. This requires a native app build with shared-host
+discovery; older mobile builds need updating.
 
 Both the host and remote server need a fork build supporting shared environment access.
 Discovery takes up to ten seconds. The browser uses the host's existing authenticated route;
@@ -424,5 +430,4 @@ use another administrative client to avoid removing your own access accidentally
 
 Shared SSH and direct bearer connections work through the host over your existing network.
 Proof-authenticated T3 Connect routes are shown as unavailable through this gateway; they still
-work through their usual direct T3 Connect connection. The native mobile app keeps its existing
-connection setup; this automatic host view applies to the host's web UI in a browser.
+work through their usual direct T3 Connect connection.

@@ -65,7 +65,7 @@ import {
 import * as ConnectionStorage from "./storage";
 import { clientPresentationMetadata } from "./clientMetadata";
 
-import { sharedEnvironmentRegistrations } from "./sharedEnvironmentRoutes";
+import { sharedEnvironmentRegistrations } from "@t3tools/client-runtime/connection";
 
 let nextObservedRpcRequestId = 0;
 

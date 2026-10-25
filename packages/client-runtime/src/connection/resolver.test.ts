@@ -14,6 +14,7 @@ import * as ClientCapabilities from "../platform/capabilities.ts";
 import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
 import {
   BearerConnectionCredential,
+  BearerConnectionProfile,
   type ConnectionCatalogEntry,
   SshConnectionProfile,
   type ConnectionCredential,
@@ -54,6 +55,7 @@ function catalogEntry(
 }
 
 const makeDependencies = Effect.fn("TestConnectionResolver.makeDependencies")((options?: {
+  readonly fetch?: typeof fetch;
   readonly profiles?: ReadonlyArray<ConnectionProfile>;
   readonly profileStore?: ConnectionProfileStore.ConnectionProfileStore["Service"];
   readonly credentials?: ReadonlyArray<readonly [string, ConnectionCredential]>;
@@ -127,21 +129,24 @@ const makeDependencies = Effect.fn("TestConnectionResolver.makeDependencies")((o
   });
 
   const layerDependencies = Layer.mergeAll(
-    RpcHttp.layerRemoteHttpClient((() =>
-      Promise.resolve(
-        Response.json({
-          environmentId: ENVIRONMENT_ID,
-          label: "Compatible environment",
-          platform: { os: "linux", arch: "x64" },
-          serverVersion: "0.0.0-test",
-          ...(options?.descriptorProtocolVersion === undefined
-            ? { orchestrationProtocolVersion: ORCHESTRATION_PROTOCOL_VERSION }
-            : options.descriptorProtocolVersion === null
-              ? {}
-              : { orchestrationProtocolVersion: options.descriptorProtocolVersion }),
-          capabilities: { repositoryIdentity: true },
-        }),
-      )) satisfies typeof fetch),
+    RpcHttp.layerRemoteHttpClient(
+      options?.fetch ??
+        ((() =>
+          Promise.resolve(
+            Response.json({
+              environmentId: ENVIRONMENT_ID,
+              label: "Compatible environment",
+              platform: { os: "linux", arch: "x64" },
+              serverVersion: "0.0.0-test",
+              ...(options?.descriptorProtocolVersion === undefined
+                ? { orchestrationProtocolVersion: ORCHESTRATION_PROTOCOL_VERSION }
+                : options.descriptorProtocolVersion === null
+                  ? {}
+                  : { orchestrationProtocolVersion: options.descriptorProtocolVersion }),
+              capabilities: { repositoryIdentity: true },
+            }),
+          )) satisfies typeof fetch),
+    ),
     Layer.succeed(
       ConnectionProfileStore.ConnectionProfileStore,
       options?.profileStore ?? profileStore,
@@ -167,6 +172,118 @@ const makeDependencies = Effect.fn("TestConnectionResolver.makeDependencies")((o
 });
 
 describe("ConnectionResolver", () => {
+  it.effect("connects a phone to a shared environment with its saved host credential", () =>
+    Effect.gen(function* () {
+      const gateway = "https://mac.test/api/shared-environments/proxy/mini";
+      const target = Object.assign(
+        new PrimaryConnectionTarget({
+          environmentId: ENVIRONMENT_ID,
+          label: "Mini",
+          httpBaseUrl: gateway,
+          wsBaseUrl: gateway.replace("https:", "wss:") + "/ws",
+        }),
+        { sharedHost: { environmentId: EnvironmentId.make("host"), connectionId: "phone-host" } },
+      );
+      const calls: Array<{ url: string; authorization: string | null }> = [];
+      const layerBroker = yield* makeDependencies({
+        profiles: [
+          new BearerConnectionProfile({
+            connectionId: "phone-host",
+            environmentId: EnvironmentId.make("host"),
+            label: "Mac",
+            httpBaseUrl: "https://mac.test/",
+            wsBaseUrl: "wss://mac.test/ws",
+          }),
+        ],
+        credentials: [
+          ["phone-host", new BearerConnectionCredential({ token: "phone-host-token" })],
+        ],
+        fetch: (input, init) => {
+          const request = input instanceof Request ? input : new Request(input, init);
+          calls.push({ url: request.url, authorization: request.headers.get("authorization") });
+          if (request.url.includes("/api/shared-environments/")) {
+            if (request.headers.get("authorization") !== "Bearer phone-host-token")
+              return Promise.resolve(
+                Response.json({ message: "host authentication required" }, { status: 401 }),
+              );
+            if (request.url.endsWith("/api/auth/websocket-ticket"))
+              return Promise.resolve(
+                Response.json({ ticket: "host-ticket", expiresAt: "2099-01-01T00:00:00Z" }),
+              );
+          }
+          return Promise.resolve(
+            Response.json({
+              environmentId: request.url.includes("/proxy/") ? ENVIRONMENT_ID : "host",
+              label: "Mac",
+              platform: { os: "darwin", arch: "arm64" },
+              serverVersion: "0.1.2",
+              orchestrationProtocolVersion: ORCHESTRATION_PROTOCOL_VERSION,
+              capabilities: { repositoryIdentity: true },
+            }),
+          );
+        },
+      });
+      const broker = yield* ConnectionResolver.ConnectionResolver.pipe(Effect.provide(layerBroker));
+      const prepared = yield* broker.prepare(catalogEntry(target));
+      expect(prepared.httpAuthorization).toEqual({ _tag: "Bearer", token: "phone-host-token" });
+      expect(prepared.socketUrl).toContain(
+        "/api/shared-environments/proxy/mini/ws?wsTicket=host-ticket",
+      );
+      expect(
+        calls
+          .filter((call) => call.authorization !== null)
+          .every((call) => call.url.startsWith(gateway + "/")),
+      ).toBe(true);
+    }),
+  );
+  it.effect("rejects a changed host identity or gateway origin before sending its credential", () =>
+    Effect.gen(function* () {
+      for (const origin of ["https://mac.test", "https://another.test"]) {
+        const calls: Array<Request> = [];
+        const target = new PrimaryConnectionTarget({
+          environmentId: ENVIRONMENT_ID,
+          label: "Mini",
+          httpBaseUrl: origin + "/api/shared-environments/proxy/mini",
+          wsBaseUrl: origin.replace("https:", "wss:") + "/api/shared-environments/proxy/mini/ws",
+          sharedHost: { environmentId: EnvironmentId.make("host"), connectionId: "phone-host" },
+        });
+        const layerBroker = yield* makeDependencies({
+          profiles: [
+            new BearerConnectionProfile({
+              connectionId: "phone-host",
+              environmentId: EnvironmentId.make("host"),
+              label: "Mac",
+              httpBaseUrl: "https://mac.test/",
+              wsBaseUrl: "wss://mac.test/ws",
+            }),
+          ],
+          credentials: [
+            ["phone-host", new BearerConnectionCredential({ token: "phone-host-token" })],
+          ],
+          fetch: (input, init) => {
+            calls.push(new Request(input, init));
+            return Promise.resolve(
+              Response.json({
+                environmentId: "different-machine",
+                label: "Wrong host",
+                platform: { os: "darwin", arch: "arm64" },
+                serverVersion: "0.1.2",
+                orchestrationProtocolVersion: ORCHESTRATION_PROTOCOL_VERSION,
+                capabilities: { repositoryIdentity: true },
+              }),
+            );
+          },
+        });
+        const broker = yield* ConnectionResolver.ConnectionResolver.pipe(
+          Effect.provide(layerBroker),
+        );
+        expect((yield* Effect.exit(broker.prepare(catalogEntry(target))))._tag).toBe("Failure");
+        expect(calls.every((request) => !request.headers.has("authorization"))).toBe(true);
+        expect(calls).toHaveLength(origin === "https://mac.test" ? 1 : 0);
+      }
+    }),
+  );
+
   it.effect("blocks an old host during discovery before opening orchestration RPC", () =>
     Effect.gen(function* () {
       const layerBroker = yield* makeDependencies({ descriptorProtocolVersion: null });

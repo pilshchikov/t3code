@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   PrimaryConnectionTarget,
+  sharedEnvironmentRegistrations,
   isHostPrimaryConnectionTarget,
   isSharedHostConnectionTarget,
   BearerConnectionTarget,
@@ -8,11 +9,7 @@ import {
 } from "@t3tools/client-runtime/connection";
 import { EnvironmentId } from "@t3tools/contracts";
 import * as Option from "effect/Option";
-import {
-  sharedEnvironmentPublication,
-  sharedEnvironmentRegistrations,
-  type SharedHostConnection,
-} from "./sharedEnvironmentRoutes";
+import { sharedEnvironmentPublication, type SharedHostConnection } from "./sharedEnvironmentRoutes";
 
 const primary = new PrimaryConnectionTarget({
   environmentId: EnvironmentId.make("host"),

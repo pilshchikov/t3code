@@ -14,6 +14,7 @@ import * as Runtime from "../lib/runtime";
 import { appAtomRegistry } from "../state/atom-registry";
 import * as BackgroundActivity from "./background-activity";
 import * as ConnectionPlatform from "./platform";
+import * as SharedEnvironments from "./shared-environments";
 
 declare const module: { readonly hot?: FoundationHotModule } | undefined;
 
@@ -47,9 +48,10 @@ const layerProvidedClientConnection = layerSnapshotLoader.pipe(
   ),
 );
 
-const layerConnection = BackgroundActivity.layerReporter.pipe(
-  Layer.provideMerge(layerProvidedClientConnection),
-);
+const layerConnection = Layer.merge(
+  BackgroundActivity.layerReporter,
+  SharedEnvironments.layer,
+).pipe(Layer.provideMerge(layerProvidedClientConnection));
 
 export const connectionAtomRuntime: Atom.AtomRuntime<
   Layer.Success<ConnectionLayerSource>,

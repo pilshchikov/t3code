@@ -1,14 +1,8 @@
 import {
-  PrimaryConnectionRegistration,
-  PrimaryConnectionTarget,
   type ConnectionCatalogEntry,
   type PreparedConnection,
 } from "@t3tools/client-runtime/connection";
-import {
-  SHARED_ENVIRONMENT_PROXY_PREFIX,
-  type SharedEnvironmentCatalog,
-  type PublishSharedEnvironmentsInput,
-} from "@t3tools/contracts";
+import { type PublishSharedEnvironmentsInput } from "@t3tools/contracts";
 
 export interface SharedHostConnection {
   readonly entry: ConnectionCatalogEntry;
@@ -44,29 +38,4 @@ export function sharedEnvironmentPublication(current: ReadonlyArray<SharedHostCo
     headers: { authorization: `Bearer ${host.prepared.httpAuthorization.token}` },
     payload,
   };
-}
-
-export function sharedEnvironmentRegistrations(
-  primary: PrimaryConnectionTarget,
-  catalog: SharedEnvironmentCatalog,
-) {
-  return catalog.environments
-    .filter((item) => item.environmentId !== primary.environmentId)
-    .map((item) => {
-      const url = new URL(primary.httpBaseUrl);
-      url.pathname = `${SHARED_ENVIRONMENT_PROXY_PREFIX}${encodeURIComponent(item.environmentId)}`;
-      url.search = "";
-      url.hash = "";
-      const ws = new URL(url);
-      ws.protocol = ws.protocol === "https:" ? "wss:" : "ws:";
-      ws.pathname += "/ws";
-      return new PrimaryConnectionRegistration({
-        target: new PrimaryConnectionTarget({
-          environmentId: item.environmentId,
-          label: item.label,
-          httpBaseUrl: url.href,
-          wsBaseUrl: ws.href,
-        }),
-      });
-    });
 }

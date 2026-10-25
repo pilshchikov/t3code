@@ -13,6 +13,13 @@ export class PrimaryConnectionTarget extends Schema.TaggedClass<PrimaryConnectio
     ...ConnectionTargetBase,
     httpBaseUrl: Schema.String,
     wsBaseUrl: Schema.String,
+    /** Ephemeral gateway route; the phone reuses its saved host credential. */
+    sharedHost: Schema.optionalKey(
+      Schema.Struct({
+        environmentId: EnvironmentId,
+        connectionId: Schema.String,
+      }),
+    ),
   },
 ) {}
 

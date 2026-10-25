@@ -1,7 +1,11 @@
 import * as Dialog from "../../components/ui/Dialog";
 import { ConnectionTraceId } from "./ConnectionTraceId";
 import { SymbolView } from "../../components/ui/AppSymbol";
-import { hasSavedBearerRoute, hostFreezeNotice } from "@t3tools/client-runtime/connection";
+import {
+  hasSavedBearerRoute,
+  hostFreezeNotice,
+  isSharedHostConnectionTarget,
+} from "@t3tools/client-runtime/connection";
 import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import { type EnvironmentId, resolveEnvironmentMachineKind } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
@@ -58,6 +62,7 @@ export function ConnectionEnvironmentRow(props: {
   const presentation = useAtomValue(
     environmentPresentations.presentationAtom(props.environment.environmentId),
   );
+  const shared = presentation !== null && isSharedHostConnectionTarget(presentation.entry.target);
   const canRetry = presentation !== null && hasSavedBearerRoute(presentation.entry);
   const { diagnosis, state: connectionState } = useConnectionDiagnosis(
     props.environment.environmentId,
@@ -123,7 +128,7 @@ export function ConnectionEnvironmentRow(props: {
           </View>
           {!props.environment.isRelayManaged && props.environment.displayUrl.trim() ? (
             <Text className="text-xs text-foreground-muted" numberOfLines={1}>
-              {props.environment.displayUrl}
+              {shared ? "Shared through desktop host" : props.environment.displayUrl}
             </Text>
           ) : null}
           {diagnosis ? (
@@ -167,7 +172,7 @@ export function ConnectionEnvironmentRow(props: {
         <ThemedSwitch
           accessibilityLabel={`Enable ${props.environment.environmentLabel}`}
           style={{ alignSelf: "center" }}
-          disabled={unsupported && !canRetry}
+          disabled={shared || (unsupported && !canRetry)}
           onValueChange={(next) => props.onSetEnabled(props.environment.environmentId, next)}
           value={enabled}
         />
@@ -208,7 +213,11 @@ export function ConnectionEnvironmentRow(props: {
               diagnosis={diagnosis}
             />
           ) : null}
-          {props.environment.isRelayManaged ? (
+          {shared ? (
+            <Text className="text-sm text-foreground-muted">
+              Managed by your desktop host. Change the connection there.
+            </Text>
+          ) : props.environment.isRelayManaged ? (
             <Text className="text-sm text-foreground-muted">
               Managed by T3 Connect. Tunnel details update automatically.
             </Text>
@@ -237,7 +246,7 @@ export function ConnectionEnvironmentRow(props: {
 
           {Platform.OS === "android" ? (
             <View className="flex-row items-center justify-end gap-2">
-              {props.environment.isRelayManaged ? null : (
+              {props.environment.isRelayManaged || shared ? null : (
                 <View className="flex-1">
                   <Button
                     label="Save"
@@ -257,6 +266,7 @@ export function ConnectionEnvironmentRow(props: {
                 onPress={() => props.onReconnect(props.environment.environmentId)}
               />
               <IconButton
+                disabled={shared}
                 accessibilityLabel="Remove environment"
                 icon="trash"
                 variant="danger"
@@ -265,7 +275,7 @@ export function ConnectionEnvironmentRow(props: {
             </View>
           ) : (
             <View className="flex-row justify-end gap-2">
-              {props.environment.isRelayManaged ? null : (
+              {props.environment.isRelayManaged || shared ? null : (
                 <Pressable
                   className="min-h-[42px] flex-1 flex-row items-center justify-center gap-1.5 rounded-[14px] bg-primary px-3.5 py-2.5 active:opacity-70"
                   onPress={handleSave}
@@ -296,7 +306,8 @@ export function ConnectionEnvironmentRow(props: {
               </Pressable>
 
               <Pressable
-                className="h-[42px] w-[42px] items-center justify-center rounded-[14px] border border-danger-border bg-danger active:opacity-70"
+                className="h-[42px] w-[42px] items-center justify-center rounded-[14px] border border-danger-border bg-danger active:opacity-70 disabled:opacity-40"
+                disabled={shared}
                 onPress={() => props.onRemove(props.environment.environmentId)}
               >
                 <SymbolView

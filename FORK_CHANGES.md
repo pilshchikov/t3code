@@ -1,5 +1,29 @@
 # Fork Changes
 
+## Native mobile environments through the desktop host — 2026-10-24
+
+- Native mobile now discovers the connected desktop host's shared catalog and registers temporary
+  gateway connections for its other environments, including SSH-managed Mac mini servers. Reuse
+  normal shell/thread synchronization and navigation; preserve environments paired directly on the
+  phone. Removing/disabling the parent or denying discovery withdraws its shared entries; temporary
+  network failures retain the last catalog for reconnect. Discovery is bounded to ten seconds.
+- Share URL construction with the web client. Native gateway targets refer to the existing paired
+  host credential instead of persisting remote credentials. Check the host identity and origin
+  before issuing authenticated gateway requests; retain the gateway prefix for HTTP/WebSocket
+  and descriptor access. Desktop/server publication and delegated permission enforcement remain
+  authoritative. No upstream relay, new pairing per remote, or remote credential export is added.
+- Native connection settings label these routes as shared and keep host-managed addresses and
+  removal controls read-only. Source owners: mobile `connection/{runtime,shared-environments}.ts`,
+  connection/settings rows, client-runtime `connection/{model,resolver,sharedEnvironmentRoutes}.ts`,
+  and web shared-route discovery. The existing host browser flow stays supported.
+- Regression reproduces the unauthenticated native gateway failure on the prior code. Focused
+  cases cover native catalog discovery, HTTP/WebSocket authentication, host identity/origin checks,
+  permission denial, temporary outages, recursion prevention, and existing server proxy grants.
+  A controlled-clock lifecycle case exercises initial discovery, outage retention, permission
+  revocation and host disablement. Device-panel tools are unavailable here, so no native device
+  UI verification was performed. `lint:mobile` was attempted but its Swift/Kotlin tools are missing.
+  Per owner instruction, this task commits/pushes only; no build, install or restart is performed.
+
 ## Compact project-rail actions — 2026-10-24
 
 - Replace the stacked/footer controls with one ellipsis **Project actions** button in both rail
