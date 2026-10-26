@@ -146,12 +146,12 @@ export const layer = Layer.effectDiscard(
               Effect.flatMap((reply) =>
                 registry.run(source, request(WS_METHODS.peerRelayRespond, { requestId, reply })),
               ),
-              Effect.catchCause(() => Effect.void),
+              Effect.ignoreCause,
             ),
           { concurrency: 32, unordered: true },
         ),
         Stream.runDrain,
-        Effect.catchCause(() => Effect.void),
+        Effect.ignoreCause,
         Effect.andThen(Effect.sleep("60 seconds")),
         Effect.forever,
       );

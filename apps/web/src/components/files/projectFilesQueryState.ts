@@ -21,6 +21,7 @@ import { useFilesystemReadAccess } from "~/state/filesystem";
 import { projectEnvironment } from "~/state/projects";
 import { useProjectPathSearch } from "~/state/queries";
 import { executeAtomQuery } from "@t3tools/client-runtime/state/runtime";
+import { revisionedQuery } from "~/state/revisionedQuery";
 
 const EMPTY_PROJECT_FILE_PATH = "";
 const FILE_REVISION_CHECK_INTERVAL_MS = 10_000;
@@ -202,19 +203,22 @@ function errorMessage(cause: unknown): string | null {
 
 const isProjectReadFileError = Schema.is(ProjectReadFileError);
 
+/** `revision` is the workspace mutation id; a new one refetches the listing. */
 export function useProjectEntriesQuery(
   environmentId: EnvironmentId,
   cwd: string,
   directoryPath = "",
   active = true,
+  revision?: string | null,
 ): ProjectQueryState<ProjectListEntriesResult> {
   const fileAccess = useFilesystemReadAccess(environmentId);
   const { canReadFiles } = fileAccess;
   const atom = canReadFiles
     ? getProjectEntriesQueryAtom(environmentId, cwd, directoryPath)
     : EMPTY_PROJECT_ENTRIES_QUERY_ATOM;
-  const result = useAtomValue(atom);
+  const result = useAtomValue(revisionedQuery(atom, canReadFiles ? revision : undefined));
   const refreshing = useRef({ running: false, again: false, generation: 0 });
+  // oxlint-disable-next-line t3code/react-effect-budget -- Cancel stale directory requests when the active listing lifetime ends.
   useEffect(() => {
     const state = refreshing.current;
     return () => {
@@ -253,9 +257,11 @@ export function useProjectEntriesQuery(
     onDirectoryChange,
     directoryPath,
   );
+  // oxlint-disable-next-line t3code/react-effect-budget -- Refresh the disk listing when its observed permission or root becomes active.
   useEffect(() => {
     refresh();
   }, [refresh]);
+  // oxlint-disable-next-line t3code/react-effect-budget -- Register the window focus trigger for the active directory query.
   useEffect(() => {
     if (!active || typeof window === "undefined") return;
     window.addEventListener("focus", refresh);
@@ -287,6 +293,7 @@ export function useProjectEntriesWatchRefresh(
   const watchResult = useAtomValue(watchAtom);
   const watchRevision = AsyncResult.isSuccess(watchResult) ? watchResult.value.revision : null;
 
+  // oxlint-disable-next-line t3code/react-effect-budget -- Forward host filesystem revisions into the listing query.
   useEffect(() => {
     if (watchRevision === null) return;
     refresh();
@@ -334,13 +341,13 @@ export function useProjectFileQuery(
   preserveOptimistic = false,
   active = true,
 ): ProjectFileQueryState {
-  // A media path is not skipped here: a folder named `assets.png` is only
-  // knowable as a folder from the read failure.
+  // Read media-like paths too; a failed read is how folders with those names are detected.
   const fileAccess = useFilesystemReadAccess(environmentId);
   const { canReadFiles } = fileAccess;
   const isQueryEnabled = enabled;
   const kind = relativePath === null ? null : filePreviewKind({ name: relativePath });
-  const metadataOnly = kind === "image" || kind === "video" || kind === "audio" || kind === "pdf";
+  const metadataOnly =
+    kind !== null && !["text", "unsupported", "markdown", "mermaid", "html"].includes(kind);
   const atom =
     enabled && canReadFiles && relativePath !== null
       ? metadataOnly
@@ -363,6 +370,7 @@ export function useProjectFileQuery(
   const watchRevision = AsyncResult.isSuccess(watchResult) ? watchResult.value.revision : null;
   const targetKey = shouldValidate ? `${environmentId}\u0000${cwd}\u0000${relativePath}` : null;
   const checkState = useRef({ generation: 0, running: false, again: false });
+  // oxlint-disable-next-line t3code/react-effect-budget -- Invalidate in-flight disk revisions when file identity or dirty ownership changes.
   useEffect(() => {
     const state = checkState.current;
     return () => {
@@ -421,9 +429,11 @@ export function useProjectFileQuery(
       }
     })();
   }, [active, atom, canReadFiles, cwd, enabled, environmentId, preserveOptimistic, relativePath]);
+  // oxlint-disable-next-line t3code/react-effect-budget -- Validate disk contents when the host watch emits a revision.
   useEffect(() => {
     if (shouldValidate) refresh();
   }, [refresh, shouldValidate, watchRevision]);
+  // oxlint-disable-next-line t3code/react-effect-budget -- Own the selected visible file metadata timer and visibility listener.
   useEffect(() => {
     if (!shouldWatch || preserveOptimistic) return;
     // Host watcher events are best effort (reconnects/atomic replacements can
@@ -441,6 +451,7 @@ export function useProjectFileQuery(
         document.removeEventListener("visibilitychange", validateVisibleFile);
     };
   }, [preserveOptimistic, refresh, shouldWatch]);
+  // oxlint-disable-next-line t3code/react-effect-budget -- Register window focus validation for the selected file.
   useEffect(() => {
     if (targetKey === null || typeof window === "undefined") return;
     window.addEventListener("focus", refresh);

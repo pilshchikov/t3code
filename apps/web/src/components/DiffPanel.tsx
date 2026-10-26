@@ -175,7 +175,9 @@ function DiffFileHeaderSuffix({
 }) {
   return (
     <>
-      <DiffFilePathCopyButton filePath={filePath} />
+      <span data-diff-copy-path className="inline-flex">
+        <DiffFilePathCopyButton filePath={filePath} />
+      </span>
       {hasStat ? (
         <DiffFileStatus error={error} truncated={truncated} retry={() => onRetry(filePath)} />
       ) : null}
@@ -279,6 +281,7 @@ export default function DiffPanel({
     [turnDiffSummaries],
   );
 
+  // oxlint-disable-next-line t3code/react-effect-budget -- Reconcile persisted turn selection with streamed checkpoint availability.
   useEffect(() => {
     if (!routeThreadRef || diffSelection.kind !== "turn") return;
     useDiffPanelStore.getState().reconcileTurnSelection(
@@ -364,6 +367,7 @@ export default function DiffPanel({
     ? `${routeThreadRef.environmentId}:${routeThreadRef.threadId}`
     : null;
 
+  // oxlint-disable-next-line t3code/react-effect-budget -- Own the window focus listener for the selected repository diff.
   useEffect(() => {
     if (!canRefreshGitDiff) return;
     const refreshOnFocus = () => refreshDiffRef.current();
@@ -590,6 +594,7 @@ export default function DiffPanel({
     preview: renderablePatch,
   });
   const revalidateOnOpen = useRef(false);
+  // oxlint-disable-next-line t3code/react-effect-budget -- Revalidate cached patches when the external panel becomes visible.
   useEffect(() => {
     if (!visible || !canRefreshGitDiff) {
       revalidateOnOpen.current = false;
@@ -672,7 +677,11 @@ export default function DiffPanel({
     selectedTurn && filesTreeOpen && codeViewFiles.length > 1 && resolvedTreeFilePath
       ? codeViewFiles.filter((file) => file.filePath === resolvedTreeFilePath)
       : codeViewFiles;
-  useEffect(() => setTreeSelectedFilePath(null), [collapseScopeKey]);
+  const [treeSelectionScope, setTreeSelectionScope] = useState(collapseScopeKey);
+  if (treeSelectionScope !== collapseScopeKey) {
+    setTreeSelectionScope(collapseScopeKey);
+    setTreeSelectedFilePath(null);
+  }
   const allDiffFilesCollapsed = areAllDiffFilesCollapsed(diffFileKeys, collapsedDiffFileKeys);
   const diffLineStat = useMemo(
     () =>
@@ -689,6 +698,7 @@ export default function DiffPanel({
     ? (codeViewFiles.find((candidate) => candidate.filePath === resolvedTreeFilePath)?.fileKey ??
       null)
     : null;
+  // oxlint-disable-next-line t3code/react-effect-budget -- Reveal the chosen file in the imperative diff viewer.
   useEffect(() => {
     if (!selectedDiffFileKey || !codeView?.getInstance()) return;
     setCollapsedDiffFiles((current) => {
@@ -748,6 +758,7 @@ export default function DiffPanel({
   );
 
   const externalRevealRef = useRef<{ cache: string; key: string } | null>(null);
+  // oxlint-disable-next-line t3code/react-effect-budget -- Consume external file-reveal requests after lazy patch loading.
   useEffect(() => {
     if (!lazySource || !selectedFilePath) return;
     const key = `${selectedFilePath}:${selectedFileRevealRequestId}`;
@@ -793,6 +804,7 @@ export default function DiffPanel({
     defaultCollapsedDiffFileKeys,
     setCollapsedDiffFiles,
   });
+  // oxlint-disable-next-line t3code/react-effect-budget -- Update event-time collapse defaults after the committed viewer selection.
   useLayoutEffect(() => {
     collapseDefaultsRef.current = {
       collapseScopeKey,
@@ -1074,18 +1086,30 @@ export default function DiffPanel({
             className="flex min-w-0 max-w-full items-center gap-2 overflow-hidden text-xs text-muted-foreground"
             aria-label={`Comparing ${selectedGitSource.headRef ?? "HEAD"} against ${selectedGitSource.baseRef}`}
           >
-            {/* The head ref keeps 3rem while the row has room; below that the
-                base-ref button keeps 2.25rem so its menu stays reachable. */}
             <Tooltip>
               <TooltipTrigger
                 render={
-                  <span className="flex min-w-[min(3rem,calc(100%-2.75rem))] items-center gap-2 overflow-hidden" />
+                  // Too narrow for both refs, the New design keeps the target readable and drops
+                  // the head, which is the thread's own branch.
+                  <span className="flex min-w-[min(3rem,calc(100%-2.75rem))] items-center gap-2 overflow-hidden redesign:@max-[20rem]/diff-refs:hidden" />
                 }
               >
                 <span className="min-w-0 max-w-48 truncate">
                   {selectedGitSource.headRef ?? "HEAD"}
                 </span>
                 <ArrowRightIcon className="size-3.5 shrink-0 opacity-70" />
+              </TooltipTrigger>
+              <TooltipPopup side="top">
+                {`${selectedGitSource.headRef ?? "HEAD"} → ${selectedGitSource.baseRef}`}
+              </TooltipPopup>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span aria-hidden className="hidden redesign:@max-[20rem]/diff-refs:inline" />
+                }
+              >
+                vs
               </TooltipTrigger>
               <TooltipPopup side="top">
                 {`${selectedGitSource.headRef ?? "HEAD"} → ${selectedGitSource.baseRef}`}
@@ -1105,7 +1129,7 @@ export default function DiffPanel({
             >
               <ComboboxTrigger
                 render={<Button variant="ghost-muted" size="xs" />}
-                className="min-w-9 max-w-48 shrink"
+                className="min-w-9 max-w-48 shrink redesign:shrink-0"
                 aria-label={`Change comparison target. Currently ${selectedGitSource.baseRef}`}
               >
                 <span className="min-w-0 truncate">{selectedGitSource.baseRef}</span>
@@ -1370,8 +1394,7 @@ export default function DiffPanel({
                 const composedPath = event.nativeEvent.composedPath?.() ?? [];
                 for (const node of composedPath) {
                   if (!(node instanceof HTMLElement)) continue;
-                  // Header controls keep their own actions. In particular, the chevron must
-                  // not also trigger the row handler or the two toggles cancel each other.
+                  // Header buttons own their clicks; bubbling a chevron click would toggle twice.
                   if (node instanceof HTMLButtonElement || node instanceof HTMLAnchorElement) {
                     return;
                   }

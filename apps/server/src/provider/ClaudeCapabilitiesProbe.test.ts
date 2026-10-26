@@ -19,12 +19,15 @@ import * as FileSystem from "effect/FileSystem";
 import * as Effect from "effect/Effect";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 // @effect-diagnostics nodeBuiltinImport:off - cleanup uses Node's retrying rm, which the FileSystem service does not expose.
+
 import { vi } from "vite-plus/test";
 import { assert, it } from "@effect/vitest";
 
 import { buildClaudeCapabilitiesProbeQueryOptions } from "./ClaudeProvider.ts";
 
 vi.mock("@anthropic-ai/claude-agent-sdk", { spy: true });
+
+const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
 
 it("drops strict MCP mode, and only that, next to an administrator's managed-mcp.json", () => {
   const options = buildClaudeCapabilitiesProbeQueryOptions({
@@ -386,4 +389,14 @@ it.effect("asks for usage without the local transcript scan", () =>
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 
-const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
+it.effect("reports a deleted worktree's scan as finished, not pending", () =>
+  Effect.gen(function* () {
+    const snapshot = yield* probeClaudeWorkspaceSnapshot(
+      decodeClaudeSettings({}),
+      { skills: [], slashCommands: [] } as unknown as ServerProvider,
+      "/nonexistent/t3-deleted-worktree",
+      { HOME: "/nonexistent/t3-home" },
+    );
+    assert.strictEqual(snapshot.slashCommandsPending, false);
+  }).pipe(Effect.provide(NodeServices.layer)),
+);

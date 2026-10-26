@@ -96,16 +96,14 @@ const make = Effect.fn("makeMultiworkService")(function* () {
     options?: { readonly timeoutMs?: number },
   ) =>
     runGit(operation, cwd, args, options).pipe(
-      Effect.flatMap((result) =>
-        result.exitCode === 0
-          ? Effect.succeed(result)
-          : Effect.fail(
-              new MultiworkError({
-                operation,
-                detail:
-                  result.stderr.trim() || `git ${args.join(" ")} failed (code ${result.exitCode})`,
-              }),
-            ),
+      Effect.filterOrFail(
+        (result) => result.exitCode === 0,
+        (result) =>
+          new MultiworkError({
+            operation,
+            detail:
+              result.stderr.trim() || `git ${args.join(" ")} failed (code ${result.exitCode})`,
+          }),
       ),
     );
 

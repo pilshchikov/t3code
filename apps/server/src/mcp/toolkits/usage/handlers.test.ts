@@ -115,10 +115,9 @@ function harness(
             state.discoveries++;
             return peerOptions.peers ?? [];
           }).pipe(
-            Effect.flatMap((peers) =>
-              peerOptions.discoveryFails
-                ? Effect.fail(new Peers.PeersError({ code: "no_relay", message: "No relay" }))
-                : Effect.succeed(peers),
+            Effect.filterOrFail(
+              () => !peerOptions.discoveryFails,
+              () => new Peers.PeersError({ code: "no_relay", message: "No relay" }),
             ),
           ),
         request: (operation) =>

@@ -6,6 +6,8 @@ import {
 } from "@t3tools/shared/threadWorkspaces";
 import { FileWorktreeToolbar } from "./FileWorktreeToolbar";
 import { Button } from "~/components/ui/button";
+import { DownloadIcon, CopyIcon, CheckIcon } from "lucide-react";
+import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { Spinner } from "~/components/ui/spinner";
 import { DIFF_SURFACE_THEME_UNSAFE_CSS } from "~/lib/diffRendering";
 import {
@@ -23,7 +25,10 @@ import { AuthFilesystemWriteScope } from "@t3tools/contracts";
 import {
   isWorkspaceAudioPreviewPath,
   isWorkspaceImagePreviewPath,
+  isWorkspaceFontPreviewPath,
   isWorkspaceVideoPreviewPath,
+  officePreviewKind,
+  binaryPreviewKind,
 } from "@t3tools/shared/filePreview";
 import { useAtomValue } from "@effect/atom-react";
 import {
@@ -64,7 +69,7 @@ import {
 } from "lucide-react";
 import { Code2, Eye, Table2 } from "lucide";
 import * as Schema from "effect/Schema";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { isBrowserPreviewFile, openFileInPreview } from "~/browser/openFileInPreview";
 import { useAssetUrlRefresh, useAssetUrlState } from "~/assets/assetUrls";
@@ -117,6 +122,7 @@ import { AttachmentFilePreview } from "./AttachmentFilePreview";
 import { AudioPreview } from "./AudioPreview";
 import { BrowserDocumentFrame, isPdfPreviewFile } from "./BrowserDocumentFrame";
 import { DelimitedTablePreview } from "./DelimitedTablePreview";
+import { PreviewImage } from "./PreviewImage";
 import FileBrowserPanel from "./FileBrowserPanel";
 import FileStructurePanel from "./FileStructurePanel";
 import GitChangesPanel from "./GitChangesPanel";
@@ -191,50 +197,54 @@ interface FilePreviewPanelProps {
   workspaceSelections?: ReadonlyArray<ThreadWorkspaceSelection> | undefined;
 }
 
+const MermaidFilePreview = lazy(() =>
+  import("./MermaidFilePreview").then((module) => ({ default: module.MermaidFilePreview })),
+);
+
 const RENDER_MARKDOWN_STORAGE_KEY = "t3code.renderMarkdown";
 const RENDER_BROWSER_FILE_STORAGE_KEY = "t3code.renderBrowserFile";
 const FILE_LINK_REVEAL_ATTRIBUTE = "data-file-link-reveal";
 const FILE_LINK_REVEAL_UNSAFE_CSS = `
-  ${DIFF_SURFACE_THEME_UNSAFE_CSS}
+${DIFF_SURFACE_THEME_UNSAFE_CSS}
 
-  diffs-container {
-    --diffs-bg: var(--code-background, var(--background)) !important;
-    --diffs-light-bg: var(--code-background, var(--background)) !important;
-    --diffs-dark-bg: var(--code-background, var(--background)) !important;
-    background-color: var(--code-background, var(--background)) !important;
-    color: var(--code-foreground, var(--foreground)) !important;
-  }
+diffs-container {
+--diffs-bg: var(--code-background, var(--background)) !important;
+--diffs-light-bg: var(--code-background, var(--background)) !important;
+--diffs-dark-bg: var(--code-background, var(--background)) !important;
+background-color: var(--code-background, var(--background)) !important;
+color: var(--code-foreground, var(--foreground)) !important;
+}
 
-  [${FILE_LINK_REVEAL_ATTRIBUTE}][data-line] {
-    background-color: light-dark(
-      color-mix(
-        in lab,
-        var(--diffs-computed-diff-line-bg) 82%,
-        var(--diffs-bg-selection-override, var(--diffs-selection-base))
-      ),
-      color-mix(
-        in lab,
-        var(--diffs-computed-diff-line-bg) 75%,
-        var(--diffs-bg-selection-override, var(--diffs-selection-base))
-      )
-    ) !important;
-  }
+[${FILE_LINK_REVEAL_ATTRIBUTE}][data-line] {
+background-color: light-dark(
+color-mix(
+in lab,
+var(--diffs-computed-diff-line-bg) 82%,
+var(--diffs-bg-selection-override, var(--diffs-selection-base))
+),
+color-mix(
+in lab,
+var(--diffs-computed-diff-line-bg) 75%,
+var(--diffs-bg-selection-override, var(--diffs-selection-base))
+)
+) !important;
+}
 
-  [${FILE_LINK_REVEAL_ATTRIBUTE}][data-column-number] {
-    background-color: light-dark(
-      color-mix(
-        in lab,
-        var(--diffs-computed-diff-line-bg) 75%,
-        var(--diffs-bg-selection-number-override, var(--diffs-selection-base))
-      ),
-      color-mix(
-        in lab,
-        var(--diffs-computed-diff-line-bg) 60%,
-        var(--diffs-bg-selection-number-override, var(--diffs-selection-base))
-      )
-    ) !important;
-    color: var(--diffs-selection-number-fg) !important;
-  }
+[${FILE_LINK_REVEAL_ATTRIBUTE}][data-column-number] {
+background-color: light-dark(
+color-mix(
+in lab,
+var(--diffs-computed-diff-line-bg) 75%,
+var(--diffs-bg-selection-number-override, var(--diffs-selection-base))
+),
+color-mix(
+in lab,
+var(--diffs-computed-diff-line-bg) 60%,
+var(--diffs-bg-selection-number-override, var(--diffs-selection-base))
+)
+) !important;
+color: var(--diffs-selection-number-fg) !important;
+}
 `;
 const RENDER_TABLE_STORAGE_KEY = "t3code.renderTable";
 type FilePostRender = <LAnnotation>(
@@ -251,6 +261,7 @@ function useRevisionAssetUrl(
   const state = useAssetUrlState(environmentId, resource);
   const refresh = useAssetUrlRefresh(environmentId, resource);
   const previous = useRef({ resource, revision });
+  // oxlint-disable-next-line t3code/react-effect-budget -- Renew the signed media resource when its disk revision changes.
   useEffect(() => {
     const changed =
       previous.current.resource === resource && previous.current.revision !== revision;
@@ -283,7 +294,6 @@ function WorkspaceImagePreview(props: {
     [insideWorkspace, props.threadRef, props.draft, props.workspaceRoot, props.absolutePath],
   );
   const assetUrl = useRevisionAssetUrl(props.environmentId, resource, props.workspaceMutationId);
-  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const revisionSuffix =
     props.workspaceMutationId === null
       ? ""
@@ -297,7 +307,7 @@ function WorkspaceImagePreview(props: {
     asset: { environmentId: props.environmentId, resource },
   };
 
-  if (assetUrl._tag === "Failure" || (imageUrl !== null && failedUrl === imageUrl)) {
+  if (assetUrl._tag === "Failure") {
     return (
       <MediaActions source={actionsSource}>
         <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-xs leading-relaxed text-destructive">
@@ -308,17 +318,11 @@ function WorkspaceImagePreview(props: {
   }
 
   return assetUrl._tag === "Success" && imageUrl !== null ? (
-    // oxlint-disable-next-line t3code/require-centered-scroll-gutter -- The image is capped at max-h-full max-w-full, so this never scrolls.
-    <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
-      <MediaActions source={actionsSource}>
-        <img
-          className="max-h-full max-w-full object-contain"
-          src={imageUrl}
-          alt={props.alt}
-          onError={() => setFailedUrl(imageUrl)}
-        />
-      </MediaActions>
-    </div>
+    <MediaActions source={actionsSource}>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <PreviewImage key={imageUrl} src={imageUrl} name={props.alt} />
+      </div>
+    </MediaActions>
   ) : (
     <div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground">
       <Spinner size="lg" />
@@ -326,10 +330,6 @@ function WorkspaceImagePreview(props: {
   );
 }
 
-/**
- * HTML runs in a sandboxed frame with an opaque origin, so a page cannot reach
- * the app's session or storage.
- */
 function WorkspaceBrowserPreview(props: {
   readonly environmentId: EnvironmentId;
   readonly threadRef: ScopedThreadRef;
@@ -533,11 +533,7 @@ function updateFileLinkReveal(fileContainer: HTMLElement, line: number | null): 
 }
 
 const REVEAL_MAX_ATTEMPTS = 30;
-/**
- * After scrolling to the target, hold it for a short window so late
- * programmatic scroll resets (editable-editor focus and state restoration)
- * cannot silently snap the file back to the top.
- */
+/** Hold the reveal target against late focus/restoration scroll resets. */
 const REVEAL_GUARD_FRAMES = 20;
 const REVEAL_GUARD_TOLERANCE_PX = 2;
 
@@ -656,8 +652,8 @@ function useFileLineReveal(
         };
         scrollContainer.addEventListener("wheel", cancelGuard, { passive: true });
         scrollContainer.addEventListener("touchstart", cancelGuard, { passive: true });
-        // Pierre stops gutter pointer events from bubbling. Listen in capture
-        // so starting a comment cancels the reveal guard before the row expands.
+        // Capture gutter pointer events before Pierre stops propagation so comments can cancel the reveal
+        // guard.
         scrollContainer.addEventListener("pointerdown", cancelGuard, {
           passive: true,
           capture: true,
@@ -690,9 +686,8 @@ function useFileLineReveal(
             return;
           }
 
-          // Contents and line metrics can lag the first post-render on fresh
-          // mounts; clamping against missing contents would scroll to line 1
-          // and wrongly mark the request handled.
+          // Wait for contents and metrics; missing data would clamp fresh-mount reveals to line 1 and mark them
+          // handled.
           const currentContents = instance.file?.contents;
           const line =
             currentContents === undefined ? null : clampFileLine(currentContents, revealLine);
@@ -748,17 +743,15 @@ function needsWorkerHighlight(workerPool: WorkerPoolManager | undefined, file: F
   return lines <= DEFAULT_TOKENIZE_MAX_LENGTH;
 }
 
-/**
- * Pierre highlights an active edit session on the main thread, so each version
- * of the file becomes editable only once it has rendered the worker's
- * highlight.
- */
+/** Enable editing only after worker highlighting renders; active edit sessions highlight on the main
+ * thread. */
 function useEditableAfterHighlight(file: FileContents) {
   const workerPool = useWorkerPool();
   const [highlightedFile, setHighlightedFile] = useState<FileContents | null>(null);
   const needsHighlight = useMemo(() => needsWorkerHighlight(workerPool, file), [file, workerPool]);
   const ready = !needsHighlight || highlightedFile === file;
 
+  // oxlint-disable-next-line t3code/react-effect-budget -- Prime the external syntax worker before showing the editor.
   useEffect(() => {
     if (ready || workerPool === undefined) return;
     workerPool.primeFileHighlightCache(file).catch(() => setHighlightedFile(file));
@@ -767,8 +760,8 @@ function useEditableAfterHighlight(file: FileContents) {
   const onPostRender = useCallback(
     (renderedFile: FileContents | undefined, phase: PostRenderPhase) => {
       if (ready || phase === "unmount" || renderedFile?.cacheKey !== file.cacheKey) return;
-      // The pool caches a result just before the instance renders it, so a
-      // render that sees the cache has painted highlighted rows.
+      // Cache results arrive just before instance rendering; seeing the cache during render means rows are
+      // highlighted.
       if (workerPool?.getFileResultCache(file) !== undefined) setHighlightedFile(file);
     },
     [file, ready, workerPool],
@@ -829,8 +822,7 @@ const EditableFileSurface = memo(function EditableFileSurface({
     relativePath,
     onPendingChange,
   });
-  // The editor owns the draft, so its own edits echoing back through the file
-  // query keep the file identity. Only a change from elsewhere replaces it.
+  // Retain file identity for echoed editor changes; only external changes replace the editor's draft.
   const [externalFile, setExternalFile] = useState(() =>
     editableFileContents(environmentId, cwd, relativePath, contents),
   );
@@ -893,6 +885,7 @@ const EditableFileSurface = memo(function EditableFileSurface({
     [addReviewComment, composerDraftTarget, cwd, environmentId, relativePath, saveCoordinator],
   );
 
+  // oxlint-disable-next-line t3code/react-effect-budget -- Install focused editor undo shortcuts for the mounted editor lifetime.
   useEffect(() => {
     const handleHistoryShortcut = (event: KeyboardEvent) => {
       const editor = editorRef.current;
@@ -1006,6 +999,7 @@ const EditableFileSurface = memo(function EditableFileSurface({
   const hasOpenCommentForm = lineAnnotations.some((annotation) =>
     annotation.metadata.entries.some((entry) => entry.kind === "draft"),
   );
+  // oxlint-disable-next-line t3code/react-effect-budget -- Install the editor dismissal bridge after its DOM surface exists.
   useEffect(() => {
     const root = surfaceRef.current;
     if (!root) return;
@@ -1167,7 +1161,11 @@ function extractNavigationSymbol(tokenText: string): string | null {
   return identifiers?.length === 1 ? identifiers[0]! : null;
 }
 
-function renderedToggleLabel(mode: "markdown" | "html" | "table", rendered: boolean): string {
+function renderedToggleLabel(
+  mode: "markdown" | "mermaid" | "html" | "table",
+  rendered: boolean,
+): string {
+  if (mode === "mermaid") return rendered ? "Show Mermaid source" : "Show rendered diagram";
   if (mode === "markdown") return rendered ? "Show markdown source" : "Show rendered markdown";
   if (mode === "table") return rendered ? "Show source" : "Show table";
   return rendered ? "Show HTML source" : "Show rendered page";
@@ -1418,9 +1416,11 @@ export default function FilePreviewPanel({
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const remoteOpenState = useRemoteOpenState(environmentId);
   const [selectedRootCwd, setSelectedRootCwd] = useState(cwd);
-  useEffect(() => {
+  const [rootIdentity, setRootIdentity] = useState(cwd);
+  if (rootIdentity !== cwd) {
+    setRootIdentity(cwd);
     setSelectedRootCwd(cwd);
-  }, [cwd]);
+  }
   const activeCwd = selectedRootCwd;
   const missingKey = `${activeCwd}\u0000${resolvedPath ?? ""}`;
   const [missingFile, setMissingFile] = useState<string | null>(null);
@@ -1465,6 +1465,11 @@ export default function FilePreviewPanel({
   const isImage = relativePath !== null && !isVideo && isWorkspaceImagePreviewPath(relativePath);
   const isMedia = isImage || isVideo || isAudio;
   const isPdf = relativePath !== null && isPdfPreviewFile(relativePath);
+  const isDocument =
+    relativePath !== null &&
+    (binaryPreviewKind({ name: relativePath }) !== null ||
+      officePreviewKind({ name: relativePath }) !== null ||
+      isWorkspaceFontPreviewPath(relativePath));
   const isHtml = relativePath !== null && !isPdf && isBrowserPreviewFile(relativePath);
   const isHostFile =
     attachment !== undefined || (relativePath !== null && isHostPath(relativePath));
@@ -1487,22 +1492,16 @@ export default function FilePreviewPanel({
   ) {
     setMissingFile(missingKey);
   }
+  const [fileRefreshRevision, setFileRefreshRevision] = useState(0);
   const attemptedPath = file.readError?.resolvedPath ?? file.readError?.operationPath;
-  // A chat link cannot tell a folder from a file, so a folder arrives here as
-  // a file surface and the read fails. Keep the breadcrumbs, drop the preview
-  // pane, and let the tree fill the surface with the folder revealed. Mutation
-  // refresh stays on so the surface notices if the path becomes a file. A host
-  // folder outside the workspace gets a tree of its own, rooted at that folder.
-  // `folderTrail` is set only when crumbs walked the browser up: the deeper path
-  // kept for the way back down. The explorer (`""`) shows crumbs only then.
+  // Folder links fail file reads; retain mutation refresh to detect conversion to files. Host folders own
+  // roots; folderTrail keeps descendants.
   const breadcrumbPath =
     attachment !== undefined ? null : (relativePath ?? (folderTrail === undefined ? null : ""));
-  // A host trail that walked up to the workspace root (`/repo/project` is `""`) no
-  // longer passes through the current path, so the crumbs start over there.
+  // Reset crumbs when a host trail reaches the workspace root and no longer passes through the current path.
   const breadcrumbTrail =
     breadcrumbPath === null ? null : retainedBreadcrumbTrail(folderTrail, breadcrumbPath);
-  // The trail only continues below folders, so a surface with one is a folder
-  // before its read settles, and walking up never flashes a file preview.
+  // A trail implies a folder before reads settle, preventing file-preview flashes while navigating up.
   const isFolder =
     attachment === undefined &&
     (file.isNotFile || (folderTrail !== undefined && file.data === null && file.error === null));
@@ -1542,9 +1541,7 @@ export default function FilePreviewPanel({
   });
   const toggleExplorer = useExplorerViewStore((state) => state.toggleOpen);
   const [commitDiffPath, setCommitDiffPath] = useState<string | null>(null);
-  useEffect(() => {
-    if (explorerView !== "commit") setCommitDiffPath(null);
-  }, [explorerView]);
+  if (explorerView !== "commit" && commitDiffPath !== null) setCommitDiffPath(null);
   // Reading markdown rendered is a preference, not a property of one file. Keeping
   // it on the panel meant a thread switch dropped it and forced source back.
   const [renderMarkdownPreferred, setRenderMarkdownPreferred] = useLocalStorage(
@@ -1562,15 +1559,20 @@ export default function FilePreviewPanel({
     true,
     Schema.Boolean,
   );
-  // Paired with the path on purpose: each file surface counts its reveals from
-  // one, so a bare id would let a dismissed reveal on one file swallow the first
-  // reveal on the next.
+  // Reveal ids restart at one per file; pair with the path so dismissal cannot swallow another file's reveal.
   const [handledReveal, setHandledReveal] = useState<{ path: string; requestId: number } | null>(
     null,
   );
   const previewRootRef = useRef<HTMLDivElement>(null);
   const symbolNavigationRequestRef = useRef(0);
-  const isMarkdown = relativePath ? isMarkdownPreviewFile(relativePath) : false;
+
+  const isMarkdown = previewPath ? isMarkdownPreviewFile(previewPath) : false;
+  const isMermaid = previewPath !== null && /\.(mmd|mermaid)$/i.test(previewPath);
+  const [renderMermaidPreferred, setRenderMermaidPreferred] = useLocalStorage(
+    "t3code.renderMermaid",
+    true,
+    Schema.Boolean,
+  );
   const tableDelimiter =
     previewPath && attachment === undefined ? filePreviewDelimiter({ name: previewPath }) : null;
   // A reveal still wins over the preference: the line only exists in the source.
@@ -1583,29 +1585,42 @@ export default function FilePreviewPanel({
   const revealHandled =
     effectiveRevealLine === null ||
     (handledReveal?.path === relativePath && handledReveal.requestId === effectiveRevealRequestId);
+  const renderMermaid = isMermaid && renderMermaidPreferred && revealHandled;
   const renderBrowserFile = isPdf || (isHtml && renderBrowserFilePreferred && revealHandled);
   const renderTable = tableDelimiter !== null && renderTablePreferred && revealHandled;
-  const renderedMode = isMarkdown
-    ? ("markdown" as const)
-    : tableDelimiter
-      ? ("table" as const)
-      : isHtml
-        ? ("html" as const)
-        : null;
+  const renderedMode = isMermaid
+    ? ("mermaid" as const)
+    : isMarkdown
+      ? ("markdown" as const)
+      : tableDelimiter
+        ? ("table" as const)
+        : isHtml
+          ? ("html" as const)
+          : null;
   const canToggleRendered =
     previewPath !== null && attachment === undefined && renderedMode !== null;
   const showsRawText =
     previewPath !== null &&
     file.data !== null &&
     !(isMarkdown && renderMarkdown) &&
+    !renderMermaid &&
     !(tableDelimiter && renderTable) &&
-    !renderBrowserFile;
-  const rendered = isMarkdown ? renderMarkdown : tableDelimiter ? renderTable : renderBrowserFile;
-  const setRenderedPreferred = isMarkdown
-    ? setRenderMarkdownPreferred
-    : tableDelimiter
-      ? setRenderTablePreferred
-      : setRenderBrowserFilePreferred;
+    !renderBrowserFile &&
+    !isDocument;
+  const rendered = isMermaid
+    ? renderMermaid
+    : isMarkdown
+      ? renderMarkdown
+      : tableDelimiter
+        ? renderTable
+        : renderBrowserFile;
+  const setRenderedPreferred = isMermaid
+    ? setRenderMermaidPreferred
+    : isMarkdown
+      ? setRenderMarkdownPreferred
+      : tableDelimiter
+        ? setRenderTablePreferred
+        : setRenderBrowserFilePreferred;
   const canOpenInBrowser =
     canOperatePreview &&
     previewPath !== null &&
@@ -1613,8 +1628,7 @@ export default function FilePreviewPanel({
     !isVideo &&
     previewAvailable &&
     isBrowserPreviewFile(previewPath);
-  // A file keeps its tab; walking up from it opens a folder browser beside it.
-  // The trail's end keeps its own spelling (`C:/a` or `C:\a`), so it finds its tab.
+  // Navigating up preserves the file tab; retain the trail's path spelling to find its folder tab.
   const navigateToFolder = (crumbPath: string) => {
     const path =
       breadcrumbTrail !== null && breadcrumbPathOf(breadcrumbTrail) === crumbPath
@@ -1657,16 +1671,15 @@ export default function FilePreviewPanel({
       active &&
       attachment === undefined &&
       relativePath !== null &&
-      // Media and PDFs never show their contents, so re-reading them on every
-      // workspace mutation is waste. A folder named like one still re-reads, so
-      // it notices when the path becomes a file.
-      (isFolder || (!isMedia && !isPdf)) &&
+      // Skip mutation reads for media and documents; folders still detect conversion to files.
+      (isFolder || (!isMedia && !isPdf && !isDocument)) &&
       !selectedFilePending,
     mutationId: workspaceMutationId,
     refresh: file.refresh,
     resourceKey: `file:${environmentId}:${activeCwd}:${relativePath ?? ""}`,
   });
 
+  // oxlint-disable-next-line t3code/react-effect-budget -- Record the active editor location in the shared navigation store.
   useEffect(() => {
     if (!active || !relativePath) return;
     const store = useEditorNavigationStore.getState();
@@ -1678,6 +1691,7 @@ export default function FilePreviewPanel({
     navigationRequest?.workspaceKey === workspaceKey ? navigationRequest.path : null;
   const pendingNavigationRequestId =
     navigationRequest?.workspaceKey === workspaceKey ? navigationRequest.requestId : null;
+  // oxlint-disable-next-line t3code/react-effect-budget -- Consume external navigation requests after the owning file surface mounts.
   useEffect(() => {
     if (active && pendingNavigationPath && pendingNavigationPath !== relativePath) {
       onOpenFile(pendingNavigationPath, activeCwd);
@@ -1929,6 +1943,47 @@ export default function FilePreviewPanel({
         <div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground">
           <LoaderCircle className="size-5 animate-spin" />
         </div>
+      ) : relativePath &&
+        absolutePath &&
+        file.data?.truncated &&
+        !isDocument &&
+        !draft &&
+        !isMarkdown &&
+        !isMermaid &&
+        !isHtml ? (
+        <WorkspaceLargeTextPreview
+          key={`${absolutePath}:${renderTable}:${file.data?.revision ?? workspaceMutationId}:${fileRefreshRevision}`}
+          environmentId={environmentId}
+          threadRef={threadRef}
+          absolutePath={absolutePath}
+          name={relativePath}
+          delimiter={renderTable ? tableDelimiter : null}
+          workspaceMutationId={workspaceMutationId}
+          revealLine={revealLine}
+          revealRequestId={revealRequestId}
+        />
+      ) : relativePath &&
+        absolutePath &&
+        (isDocument || file.readError?.failure === "binary_file") ? (
+        <AttachmentFilePreview
+          key={`${environmentId}:${absolutePath}:${file.data?.revision ?? workspaceMutationId}:${fileRefreshRevision}`}
+          name={relativePath.split(/[\\/]/).at(-1) || relativePath}
+          mimeType="application/octet-stream"
+          sizeBytes={0}
+          asset={{
+            environmentId,
+            resource:
+              draft && isDocument
+                ? { _tag: "draft-workspace-file", cwd: activeCwd, path: absolutePath }
+                : {
+                    _tag: "media-file",
+                    threadId: threadRef.threadId,
+                    path: absolutePath,
+                    ...(isDocument ? {} : { disposition: "attachment" as const }),
+                  },
+          }}
+          origin="File"
+        />
       ) : relativePath && file.error && file.data === null ? (
         <div role="alert" className="flex min-h-0 flex-1 flex-col overflow-auto">
           <div className="my-auto flex shrink-0 flex-col gap-3 px-6 py-6 text-center text-xs leading-relaxed">
@@ -1964,7 +2019,11 @@ export default function FilePreviewPanel({
           <LoaderCircle className="size-5 animate-spin" />
         </div>
       ) : relativePath && file.data ? (
-        isMarkdown && renderMarkdown ? (
+        renderMermaid ? (
+          <Suspense fallback={<FileSurfaceLoading />}>
+            <MermaidFilePreview text={file.data.contents} />
+          </Suspense>
+        ) : isMarkdown && renderMarkdown ? (
           <RenderedMarkdownSurface
             environmentId={environmentId}
             cwd={activeCwd}
@@ -2280,11 +2339,139 @@ export default function FilePreviewPanel({
                   setSelectedRootCwd(rootPath);
                   onOpenFile(path, rootPath);
                 }}
+                {...(previewPath && !isMedia && !isPdf
+                  ? {
+                      onRefreshSelectedFile: () => {
+                        if (!isDocument) file.refresh();
+                        setFileRefreshRevision((value) => value + 1);
+                      },
+                    }
+                  : {})}
               />
             )}
           </aside>
         )}
       </div>
     </div>
+  );
+}
+
+const LargeTextViewer = lazy(() => import("./LargeTextViewer"));
+export function WorkspaceLargeTextPreview(props: {
+  environmentId: EnvironmentId;
+  threadRef: ScopedThreadRef;
+  absolutePath: string;
+  name: string;
+  delimiter: "," | "\t" | null;
+  workspaceMutationId: string | null;
+  revealLine: number | null;
+  revealRequestId: number;
+}) {
+  const resource = {
+    _tag: "media-file",
+    threadId: props.threadRef.threadId,
+    path: props.absolutePath,
+    disposition: "attachment",
+  } as const;
+  const copyContents = useRef<(() => Promise<string>) | null>(null);
+  const { copyToClipboard, isCopied } = useCopyToClipboard({ target: props.name });
+  const [saving, setSaving] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const showError = (cause: unknown) => {
+    toastManager.add({
+      type: "error",
+      title: "Could not read file",
+      description: cause instanceof Error ? cause.message : "Try again.",
+    });
+  };
+  const assetUrl = useAssetUrlState(props.environmentId, resource);
+  const refreshAssetUrl = useAssetUrlRefresh(props.environmentId, resource);
+  useWorkspaceMutationRefresh({
+    mutationId: props.workspaceMutationId,
+    resourceKey: JSON.stringify([props.environmentId, resource]),
+    refresh: () => {
+      void refreshAssetUrl().catch(() => undefined);
+    },
+  });
+  const contentRevision = JSON.stringify([
+    props.environmentId,
+    resource,
+    assetUrl._tag === "Success" ? (assetUrl.fileRevision ?? props.workspaceMutationId) : null,
+    revision,
+  ]);
+  const [loaded, setLoaded] = useState<{ revision: string; url: string } | null>(null);
+  if (assetUrl._tag === "Success" && loaded?.revision !== contentRevision) {
+    setLoaded({ revision: contentRevision, url: assetUrl.url });
+  }
+  if (assetUrl._tag === "Failure")
+    return (
+      <FileSurfaceFailure
+        message="Unable to load file preview."
+        onRetry={() => {
+          setRevision((value) => value + 1);
+          void refreshAssetUrl().catch(showError);
+        }}
+      />
+    );
+  if (assetUrl._tag !== "Success" || loaded === null)
+    return <div className="p-6 text-xs text-muted-foreground">Loading…</div>;
+  const src = `${loaded.url}${loaded.url.includes("?") ? "&" : "?"}revision=${encodeURIComponent(loaded.revision)}`;
+  return (
+    <>
+      <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3">
+        <span className="min-w-0 flex-1 text-xs text-muted-foreground">Full file</span>
+        <FileSurfaceAction
+          label={isCopied ? "Copied" : "Copy contents"}
+          onPress={() => {
+            const copy = copyContents.current;
+            if (!copy) return;
+            void copy()
+              .then((text) => copyToClipboard(text, undefined))
+              .catch(showError);
+          }}
+        >
+          {isCopied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+        </FileSurfaceAction>
+        <FileSurfaceAction
+          label={saving ? "Preparing file…" : "Save file"}
+          disabled={saving}
+          onPress={() => {
+            setSaving(true);
+            void (async () => {
+              const url = await refreshAssetUrl();
+              if (!url) throw new Error("Reconnect to the environment and try again.");
+              const response = await fetch(url);
+              if (!response.ok) throw new Error("The file could not be loaded. Try again.");
+              const downloadUrl = URL.createObjectURL(await response.blob());
+              setTimeout(() => URL.revokeObjectURL(downloadUrl), 30_000);
+              const anchor = document.createElement("a");
+              anchor.href = downloadUrl;
+              anchor.download = props.name.split(/[\\/]/).at(-1) || props.name;
+              anchor.click();
+            })()
+              .catch(showError)
+              .finally(() => setSaving(false));
+          }}
+        >
+          <DownloadIcon className="size-3.5" />
+        </FileSurfaceAction>
+      </div>
+      <Suspense fallback={<div className="p-6 text-xs text-muted-foreground">Loading…</div>}>
+        <LargeTextViewer
+          key={`${src}:${revision}`}
+          name={props.name}
+          copyContents={copyContents}
+          onRetry={() => {
+            void refreshAssetUrl()
+              .then(() => setRevision((value) => value + 1))
+              .catch(showError);
+          }}
+          src={src}
+          delimiter={props.delimiter}
+          revealLine={props.revealLine}
+          revealRequestId={props.revealRequestId}
+        />
+      </Suspense>
+    </>
   );
 }

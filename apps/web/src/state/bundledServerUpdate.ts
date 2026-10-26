@@ -74,7 +74,7 @@ export const updateBundledServer = createRuntimeCommand(connectionAtomRuntime, {
           Stream.runHead,
           Effect.timeout("60 seconds"),
         );
-      if (Option.isNone(observed)) return yield* Effect.fail(new BundledServerReconnectError());
+      if (Option.isNone(observed)) return yield* new BundledServerReconnectError();
       return result satisfies BundledServerRuntime;
     }).pipe(
       Effect.onExit((exit) =>

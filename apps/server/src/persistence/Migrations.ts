@@ -1,14 +1,6 @@
 import Migration0060 from "./Migrations/056_RemoveRedundantProjectionIndexes.ts";
 import Migration0059 from "./Migrations/055_OrchestrationV2.ts";
-/**
- * Migration runner with an inline loader.
- *
- * Uses Migrator.make with fromRecord to define migrations inline.
- * All migrations are statically imported - no dynamic file system loading.
- *
- * `runMigrations` is called by the SQLite persistence layer at startup, so the
- * schema is always up to date before the application starts.
- */
+/** Static migration imports keep startup independent of filesystem module discovery. */
 
 import * as Migrator from "effect/sql/Migrator";
 import * as Effect from "effect/Effect";
@@ -192,12 +184,7 @@ const makeMigrationLoader = (throughId?: number) =>
 // Released fork databases begin V2 at 59; earlier ids retain their original names.
 const FIRST_V2_MIGRATION_ID = 59;
 
-/**
- * Fail before migrating when the migrator would skip one of V2's own
- * migrations. It skips every id up to the highest recorded one, whatever name
- * was recorded, so a database that took a V2 id for another migration would
- * start without V2's schema and fail on first use.
- */
+// Migrators skip ids up to the highest recorded; reject collisions that would skip V2 schema.
 const assertV2MigrationsCanRun = Effect.fn("assertV2MigrationsCanRun")(function* (
   throughId?: number,
 ) {

@@ -105,7 +105,7 @@ it.layer(NodeServices.layer)("shared environment browser gateway", (it) => {
             "/ws",
             Effect.gen(function* () {
               const request = yield* HttpServerRequest.HttpServerRequest;
-              const actor = yield* remoteAuth.authenticateWebSocketUpgrade(request);
+              const actor = yield* remoteAuth.authenticateWebSocketUpgrade(request, "rpc");
               const socket = yield* request.upgrade;
               const { pull } = yield* socket.reader;
               const writer = yield* socket.writer;

@@ -29,7 +29,8 @@ export function projectRailStatuses(
     status.running ||= threadStatus === "working";
     status.monitoring ||=
       threadStatus !== "working" && (thread.pendingBackgroundTasks?.length ?? 0) > 0;
-    status.input ||= threadStatus === "approval" || threadStatus === "input";
+    status.input ||=
+      threadStatus === "approval" || threadStatus === "input" || threadStatus === "request";
     status.completed ||= hasUnseenCompletion({
       ...thread,
       lastVisitedAt:

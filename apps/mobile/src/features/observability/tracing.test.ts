@@ -27,6 +27,7 @@ it.effect("never exports mobile spans, even with a supplied collector", () => {
     },
     {
       appVariant: "test",
+      serviceInstanceId: "test-instance",
       serviceVersion: "1.2.3",
     },
   ).pipe(Layer.provide(layerRemoteHttpClient(fetchFn)));
@@ -58,6 +59,7 @@ it.effect("does not let OTLP serialization failures alter application effects", 
     },
     {
       appVariant: "test",
+      serviceInstanceId: "test-instance",
       serviceVersion: "1.2.3",
     },
   ).pipe(Layer.provide(layerRemoteHttpClient(fetchFn)));

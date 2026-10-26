@@ -220,14 +220,7 @@ const THREAD_JUMP_TO_PROJECT_JUMP = new Map(
   ),
 );
 
-/**
- * Carries a config written against the old numbered-thread bindings over to the numbered project
- * slots this fork spends mod+1..9 on. Without it the startup backfill would refuse to add the new
- * defaults: their shortcut context is already claimed by the rules being replaced, and the file
- * would keep jumping to threads. The file structure moves off mod+1 for the same reason.
- *
- * Returns null when there is nothing to rewrite, so an already-migrated config is never rewritten.
- */
+/** Migrate numbered thread bindings before default backfill: they otherwise occupy the project-slot chords. */
 export function migrateKeybindingsToProjectSlots(
   custom: ReadonlyArray<KeybindingRule>,
 ): KeybindingRule[] | null {
@@ -596,8 +589,7 @@ const make = Effect.gen(function* () {
         }
       }
 
-      // Keep only defaults that fit, before persisted rules so existing
-      // custom shortcuts retain priority when their conditions overlap.
+      // Put defaults before persisted rules so custom shortcuts win overlapping conditions.
       const availableSlots = Math.max(0, MAX_KEYBINDINGS_COUNT - customConfig.length);
       const defaultsToAppend = missingDefaults.slice(0, availableSlots);
       const skippedDefaults = missingDefaults.slice(availableSlots);
@@ -642,8 +634,7 @@ const make = Effect.gen(function* () {
 
     const revalidateAndEmitSafely = revalidateAndEmit.pipe(Effect.ignoreCause({ log: true }));
 
-    // Editors emit multiple events per save (truncate, write, rename) and
-    // `fs.watch` can fire before the content has been flushed to disk.
+    // Saves emit multiple events; fs.watch may fire before content is flushed.
     const debouncedKeybindingsEvents = fs.watch(keybindingsConfigDir).pipe(
       Stream.filter((event) => {
         return (

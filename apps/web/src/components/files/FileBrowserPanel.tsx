@@ -308,9 +308,12 @@ export default function FileBrowserPanel({
   const clearSelection = useCallback(() => setSelectedPaths([]), []);
   // An undo entry belongs to the directory it was taken from; carrying it across would write those
   // files into a different workspace root.
-  useEffect(() => {
+  const undoRoot = `${environmentId}:${cwd}`;
+  const [undoRootIdentity, setUndoRootIdentity] = useState(undoRoot);
+  if (undoRootIdentity !== undoRoot) {
+    setUndoRootIdentity(undoRoot);
     setUndoableDelete(null);
-  }, [cwd, environmentId]);
+  }
 
   /**
    * Reads every path back so a delete can be undone, or gives up on the whole set. Partial recovery

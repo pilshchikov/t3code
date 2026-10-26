@@ -43,6 +43,8 @@ export class ThreadWorkspaces extends Context.Service<
   }
 >()("t3/workspace/ThreadWorkspaces") {}
 
+const isThreadWorkspaceError = Schema.is(ThreadWorkspaceError);
+
 const make = Effect.gen(function* () {
   const git = yield* GitWorkflowService;
   const engine = yield* ThreadManagementService.ThreadManagementService;
@@ -55,7 +57,7 @@ const make = Effect.gen(function* () {
   const wrap = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
       Effect.mapError((cause) =>
-        Schema.is(ThreadWorkspaceError)(cause)
+        isThreadWorkspaceError(cause)
           ? cause
           : new ThreadWorkspaceError({
               message: cause instanceof Error ? cause.message : String(cause),
@@ -164,7 +166,7 @@ const make = Effect.gen(function* () {
     };
   });
   return ThreadWorkspaces.of({
-    inspect: (input) =>
+    inspect: Effect.fn("ThreadWorkspaces.inspect")((input) =>
       wrap(
         Effect.gen(function* () {
           const ctx = yield* context(input);
@@ -187,7 +189,8 @@ const make = Effect.gen(function* () {
           };
         }),
       ),
-    create: (input) =>
+    ),
+    create: Effect.fn("ThreadWorkspaces.create")((input) =>
       wrap(
         mutations.withPermit(
           Effect.gen(function* () {
@@ -204,7 +207,8 @@ const make = Effect.gen(function* () {
           }),
         ),
       ),
-    select: (input) =>
+    ),
+    select: Effect.fn("ThreadWorkspaces.select")((input) =>
       wrap(
         mutations.withPermit(
           Effect.gen(function* () {
@@ -254,6 +258,7 @@ const make = Effect.gen(function* () {
           }),
         ),
       ),
+    ),
   });
 });
 

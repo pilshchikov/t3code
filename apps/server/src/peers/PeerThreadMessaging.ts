@@ -350,7 +350,9 @@ const make = Effect.gen(function* () {
     send,
     watch,
     start,
-    unwatch: (caller, watchId, requestId) => configure(caller, watchId, null, `stop:${requestId}`),
+    unwatch: Effect.fn("PeerThreadMessaging.unwatch")((caller, watchId, requestId) =>
+      configure(caller, watchId, null, `stop:${requestId}`),
+    ),
   });
 });
 export const layer = Layer.effect(PeerThreadMessaging, make);

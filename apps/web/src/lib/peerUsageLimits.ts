@@ -1,13 +1,29 @@
+import type { EnvironmentSupervisor } from "@t3tools/client-runtime/connection";
+import type { EnvironmentId } from "@t3tools/contracts";
 import { request, subscribe } from "@t3tools/client-runtime/rpc";
 import { WS_METHODS } from "@t3tools/contracts";
 import { usageMcpSnapshot } from "@t3tools/shared/usageMcpSnapshot";
+import type * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 
+type PeerUsageLimitsError =
+  | Effect.Error<
+      | ReturnType<typeof request<typeof WS_METHODS.serverGetConfig>>
+      | ReturnType<typeof request<typeof WS_METHODS.serverRefreshProviders>>
+    >
+  | Stream.Error<ReturnType<typeof subscribe<typeof WS_METHODS.subscribeServerConfig>>>
+  | Cause.NoSuchElementError
+  | Cause.TimeoutError;
+
 export const readPeerUsageLimits = Effect.fn("web.peerUsageLimits.read")(function* (
   refresh: boolean,
-) {
+): Effect.fn.Return<
+  { environmentId: EnvironmentId; snapshot: ReturnType<typeof usageMcpSnapshot> },
+  PeerUsageLimitsError,
+  EnvironmentSupervisor.EnvironmentSupervisor
+> {
   if (refresh) yield* request(WS_METHODS.serverRefreshProviders, { fresh: true });
   const config = yield* request(WS_METHODS.serverGetConfig, {});
   // Hub snapshots arrive on the config stream, rather than server.getConfig.

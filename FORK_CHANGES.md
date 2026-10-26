@@ -1,5 +1,79 @@
 # Fork Changes
 
+## Daily upstream integration — 2026-10-26 (3f9448747b)
+
+- Merge all 326 incoming upstream commits through
+  `3f9448747bb8848050dc2cacf83affa6f94a66a1` into fork parent
+  `cef955f9fe89eddc2b8418275d293b6f59d6d54c`, retaining both histories.
+  Review the 311 overlapping paths, including automatic merges, and resolve 99
+  conflicted paths individually. Reconcile heavily reindented files with an
+  indentation-normalized three-way comparison before reviewing their remaining hunks.
+- Integrate upstream's default design, Settings/Usage overlays, guest sharing,
+  document/archive/database/font/large-text previews, bounded shell/history transport,
+  workspace snapshot subscriptions, DPoP route audiences and lifecycle refactors.
+  Keep the native Files renderer and its directory watcher helper instead of restoring
+  the superseded Pierre tree. Retain per-repository checkout recovery, saved collapse/
+  expansion/resize, dirty editors, navigation/Structure/Commit/Git History and deletion/undo.
+  New document assets use the selected checkout, and their metadata revisions participate
+  in the fork's visible-file watcher and ten-second validation path.
+- Move custom chat width, chat font size and theme-aware accent application into the
+  startup appearance owner. Keep project rail groups/settled shortcuts/status dots/colors,
+  manual order, numbered slots, picker sizing, dashboard navigation and root-owned panel
+  shortcuts. Combine upstream paged settled shelves and route reveal with group scopes
+  and manual active-thread order. Keep native communication sheets classified as overlays.
+- Retain the independent one-second timeline recovery deadline with upstream's shared
+  viewport navigation and measured-end settling. Missing saved rows, invalid offsets and
+  stalled scroll promises recover to the latest content; explicit navigation cancels recovery.
+  Keep remembered follow mode for drafts and existing threads, downward-wheel rearming,
+  zero-jump repair, first assistant text outside settled folds, mixed-work labels and stable
+  imported identities. The editor's caret handler still scrolls only the prompt editor.
+- Trace mounted `ChatView` → `ChatComposer` → `ComposerPrimaryActions`: Orb mounts
+  `ComposerActionOrb`, saved send color covers Send/Resume/Queue/Steer, and saved stop color
+  covers ordinary and pending-input Stop. Classic stays selectable. Existing chats and draft
+  heroes keep forced mobile expansion, disabled scroll/focus collapse, custom width, one-line
+  minimum and keyboard/viewport handling. Ordinary sends never compact first.
+- Preserve the validated initial preparing run as the sole ordinary primary-checkout
+  binding/clearing exception: only queued follow-ups, no provider session, pending question
+  or background work. Keep Claude HOME/config isolation, account-history workers and observed
+  worker effort hooks; discard only the incoming unused duplicate history-worker implementation.
+  Account/source/model usage remains separate, with alphabetical colored pools, continuous bars
+  and compact trends. Mounted CLI resume still creates V2 native-session references, and
+  project-root/multi-root Markdown links still route to the explorer.
+- Keep project notes/workspace/peer/connected-usage MCP services, shared-host gateways,
+  bundled fork SSH updates and durable response watches connected. Adapt shared gateways to
+  the RPC ticket audience. Keep the project-aware idle-compaction worker and overrides as the
+  sole policy. Adapt the dashboard to upstream's meaningful-run shell projection, including
+  historical system-created compactions in its SQL filter. Routine compactions stay quiet;
+  failures remain visible. Keep real background work as Monitoring; guest requests stay in the
+  inbox and light the rail input dot. Retain Never-default settlement, open-PR inactivity
+  protection and monitor settlement guards.
+- External analytics/OTLP and endpoint probes remain disabled. Provider version/manifest/
+  periodic-refresh, desktop update and Keychain opt-ins, stable desktop storage and encrypted
+  local connections remain active. Released migration IDs 1–74 stay unchanged. Multiwork and
+  machine sync remain retired; older usage/sync helpers remain superseded.
+- Adopt the new Effect function diagnostics without changing service behavior or existing Git/
+  SSH span ownership. Keep the existing React Compiler exception list; new refs/dependency/
+  memoization diagnostics on those same files report as warnings. Retained filesystem/editor
+  effects state their external synchronization reason; simple root/selection resets derive
+  during render rather than adding synchronization effects.
+- Validation: frozen-lockfile installation succeeded with lifecycle scripts disabled, using
+  pnpm 12.14.0 from a temporary copy because the host launcher referenced a missing file.
+  Scoped typechecks passed for 33 workspaces: server/web/mobile/desktop and marketing, contracts/shared/
+  client-runtime, all nine provider packages, both Effect protocol packages, all nine source-
+  control packages, SSH, Tailscale, relay, scripts and the lint plugin. Initial integration and
+  newly enforced diagnostic failures were corrected. Non-failing Effect suggestions remain.
+  Checks use native tsc-rs 0.8.0 on host Node 24.15.0; the repository pins Node 26.12.1.
+  Changed-file lint initially scanned 2,707 code files; integration lint passes with zero errors
+  and 76 advisory warnings, including legacy styling, refs and dependency findings. Integration
+  sources are formatted. Source whitespace checks pass; 2,538 findings in incoming vendored
+  highlighting C/headers and 23 dependency-patch context lines remain verbatim. Tests were
+  neither independently added nor executed; incoming cases and existing fixtures were
+  retained/adapted and typechecked only.
+- No builds, packaging, dev servers, browser/device/runtime checks, app installation/restart,
+  process stops, installed-app/live-userdata access, push, PR, external messages, subagents,
+  other-worktree/main edits or schedule changes. Static checks do not establish visual behavior,
+  native compilation or runtime performance.
+
 ## Native mobile environments through the desktop host — 2026-10-24
 
 - Native mobile now discovers the connected desktop host's shared catalog and registers temporary

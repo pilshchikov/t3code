@@ -132,7 +132,7 @@ const makePasswordPrompt = (
     prompts.request(request).pipe(Effect.mapError(toSshPasswordPromptError)),
 });
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.fn("desktop.ssh.make")(function* (
   options: DesktopSshEnvironmentLayerOptions = {},
 ) {
@@ -185,32 +185,28 @@ export const make = Effect.fn("desktop.ssh.make")(function* (
       }
       return metadata;
     }),
-    discoverHosts: (input) =>
-      discoverDesktopSshHostsEffect(input).pipe(
-        Effect.provide(runtimeContext),
-        Effect.withSpan("desktop.ssh.discoverHosts"),
-      ),
-    resolveHost: (alias) =>
-      resolveSshTarget(alias.trim()).pipe(
-        Effect.provide(runtimeContext),
-        Effect.withSpan("desktop.ssh.resolveHost"),
-      ),
-    ensureEnvironment: (target, ensureOptions) =>
+    discoverHosts: Effect.fn("desktop.ssh.discoverHosts")((input) =>
+      discoverDesktopSshHostsEffect(input).pipe(Effect.provide(runtimeContext)),
+    ),
+    resolveHost: Effect.fn("desktop.ssh.resolveHost")((alias) =>
+      resolveSshTarget(alias.trim()).pipe(Effect.provide(runtimeContext)),
+    ),
+    ensureEnvironment: Effect.fn("desktop.ssh.ensureEnvironment")((target, ensureOptions) =>
       manager
         .ensureEnvironment(target, ensureOptions)
         .pipe(
           Effect.provideService(SshAuth.SshPasswordPrompt, passwordPrompt),
           Effect.provide(runtimeContext),
-          Effect.withSpan("desktop.ssh.ensureEnvironment"),
         ),
-    disconnectEnvironment: (target) =>
+    ),
+    disconnectEnvironment: Effect.fn("desktop.ssh.disconnectEnvironment")((target) =>
       manager
         .disconnectEnvironment(target)
         .pipe(
           Effect.provideService(SshAuth.SshPasswordPrompt, passwordPrompt),
           Effect.provide(runtimeContext),
-          Effect.withSpan("desktop.ssh.disconnectEnvironment"),
         ),
+    ),
   });
 });
 

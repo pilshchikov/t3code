@@ -1,26 +1,4 @@
-/**
- * AccountLimitsService - the server-wide account rate-limit cache.
- *
- * Fed passively: runtime ingestion forwards every
- * `account.rate-limits.updated` event here (Claude usage snapshots and
- * streamed window updates, Codex app-server notifications), so the cache costs
- * nothing while sessions run. When asked and Codex has no live snapshot, the
- * newest transcript snapshot is recovered from disk. Claude has no disk
- * fallback: its limits exist only on the live stream, which is why snapshots
- * are persisted across restarts.
- *
- * One snapshot per (provider, instance). Limits belong to provider
- * *accounts*, and the instance is the closest identity every event already
- * carries: with several instances configured (work + personal accounts, the
- * documented multi-account setup), a single per-provider slot makes the
- * accounts overwrite and suppress each other. Two instances logged into the
- * same account simply show the same numbers - honest, and free of credential
- * reads on the event path. Cache rows that predate instance attribution load
- * under the driver's default instance id, which is what the old single-slot
- * world semantically was - see `migratedSlots` for how long that lasts.
- *
- * @module AccountLimitsService
- */
+/** Cache snapshots per provider instance so accounts cannot overwrite each other; only unambiguous Codex histories seed missing live data. */
 import {
   ACCOUNT_LIMITS_CONTRACT_VERSION,
   AccountLimitsSnapshot,
@@ -79,11 +57,7 @@ export interface AccountLimitsIngestInput {
   /** The event's `payload.rateLimits`, in whatever shape the adapter emitted. */
   readonly payload: unknown;
   readonly createdAt: string;
-  /**
-   * Instance routing key off the event envelope. Optional during the
-   * driver/instance migration; an absent value means the driver's default
-   * instance, exactly like the envelope field it mirrors.
-   */
+  /** Legacy events without an instance id belong to the driver default, matching their original routing. */
   readonly providerInstanceId?: ProviderInstanceId | undefined;
 }
 
@@ -96,18 +70,6 @@ export class AccountLimitsService extends Context.Service<
 >()("t3/usage/AccountLimitsService") {}
 
 /** Empty cache, for suites that only need the RPC surface to resolve. */
-const layerTest = Layer.succeed(
-  AccountLimitsService,
-  AccountLimitsService.of({
-    readSummary: () =>
-      Effect.succeed({
-        contractVersion: ACCOUNT_LIMITS_CONTRACT_VERSION,
-        readAt: "1970-01-01T00:00:00.000Z",
-        snapshots: [],
-      }),
-    ingest: () => Effect.void,
-  }),
-);
 
 function providerFromDriver(driver: string): UsageProviderKind | null {
   if (driver === "claudeAgent") return "claude";
@@ -115,12 +77,7 @@ function providerFromDriver(driver: string): UsageProviderKind | null {
   return null;
 }
 
-/**
- * The instance that owns data carrying no instance id: legacy emitters and
- * v1 cache rows. The legacy single-instance world used the driver kind
- * itself as the instance id (see `defaultInstanceIdForDriver`), so this is
- * not a guess - it is what that data always meant.
- */
+/** Legacy emitters used the driver kind as the instance id; retain that identity for older cache rows. */
 function defaultInstanceIdForProvider(provider: UsageProviderKind): ProviderInstanceId {
   return defaultInstanceIdForDriver(
     ProviderDriverKind.make(provider === "claude" ? "claudeAgent" : "codex"),
@@ -139,23 +96,11 @@ function slotKey(provider: UsageProviderKind, instanceId: ProviderInstanceId): s
 export interface CodexSeedTarget {
   readonly instanceId: ProviderInstanceId;
   readonly sessionsDir: string;
-  /**
-   * Disabled instances still own their transcripts - their sessions share
-   * the dir whether or not the instance currently runs - so they count for
-   * ambiguity, and only enabled sole owners are actually seeded.
-   */
+  /** Disabled instances still own their transcript directories and must count toward attribution ambiguity. */
   readonly enabled: boolean;
 }
 
-/**
- * Sole-owner sessions dirs only. Shadow homes share `sessions/` with the
- * home they overlay (see CodexHomeLayout), and a transcript names no
- * account - so a directory that several instances write cannot be
- * attributed honestly, and seeding it into any one of them invents data
- * (seeding it into all of them invents more). Those dirs are skipped: live
- * events still meter every instance; the transcripts just stop pretending
- * to know whose usage they hold. Pure and exported for tests.
- */
+/** Shared Codex session directories cannot identify an account; seed only enabled instances with exclusive ownership. */
 export function planCodexTranscriptSeeds(
   targets: readonly CodexSeedTarget[],
 ): readonly CodexSeedTarget[] {
@@ -173,15 +118,7 @@ const make = Effect.gen(function* () {
   const settingsService = yield* ServerSettings.ServerSettingsService;
 
   const snapshots = new Map<string, AccountLimitsSnapshot>();
-  /**
-   * Slot keys holding rows migrated from the v1 single-slot cache. A v1 row
-   * was "whichever account wrote last", not "the default instance" - the
-   * default id is only the least-wrong home for it. The first live event
-   * proves the point either way: landing on the default slot confirms the
-   * row, landing on any other instance of the same provider proves the
-   * migrated row may belong to somebody else, so it is evicted rather than
-   * shown as a ghost account forever.
-   */
+  /** The first live event disambiguates a migrated single-slot row; evict it when another account proves ownership ambiguous. */
   const hostEnvironment = yield* HostProcess.Environment;
   const migratedSlots = new Set<string>();
   const cachePath = path.join(config.stateDir, "account-limits.json");
@@ -211,14 +148,7 @@ const make = Effect.gen(function* () {
     }),
   );
 
-  /**
-   * All snapshot mutations - event ingest (worker fiber), the transcript
-   * seed and instance eviction (RPC fiber) - run under this one permit, so
-   * each ordering guard, map write, and persist is atomic with respect to
-   * the others. Without it a concurrent pair can both pass their guard
-   * against the same prior snapshot and land in either order, rolling the
-   * state backwards. Reads stay lock-free.
-   */
+  /** Serialize event ingestion, transcript seeding and eviction so ordering checks and persistence stay atomic; reads remain lock-free. */
   const stateLock = yield* Semaphore.make(1);
 
   // A cache we cannot write is a colder next start, not a failure. Only
@@ -240,7 +170,7 @@ const make = Effect.gen(function* () {
       ),
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(Path.Path, path),
-      Effect.catchCause(() => Effect.void),
+      Effect.ignoreCause,
     );
   });
 
@@ -349,14 +279,7 @@ const make = Effect.gen(function* () {
     );
   });
 
-  /**
-   * Recovers Codex snapshots from session transcripts when they are newer
-   * than what the cache holds - which covers both a cold cache and Codex
-   * sessions driven outside T3 Code. Instances are enumerated the same way
-   * the registry derives them, so the legacy single-instance mirror is
-   * included; only sessions dirs owned by exactly one instance are read
-   * (see `planCodexTranscriptSeeds`).
-   */
+  /** Recover newer external Codex measurements only from exclusively owned session directories, including the legacy default instance. */
   const maybeSeedCodexFromTranscripts = Effect.fn("AccountLimitsService.seedCodex")(function* (
     nowMs: number,
     configMap: ProviderInstanceConfigMap | null,
@@ -442,14 +365,8 @@ const make = Effect.gen(function* () {
       Effect.catchCause(() => Effect.succeed(null)),
     );
     const configMap = settings === null ? null : deriveProviderInstanceConfigMap(settings);
-    yield* maybeSeedCodexFromTranscripts(nowMs, configMap).pipe(
-      Effect.catchCause(() => Effect.void),
-    );
-    // A deleted instance takes its rows with it - anything else leaves a
-    // ghost account forcing the captioned multi-row UI forever. A merely
-    // disabled instance keeps its cache (re-enabling restores it) but stays
-    // out of the summary. Default instances always derive, so single-account
-    // setups are untouched by either rule.
+    yield* maybeSeedCodexFromTranscripts(nowMs, configMap).pipe(Effect.ignoreCause);
+    // Evict deleted instances, but retain disabled account caches for re-enablement without showing ghost rows.
     if (configMap !== null) {
       yield* stateLock.withPermits(1)(
         Effect.gen(function* () {

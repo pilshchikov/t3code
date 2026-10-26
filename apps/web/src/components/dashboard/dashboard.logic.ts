@@ -44,23 +44,26 @@ export function collectDashboardItems(input: {
     const key = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
     const phase = resolveSidebarThreadStatus(thread);
     const attention =
-      phase === "approval"
-        ? "Approval needed"
-        : phase === "input"
-          ? "Input needed"
-          : phase === "limited"
-            ? "Usage limit reached"
-            : phase === "failed"
-              ? "Turn failed"
-              : null;
+      phase === "request"
+        ? "Guest message waiting"
+        : phase === "approval"
+          ? "Approval needed"
+          : phase === "input"
+            ? "Input needed"
+            : phase === "limited"
+              ? "Usage limit reached"
+              : phase === "failed"
+                ? "Turn failed"
+                : null;
     let status: DashboardStatus;
     let timestamp =
       thread.runtime?.activityStartedAt ?? thread.latestRun?.startedAt ?? thread.updatedAt;
-    if (phase === "working" || phase === "approval" || phase === "input") status = "working";
+    if (phase === "working" || phase === "approval" || phase === "input" || phase === "request")
+      status = "working";
     else if (phase === "waiting") status = "monitoring";
     else {
       const completed = thread.latestRun?.completedAt;
-      if (!completed || (thread.source.latestRunSilent && attention === null)) continue;
+      if (!completed) continue;
       const completedAt = Date.parse(completed);
       if (!Number.isFinite(completedAt)) continue;
       const visit = resolveThreadLastVisitedAt(thread.lastVisitedAt, input.localVisits[key]);

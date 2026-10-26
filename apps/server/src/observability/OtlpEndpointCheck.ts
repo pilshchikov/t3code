@@ -14,6 +14,8 @@ export class OtlpEndpointCheck extends Context.Service<
 export const layer = Layer.succeed(
   OtlpEndpointCheck,
   OtlpEndpointCheck.of({
-    check: () => Effect.succeed({ _tag: "Unreachable", timedOut: false }),
+    check: Effect.fn("OtlpEndpointCheck.check")(() =>
+      Effect.succeed({ _tag: "Unreachable", timedOut: false }),
+    ),
   }),
 );

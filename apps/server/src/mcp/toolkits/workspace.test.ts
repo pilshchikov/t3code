@@ -13,7 +13,6 @@ import {
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import type { Tool } from "effect/ai";
@@ -133,19 +132,17 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* (
     Layer.mock(ServerSettingsService)({ getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS) }),
     Layer.mock(ProjectService)({
       getById: () =>
-        Effect.succeed(
-          Option.some({
-            id: projectId,
-            title: "Project",
-            workspaceRoot: "/repo",
-            workspaceRoots: [{ path: "/repo" }, { path: "/backend", label: "Backend" }],
-            defaultModelSelection: null,
-            scripts: [],
-            createdAt: now,
-            updatedAt: now,
-            deletedAt: null,
-          }),
-        ),
+        Effect.succeedSome({
+          id: projectId,
+          title: "Project",
+          workspaceRoot: "/repo",
+          workspaceRoots: [{ path: "/repo" }, { path: "/backend", label: "Backend" }],
+          defaultModelSelection: null,
+          scripts: [],
+          createdAt: now,
+          updatedAt: now,
+          deletedAt: null,
+        }),
     }),
     Layer.mock(ThreadManagementService)({
       getThreadShell: (id) => Effect.sync(() => (id === threadId ? thread : null)),

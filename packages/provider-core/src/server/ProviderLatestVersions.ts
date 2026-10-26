@@ -1,11 +1,4 @@
-/**
- * Memoizes "latest available version" lookups (npm registry, release
- * channels) for the version advisory. One instance is shared by every driver
- * and the maintenance runner, so a provider update can invalidate the entry
- * the next snapshot refresh reads.
- *
- * @module provider-core/server/ProviderLatestVersions
- */
+/** Share version-advisory cache entries across drivers and maintenance, retaining explicit invalidation after updates. */
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -59,12 +52,13 @@ export const make = Effect.fn("ProviderLatestVersions.make")(function* (
       );
       return version;
     }),
-    invalidate: (key) =>
-      Ref.update(entries, (current) => {
+    invalidate: Effect.fn("ProviderLatestVersions.invalidate")(function (key) {
+      return Ref.update(entries, (current) => {
         const next = new Map(current);
         next.delete(key);
         return next;
-      }),
+      });
+    }),
   });
 });
 
@@ -81,7 +75,7 @@ export const layer = Layer.effect(
     return enabled
       ? versions
       : ProviderLatestVersions.of({
-          cached: () => Effect.succeed(null),
+          cached: Effect.fn("ProviderLatestVersions.cached")(() => Effect.succeed(null)),
           invalidate: versions.invalidate,
         });
   }),

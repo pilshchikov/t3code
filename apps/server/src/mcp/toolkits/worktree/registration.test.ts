@@ -1,3 +1,4 @@
+import * as DocumentText from "../../../provider/DocumentText.ts";
 import * as Context from "effect/Context";
 import * as ThreadWorkspaces from "../../../workspace/ThreadWorkspaces.ts";
 import * as SqlitePersistence from "../../../persistence/Sqlite.ts";
@@ -44,6 +45,7 @@ import * as UsageService from "../../../usage/UsageService.ts";
 import * as UsageLimitSources from "../../../usage/UsageLimitSources.ts";
 
 const layerStubServices = Layer.mergeAll(
+  Layer.mock(DocumentText.DocumentText)({}),
   Layer.mock(UsageService.UsageService)({}),
   Layer.mock(UsageLimitSources.UsageLimitSources)({}),
   Layer.mock(PeerThreadMessaging.PeerThreadMessaging)({}),

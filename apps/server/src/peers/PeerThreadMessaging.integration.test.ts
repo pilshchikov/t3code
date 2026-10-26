@@ -95,9 +95,7 @@ const api = OrchestratorMcpService.layer.pipe(
   Layer.provide(
     Layer.mock(ProjectService.ProjectService)({
       getById: () =>
-        Effect.succeed(
-          Option.some({ id: projectId, defaultModelSelection: modelSelection } as never),
-        ),
+        Effect.succeedSome({ id: projectId, defaultModelSelection: modelSelection } as never),
     }),
   ),
   Layer.provide(NodeServices.layer),

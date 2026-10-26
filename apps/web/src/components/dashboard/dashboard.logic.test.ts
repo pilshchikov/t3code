@@ -86,7 +86,7 @@ describe("thread dashboard", () => {
             parentThreadId: ThreadId.make("parent"),
           },
         }),
-        dashboardThread({ source: { ...thread.source, latestRunSilent: true } }),
+        dashboardThread({ latestRun: null }),
       ]),
     ).toEqual([]);
     expect(

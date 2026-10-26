@@ -277,7 +277,7 @@ const make = Effect.gen(function* () {
       const upgrade = request.headers.upgrade?.toLowerCase() === "websocket";
       const actor = yield* (
         upgrade && path === "/ws"
-          ? auth.authenticateWebSocketUpgrade(request)
+          ? auth.authenticateWebSocketUpgrade(request, "rpc")
           : auth.authenticateHttpRequest(request)
       ).pipe(
         Effect.mapError(
