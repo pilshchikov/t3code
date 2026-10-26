@@ -319,7 +319,6 @@
   "apps/web/src/components/files/FileBrowserPanel.tsx": 9,
   "apps/web/src/components/files/FilePreviewPanel.tsx": 3,
   "apps/web/src/components/files/InlineAudioPreview.tsx": 1,
-  "apps/web/src/components/files/useDirectoryEntries.ts": 1,
   "apps/web/src/components/files/useFileSaveCoordinator.ts": 2,
   "apps/web/src/components/guest/GuestHtmlRender.tsx": 3,
   "apps/web/src/components/guest/GuestPage.tsx": 7,

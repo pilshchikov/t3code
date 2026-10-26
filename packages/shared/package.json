@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./accentColors": {
+      "types": "./src/accentColors.ts",
+      "import": "./src/accentColors.ts"
+    },
     "./usageMcpSnapshot": {
       "types": "./src/usageMcpSnapshot.ts",
       "import": "./src/usageMcpSnapshot.ts"

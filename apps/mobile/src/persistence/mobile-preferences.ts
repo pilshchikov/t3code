@@ -1,3 +1,4 @@
+import { isAccentColorValue } from "@t3tools/shared/accentColors";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -114,6 +115,7 @@ export interface Preferences {
   readonly threadListSettledShelfExpanded?: boolean;
   readonly threadListSnoozedShelfExpanded?: boolean;
   readonly threadListWorkingShelfExpanded?: boolean;
+  readonly threadAccentColors?: Readonly<Record<string, string>>;
   readonly threadListFilters?: ThreadListFilters;
   readonly pullRequestListFilters?: PullRequestListPreferences;
   readonly workspaceSelections?: WorkspaceSelections;
@@ -187,6 +189,7 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     threadListSettledShelfExpanded?: boolean;
     threadListSnoozedShelfExpanded?: boolean;
     threadListWorkingShelfExpanded?: boolean;
+    threadAccentColors?: Readonly<Record<string, string>>;
     threadListFilters?: ThreadListFilters;
     pullRequestListFilters?: PullRequestListPreferences;
     workspaceSelections?: WorkspaceSelections;
@@ -322,6 +325,17 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   }
   if (typeof parsed.threadListWorkingShelfExpanded === "boolean") {
     preferences.threadListWorkingShelfExpanded = parsed.threadListWorkingShelfExpanded;
+  }
+  if (
+    parsed.threadAccentColors &&
+    typeof parsed.threadAccentColors === "object" &&
+    !Array.isArray(parsed.threadAccentColors)
+  ) {
+    preferences.threadAccentColors = Object.fromEntries(
+      Object.entries(parsed.threadAccentColors).filter(
+        ([, color]) => typeof color === "string" && isAccentColorValue(color),
+      ),
+    );
   }
   if (isThreadListFilters(parsed.threadListFilters)) {
     preferences.threadListFilters = parsed.threadListFilters;

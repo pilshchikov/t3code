@@ -1,3 +1,5 @@
+import { useThreadMergeBack } from "./useThreadMergeBack";
+import { useThreadProjectTools } from "../terminal/useThreadProjectTools";
 import * as Dialog from "../../components/ui/Dialog";
 import { useOpenPullRequest } from "../../native/useOpenPullRequest";
 import { makeTurnCommandMetadata } from "../../lib/commandMetadata";
@@ -12,17 +14,9 @@ import {
   AuthOrchestrationOperateScope,
   AuthTerminalOperateScope,
   AuthTerminalReadScope,
-  DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
   ThreadId,
-  type ProjectScript,
 } from "@t3tools/contracts";
-import {
-  projectScriptCwd,
-  projectScriptRuntimeEnv,
-  projectScriptTerminalInput,
-  resolveProjectScripts,
-} from "@t3tools/shared/projectScripts";
 import { Platform } from "react-native";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -44,21 +38,12 @@ import {
   useRemoteConnectionStatus,
   useRemoteEnvironmentRuntime,
 } from "../../state/use-remote-environment-registry";
-import { useKnownTerminalSessions } from "../../state/use-terminal-session";
 import { uuidv4 } from "../../lib/uuid";
 import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
 import { useSelectedThreadDetailState } from "../../state/use-thread-detail";
 import { useThreadSelection } from "../../state/use-thread-selection";
 import { GitActionProgressOverlay } from "./GitActionProgressOverlay";
-import {
-  buildTerminalMenuSessions,
-  nextOpenTerminalId,
-  resolveProjectScriptTerminalId,
-} from "../terminal/terminalMenu";
-import {
-  resolvePreferredThreadWorktreePath,
-  stagePendingTerminalLaunch,
-} from "../terminal/terminalLaunchContext";
+import { nextOpenTerminalId } from "../terminal/terminalMenu";
 import { terminalDebugLog } from "../terminal/terminalDebugLog";
 import type { ThreadDetailScreenProps } from "./ThreadDetailScreen";
 import { ThreadScreenBinding, ThreadScreenFallback, ThreadScreenHost } from "./ThreadScreenHost";
@@ -71,8 +56,6 @@ import { useSelectedThreadGitState } from "../../state/use-selected-thread-git-s
 import { useSelectedThreadRequests } from "../../state/use-selected-thread-requests";
 import { useSelectedThreadWorktree } from "../../state/use-selected-thread-worktree";
 import { useThreadComposerState } from "../../state/use-thread-composer-state";
-import { resolveMergeBackTargetThreadId } from "@t3tools/client-runtime/state/thread-relationships";
-import { resolveLatestMergeBackRun } from "@t3tools/client-runtime/state/thread-workflows";
 import { threadEnvironment, useThreadFamily } from "../../state/threads";
 import { projectThreadContentPresentation } from "./threadContentPresentation";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
@@ -101,7 +84,6 @@ import {
   type ThreadInspectorPresentation,
 } from "./thread-inspector-preview";
 import type { ThreadInspectorTarget } from "./thread-inspector-navigation";
-import { useSelectWorkspaceDetail } from "../workspace/useSelectWorkspaceDetail";
 
 interface ThreadInspectorSelection {
   readonly routeThreadIdentity: string | null;
@@ -358,39 +340,8 @@ function ThreadRouteContent(
     };
   })();
   const navigation = useNavigation();
-  const selectDetail = useSelectWorkspaceDetail();
   const openPullRequest = useOpenPullRequest();
-  const mergeBack = useAtomCommand(threadEnvironment.mergeBack, "merge thread back");
-  const mergeBackTargetThreadId = resolveMergeBackTargetThreadId(selectedThreadDetail);
-  const mergeBackRun =
-    selectedThreadDetail === null ? null : resolveLatestMergeBackRun(selectedThreadDetail);
-  const mergeBackBusyRef = useRef(false);
-  const handleMergeBack = async () => {
-    if (
-      mergeBackBusyRef.current ||
-      !selectedThread ||
-      mergeBackTargetThreadId === null ||
-      mergeBackRun === null
-    ) {
-      return;
-    }
-    mergeBackBusyRef.current = true;
-    const result = await mergeBack({
-      environmentId: selectedThread.environmentId,
-      input: {
-        sourceThreadId: selectedThread.id,
-        targetThreadId: mergeBackTargetThreadId,
-        runId: mergeBackRun.id,
-        creationSource: "mobile",
-      },
-    });
-    mergeBackBusyRef.current = false;
-    if (result._tag !== "Success") return;
-    selectDetail({
-      name: "Thread",
-      params: { environmentId: selectedThread.environmentId, threadId: mergeBackTargetThreadId },
-    });
-  };
+  const onMergeBack = useThreadMergeBack(selectedThread, selectedThreadDetail);
   const params = props.route.params ?? {};
   const environmentIdRaw = firstRouteParam(params.environmentId);
   const environmentId = environmentIdRaw ? EnvironmentId.make(environmentIdRaw) : null;
@@ -480,15 +431,8 @@ function ThreadRouteContent(
         })
       : null,
   );
-  const { sessions: knownTerminalSessions } = useKnownTerminalSessions({
-    environmentId: selectedThread?.environmentId ?? null,
-    threadId: selectedThread?.id ?? null,
-  });
-  const terminalMenuSessions = buildTerminalMenuSessions({
-    knownSessions: knownTerminalSessions ?? [],
-    workspaceRoot: selectedThreadProject?.workspaceRoot ?? null,
-  });
-  const selectedThreadDetailWorktreePath = selectedThreadDetail?.thread.worktreePath ?? null;
+  const { knownTerminalSessions, terminalMenuSessions, projectScripts, runProjectScript } =
+    useThreadProjectTools();
   const handleReconnectEnvironment = () => {
     if (!environmentId) {
       return;
@@ -692,74 +636,6 @@ function ThreadRouteContent(
     });
   };
 
-  const handleRunProjectScript = async (script: ProjectScript) => {
-    terminalDebugLog("project-script:press", {
-      scriptId: script.id,
-      command: script.command,
-      hasThread: Boolean(selectedThread),
-      hasWorkspaceRoot: Boolean(selectedThreadProject?.workspaceRoot),
-    });
-
-    if (
-      !selectedThread ||
-      !selectedThreadProject?.workspaceRoot ||
-      !readEnvironmentScope(selectedThread.environmentId, AuthTerminalOperateScope)
-    ) {
-      terminalDebugLog("project-script:abort", {
-        scriptId: script.id,
-        reason: "no-thread-workspace-or-terminal-access",
-      });
-      return;
-    }
-
-    const targetTerminalId = resolveProjectScriptTerminalId({
-      existingTerminalIds: terminalMenuSessions.map((session) => session.terminalId),
-      ...(knownTerminalSessions === null ||
-      !readEnvironmentScope(selectedThread.environmentId, AuthTerminalReadScope)
-        ? { uniqueSuffix: uuidv4() }
-        : {}),
-      hasRunningTerminal: terminalMenuSessions.some(
-        (session) => session.status === "running" || session.status === "starting",
-      ),
-    });
-    const preferredWorktreePath = resolvePreferredThreadWorktreePath({
-      threadShellWorktreePath: selectedThread.worktreePath ?? null,
-      threadDetailWorktreePath: selectedThreadDetailWorktreePath,
-    });
-    const cwd = projectScriptCwd({
-      project: { cwd: selectedThreadProject.workspaceRoot },
-      worktreePath: preferredWorktreePath,
-    });
-    const env = projectScriptRuntimeEnv({
-      project: { cwd: selectedThreadProject.workspaceRoot },
-      worktreePath: preferredWorktreePath,
-    });
-    stagePendingTerminalLaunch({
-      target: {
-        environmentId: selectedThread.environmentId,
-        threadId: selectedThread.id,
-        terminalId: targetTerminalId,
-      },
-      launch: {
-        cwd,
-        worktreePath: preferredWorktreePath,
-        env,
-        initialInput: projectScriptTerminalInput(script.command),
-      },
-    });
-    terminalDebugLog("project-script:staged", {
-      scriptId: script.id,
-      terminalId: targetTerminalId,
-      cwd,
-      worktreePath: preferredWorktreePath,
-    });
-
-    void navigation.navigate("ThreadTerminal", {
-      environmentId: String(selectedThread.environmentId),
-      threadId: String(selectedThread.id),
-      terminalId: targetTerminalId,
-    });
-  };
   const threadGitControlProps = {
     environmentId: environmentIdRaw ?? "",
     threadId: threadId ?? "",
@@ -773,10 +649,7 @@ function ThreadRouteContent(
     onOpenFilesInspector:
       fileInspector.supported && selectedThreadCwd !== null ? handleOpenFilesInspector : undefined,
     onOpenGitInspector: fileInspector.supported ? handleOpenGitInspector : undefined,
-    onMergeBack:
-      mergeBackTargetThreadId !== null && mergeBackRun !== null
-        ? () => void handleMergeBack()
-        : undefined,
+    onMergeBack,
     currentBranch: selectedThread?.branch ?? null,
     gitStatus: gitStatus.data,
     gitOperationLabel: gitState.gitOperationLabel,
@@ -784,17 +657,13 @@ function ThreadRouteContent(
       Boolean(selectedThreadProject?.workspaceRoot) && (canReadTerminal || canOperateTerminal),
     canOperateTerminal,
     canOpenFiles: Boolean(selectedThreadProject?.workspaceRoot),
-    projectScripts: selectedThreadProject
-      ? resolveProjectScripts(
-          routeEnvironmentRuntime?.serverConfig?.settings ?? DEFAULT_SERVER_SETTINGS,
-          selectedThreadProject,
-        )
-      : [],
+    projectScripts,
     terminalSessions: terminalMenuSessions,
     showDirectFileControl: layout.usesSplitView,
     onOpenTerminal: handleOpenTerminal,
     onOpenNewTerminal: handleOpenNewTerminal,
-    onRunProjectScript: handleRunProjectScript,
+    onRunProjectScript: async (script: Parameters<typeof runProjectScript>[0]) =>
+      runProjectScript(script),
     onPull: gitActions.onPullSelectedThreadBranch,
     onRunAction: gitActions.onRunSelectedThreadGitAction,
   };
