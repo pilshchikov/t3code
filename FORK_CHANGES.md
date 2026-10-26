@@ -1,5 +1,15 @@
 # Fork Changes
 
+## Upstream connector follow-up — 2026-10-26 (b6994c5499)
+
+- Include the additional upstream commit published during validation, through
+  `b6994c549977dd194d38f95902fcfac0445d8fa1`. Adopt its pinned cloudflared 2026.10.4
+  URLs and matching checksums in `packages/shared/src/relayClient.ts`, retaining the
+  fork's existing connector selection, opt-ins and privacy policy.
+- Validation: scoped `check:changed HEAD` passes formatting, lint, both knip passes,
+  all 29 affected package typechecks and 14 relay-client cases. Build a packaged arm64
+  desktop artifact; installation/restart and remote mutations are outside this request.
+
 ## Upstream follow-up and Codex Terra 6.1 — 2026-10-26 (220eb73524)
 
 - Merge all ten upstream commits after `3f9448747b` through `220eb73524`, retaining
