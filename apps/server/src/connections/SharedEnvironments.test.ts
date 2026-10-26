@@ -64,8 +64,10 @@ it.layer(NodeServices.layer)("shared environment browser gateway", (it) => {
       Effect.gen(function* () {
         const remoteContext = yield* Layer.build(authLayer(remoteId));
         const remoteAuth = Context.get(remoteContext, EnvironmentAuth.EnvironmentAuth);
+        const remoteSessions = Context.get(remoteContext, SessionStore.SessionStore);
         const remoteOwner = yield* remoteAuth.issueSession({ scopes: AuthStandardClientScopes });
         let modern = true;
+        let ticketAudiences = true;
         let calls = 0;
         const descriptor = (): ExecutionEnvironmentDescriptor => ({
           environmentId: remoteId,
@@ -106,6 +108,10 @@ it.layer(NodeServices.layer)("shared environment browser gateway", (it) => {
             Effect.gen(function* () {
               const request = yield* HttpServerRequest.HttpServerRequest;
               const actor = yield* remoteAuth.authenticateWebSocketUpgrade(request, "rpc");
+              const ticket = new URL(request.url, "http://localhost").searchParams.get("wsTicket");
+              expect((yield* remoteSessions.verifyWebSocketToken(ticket!)).audience).toBe(
+                ticketAudiences ? "rpc" : undefined,
+              );
               const socket = yield* request.upgrade;
               const { pull } = yield* socket.reader;
               const writer = yield* socket.writer;
@@ -123,7 +129,14 @@ it.layer(NodeServices.layer)("shared environment browser gateway", (it) => {
           port: 0,
         });
         yield* remoteServer
-          .serve(remoteApp)
+          .serve(
+            Effect.gen(function* () {
+              const request = yield* HttpServerRequest.HttpServerRequest;
+              if (!ticketAudiences && request.url === "/api/auth/websocket-ticket/rpc")
+                return HttpServerResponse.empty({ status: 404 });
+              return yield* remoteApp;
+            }),
+          )
           .pipe(
             Effect.provideService(
               ServerSecretStore.ServerSecretStore,
@@ -212,12 +225,24 @@ it.layer(NodeServices.layer)("shared environment browser gateway", (it) => {
         });
         expect((yield* fetchAsPhone("/api/example", "POST")).status).toBe(403);
 
-        const ticketResponse = yield* fetchAsPhone("/api/auth/websocket-ticket", "POST");
+        const ticketResponse = yield* fetchAsPhone("/api/auth/websocket-ticket/rpc", "POST");
         expect(ticketResponse.status).toBe(200);
         const { ticket } = (yield* ticketResponse.json) as { ticket: string };
-        expect((yield* sessions.verifyWebSocketToken(ticket)).sessionId).toBe(
+        expect(yield* sessions.verifyWebSocketToken(ticket)).toMatchObject({
+          sessionId: phoneSession.sessionId,
+          audience: "rpc",
+        });
+        const legacyTicketResponse = yield* fetchAsPhone("/api/auth/websocket-ticket", "POST");
+        const legacyTicket = (yield* legacyTicketResponse.json) as { ticket: string };
+        expect((yield* sessions.verifyWebSocketToken(legacyTicket.ticket)).sessionId).toBe(
           phoneSession.sessionId,
         );
+        const mediaTicketResponse = yield* fetchAsPhone("/api/auth/websocket-ticket/media", "POST");
+        const mediaTicket = (yield* mediaTicketResponse.json) as { ticket: string };
+        expect(yield* sessions.verifyWebSocketToken(mediaTicket.ticket)).toMatchObject({
+          sessionId: phoneSession.sessionId,
+          audience: "media",
+        });
         const wsUrl = new URL(base + "/ws");
         wsUrl.protocol = "ws:";
         wsUrl.searchParams.set("wsTicket", ticket);
@@ -230,6 +255,7 @@ it.layer(NodeServices.layer)("shared environment browser gateway", (it) => {
           typeof frames[0] === "string" ? frames[0] : new TextDecoder().decode(frames[0]),
         );
         expect(message).toEqual({ machine: "Mac Mini", scopes: [...phoneScopes].sort() });
+        ticketAudiences = false;
         const cookieUrl = new URL(base + "/ws");
         cookieUrl.protocol = "ws:";
         const cookieSocket = yield* Socket.makeWebSocket(cookieUrl.href, {

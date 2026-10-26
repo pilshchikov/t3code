@@ -25,6 +25,14 @@ T3 Code can use your installed Codex and its existing login. Run `codex login`
 on the environment's machine to sign in. [Provider setup](./install.md#providers)
 covers installation and custom configuration.
 
+## Use GPT-6.1 Terra
+
+Choose **GPT-6.1 Terra** from the thread's model picker. It requires Codex CLI
+[0.159.0 or later](https://learn.chatgpt.com/docs/models) on the selected environment
+and access through your Codex account.
+If the picker asks for a provider update, update Codex in **Settings → Providers**,
+then refresh its status. Existing threads keep their selected model.
+
 ## Use multiple accounts
 
 Add another ChatGPT account in **Settings → Providers**, then select the account

@@ -206,7 +206,7 @@ describe("ConnectionResolver", () => {
               return Promise.resolve(
                 Response.json({ message: "host authentication required" }, { status: 401 }),
               );
-            if (request.url.endsWith("/api/auth/websocket-ticket"))
+            if (request.url.endsWith("/api/auth/websocket-ticket/rpc"))
               return Promise.resolve(
                 Response.json({ ticket: "host-ticket", expiresAt: "2099-01-01T00:00:00Z" }),
               );

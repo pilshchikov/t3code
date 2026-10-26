@@ -1,5 +1,41 @@
 # Fork Changes
 
+## Upstream follow-up and Codex Terra 6.1 — 2026-10-26 (220eb73524)
+
+- Merge all ten upstream commits after `3f9448747b` through `220eb73524`, retaining
+  both histories and the separately published iOS fork changes. Review automatic
+  merges in `PullRequestsPage.tsx` and `ProviderSettingsForm.test.ts`: retain project
+  group scoping, fork-specific provider configuration and existing regression coverage.
+- Adopt explicit provider setup flows, stable editable provider rows, single-commit
+  color dragging, PR confirmation cleanup, bounded PR cache ownership, mobile composer
+  sizing and shared media/file-jump lifecycles. Dashboard layouts, Files/worktree recovery,
+  settled/grouped project rail, account usage tools, Claude isolation, idle compaction,
+  desktop-host gateways and bundled SSH updates retain their fork implementations.
+  No incoming changes touch the disabled analytics/OTLP owners.
+- Register `gpt-6.1-terra` as a current Codex model in the bundled catalog and legacy
+  classification overlay. Announce its documented Codex CLI minimum of `0.159.0` through
+  the existing update-required picker path. Bump manifest freshness so an older cached
+  manifest cannot mask this release. Use Codex-discovered reasoning/speed capabilities
+  and preserve selected/default models. Web, desktop and native mobile share this catalog.
+- Repair a protocol regression exposed by the fork checks: host gateways now issue the
+  new `/rpc` and `/media` tickets locally with their proper audience, rather than forwarding
+  ticket minting to the remote host. Upstream RPC connections request a remote RPC ticket,
+  with the legacy endpoint used only for a 404. Keep phone credentials scoped to the paired
+  host, intersected grants, revocation and backward compatibility. The existing two-server
+  regression fails before the fix with a host-token signature mismatch; it passes afterward
+  with live HTTP/WebSocket forwarding, audience checks and an older-server fallback.
+- Source owners: `apps/server/src/provider/model-manifest.json`, `connections/SharedEnvironments.ts`,
+  client-runtime resolver fixture and upstream-owned settings/PR/mobile files. User guidance:
+  `providers-codex.md`.
+- Validation: `check:changed bb48ca95cb` passes: 386 tests across 27 files, 34 affected
+  package typechecks, formatting, lint, both knip passes, generated GraphQL and unused-patch
+  checks. Another 24 Codex/catalog cases pass; targeted dashboard, settlement, Files checkout,
+  SSH runtime, native discovery, Claude-home and privacy cases pass. A read-only runtime probe
+  validates the actual Terra manifest, older-CLI hint, wire ID and discovered reasoning choices.
+  `lint:mobile` was attempted but SwiftLint, ktlint and detekt are unavailable; no native
+  Swift/Kotlin source changed. Rebuild the packaged local Mac app for later installation;
+  leave running applications and all remote servers untouched.
+
 ## Fork branch reconciliation — 2026-10-26
 
 - Bring the published iOS navigation/thread-control commit `e08b3741ca` into the

@@ -294,8 +294,17 @@ const make = Effect.gen(function* () {
         .awaitInvalidation(actor.sessionId, actor.credentialScopes ?? actor.scopes)
         .pipe(Effect.orDie);
       // The browser ticket belongs to the host. It must never be sent to the other server.
-      if (!upgrade && path === "/api/auth/websocket-ticket") {
-        const ticket = yield* auth.issueWebSocketTicket(actor);
+      const ticketUse =
+        path === "/api/auth/websocket-ticket/rpc"
+          ? "rpc"
+          : path === "/api/auth/websocket-ticket/media"
+            ? "media"
+            : undefined;
+      if (!upgrade && (path === "/api/auth/websocket-ticket" || ticketUse !== undefined)) {
+        const ticket = yield* auth.issueWebSocketTicket(
+          actor,
+          ticketUse === undefined ? undefined : { use: ticketUse },
+        );
         return yield* HttpServerResponse.schemaJson(AuthWebSocketTicketResult)(ticket);
       }
       const upstreamUrl = new URL(environment.httpBaseUrl);
@@ -307,12 +316,20 @@ const make = Effect.gen(function* () {
       Object.assign(outgoingHeaders, headers(actor, environment));
       if (upgrade) {
         if (path === "/ws") {
-          const response = yield* client
-            .post(new URL("/api/auth/websocket-ticket", environment.httpBaseUrl).href, {
-              headers: outgoingHeaders,
-            })
-            .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(AuthWebSocketTicketResult)));
-          upstreamUrl.searchParams.set("wsTicket", response.ticket);
+          let response = yield* client.post(
+            new URL("/api/auth/websocket-ticket/rpc", environment.httpBaseUrl).href,
+            { headers: outgoingHeaders },
+          );
+          if (response.status === 404) {
+            yield* response.arrayBuffer;
+            response = yield* client.post(
+              new URL("/api/auth/websocket-ticket", environment.httpBaseUrl).href,
+              { headers: outgoingHeaders },
+            );
+          }
+          const ticket =
+            yield* HttpClientResponse.schemaBodyJson(AuthWebSocketTicketResult)(response);
+          upstreamUrl.searchParams.set("wsTicket", ticket.ticket);
         }
         upstreamUrl.protocol = upstreamUrl.protocol === "https:" ? "wss:" : "ws:";
         const upstream = yield* Socket.makeWebSocket(upstreamUrl.href, {
