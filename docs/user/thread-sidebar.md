@@ -13,12 +13,12 @@ desktop, or mobile client is connected. The default is **Never**, so threads mov
 settle them manually. **When PR merges or closes** settles a thread only when the finished pull
 request is not older than the user's latest activity. **After inactivity** uses the configured day
 count and keeps threads with open pull requests active. Active work, pending input, and live
-agent background work keep the thread active. Change the policy in **Settings > General**. A
+agent background work keep the thread active. Change the policy in **Settings > Threads**. A
 settings change affects future settlement and does not reopen a settled thread.
 
 The change is written to every environment you are
 connected to at that moment. An environment that is offline keeps its old value. When a connected
-environment holds a different value, **Settings > General** shows a warning that names it. Choose
+environment holds a different value, **Settings > Threads** shows a warning that names it. Choose
 **Apply to all** to write your current values to every connected environment. The same applies to
 the new-thread workspace mode and the source control writing style.
 
@@ -27,6 +27,14 @@ Pin a thread from its menu to keep it above your active work.
 Right-click a pull request link in a thread and choose **Link to thread** to show that pull request
 in the sidebar. With the finished-pull-request policy selected, that linked request can settle the
 thread. Right-click the same link and choose **Unlink from thread** to remove it.
+On mobile, **New thread** starts in the current thread's project, or else in the
+last project you opened or chose on that device. If neither is available, the
+project picker opens. Turn off **Settings → General → Use last project** to
+choose a project every time. When you pick a project that is on more than one
+machine, the thread starts on a connected one if any is connected.
+
+When you change a new thread's project, T3 Code stays in the current environment
+if that project exists there. Otherwise it selects an environment that has it.
 
 ### Start without a project
 
@@ -127,8 +135,8 @@ To generate a fresh title from the conversation, open a thread's menu and choose
 **Regenerate title**. The action is unavailable while title generation is in progress
 or when the connected environment needs a server update.
 
-To change how titles are written, add **Thread title instructions** in **Settings → General →
-Text generation**, such as a length limit or an identifier to put first. They apply to new and
+To change how titles are written, add **Thread title instructions** in **Settings → Threads →
+Text generation**, under Advanced, such as a length limit or an identifier to put first. They apply to new and
 regenerated titles. Select a project to give it its own instructions.
 
 Agents connected through T3 Code can use the same server-owned metadata workflow to
@@ -146,8 +154,8 @@ there. A thread returns to the top of the active list when it finishes, fails, o
 answer. The Working section lists the thread you last sent work to first. Pinned threads stay in
 the pinned section.
 
-This is on by default. Turn it off with **Settings → Beta → Working section** on web and desktop,
-or **Settings → Thread behavior → Working section** on iOS and Android. Each device keeps its own
+This is on by default. Turn it off with **Settings → General → Working section** on web and desktop,
+or **Settings → General → Working section** on iOS and Android. Each device keeps its own
 choice.
 
 While this is on, the active list is ordered by when each thread last came back to you, so you
@@ -205,7 +213,7 @@ choose **Auto-settle behavior**, and pick **Disabled**. The current option is ch
 **Enabled** to return to the usual rules. Manual settle, snooze, and archive still work while it
 is disabled.
 
-Change these rules in **Settings → General** on web and desktop, or **Settings → Thread behavior** on mobile.
+Change these rules in **Settings → Threads**.
 They continue to run when your apps are closed. On web and desktop, choose an environment at the
 top to change only its rules, or **All environments** to update connected environments together.
 Mixed values show where the selected environments disagree. Mobile applies these
@@ -255,8 +263,8 @@ the continuation finishes. If the queue was held by a restart, resume it then.
 When the provider reports a reset time, choose **Resume at reset** to schedule a
 continuation. **Auto-resume limited threads** is enabled by default when no saved
 preference exists. It schedules a continuation for the main thread when its provider
-reports a usage-limit reset time. Change it in **Settings → General** on web and
-desktop, or **Settings → Thread behavior** on mobile. A saved Off preference is
+reports a usage-limit reset time. Change it in **Settings → Threads** on web and
+desktop, or **Settings → Threads** on mobile. A saved Off preference is
 preserved, and you can cancel an individual continuation from its thread.
 The environment must be running when the reset arrives; it resumes overdue
 continuations after a restart. Stopping the thread, sending a new message,

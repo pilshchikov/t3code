@@ -159,7 +159,7 @@ it("omits an empty reset plate but keeps countdowns and banked credits visible",
   await act(() =>
     screen.rerender(<UsageLimitsPooled presentations={presentations(undefined, 0)} now={now} />),
   );
-  await expect.element(segment.getByText("100%", { exact: true })).toBeVisible();
+  await expect.element(segment).toHaveAccessibleName("Alpha: 100% left");
   expect(plate()).toBeNull();
 
   await act(() =>

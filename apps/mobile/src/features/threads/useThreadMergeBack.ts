@@ -29,24 +29,22 @@ export function useThreadMergeBack(
   const onMergeBack = async () => {
     if (busyRef.current || !canOperate || !thread || !targetThreadId || !run) return;
     busyRef.current = true;
-    try {
-      const result = await mergeBack({
-        environmentId: thread.environmentId,
-        input: {
-          sourceThreadId: thread.id,
-          targetThreadId,
-          runId: run.id,
-          creationSource: "mobile",
-        },
-      });
-      if (result._tag === "Success")
-        selectDetail({
-          name: "Thread",
-          params: { environmentId: thread.environmentId, threadId: targetThreadId },
-        });
-    } finally {
+    const result = await mergeBack({
+      environmentId: thread.environmentId,
+      input: {
+        sourceThreadId: thread.id,
+        targetThreadId,
+        runId: run.id,
+        creationSource: "mobile",
+      },
+    }).finally(() => {
       busyRef.current = false;
-    }
+    });
+    if (result._tag === "Success")
+      selectDetail({
+        name: "Thread",
+        params: { environmentId: thread.environmentId, threadId: targetThreadId },
+      });
   };
   return canOperate && targetThreadId !== null && run !== null
     ? () => void onMergeBack()

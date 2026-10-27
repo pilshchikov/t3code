@@ -1,5 +1,38 @@
 # Fork Changes
 
+## Upstream synchronization — 2026-10-27 (d1c4b52b7c)
+
+- Merge 138 upstream commits through `d1c4b52b7c7c7e1b7637ec47e4c959ff0c2d8d99`
+  into the fork, retaining both histories. Review 120 overlapping files and reconcile
+  36 conflicts. Adopt 0.1.3, the FX provider, compact MCP schemas, delegated-run fixes,
+  settings page organization, Files save sessions/revisioned queries, mobile navigation
+  and lifecycle updates, and desktop startup/release improvements.
+- Preserve dashboards and Appearance choices, settled/grouped project rail, manual ordering,
+  expanded composer and action orb, custom colors/type/chat width, native Files tree and
+  checkout recovery, editor navigation/undo, Claude account isolation, agent-visible account
+  usage, continuous usage bars, desktop phone gateway and packaged SSH environment updates.
+  Analytics remains a no-op; upstream failed-batch retries do not enable collection.
+- Move fork settlement controls and settled-thread retention into Threads settings, retain
+  Never as the default and open-PR protection, and move the full idle compaction controls
+  into Providers. Retain fork worktree cleanup precedence and retention defaults. Keep
+  Terra 6.1 and its CLI requirement, using upstream release-date-based new badges.
+- Keep fork memory, workspace, peer messaging and usage tools in the condensed MCP server.
+  Retain their agent instructions alongside upstream instructions. The strict context-budget
+  fixture explicitly includes these extra capabilities: Claude 9,962 bytes, Codex 10,508
+  bytes, tool schemas 58,389 bytes. Preserve exact-size checks and model eval tooling.
+- Integrate Markdown frontmatter masking into the fork preview while preserving checkbox
+  offsets. Adapt directory invalidation and asset tests to selected checkouts and the native
+  tree, and protect file dragging from opening a preview. Keep mobile checkout and merge-back
+  controls compatible with upstream React Compiler coverage.
+- Validation: `check:changed aadc9af1cf` passes all 4,954 tests in 244 files, 36 affected
+  package typechecks, formatting, generated GraphQL and patch checks. Its lint and unused-export
+  findings are fixed; final changed-file lint and both knip rechecks pass. Another 46 fork
+  preservation cases, 30 dashboard/rail/relay/Claude/privacy/idle-compaction cases and 25 fork
+  tools/SSH cases pass. The real MCP model eval was attempted but requires an unavailable
+  `ANTHROPIC_API_KEY`; its dry run succeeds. Native lint was attempted; SwiftLint, ktlint and
+  detekt are unavailable locally. Build/stage the arm64 desktop app without restarting local
+  or remote applications.
+
 ## Upstream connector follow-up — 2026-10-26 (b6994c5499)
 
 - Include the additional upstream commit published during validation, through

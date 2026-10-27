@@ -1,3 +1,4 @@
+import type { ReviewDiffPreviewInput } from "@t3tools/contracts";
 import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { useAtomValue } from "@effect/atom-react";
 import type { FileDiffContentsLoader, FileDiffMetadata } from "@pierre/diffs";
@@ -19,7 +20,6 @@ import {
   TextWrapIcon,
 } from "lucide-react";
 import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide";
-import * as DateTime from "effect/DateTime";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useCodeViewFileReveal } from "./diffs/useCodeViewFileReveal";
 import { useFilesystemReadAccess } from "~/state/filesystem";
@@ -40,7 +40,6 @@ import { useRenderedAppearance } from "../hooks/useTheme";
 import {
   buildFileDiffContentVersion,
   buildFileDiffIdentityKey,
-  getDiffCollapseIconClassName,
   getDiffLineStat,
   getRenderablePatch,
   resolveDiffThemeName,
@@ -122,14 +121,12 @@ function DiffFileCollapseToggle({
   fileKey,
   collapsed,
   unavailable,
-  iconClassName,
   onToggle,
 }: {
   filePath: string;
   fileKey: string;
   collapsed: boolean;
   unavailable: boolean;
-  iconClassName: string;
   onToggle: (fileKey: string) => void;
 }) {
   return (
@@ -150,10 +147,7 @@ function DiffFileCollapseToggle({
           />
         }
       >
-        <MorphIcon
-          className={cn("size-4", iconClassName)}
-          icon={collapsed ? ChevronRight : ChevronDown}
-        />
+        <MorphIcon className="size-4" icon={collapsed ? ChevronRight : ChevronDown} />
       </TooltipTrigger>
       <TooltipPopup side="top">{collapsed ? "Expand diff" : "Collapse diff"}</TooltipPopup>
     </Tooltip>
@@ -343,18 +337,21 @@ export default function DiffPanel({
     },
     { enabled: isGitRepo && selectedTurn !== undefined },
   );
-  const branchDiffPreview = useEnvironmentQuery(
+  const branchDiffPreviewInput: ReviewDiffPreviewInput | undefined =
     canReadFiles && selectedRunId === null && activeThread && activeCwd
+      ? {
+          cwd: activeCwd,
+          ...(selectedBaseRef ? { baseRef: selectedBaseRef } : {}),
+          ignoreWhitespace: diffIgnoreWhitespace,
+          sourceKind: activeSourceKind,
+          includePatch: false,
+        }
+      : undefined;
+  const branchDiffPreview = useEnvironmentQuery(
+    branchDiffPreviewInput && activeThread
       ? reviewEnvironment.diffPreview({
           environmentId: activeThread.environmentId,
-          input: {
-            cwd: activeCwd,
-            ...(selectedBaseRef ? { baseRef: selectedBaseRef } : {}),
-            ignoreWhitespace: diffIgnoreWhitespace,
-            sourceKind: activeSourceKind,
-            // The overview is the file list; patch bodies are fetched per file below.
-            includePatch: false,
-          },
+          input: branchDiffPreviewInput,
         })
       : null,
   );
@@ -588,9 +585,7 @@ export default function DiffPanel({
     baseRef: lazySource?.baseRef ?? selectedBaseRef,
     ignoreWhitespace: diffIgnoreWhitespace,
     theme: resolvedTheme,
-    revision: branchDiffPreview.data
-      ? DateTime.formatIso(branchDiffPreview.data.generatedAt)
-      : undefined,
+    previewInput: branchDiffPreviewInput,
     preview: renderablePatch,
   });
   const revalidateOnOpen = useRef(false);
@@ -717,14 +712,13 @@ export default function DiffPanel({
     collapseScopeKey,
   ]);
 
-  const treeRevealScope = useMemo(
-    () => ({ collapseScopeKey, diffSelection }),
-    [collapseScopeKey, diffSelection],
-  );
-  const requestTreeReveal = useCodeViewFileReveal(
-    codeView,
-    treeRevealScope,
-    codeViewFiles.map((file) => file.fileKey),
+  const requestTreeReveal = useCodeViewFileReveal();
+  const attachCodeView = useCallback(
+    (viewer: AnnotatableCodeViewHandle | null) => {
+      setCodeView(viewer);
+      requestTreeReveal.attach(viewer);
+    },
+    [requestTreeReveal],
   );
   const revealDiffFile = useCallback(
     (filePath: string) => {
@@ -743,7 +737,7 @@ export default function DiffPanel({
       if (lazySource && index >= settledFileCount) {
         requestFile(index);
       }
-      requestTreeReveal(file.fileKey);
+      requestTreeReveal.request(file.fileKey);
     },
     [
       renderableFileEntries,
@@ -895,7 +889,7 @@ export default function DiffPanel({
   const diffCodeView = (
     <AnnotatableCodeView
       key={`${collapseScopeKey ?? reviewSectionId}:${resolvedTreeFilePath ?? "all"}`}
-      viewerRef={setCodeView}
+      viewerRef={attachCodeView}
       codeViewKey={`${codeViewMountKey}:${lazySource ? filePatchScope : (resolvedTreeFilePath ?? "all")}`}
       className="h-full min-h-0 overflow-auto"
       onRevealSearchMatch={unfoldDiffFile}
@@ -937,12 +931,12 @@ export default function DiffPanel({
             fileKey={fileKey}
             collapsed={unavailable || viewerCollapsed}
             unavailable={unavailable}
-            iconClassName={getDiffCollapseIconClassName(fileDiff)}
             onToggle={toggleDiffFileCollapsed}
           />
         );
       }}
       options={{
+        onPostRender: requestTreeReveal.flush,
         diffStyle: diffLayout === "split" ? "split" : "unified",
         lineDiffType: "none",
         overflow: wordWrap ? "wrap" : "scroll",
@@ -1091,7 +1085,7 @@ export default function DiffPanel({
                 render={
                   // Too narrow for both refs, the New design keeps the target readable and drops
                   // the head, which is the thread's own branch.
-                  <span className="flex min-w-[min(3rem,calc(100%-2.75rem))] items-center gap-2 overflow-hidden redesign:@max-[20rem]/diff-refs:hidden" />
+                  <span className="flex min-w-[min(3rem,calc(100%-2.75rem))] items-center gap-2 overflow-hidden @max-[20rem]/diff-refs:hidden" />
                 }
               >
                 <span className="min-w-0 max-w-48 truncate">
@@ -1105,9 +1099,7 @@ export default function DiffPanel({
             </Tooltip>
             <Tooltip>
               <TooltipTrigger
-                render={
-                  <span aria-hidden className="hidden redesign:@max-[20rem]/diff-refs:inline" />
-                }
+                render={<span aria-hidden className="hidden @max-[20rem]/diff-refs:inline" />}
               >
                 vs
               </TooltipTrigger>
@@ -1129,7 +1121,7 @@ export default function DiffPanel({
             >
               <ComboboxTrigger
                 render={<Button variant="ghost-muted" size="xs" />}
-                className="min-w-9 max-w-48 shrink redesign:shrink-0"
+                className="min-w-9 max-w-48 shrink shrink-0"
                 aria-label={`Change comparison target. Currently ${selectedGitSource.baseRef}`}
               >
                 <span className="min-w-0 truncate">{selectedGitSource.baseRef}</span>

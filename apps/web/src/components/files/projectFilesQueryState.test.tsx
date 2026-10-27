@@ -914,6 +914,37 @@ describe("project query refresh", () => {
       atomHooks.registry = null;
     }
   });
+  it("refetches a listing when the workspace mutation changes, not when it is first read", async () => {
+    let fetches = 0;
+    const listing = Atom.make(() => {
+      fetches += 1;
+      return AsyncResult.success({ entries: [], truncated: false });
+    }).pipe(Atom.keepAlive);
+    projectMocks.listEntries.mockReturnValue(listing);
+    projectMocks.watchEntries.mockReturnValue(Atom.make(AsyncResult.initial()));
+    const registry = AtomRegistry.make();
+    atomHooks.registry = registry;
+    const read = (mutationId: string | null) => {
+      reactHooks.beginRender();
+      return useProjectEntriesQuery(environmentId, "/repo", "src", false, mutationId);
+    };
+
+    try {
+      read("mutation-1");
+      read("mutation-1");
+      expect(fetches).toBe(1);
+
+      read("mutation-2");
+      // The refetch runs after the render that read the new revision; a reader that is not
+      // subscribed sees it on its next read.
+      await Promise.resolve();
+      read("mutation-2");
+      expect(fetches).toBe(2);
+    } finally {
+      registry.dispose();
+      atomHooks.registry = null;
+    }
+  });
 });
 
 function projectEntries(
