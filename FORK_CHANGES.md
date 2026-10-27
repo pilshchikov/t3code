@@ -22,7 +22,8 @@
   bytes, tool schemas 58,389 bytes. Preserve exact-size checks and model eval tooling.
 - Integrate Markdown frontmatter masking into the fork preview while preserving checkbox
   offsets. Adapt directory invalidation and asset tests to selected checkouts and the native
-  tree, and protect file dragging from opening a preview. Keep mobile checkout and merge-back
+  tree, and protect file dragging from opening a preview. Drop obsolete outer Pierre drag/context
+  handlers; the native tree owns these events. Keep mobile checkout and merge-back
   controls compatible with upstream React Compiler coverage.
 - Validation: `check:changed aadc9af1cf` passes all 4,954 tests in 244 files, 36 affected
   package typechecks, formatting, generated GraphQL and patch checks. Its lint and unused-export
