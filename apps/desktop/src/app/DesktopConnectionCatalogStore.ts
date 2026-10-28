@@ -163,13 +163,13 @@ export class DesktopConnectionCatalogStore extends Context.Service<
       | DesktopConnectionCatalogStoreMigrationError
       | DesktopConnectionCatalogStoreProtectionError
     >;
+    readonly clear: Effect.Effect<void>;
     readonly set: (
       catalog: string,
     ) => Effect.Effect<
       boolean,
       DesktopConnectionCatalogStoreWriteError | DesktopConnectionCatalogStoreProtectionError
     >;
-    readonly clear: Effect.Effect<void>;
   }
 >()("@t3tools/desktop/app/DesktopConnectionCatalogStore") {}
 

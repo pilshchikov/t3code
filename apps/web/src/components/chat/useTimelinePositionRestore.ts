@@ -10,8 +10,8 @@ const SETTLE_MAX_FRAMES = 60;
 /**
  * Index and end scrolling start from estimated row sizes, so they can stop
  * short of a tall row. Corrects against the DOM until the viewport holds the
- * target for two layout frames, the frame budget runs out, the caller cancels,
- * or the target disappears.
+ * target through the virtualizer's deferred layout frames, the frame budget
+ * runs out, the caller cancels, or the target disappears.
  */
 export function settleListScroll(
   list: Pick<LegendListRef, "getScrollableNode" | "scrollToOffset">,
@@ -29,13 +29,13 @@ export function settleListScroll(
       if (!element || offset === undefined || frames > SETTLE_MAX_FRAMES) return resolve();
       if (Math.abs(element.scrollTop - offset) > 1) {
         stableFrames = 0;
-        void list.scrollToOffset({ offset, animated: false }).then(() => {
-          requestAnimationFrame(reconcile);
-        });
+        void list.scrollToOffset({ offset, animated: false }).catch(() => {});
+        element.scrollTop = offset;
+        requestAnimationFrame(reconcile);
         return;
       }
       stableFrames += 1;
-      if (stableFrames >= 2) resolve();
+      if (stableFrames >= 6) resolve();
       else requestAnimationFrame(reconcile);
     };
     requestAnimationFrame(reconcile);

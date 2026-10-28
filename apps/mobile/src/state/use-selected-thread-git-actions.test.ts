@@ -147,11 +147,11 @@ describe("thread Git mutation permissions", () => {
         newBranch: "feature/task",
       });
       expect(result).toEqual(
-        canOperate ? { worktree: { path: "/repo-worktree", refName: "feature/task" } } : null,
+        canOperate ? { worktree: { path: "/repo-worktree", refName: "spilshchikov/task" } } : null,
       );
       expect(state.worktrees).toEqual(canOperate ? ["/repo-worktree"] : []);
       expect(state.thread.worktreePath).toBe(canOperate ? "/repo-worktree" : null);
-      expect(state.thread.branch).toBe(canOperate ? "feature/task" : "main");
+      expect(state.thread.branch).toBe(canOperate ? "spilshchikov/task" : "main");
     },
   );
 
@@ -222,10 +222,12 @@ describe("thread Git mutation permissions", () => {
               });
       expect(result).toEqual(
         operation === "worktree"
-          ? { worktree: { path: "/repo-worktree", refName: "feature/task" } }
+          ? { worktree: { path: "/repo-worktree", refName: "spilshchikov/task" } }
           : { refName: "feature/task" },
       );
-      expect(state.thread.branch).toBe("feature/task");
+      expect(state.thread.branch).toBe(
+        operation === "worktree" ? "spilshchikov/task" : "feature/task",
+      );
       expect(state.metadataRequests).toHaveLength(1);
       expect(state.results).toEqual([]);
     },

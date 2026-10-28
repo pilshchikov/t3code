@@ -1,3 +1,4 @@
+import { resolveInteractionMode } from "../mcp/delegatedTaskModes.ts";
 import {
   OrchestratorMcpFailure,
   isProviderNativeSubagentThread,
@@ -89,10 +90,7 @@ const make = Effect.gen(function* () {
               message:
                 "Use the provider's native SendMessage/send_input tool for this subagent, or message its parent. Its T3 transcript cannot accept ordinary turns.",
             });
-          yield* OrchestratorMcpService.resolveInteractionMode(
-            input.sender.interactionMode,
-            target.interactionMode,
-          );
+          yield* resolveInteractionMode(input.sender.interactionMode, target.interactionMode);
           const header = `Agent message from ${input.sender.environmentLabel} / ${input.sender.threadTitle}\nSource environment: ${input.sender.environmentId}\nSource thread: ${input.sender.threadId}\n\n`;
           const result = yield* api
             .sendToThread(scope, { ...input, message: header + input.message })

@@ -1,3 +1,4 @@
+import { RemoteDelegation } from "../peer/RemoteDelegation.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import {
@@ -84,6 +85,7 @@ const threads = ThreadManagement.layer.pipe(
   Layer.provide(CommandReceipts.layer.pipe(Layer.provide(SqlitePersistence.layerMemory))),
 );
 const api = OrchestratorMcpService.layer.pipe(
+  Layer.provide(Layer.mock(RemoteDelegation)({})),
   Layer.provideMerge(threads),
   Layer.provide(registry),
   Layer.provide(ProviderRegistryMock.layer()),

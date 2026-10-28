@@ -58,7 +58,6 @@ import type {
   TerminalMetadataStreamEvent,
   TerminalOpenInput,
   TerminalResizeInput,
-  TerminalRestartInput,
   TerminalSessionSnapshot,
   TerminalWriteInput,
 } from "./terminal.ts";
@@ -69,9 +68,7 @@ import type {
   PreviewEvent,
   PreviewListInput,
   PreviewListResult,
-  PreviewNavigateInput,
   PreviewOpenInput,
-  PreviewRefreshInput,
   PreviewReportStatusInput,
   PreviewResizeInput,
   PreviewSessionSnapshot,
@@ -93,7 +90,7 @@ import type {
   BrowserImportSourceId,
 } from "./browserImport.ts";
 import { ListResumableSessionsInput, ListResumableSessionsResult } from "./resumableSessions.ts";
-import { AuthAccessTokenResult, AuthSessionState, AuthWebSocketTicketResult } from "./auth.ts";
+import { AuthAccessTokenResult, AuthSessionState } from "./auth.ts";
 import { AdvertisedEndpoint } from "./remoteAccess.ts";
 import { ExecutionEnvironmentDescriptor } from "./environment.ts";
 import { type ClientSettings, type QuitConfirmationMode, SnapShotShortcut } from "./settings.ts";
@@ -1116,12 +1113,12 @@ export type SystemSettingsPane = typeof SystemSettingsPaneSchema.Type;
 
 export interface DesktopBridge {
   getAppBranding: () => DesktopAppBranding | null;
-  getRelayTelemetryEnabled?: () => boolean;
-  getPathForFile?: (file: File) => string;
-  getClientPlatform?: () => string;
-  setNotificationBadge?: (badge: { count: number; image: string | null }) => Promise<void>;
-  onNotificationBadgeClear?: (listener: () => void) => () => void;
-  onTrackpadScrollEnd?: (listener: () => void) => () => void;
+  getRelayTelemetryEnabled: () => boolean;
+  getPathForFile: (file: File) => string;
+  getClientPlatform: () => string;
+  setNotificationBadge: (badge: { count: number; image: string | null }) => Promise<void>;
+  onNotificationBadgeClear: (listener: () => void) => () => void;
+  onTrackpadScrollEnd: (listener: () => void) => () => void;
   /**
    * Renderer `window.focus()` cannot raise an Electron window, and on Wayland
    * only the main process can spend a notification click's activation token.
@@ -1130,8 +1127,8 @@ export interface DesktopBridge {
   /** Packaged Chromium only ships en-US locale data, so native OS locale must cross IPC explicitly. */
   getSystemLocale?: () => string | null;
   getLocalEnvironmentBootstraps: () => readonly DesktopEnvironmentBootstrap[];
-  getLocalEnvironmentEnabled?: () => boolean;
-  setLocalEnvironmentEnabled?: (enabled: boolean) => Promise<void>;
+  getLocalEnvironmentEnabled: () => boolean;
+  setLocalEnvironmentEnabled: (enabled: boolean) => Promise<void>;
   getLocalEnvironmentBearerToken: () => Promise<string>;
   getClientSettings: () => Promise<ClientSettings | null>;
   setClientSettings: (settings: ClientSettings) => Promise<void>;
@@ -1144,24 +1141,24 @@ export interface DesktopBridge {
   ) => Promise<BundledServerRuntime>;
   discoverSshHosts: () => Promise<readonly DesktopDiscoveredSshHost[]>;
   resolveSshHost: (alias: string) => Promise<DesktopSshEnvironmentTarget>;
-  requestSnapShotPermissions?: (includeAccessibility: boolean) => Promise<void>;
-  getSnapShotState?: () => Promise<DesktopSnapShotState>;
-  setupSnapShot?: (action: DesktopSnapShotSetupAction) => Promise<void>;
-  previewSnapShotConfig?: (
+  requestSnapShotPermissions: (includeAccessibility: boolean) => Promise<void>;
+  getSnapShotState: () => Promise<DesktopSnapShotState>;
+  setupSnapShot: (action: DesktopSnapShotSetupAction) => Promise<void>;
+  previewSnapShotConfig: (
     request: DesktopCaptureConfigRequest,
   ) => Promise<DesktopCaptureConfigPreview | null>;
-  applySnapShotConfig?: (previewId: string) => Promise<DesktopCaptureConfigApplied>;
-  checkSnapShotShortcut?: (
+  applySnapShotConfig: (previewId: string) => Promise<DesktopCaptureConfigApplied>;
+  checkSnapShotShortcut: (
     shortcut: SnapShotShortcut,
   ) => Promise<DesktopSnapShotShortcutAvailability>;
-  setSnapShotShortcutSuppressed?: (suppressed: boolean) => Promise<void>;
-  listPendingSnapShots?: () => Promise<readonly DesktopPendingSnapShot[]>;
-  readSnapShot?: (id: string) => Promise<DesktopSnapShot>;
-  setSnapShotAnimationDestination?: (
+  setSnapShotShortcutSuppressed: (suppressed: boolean) => Promise<void>;
+  listPendingSnapShots: () => Promise<readonly DesktopPendingSnapShot[]>;
+  readSnapShot: (id: string) => Promise<DesktopSnapShot>;
+  setSnapShotAnimationDestination: (
     destination: DesktopSnapShotAnimationDestination,
   ) => Promise<void>;
-  dismissSnapShotAnimation?: (id: DesktopSnapShotId) => Promise<void>;
-  acknowledgeSnapShot?: (id: string) => Promise<void>;
+  dismissSnapShotAnimation: (id: DesktopSnapShotId) => Promise<void>;
+  acknowledgeSnapShot: (id: string) => Promise<void>;
   ensureSshEnvironment: (
     target: DesktopSshEnvironmentTarget,
     options?: { issuePairingToken?: boolean },
@@ -1173,10 +1170,6 @@ export interface DesktopBridge {
     credential: string,
   ) => Promise<AuthAccessTokenResult>;
   fetchSshSessionState: (httpBaseUrl: string, bearerToken: string) => Promise<AuthSessionState>;
-  issueSshWebSocketTicket: (
-    httpBaseUrl: string,
-    bearerToken: string,
-  ) => Promise<AuthWebSocketTicketResult>;
   onSshPasswordPrompt: (listener: (request: DesktopSshPasswordPromptRequest) => void) => () => void;
   resolveSshPasswordPrompt: (requestId: string, password: string | null) => Promise<void>;
   getServerExposureState: () => Promise<DesktopServerExposureState>;
@@ -1191,56 +1184,54 @@ export interface DesktopBridge {
   setWslDistro: (distro: string | null) => Promise<DesktopWslState>;
   setWslOnly: (enabled: boolean) => Promise<DesktopWslState>;
   pickFolder: (options?: PickFolderOptions) => Promise<string | null>;
-  pickProjectFavicon?: (initialPath?: string) => Promise<string | null>;
-  pickThemeFiles?: () => Promise<readonly PickedThemeFile[] | null>;
+  pickProjectFavicon: (initialPath?: string) => Promise<string | null>;
+  pickThemeFiles: () => Promise<readonly PickedThemeFile[] | null>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
   showContextMenu: <T extends string>(
     items: readonly ContextMenuItem<T>[],
     position?: { x: number; y: number },
   ) => Promise<T | null>;
-  receiveProviderAuthCallback?: (authorizationUrl: string) => Promise<string>;
-  cancelProviderAuthCallback?: (authorizationUrl: string) => Promise<void>;
+  receiveProviderAuthCallback: (authorizationUrl: string) => Promise<string>;
+  cancelProviderAuthCallback: (authorizationUrl: string) => Promise<void>;
   openExternal: (url: string) => Promise<boolean>;
-  openSystemSettings?: (pane: SystemSettingsPane) => Promise<boolean>;
-  checkSystemPermission?: (pane: SystemSettingsPane) => Promise<boolean>;
-  /** Older builds lack this; fall back to VS Code only. */
-  probeRemoteEditors?: () => Promise<readonly EditorId[]>;
-  pasteAsText?: () => Promise<void>;
+  openSystemSettings: (pane: SystemSettingsPane) => Promise<boolean>;
+  checkSystemPermission: (pane: SystemSettingsPane) => Promise<boolean>;
+  probeRemoteEditors: () => Promise<readonly EditorId[]>;
+  pasteAsText: () => Promise<void>;
   onMenuAction: (listener: (action: string) => void) => () => void;
-  onSnapShotEvent?: (listener: (event: DesktopSnapShotEvent) => void) => () => void;
-  onQuitShortcut?: (listener: (event: QuitShortcutHintEvent) => void) => () => void;
+  onSnapShotEvent: (listener: (event: DesktopSnapShotEvent) => void) => () => void;
+  onQuitShortcut: (listener: (event: QuitShortcutHintEvent) => void) => () => void;
   getWindowFullscreenState: () => boolean;
   onWindowFullscreenStateChange: (listener: (fullscreen: boolean) => void) => () => void;
-  /** App window zoom; older desktop shells omit this method. */
-  getWindowZoomFactor?: () => number;
+  getWindowZoomFactor: () => number;
   getUpdateState: () => Promise<DesktopUpdateState>;
   setUpdateChannel: (channel: DesktopUpdateChannel) => Promise<DesktopUpdateState>;
   checkForUpdate: () => Promise<DesktopUpdateCheckResult>;
   downloadUpdate: () => Promise<DesktopUpdateActionResult>;
   installUpdate: () => Promise<DesktopUpdateActionResult>;
   onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
-  cliCommand?: {
+  cliCommand: {
     getState: () => Promise<DesktopCliCommandState>;
     install: () => Promise<DesktopCliCommandState>;
     uninstall: () => Promise<DesktopCliCommandState>;
   };
-  webLinks?: {
+  webLinks: {
     setReady: (ready: boolean) => Promise<void>;
     onOpen: (listener: (url: string) => void) => () => void;
   };
-  appActivation?: {
+  appActivation: {
     setReady: (ready: boolean) => Promise<void>;
     complete: (response: DesktopAppActivationResponse) => Promise<void>;
     onRequest: (listener: (request: DesktopAppActivationRequest) => void) => () => void;
   };
-  preview?: DesktopPreviewBridge;
+  preview: DesktopPreviewBridge;
 }
 
 /** Renderer callback invoked by Electron with a fresh user gesture before display-media capture. */
 export const DESKTOP_PREVIEW_RECORDING_CAPTURE_TRIGGER = "__t3DesktopPreviewRecordingCapture";
 
 export interface DesktopPreviewBridge {
-  setForwardedShortcuts?: (shortcuts: ReadonlyArray<PreviewForwardedShortcut>) => Promise<void>;
+  setForwardedShortcuts: (shortcuts: ReadonlyArray<PreviewForwardedShortcut>) => Promise<void>;
   createTab: (tabId: string, defaults?: DesktopPreviewTabDefaults) => Promise<void>;
   closeTab: (tabId: string) => Promise<void>;
   registerWebview: (tabId: string, webContentsId: number) => Promise<void>;
@@ -1292,7 +1283,6 @@ export interface DesktopPreviewBridge {
       mimeType: string,
       data: Uint8Array,
     ) => Promise<DesktopPreviewRecordingArtifact>;
-    onFrame: (listener: (frame: DesktopPreviewRecordingFrame) => void) => () => void;
   };
   onStateChange: (listener: (tabId: string, state: DesktopPreviewTabState) => void) => () => void;
   onPointerEvent: (listener: (event: DesktopPreviewPointerEvent) => void) => () => void;
@@ -1341,7 +1331,6 @@ export interface EnvironmentApi {
     write: (input: typeof TerminalWriteInput.Encoded) => Promise<void>;
     resize: (input: typeof TerminalResizeInput.Encoded) => Promise<void>;
     clear: (input: typeof TerminalClearInput.Encoded) => Promise<void>;
-    restart: (input: typeof TerminalRestartInput.Encoded) => Promise<TerminalSessionSnapshot>;
     close: (input: typeof TerminalCloseInput.Encoded) => Promise<void>;
     onMetadata: (
       callback: (event: TerminalMetadataStreamEvent) => void,
@@ -1417,9 +1406,7 @@ export interface EnvironmentApi {
   };
   preview: {
     open: (input: typeof PreviewOpenInput.Encoded) => Promise<PreviewSessionSnapshot>;
-    navigate: (input: typeof PreviewNavigateInput.Encoded) => Promise<PreviewSessionSnapshot>;
     resize: (input: typeof PreviewResizeInput.Encoded) => Promise<PreviewSessionSnapshot>;
-    refresh: (input: typeof PreviewRefreshInput.Encoded) => Promise<void>;
     close: (input: typeof PreviewCloseInput.Encoded) => Promise<void>;
     list: (input: typeof PreviewListInput.Encoded) => Promise<PreviewListResult>;
     reportStatus: (input: typeof PreviewReportStatusInput.Encoded) => Promise<void>;

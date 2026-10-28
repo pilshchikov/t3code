@@ -143,7 +143,7 @@ it.effect.each([
   const nodeId = NodeId.make("old-worker-question-node");
   const requestId = RuntimeRequestId.make("old-worker-question-request");
   const runId = RunId.make("old-worker-question-run");
-  let projection = {
+  const projection = {
     thread: { id: threadId, lineage: { relationshipToParent: subagent ? "subagent" : null } },
     runtimeRequests: [
       {
@@ -186,11 +186,11 @@ it.effect.each([
               committed.push(input);
               for (const event of input.events) {
                 if (event.type === "runtime-request.updated")
-                  projection = { ...projection, runtimeRequests: [event.payload] };
+                  Object.assign(projection, { runtimeRequests: [event.payload] });
                 if (event.type === "node.updated")
-                  projection = { ...projection, nodes: [event.payload] };
+                  Object.assign(projection, { nodes: [event.payload] });
                 if (event.type === "turn-item.updated")
-                  projection = { ...projection, turnItems: [event.payload] };
+                  Object.assign(projection, { turnItems: [event.payload] });
               }
               return { committed: true, cancelledEffectCount: 0 } as never;
             }),
@@ -562,6 +562,89 @@ it.effect("cancels a stale waiting run when no checkpoint capture can finish it"
     assert.equal(summary.terminalizedRuns, 1);
     const runEvent = committedInput?.events.find((event) => event.type === "run.updated");
     assert.equal(runEvent?.type === "run.updated" ? runEvent.payload.status : null, "cancelled");
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("recovery closes a secret card's form but leaves a link card open", () => {
+  const threadId = ThreadId.make("thread_secret_recovery");
+  const runId = RunId.make("run_secret_recovery");
+  let committedInput: Parameters<EventSink.EventSinkV2["Service"]["commitCommand"]>[0] | null =
+    null;
+  const projection = {
+    thread: { id: threadId },
+    runtimeRequests: [],
+    providerSessions: [],
+    providerThreads: [],
+    providerTurns: [],
+    runs: [{ id: runId, status: "running", providerInstanceId: ProviderInstanceId.make("codex") }],
+    attempts: [],
+    nodes: [],
+    subagents: [],
+    messages: [],
+    turnItems: [
+      {
+        id: "turn-item:secret-request:recovery",
+        threadId,
+        runId,
+        nodeId: null,
+        type: "secret_request",
+        status: "waiting",
+        secretStatus: "pending",
+        label: "GitHub token",
+        reason: "Used as GH_TOKEN.",
+      },
+      {
+        id: "turn-item:link-request:recovery",
+        threadId,
+        runId,
+        nodeId: null,
+        type: "link_request",
+        status: "waiting",
+        linkStatus: "pending",
+        url: "https://box.example.ts.net",
+        reason: "Run the suite there.",
+      },
+    ],
+  } as unknown as OrchestrationV2ThreadProjection;
+  const layer = ProviderRuntimeRecovery.layer.pipe(
+    Layer.provide(ServerSettings.layerTest()),
+    Layer.provide(
+      Layer.mergeAll(
+        Layer.mock(ProjectionStore.ProjectionStoreV2)({
+          getRecoveryThreadIds: () => Effect.succeed([threadId]),
+          getRuntimeRecoveryProjection: () => Effect.succeed(projection),
+        }),
+        Layer.mock(EventSink.EventSinkV2)({
+          commitCommand: (input) => {
+            committedInput = input;
+            return Effect.succeed({ committed: true, cancelledEffectCount: 0 } as never);
+          },
+        }),
+        IdAllocator.layer,
+        Layer.mock(EffectWorker.OrchestrationEffectWorkerV2)({
+          runRecoveryOnce: Effect.succeed(false),
+        }),
+        Layer.mock(EffectOutbox.EffectOutboxV2)({
+          listByCommandId: () => Effect.succeed([]),
+          reconcileAfterProcessLoss: Effect.succeed({ requeued: 0, cancelled: 0 }),
+        }),
+      ),
+    ),
+  );
+
+  return Effect.gen(function* () {
+    yield* (yield* ProviderRuntimeRecovery.ProviderRuntimeRecoveryService).reconcile("startup");
+    const cards = (committedInput?.events ?? []).flatMap((event) =>
+      event.type === "turn-item.updated" ? [event.payload] : [],
+    );
+    const secret = cards.find((card) => card.type === "secret_request");
+    assert.equal(secret?.status, "cancelled");
+    assert.equal(secret?.type === "secret_request" ? secret.secretStatus : null, "cancelled");
+    // Nothing in memory waits on a link card; the user can still answer it.
+    assert.equal(
+      cards.some((card) => card.type === "link_request"),
+      false,
+    );
   }).pipe(Effect.provide(layer));
 });
 

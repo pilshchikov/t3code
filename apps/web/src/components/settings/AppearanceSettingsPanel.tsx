@@ -14,6 +14,7 @@ import {
   DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
   DEFAULT_UNIFIED_SETTINGS,
   type ChatWidth,
+  type EffortDisplay,
   type EnvironmentIdentificationMode,
   MAX_APPEARANCE_CONTRAST,
   MAX_GLASS_OPACITY,
@@ -22,10 +23,6 @@ import {
   MIN_GLASS_OPACITY,
   MIN_PANEL_ANIMATION_DURATION_MS,
 } from "@t3tools/contracts/settings";
-import {
-  resolveEnvironmentIdentificationPillLabel,
-  useEnvironmentStageLabel,
-} from "../SidebarStageBackdrop";
 import { useCustomThemes } from "../../hooks/useCustomThemes";
 import { useTheme } from "../../hooks/useTheme";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
@@ -44,6 +41,8 @@ import { TypographySection } from "./TypographySettings";
 
 const ENVIRONMENT_IDENTIFICATION_LABELS: Record<EnvironmentIdentificationMode, string> = {
   artwork: "Artwork",
+  "nightly-artwork": "Nightly artwork",
+  "dev-artwork": "Dev artwork",
   pill: "Version pill",
   none: "None",
 };
@@ -89,6 +88,10 @@ const ORB_STOP_SWATCHES = [
   { hex: "#d9463d", label: "ember" },
   { hex: "#a21caf", label: "magenta" },
 ] as const;
+const EFFORT_DISPLAY_LABELS: Record<EffortDisplay, string> = {
+  label: "Word",
+  bars: "Bars",
+};
 
 export function AppearanceSettingsPanel() {
   const {
@@ -105,9 +108,7 @@ export function AppearanceSettingsPanel() {
   const [isImportThemeOpen, setIsImportThemeOpen] = useState(false);
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
-  const environmentStageLabel = useEnvironmentStageLabel();
-  const showEnvironmentIdentification =
-    resolveEnvironmentIdentificationPillLabel(environmentStageLabel) !== null;
+  const showEnvironmentIdentification = true;
   const glassOpacityRatio =
     (settings.glassOpacity - MIN_GLASS_OPACITY) / (MAX_GLASS_OPACITY - MIN_GLASS_OPACITY);
   const glassOpacitySliderStyle = {
@@ -219,6 +220,54 @@ export function AppearanceSettingsPanel() {
                 />
                 Custom
               </label>
+            </div>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("setting-appearance-contrast")}
+          description="Adjust the contrast of text, borders, and controls."
+          resetAction={
+            settings.appearanceContrast !== DEFAULT_UNIFIED_SETTINGS.appearanceContrast ? (
+              <SettingResetButton
+                label="contrast"
+                onClick={() =>
+                  updateSettings({
+                    appearanceContrast: DEFAULT_UNIFIED_SETTINGS.appearanceContrast,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="flex w-full items-center gap-3 sm:w-52">
+              <output
+                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+                htmlFor="appearance-contrast"
+              >
+                {settings.appearanceContrast}%
+              </output>
+              <input
+                aria-label="Contrast"
+                className="settings-slider min-w-0 flex-1"
+                id="appearance-contrast"
+                max={MAX_APPEARANCE_CONTRAST}
+                min={MIN_APPEARANCE_CONTRAST}
+                onChange={(event) => {
+                  const appearanceContrast = Number(event.currentTarget.value);
+                  if (
+                    Number.isInteger(appearanceContrast) &&
+                    appearanceContrast >= MIN_APPEARANCE_CONTRAST &&
+                    appearanceContrast <= MAX_APPEARANCE_CONTRAST
+                  ) {
+                    updateSettings({ appearanceContrast });
+                  }
+                }}
+                step={5}
+                style={appearanceContrastSliderStyle}
+                type="range"
+                value={settings.appearanceContrast}
+              />
             </div>
           }
         />
@@ -394,7 +443,13 @@ export function AppearanceSettingsPanel() {
               <Select
                 value={settings.environmentIdentificationMode}
                 onValueChange={(value) => {
-                  if (value === "artwork" || value === "pill" || value === "none") {
+                  if (
+                    value === "artwork" ||
+                    value === "nightly-artwork" ||
+                    value === "dev-artwork" ||
+                    value === "pill" ||
+                    value === "none"
+                  ) {
                     updateSettings({ environmentIdentificationMode: value });
                   }
                 }}
@@ -542,6 +597,39 @@ export function AppearanceSettingsPanel() {
                   onChange={(chatCustomWidthPx) => updateSettings({ chatCustomWidthPx })}
                 />
               ) : null}
+            </div>
+          }
+        />
+        <SettingsRow
+          {...searchableSetting("effort-display")}
+          description="Show reasoning effort in the composer as its name, such as High, or as bars."
+          resetAction={
+            settings.effortDisplay !== DEFAULT_UNIFIED_SETTINGS.effortDisplay ? (
+              <SettingResetButton
+                label="effort display"
+                onClick={() =>
+                  updateSettings({ effortDisplay: DEFAULT_UNIFIED_SETTINGS.effortDisplay })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="w-full sm:w-40">
+              <Select
+                value={settings.effortDisplay}
+                onValueChange={(value) => {
+                  if (value === "bars" || value === "label")
+                    updateSettings({ effortDisplay: value });
+                }}
+              >
+                <SelectTrigger size="sm" className="w-full min-w-0" aria-label="Effort display">
+                  <SelectValue>{EFFORT_DISPLAY_LABELS[settings.effortDisplay]}</SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  <SelectItem value="label">Word (default)</SelectItem>
+                  <SelectItem value="bars">Bars</SelectItem>
+                </SelectPopup>
+              </Select>
             </div>
           }
         />

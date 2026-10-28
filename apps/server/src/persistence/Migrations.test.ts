@@ -43,12 +43,18 @@ describe("runMigrations", () => {
         [72, "WebhookDedupe"],
         [73, "ShellStopRequestIndex"],
         [74, "ThreadMessageSearch"],
+        [75, "PeerLinks"],
+        [76, "PeerLinkFence"],
+        [77, "WaitingLinkRequestIndex"],
       ]);
       assert.deepStrictEqual(yield* history, [
         ...beforeHistory,
         [72, "WebhookDedupe"],
         [73, "ShellStopRequestIndex"],
         [74, "ThreadMessageSearch"],
+        [75, "PeerLinks"],
+        [76, "PeerLinkFence"],
+        [77, "WaitingLinkRequestIndex"],
       ]);
       assert.deepStrictEqual(yield* sql`SELECT * FROM project_memories`, memories);
       assert.deepStrictEqual(yield* sql`SELECT * FROM usage_limit_history`, usage);

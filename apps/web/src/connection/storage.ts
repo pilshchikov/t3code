@@ -387,15 +387,17 @@ export interface CatalogBackend {
 
 export function makeCatalogBackend(database: DatabaseHandle): CatalogBackend {
   const bridge = window.desktopBridge;
-  if (bridge?.getConnectionCatalog !== undefined && bridge.setConnectionCatalog !== undefined) {
+  const getCatalog = bridge?.getConnectionCatalog;
+  const setCatalog = bridge?.setConnectionCatalog;
+  if (getCatalog && setCatalog) {
     return {
       read: Effect.tryPromise({
-        try: () => bridge.getConnectionCatalog!(),
+        try: () => getCatalog(),
         catch: (cause) => catalogError("load", cause),
       }),
       write: (raw) =>
         Effect.tryPromise({
-          try: () => bridge.setConnectionCatalog!(raw),
+          try: () => setCatalog(raw),
           catch: (cause) => catalogError("save", cause),
         }).pipe(
           Effect.flatMap((stored) =>

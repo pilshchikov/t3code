@@ -32,12 +32,12 @@ const DevicePanel = lazy(() =>
 );
 const GitHistoryPanel = lazy(() => import("../GitHistoryPanel"));
 
-export type RightPanelTerminalProps = Omit<
+type RightPanelTerminalProps = Omit<
   PersistentThreadTerminalPanelProps,
   "visible" | "threadRef" | "surface"
 >;
 
-export interface RightPanelPullRequestProps {
+interface RightPanelPullRequestProps {
   readonly capabilityKnown: boolean;
   readonly supported: boolean;
   readonly projectId: ProjectId | null;

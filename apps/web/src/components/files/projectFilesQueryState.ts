@@ -218,7 +218,7 @@ export function useProjectEntriesQuery(
     : EMPTY_PROJECT_ENTRIES_QUERY_ATOM;
   const result = useAtomValue(revisionedQuery(atom, canReadFiles ? revision : undefined));
   const refreshing = useRef({ running: false, again: false, generation: 0 });
-  // oxlint-disable-next-line t3code/react-effect-budget -- Cancel stale directory requests when the active listing lifetime ends.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Cancel stale directory requests when the active listing lifetime ends.
   useEffect(() => {
     const state = refreshing.current;
     return () => {
@@ -257,11 +257,11 @@ export function useProjectEntriesQuery(
     onDirectoryChange,
     directoryPath,
   );
-  // oxlint-disable-next-line t3code/react-effect-budget -- Refresh the disk listing when its observed permission or root becomes active.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Refresh the disk listing when its observed permission or root becomes active.
   useEffect(() => {
     refresh();
   }, [refresh]);
-  // oxlint-disable-next-line t3code/react-effect-budget -- Register the window focus trigger for the active directory query.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Register the window focus trigger for the active directory query.
   useEffect(() => {
     if (!active || typeof window === "undefined") return;
     window.addEventListener("focus", refresh);
@@ -293,7 +293,7 @@ export function useProjectEntriesWatchRefresh(
   const watchResult = useAtomValue(watchAtom);
   const watchRevision = AsyncResult.isSuccess(watchResult) ? watchResult.value.revision : null;
 
-  // oxlint-disable-next-line t3code/react-effect-budget -- Forward host filesystem revisions into the listing query.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Forward host filesystem revisions into the listing query.
   useEffect(() => {
     if (watchRevision === null) return;
     refresh();
@@ -370,7 +370,7 @@ export function useProjectFileQuery(
   const watchRevision = AsyncResult.isSuccess(watchResult) ? watchResult.value.revision : null;
   const targetKey = shouldValidate ? `${environmentId}\u0000${cwd}\u0000${relativePath}` : null;
   const checkState = useRef({ generation: 0, running: false, again: false });
-  // oxlint-disable-next-line t3code/react-effect-budget -- Invalidate in-flight disk revisions when file identity or dirty ownership changes.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Invalidate in-flight disk revisions when file identity or dirty ownership changes.
   useEffect(() => {
     const state = checkState.current;
     return () => {
@@ -429,11 +429,11 @@ export function useProjectFileQuery(
       }
     })();
   }, [active, atom, canReadFiles, cwd, enabled, environmentId, preserveOptimistic, relativePath]);
-  // oxlint-disable-next-line t3code/react-effect-budget -- Validate disk contents when the host watch emits a revision.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Validate disk contents when the host watch emits a revision.
   useEffect(() => {
     if (shouldValidate) refresh();
   }, [refresh, shouldValidate, watchRevision]);
-  // oxlint-disable-next-line t3code/react-effect-budget -- Own the selected visible file metadata timer and visibility listener.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Own the selected visible file metadata timer and visibility listener.
   useEffect(() => {
     if (!shouldWatch || preserveOptimistic) return;
     // Host watcher events are best effort (reconnects/atomic replacements can
@@ -451,7 +451,7 @@ export function useProjectFileQuery(
         document.removeEventListener("visibilitychange", validateVisibleFile);
     };
   }, [preserveOptimistic, refresh, shouldWatch]);
-  // oxlint-disable-next-line t3code/react-effect-budget -- Register window focus validation for the selected file.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Register window focus validation for the selected file.
   useEffect(() => {
     if (targetKey === null || typeof window === "undefined") return;
     window.addEventListener("focus", refresh);

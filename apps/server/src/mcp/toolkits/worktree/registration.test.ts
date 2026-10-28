@@ -1,3 +1,7 @@
+import { RemoteDelegation } from "../../../peer/RemoteDelegation.ts";
+import { PeerLinkRequests } from "../../../peer/PeerLinkRequests.ts";
+import { PeerLinks } from "../../../peer/PeerLinks.ts";
+import { PeerForwarding } from "../../../peer/PeerForwarding.ts";
 import * as DocumentText from "../../../provider/DocumentText.ts";
 import * as Context from "effect/Context";
 import * as ThreadWorkspaces from "../../../workspace/ThreadWorkspaces.ts";
@@ -45,6 +49,10 @@ import * as UsageService from "../../../usage/UsageService.ts";
 import * as UsageLimitSources from "../../../usage/UsageLimitSources.ts";
 
 const layerStubServices = Layer.mergeAll(
+  Layer.mock(RemoteDelegation)({}),
+  Layer.mock(PeerLinkRequests)({}),
+  Layer.mock(PeerLinks)({}),
+  Layer.mock(PeerForwarding)({}),
   Layer.mock(DocumentText.DocumentText)({}),
   Layer.mock(UsageService.UsageService)({}),
   Layer.mock(UsageLimitSources.UsageLimitSources)({}),

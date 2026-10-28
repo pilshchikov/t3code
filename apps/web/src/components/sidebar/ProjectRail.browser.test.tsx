@@ -104,13 +104,13 @@ async function projectMenu(button: HTMLButtonElement) {
     ),
   );
   await expect
-    .element(page.getByRole("button", { name: "Settle project", exact: true }))
+    .element(page.getByRole("menuitem", { name: "Settle project", exact: true }))
     .toBeVisible();
 }
 
 async function settle(container: HTMLElement, name: string) {
   await projectMenu(project(container, name)!);
-  await userEvent.click(page.getByRole("button", { name: "Settle project", exact: true }));
+  await userEvent.click(page.getByRole("menuitem", { name: "Settle project", exact: true }));
   await vi.waitFor(() => expect(project(container, name)).toBeNull());
 }
 
@@ -134,7 +134,7 @@ it("switches between the short and the named rail", async () => {
   await using screen = await renderRail();
   expect(rail(screen.container).dataset.named).toBe("false");
   await userEvent.click(screen.getByRole("button", { name: "Project actions", exact: true }));
-  await userEvent.click(page.getByRole("button", { name: "Show names", exact: true }));
+  await userEvent.click(page.getByRole("menuitem", { name: "Show names", exact: true }));
   expect(rail(screen.container).dataset.named).toBe("true");
   expect(
     [...screen.container.querySelectorAll('[data-rail="row"]')].map((row) => row.textContent),
@@ -147,10 +147,10 @@ it("keeps project grouping and settings available in the project menu", async ()
   await using screen = await renderRail();
   await projectMenu(project(screen.container, "alpha")!);
   await expect
-    .element(page.getByRole("button", { name: "Add to group", exact: true }))
+    .element(page.getByRole("menuitem", { name: "Add to group", exact: true }))
     .toBeVisible();
   await expect
-    .element(page.getByRole("button", { name: "Project settings", exact: true }))
+    .element(page.getByRole("menuitem", { name: "Project settings", exact: true }))
     .toBeVisible();
 });
 
@@ -172,7 +172,7 @@ it("settles the selected project without changing its selection or manual order,
   expect(project(remounted.container, "alpha")).toBeNull();
   await userEvent.click(remounted.getByRole("button", { name: "Project actions", exact: true }));
   await expect
-    .element(page.getByRole("button", { name: "Settled projects", exact: true }))
+    .element(page.getByRole("menuitem", { name: "Settled projects", exact: true }))
     .toBeVisible();
 });
 
@@ -182,19 +182,19 @@ it("opens a settled project without restoring it, and restores it explicitly fro
   await settle(screen.container, "beta");
   const groups = useProjectRailGroupsStore.getState().groups;
   await userEvent.click(screen.getByRole("button", { name: "Project actions", exact: true }));
-  await userEvent.click(page.getByRole("button", { name: "Settled projects", exact: true }));
-  await userEvent.click(page.getByRole("button", { name: "beta", exact: true }));
+  await userEvent.click(page.getByRole("menuitem", { name: "Settled projects", exact: true }));
+  await userEvent.click(page.getByRole("menuitem", { name: "beta", exact: true }));
   await vi.waitFor(() =>
     expect(JSON.parse(localStorage.getItem("t3code:sidebar-project-scope:v1")!)).toBe("local:beta"),
   );
   expect(project(screen.container, "beta")).toBeNull();
   await userEvent.click(screen.getByRole("button", { name: "Project actions", exact: true }));
-  await userEvent.click(page.getByRole("button", { name: "Settled projects", exact: true }));
-  await userEvent.click(page.getByRole("button", { name: "Unsettle project", exact: true }));
+  await userEvent.click(page.getByRole("menuitem", { name: "Settled projects", exact: true }));
+  await userEvent.click(page.getByRole("menuitem", { name: "Unsettle project", exact: true }));
   await userEvent.click(
     page
       .elementLocator(document.querySelector('[data-level="2"]')!)
-      .getByRole("button", { name: "beta", exact: true }),
+      .getByRole("menuitem", { name: "beta", exact: true }),
   );
   await vi.waitFor(() => expect(project(screen.container, "beta")).not.toBeNull());
   expect(useProjectRailGroupsStore.getState().groups).toEqual(groups);
@@ -208,9 +208,9 @@ it("keeps the rail and restore menu usable when every project is settled", async
   expect(groupHead(screen.container)).toBeNull();
   expect(rail(screen.container)).not.toBeNull();
   await userEvent.click(screen.getByRole("button", { name: "Project actions", exact: true }));
-  await userEvent.click(page.getByRole("button", { name: "Settled projects", exact: true }));
+  await userEvent.click(page.getByRole("menuitem", { name: "Settled projects", exact: true }));
   for (const name of ["alpha", "beta", "gamma"])
-    await expect.element(page.getByRole("button", { name, exact: true })).toBeVisible();
+    await expect.element(page.getByRole("menuitem", { name, exact: true })).toBeVisible();
 });
 
 it("moves visible projects past settled ones while preserving their group membership", async () => {

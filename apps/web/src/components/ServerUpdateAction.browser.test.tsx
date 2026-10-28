@@ -19,7 +19,6 @@ const testState = vi.hoisted(() => ({
   updateServer: vi.fn(),
   toast: vi.fn(),
   clipboard: vi.fn(),
-  continueThreadsAfterServerUpdate: false,
   sessionAtom: null as unknown,
   environment: null as EnvironmentPresentation | null,
   runtime: null as BundledServerRuntime | null,
@@ -49,16 +48,6 @@ vi.mock(import("~/hooks/useCopyToClipboard"), async (original) => ({
     },
     isCopied: false,
   })) as never,
-}));
-vi.mock(import("~/hooks/useSettings"), async (original) => ({
-  ...(await original()),
-  useEnvironmentSettings: ((
-    _environmentId: EnvironmentId,
-    selector: (settings: { continueThreadsAfterServerUpdate: boolean }) => unknown,
-  ) =>
-    selector({
-      continueThreadsAfterServerUpdate: testState.continueThreadsAfterServerUpdate,
-    })) as never,
 }));
 vi.mock(import("~/state/session"), async (original) => {
   const actual = await original();
@@ -116,7 +105,6 @@ function setup(): Disposable {
   testState.updateServer.mockReset();
   testState.toast.mockReset();
   testState.clipboard.mockReset();
-  testState.continueThreadsAfterServerUpdate = false;
   testState.environment = null;
   testState.runtime = null;
   const sessionAtom = Atom.make<SessionResult>(AsyncResult.success(currentSession));
@@ -211,16 +199,12 @@ describe("ServerUpdatesAction", () => {
       serverLabel: "Laptop",
       selfUpdate: "boot-service",
       targetVersion: "0.0.31",
-      threadContinuation: true,
-      continueThreadsAfterServerUpdate: true,
     },
     {
       environmentId: "batch-b" as EnvironmentId,
       serverLabel: "Office",
       selfUpdate: "respawn",
       targetVersion: "0.0.31",
-      threadContinuation: true,
-      continueThreadsAfterServerUpdate: false,
     },
     {
       environmentId: "batch-c" as EnvironmentId,
@@ -269,6 +253,7 @@ describe("bundled fork update", () => {
       environmentId: "env-test",
       entry: { profile: Option.some({ _tag: "SshConnectionProfile", target }) },
       serverConfig: {
+        settings: { continueThreadsAfterServerUpdate: false },
         environment: { platform: { os: "darwin", arch: "arm64" }, serverVersion: "0.1.1" },
       },
     } as EnvironmentPresentation;

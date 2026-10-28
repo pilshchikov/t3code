@@ -48,7 +48,7 @@ export function ProjectNavigationPanel(props: {
       }),
     [onClose],
   );
-  // oxlint-disable-next-line t3code/react-effect-budget -- Start and cancel the native slide animation with the mounted panel.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Start and cancel the native slide animation with the mounted panel.
   useEffect(() => {
     const animation = Animated.timing(translation, {
       toValue: 0,

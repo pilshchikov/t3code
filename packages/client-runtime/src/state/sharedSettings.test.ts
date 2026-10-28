@@ -7,12 +7,10 @@ import {
 } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 
-import { filterSharedServerPatch, pickSharedServerSettings } from "./sharedSettings.ts";
-
-const restartCapabilities = { threadRestartContinuation: true };
+import { filterSharedServerPatch } from "./sharedSettings.ts";
 
 describe("supportsSharedSettingsSync", () => {
-  it("accepts only connected servers that advertise the shared-settings capability", () => {
+  it("accepts connected servers after their configuration loads", () => {
     expect(
       supportsSharedSettingsSync({
         connection: { phase: "connected" },
@@ -24,7 +22,7 @@ describe("supportsSharedSettingsSync", () => {
         connection: { phase: "connected" },
         serverConfig: { environment: { capabilities: {} } },
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       supportsSharedSettingsSync({
         connection: { phase: "reconnecting" },
@@ -61,7 +59,6 @@ describe("splitSharedServerPatch", () => {
   ])("shares the text generation model and options, including reset (%j)", (selection) => {
     const patch = { textGenerationModelSelection: selection };
     expect(splitSharedServerPatch(patch)).toEqual({ sharedPatch: patch, localPatch: {} });
-    expect(pickSharedServerSettings({ ...DEFAULT_SERVER_SETTINGS, ...patch })).toMatchObject(patch);
   });
 
   it("routes preference keys to the shared patch and machine keys to the local patch", () => {
@@ -86,28 +83,13 @@ describe("splitSharedServerPatch", () => {
   });
 });
 
-describe("pickSharedServerSettings", () => {
-  it("returns only the shared keys", () => {
-    expect(
-      Object.keys(pickSharedServerSettings(DEFAULT_SERVER_SETTINGS, restartCapabilities)).sort(),
-    ).toEqual([
-      "autoResumeLimitedThreads",
-      "continueThreadsAfterServerUpdate",
-      "idleCompactionAllowBackgroundWork",
-      "idleCompactionEnabled",
-      "idleCompactionMinutes",
-      "idleCompactionTokens",
-      "newWorktreesStartFromOrigin",
-      "sidebarAutoSettleAfterDays",
-      "sidebarAutoSettleOnMerge",
-      "snoozeLimitedThreads",
-      "sourceControlWritingStyle",
-      "textGenerationModelSelection",
-    ]);
-  });
-});
-
 describe("filterSharedServerPatch", () => {
+  it("holds the restart preference until the target's config loads", () => {
+    const patch = { continueThreadsAfterServerUpdate: true, sidebarAutoSettleAfterDays: 7 };
+    expect(filterSharedServerPatch(patch, undefined)).toEqual({ sidebarAutoSettleAfterDays: 7 });
+    expect(filterSharedServerPatch(patch, DEFAULT_SERVER_SETTINGS)).toEqual(patch);
+  });
+
   it.each([true, false])(
     "resets a disabled default provider only on the originating environment (%s)",
     (targetIsSource) => {
@@ -131,14 +113,13 @@ describe("filterSharedServerPatch", () => {
         continueThreadsAfterServerUpdate: true,
         sidebarAutoSettleAfterDays: 7,
       };
-      expect(filterSharedServerPatch(patch, undefined, settings, settings, targetIsSource)).toEqual(
-        {
-          ...(targetIsSource
-            ? { textGenerationModelSelection: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection }
-            : {}),
-          sidebarAutoSettleAfterDays: 7,
-        },
-      );
+      expect(filterSharedServerPatch(patch, settings, settings, targetIsSource)).toEqual({
+        ...(targetIsSource
+          ? { textGenerationModelSelection: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection }
+          : {}),
+        continueThreadsAfterServerUpdate: true,
+        sidebarAutoSettleAfterDays: 7,
+      });
     },
   );
 
@@ -169,23 +150,8 @@ describe("filterSharedServerPatch", () => {
           [instanceId]: { ...instance, driver: ProviderDriverKind.make("codex"), enabled: true },
         },
       };
-      expect(filterSharedServerPatch(patch, restartCapabilities, settings, sourceSettings)).toEqual(
+      expect(filterSharedServerPatch(patch, settings, sourceSettings)).toEqual(
         availability === "enabled" ? patch : { sidebarAutoSettleAfterDays: 7 },
-      );
-    },
-  );
-
-  it.each([undefined, {}, { threadRestartContinuation: false }])(
-    "omits only the unsupported restart preference with capabilities %j",
-    (capabilities) => {
-      expect(
-        filterSharedServerPatch(
-          { continueThreadsAfterServerUpdate: true, sidebarAutoSettleAfterDays: 7 },
-          capabilities,
-        ),
-      ).toEqual({ sidebarAutoSettleAfterDays: 7 });
-      expect(pickSharedServerSettings(DEFAULT_SERVER_SETTINGS, capabilities)).not.toHaveProperty(
-        "continueThreadsAfterServerUpdate",
       );
     },
   );

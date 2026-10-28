@@ -223,7 +223,7 @@ export function NativeProjectFileTree(props: {
       ),
     [expanded, visibleRows],
   );
-  // oxlint-disable-next-line t3code/react-effect-budget -- Report expanded directories to the parent that loads their filesystem entries.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Report expanded directories to the parent that loads their filesystem entries.
   useEffect(() => {
     props.onExpandedDirectoriesChange?.(visibleExpandedDirectories);
   }, [props.onExpandedDirectoriesChange, visibleExpandedDirectories]);
@@ -233,7 +233,7 @@ export function NativeProjectFileTree(props: {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ height: 0, scrollTop: 0 });
 
-  // oxlint-disable-next-line t3code/react-effect-budget -- Observe the DOM viewport height for file-row virtualization.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Observe the DOM viewport height for file-row virtualization.
   useEffect(() => {
     const scrollElement = scrollRef.current;
     if (!scrollElement) return;
@@ -252,7 +252,7 @@ export function NativeProjectFileTree(props: {
   // which is the state you'd immediately have to click back out of.
   const expandAllRef = useRef(false);
   const lastExpandAllRequestRef = useRef(0);
-  // oxlint-disable-next-line t3code/react-effect-budget -- Expand folders as asynchronous directory listings arrive after Expand all.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Expand folders as asynchronous directory listings arrive after Expand all.
   useEffect(() => {
     if (!props.active) return;
     const requestId = props.expandAllRequestId ?? 0;
@@ -276,7 +276,7 @@ export function NativeProjectFileTree(props: {
     });
   }, [nodes, props.active, props.expandAllRequestId, setExpanded]);
   const lastCollapseRequestRef = useRef(0);
-  // oxlint-disable-next-line t3code/react-effect-budget -- Apply an external collapse request from the Files toolbar.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Apply an external collapse request from the Files toolbar.
   useEffect(() => {
     if (props.collapseRequestId === 0) return;
     if (lastCollapseRequestRef.current === props.collapseRequestId) return;
@@ -288,7 +288,7 @@ export function NativeProjectFileTree(props: {
   // Revealing a file expands its own ancestors and nothing else. It used to replace the expanded
   // set, so opening a file in one directory shut every directory the reader had opened elsewhere.
   // Collapsing the tree is the collapse button's job.
-  // oxlint-disable-next-line t3code/react-effect-budget -- Reveal the selected file when navigation changes outside the tree.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Reveal the selected file when navigation changes outside the tree.
   useEffect(() => {
     if (!props.active || !props.selectedPath) return;
     const ancestors = ancestorDirectories(props.selectedPath);
@@ -301,7 +301,7 @@ export function NativeProjectFileTree(props: {
     props.onSelectionChange([props.selectedPath]);
   }, [props.active, props.selectedPath, props.selectedPathRevealId, setExpanded]);
 
-  // oxlint-disable-next-line t3code/react-effect-budget -- Scroll the DOM viewport to the file requested by external navigation.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Scroll the DOM viewport to the file requested by external navigation.
   useEffect(() => {
     if (!props.active || !props.selectedPath) return;
     const index = visibleRows.findIndex(({ node }) => node.path === props.selectedPath);

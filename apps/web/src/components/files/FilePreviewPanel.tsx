@@ -90,7 +90,7 @@ import {
 import { useExplorerViewStore } from "~/explorerViewStore";
 import { MorphIcon } from "~/components/MorphIcon";
 import { useRemoteOpenState } from "~/remoteOpen";
-import { useClientSettings, updateClientSettings } from "~/hooks/useSettings";
+import { useClientSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { resolveDiffThemeName } from "~/lib/diffRendering";
@@ -733,7 +733,7 @@ function useEditableAfterHighlight(file: FileContents) {
   const needsHighlight = useMemo(() => needsWorkerHighlight(workerPool, file), [file, workerPool]);
   const ready = !needsHighlight || highlightedFile === file;
 
-  // oxlint-disable-next-line t3code/react-effect-budget -- Prime the external syntax worker before showing the editor.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Prime the external syntax worker before showing the editor.
   useEffect(() => {
     if (ready || workerPool === undefined) return;
     workerPool.primeFileHighlightCache(file).catch(() => setHighlightedFile(file));
@@ -866,7 +866,7 @@ const EditableFileSurface = memo(function EditableFileSurface({
     [addReviewComment, composerDraftTarget, cwd, environmentId, relativePath, saveTarget],
   );
 
-  // oxlint-disable-next-line t3code/react-effect-budget -- Install focused editor undo shortcuts for the mounted editor lifetime.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Install focused editor undo shortcuts for the mounted editor lifetime.
   useEffect(() => {
     const handleHistoryShortcut = (event: KeyboardEvent) => {
       const editor = editorRef.current;
@@ -980,7 +980,7 @@ const EditableFileSurface = memo(function EditableFileSurface({
   const hasOpenCommentForm = lineAnnotations.some((annotation) =>
     annotation.metadata.entries.some((entry) => entry.kind === "draft"),
   );
-  // oxlint-disable-next-line t3code/react-effect-budget -- Install the editor dismissal bridge after its DOM surface exists.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Install the editor dismissal bridge after its DOM surface exists.
   useEffect(() => {
     const root = surfaceRef.current;
     if (!root) return;
@@ -1391,7 +1391,9 @@ export default function FilePreviewPanel({
     attachment === undefined ? resolveFilePreviewPath(requestedPath, cwd) : requestedPath;
   const draft = typeof composerDraftTarget === "string";
   const { resolvedTheme } = useTheme();
-  const wordWrap = useClientSettings((settings) => settings.wordWrap);
+  const defaultWordWrap = useClientSettings((settings) => settings.wordWrap);
+  const [wordWrapOverride, setWordWrapOverride] = useState<boolean | null>(null);
+  const wordWrap = wordWrapOverride ?? defaultWordWrap;
   const canOperatePreview = useEnvironmentScope(environmentId, AuthPreviewOperateScope);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const remoteOpenState = useRemoteOpenState(environmentId);
@@ -1660,7 +1662,7 @@ export default function FilePreviewPanel({
       : NO_FILE_REVISION_ATOM,
   );
 
-  // oxlint-disable-next-line t3code/react-effect-budget -- Record the active editor location in the shared navigation store.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Record the active editor location in the shared navigation store.
   useEffect(() => {
     if (!active || !relativePath) return;
     const store = useEditorNavigationStore.getState();
@@ -1672,7 +1674,7 @@ export default function FilePreviewPanel({
     navigationRequest?.workspaceKey === workspaceKey ? navigationRequest.path : null;
   const pendingNavigationRequestId =
     navigationRequest?.workspaceKey === workspaceKey ? navigationRequest.requestId : null;
-  // oxlint-disable-next-line t3code/react-effect-budget -- Consume external navigation requests after the owning file surface mounts.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Consume external navigation requests after the owning file surface mounts.
   useEffect(() => {
     if (active && pendingNavigationPath && pendingNavigationPath !== relativePath) {
       onOpenFile(pendingNavigationPath, activeCwd);
@@ -1942,6 +1944,7 @@ export default function FilePreviewPanel({
           workspaceMutationId={workspaceMutationId}
           revealLine={revealLine}
           revealRequestId={revealRequestId}
+          wordWrap={wordWrap}
         />
       ) : relativePath &&
         absolutePath &&
@@ -2191,7 +2194,7 @@ export default function FilePreviewPanel({
             <FileSurfaceAction
               label={wordWrap ? "Disable word wrap" : "Enable word wrap"}
               pressed={wordWrap}
-              onPress={() => updateClientSettings({ wordWrap: !wordWrap })}
+              onPress={() => setWordWrapOverride(!wordWrap)}
             >
               <WrapTextIcon className="size-3.5" />
             </FileSurfaceAction>
@@ -2347,6 +2350,7 @@ export function WorkspaceLargeTextPreview(props: {
   workspaceMutationId: string | null;
   revealLine: number | null;
   revealRequestId: number;
+  wordWrap?: boolean;
 }) {
   const resource = {
     _tag: "media-file",
@@ -2447,6 +2451,7 @@ export function WorkspaceLargeTextPreview(props: {
           }}
           src={src}
           delimiter={props.delimiter}
+          {...(props.wordWrap === undefined ? {} : { wordWrap: props.wordWrap })}
           revealLine={props.revealLine}
           revealRequestId={props.revealRequestId}
         />

@@ -1,5 +1,42 @@
 # Fork Changes
 
+## Upstream synchronization — 2026-10-28 (9826dbb990)
+
+- Merge 157 upstream commits through `9826dbb9904b2591bfbf60d1317486b59132f56b`,
+  retaining both histories. Review 255 overlapping paths and reconcile 76 conflicts.
+  Adopt bounded thread-history paging, recorded tool-call diffs, linked-environment
+  delegation, pending-question recovery, grouped composer controls and effort labels,
+  device-pool support, mobile workflows and native merge controls, and release fixes.
+- Preserve the fork's dashboards, settled/grouped project rail and manual ordering,
+  custom appearance and action orb, always-expanded composer, native Files tree,
+  checkout recovery, multiple workspace roots, editor navigation/undo and Git history.
+  Integrate tool-call diffs into the resizable diff tree and keep preview word-wrap
+  overrides local. Restore the Contrast control alongside the retained contrast setting.
+- Keep Terra 6.1, isolated Claude accounts, agent-visible usage, continuous usage bars,
+  memory/workspace/peer tools, phone relay, and packaged SSH environment updates.
+  Preserve the fork's settlement/retention defaults and update continuation capability.
+  Analytics and client tracing remain no-ops; OTLP exports and endpoint probes stay disabled.
+- Preserve released database migration slots; assign upstream peer-link migrations
+  slots 75–77 in `apps/server/src/persistence/migrations.ts`. Connect upstream remote
+  delegation to the fork's peer services in `apps/server/src/server.ts`, retaining
+  permission checks and stale worker-question recovery.
+- Keep all fork model instructions alongside upstream's device and delegation guidance
+  in `packages/provider-core/src/server/orchestrationInstructions.ts`. The measured strict
+  context budget is Claude 10,240 bytes, Codex 11,964 bytes and MCP tool schemas 62,001 bytes.
+- Keep Claude skill discovery in the explicitly selected account config directory, and
+  keep open-PR protection when adopting upstream settlement tests. Update the fork's
+  fixtures to the current context-menu roles, tool-call actions and worktree prefix.
+  Timeline restoration waits through deferred virtualizer layout and does not stall on
+  unresolved scroll promises; an existing scrolling test covers both promise outcomes.
+- Validation: changed-file formatting/lint, both knip passes, generated GraphQL, dependency
+  patches and all 36 affected package typechecks pass. The 650-file test run passes 9,012
+  cases; its remaining early-navigation assertion now waits for restoration, and all 107
+  cases in the timeline/guest/rail recheck pass. Isolated Chromium checks cover dashboard
+  layouts, real thread navigation and visits, custom project filters, the phone viewport,
+  Contrast, a free Replay turn, and the native Files tree/editor. Native lint is blocked by
+  missing SwiftLint/ktlint/detekt. The real MCP eval requires an unavailable API key;
+  its dry run succeeds. Package/stage the arm64 app without restarting local or remote apps.
+
 ## Upstream synchronization — 2026-10-27 (d1c4b52b7c)
 
 - Merge 138 upstream commits through `d1c4b52b7c7c7e1b7637ec47e4c959ff0c2d8d99`
@@ -2877,7 +2914,7 @@ fork-specific behavior so future upstream syncs are easier to review.
   Project action imports retain their configured working directory.
 - Registered upstream message context as migration 55, after fork usage history at 54.
   Upgrade tests cover existing project notes and usage observations as well as an already-present
-  context column. Sources: `apps/server/src/persistence/Migrations.ts` and migration tests.
+  context column. Sources: `apps/server/src/persistence/migrations.ts` and migration tests.
 - Retained the fork file browser and multiwork roots in `components/files/FileBrowserPanel.tsx`
   and `FilePreviewPanel.tsx`. Integrated upstream attachment, audio, and table previews. File
   watches register before the initial ready event and include nested directories.
@@ -2982,7 +3019,7 @@ fork-specific behavior so future upstream syncs are easier to review.
   retain thread/project isolation and explicit capability checks.
 - Registered upstream's multi-PR migration as 53, after this fork's memory migration 52.
   Upgrade tests verify memory contents survive and legacy PR links are backfilled.
-  Sources: `apps/server/src/persistence/Migrations.ts` and migration tests.
+  Sources: `apps/server/src/persistence/migrations.ts` and migration tests.
 - Multi-PR settlement uses upstream link snapshots with the fork's settlement modes. Usage pools
   retain stable account order even when reset times differ; upstream missing-window columns and
   unknown-cost reporting remain available. Sources: `ThreadSettlementReactor.ts`,

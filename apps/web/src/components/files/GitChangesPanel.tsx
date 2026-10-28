@@ -23,7 +23,7 @@ import {
   Sparkles,
   WandSparkles,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { ProviderModelPicker } from "~/components/chat/ProviderModelPicker";
 import { toastManager } from "~/components/ui/toast";
@@ -35,11 +35,7 @@ import { serverEnvironment } from "~/state/server";
 import { threadEnvironment } from "~/state/threads";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { getAppModelOptionsForInstance } from "~/modelSelection";
-import {
-  applyProviderInstanceSettings,
-  deriveProviderInstanceEntries,
-  sortProviderInstanceEntries,
-} from "~/providerInstances";
+import { providerInstanceEntriesFor } from "~/providerInstances";
 import { cn, newMessageId } from "~/lib/utils";
 
 import {
@@ -388,12 +384,10 @@ export default function GitChangesPanel({
   const modelInstanceEntries = useMemo(
     () =>
       serverConfig
-        ? sortProviderInstanceEntries(
-            applyProviderInstanceSettings(
-              deriveProviderInstanceEntries(serverConfig.providers),
-              unifiedSettings!,
-              activeThread?.projectId ?? null,
-            ),
+        ? providerInstanceEntriesFor(
+            serverConfig.providers,
+            unifiedSettings!,
+            activeThread?.projectId ?? null,
           )
         : [],
     [serverConfig, unifiedSettings, activeThread?.projectId],
@@ -414,10 +408,9 @@ export default function GitChangesPanel({
     serverConfig?.settings.textGenerationModelSelection ??
     null;
 
-  useEffect(() => {
-    if (conflictModelSelection !== null || effectiveConflictModelSelection === null) return;
+  if (conflictModelSelection === null && effectiveConflictModelSelection !== null) {
     setConflictModelSelection(effectiveConflictModelSelection);
-  }, [conflictModelSelection, effectiveConflictModelSelection]);
+  }
   const { changes, unversioned } = useMemo(() => {
     const tracked: GitFileChange[] = [];
     const untracked: GitFileChange[] = [];

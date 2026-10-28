@@ -19,7 +19,8 @@ vi.mock("~/hooks/useSettings", () => ({
 }));
 vi.mock("../SidebarStageBackdrop", () => ({
   StageBackdropButtonArt: ({ variant }: { variant: string }) => `stage-${variant}`,
-  useSidebarStageBackdropVariant: (enabled = true) => (enabled ? stageArtworkState.variant : null),
+  useSidebarStageBackdropVariant: (mode: string) =>
+    mode === "artwork" ? stageArtworkState.variant : null,
 }));
 
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
@@ -42,7 +43,6 @@ function renderPendingActions(isRunning: boolean) {
       promptHasText: false,
       isSendBusy: false,
       sendDisabledReason: null,
-      isConnecting: false,
       isEnvironmentUnavailable: false,
       isPreparingWorktree: false,
       hasSendableContent: false,
@@ -65,7 +65,6 @@ function renderSendButton(sendDisabledReason: string | null = null) {
       promptHasText: true,
       isSendBusy: false,
       sendDisabledReason,
-      isConnecting: false,
       isEnvironmentUnavailable: false,
       isPreparingWorktree: false,
       hasSendableContent: true,

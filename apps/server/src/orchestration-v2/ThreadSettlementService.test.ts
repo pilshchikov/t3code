@@ -259,7 +259,7 @@ describe("resolveAutoSettlementAt", () => {
     ).toEqual(at(-4 * DAY_MS));
   });
 
-  it("settles an idle thread with an open persisted link only while retention is off", () => {
+  it("keeps an idle thread with an open persisted link even while retention is off", () => {
     const input = {
       thread: shell({
         latestUserMessageAt: at(-4 * DAY_MS),
@@ -271,14 +271,14 @@ describe("resolveAutoSettlementAt", () => {
       autoSettleOnMerge: true,
       autoSettleKeepPullRequests: false,
     };
-    expect(ThreadSettlementService.resolveAutoSettlementAt(input)).toEqual(at(-4 * DAY_MS));
+    expect(ThreadSettlementService.resolveAutoSettlementAt(input)).toBeNull();
     expect(
       ThreadSettlementService.resolveAutoSettlementAt({
         ...input,
         autoSettleKeepPullRequests: true,
       }),
     ).toBeNull();
-    // The open link outranks a merged lookup, so only inactivity can settle it.
+    // A stale merged lookup must not overrule the persisted open link.
     expect(
       ThreadSettlementService.resolveAutoSettlementAt({
         ...input,
@@ -784,7 +784,10 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
       number: 42,
       mergedAt: NOW,
     }),
-    layer: ThreadSettlementService.layer.pipe(Layer.provide(layerDependencies)),
+    layer: Layer.effect(
+      ThreadSettlementService.ThreadSettlementServiceV2,
+      ThreadSettlementService.make,
+    ).pipe(Layer.provide(layerDependencies)),
   };
 });
 
@@ -848,7 +851,7 @@ describe("ThreadSettlementServiceV2 worker", () => {
     ),
   );
 
-  it.effect("settles an idle thread with an open persisted link on the inactivity sweep", () =>
+  it.effect("keeps an idle thread with an open persisted link on the inactivity sweep", () =>
     Effect.scoped(
       Effect.gen(function* () {
         yield* TestClock.setTime(Date.parse(NOW));
@@ -860,15 +863,14 @@ describe("ThreadSettlementServiceV2 worker", () => {
           settings: {
             ...DEFAULT_SERVER_SETTINGS,
             sidebarAutoSettleAfterDays: 3,
+            sidebarAutoSettleMode: "inactivity",
             sidebarAutoSettleKeepPullRequests: false,
           },
         });
         yield* Effect.gen(function* () {
           const service = yield* ThreadSettlementService.ThreadSettlementServiceV2;
           yield* startHarness(service, fixture.activation, fixture.snapshotReads);
-          expect((yield* Ref.get(fixture.commands)).map((command) => command.threadId)).toEqual([
-            thread.id,
-          ]);
+          expect((yield* Ref.get(fixture.commands)).map((command) => command.threadId)).toEqual([]);
         }).pipe(Effect.provide(fixture.layer));
       }),
     ),

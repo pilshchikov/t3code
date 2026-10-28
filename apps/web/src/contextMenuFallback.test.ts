@@ -66,6 +66,10 @@ class FakeElement {
     this.listeners.set(type, existing);
   }
 
+  matches(_selector: string) {
+    return false;
+  }
+
   setAttribute(name: string, value: string) {
     this.attributes.set(name, value);
   }
@@ -192,6 +196,8 @@ beforeEach(() => {
   vi.stubGlobal("window", {
     innerWidth: 1280,
     innerHeight: 800,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
   });
   vi.stubGlobal("requestAnimationFrame", (callback: (time: number) => void) => {
     callback(0);
