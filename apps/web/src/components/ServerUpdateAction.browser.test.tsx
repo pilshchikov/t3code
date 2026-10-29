@@ -20,6 +20,7 @@ const testState = vi.hoisted(() => ({
   toast: vi.fn(),
   clipboard: vi.fn(),
   sessionAtom: null as unknown,
+  serverVersions: new Map<string, string>(),
   environment: null as EnvironmentPresentation | null,
   runtime: null as BundledServerRuntime | null,
 }));
@@ -59,6 +60,16 @@ vi.mock(import("~/state/session"), async (original) => {
     },
   };
 });
+vi.mock(import("~/state/entities"), async (original) => ({
+  ...(await original()),
+  useServerConfigs: (() =>
+    new Map(
+      [...testState.serverVersions].map(([id, serverVersion]) => [
+        id,
+        { environment: { serverVersion } },
+      ]),
+    )) as never,
+}));
 vi.mock(import("~/state/use-atom-command"), async (original) => ({
   ...(await original()),
   useAtomCommand: (() => testState.updateServer) as never,
@@ -105,6 +116,7 @@ function setup(): Disposable {
   testState.updateServer.mockReset();
   testState.toast.mockReset();
   testState.clipboard.mockReset();
+  testState.serverVersions.clear();
   testState.environment = null;
   testState.runtime = null;
   const sessionAtom = Atom.make<SessionResult>(AsyncResult.success(currentSession));
@@ -235,40 +247,68 @@ describe("ServerUpdatesAction", () => {
     );
     expect(button(screen, "Update all")!.disabled).toBe(false);
   });
+
+  it("skips a machine whose update would cross Stable and Nightly", async () => {
+    using _state = setup();
+    testState.serverVersions.set("batch-a", "0.0.30-nightly.20261001.1");
+    testState.updateServer.mockResolvedValue(success());
+    await using screen = await mount();
+    await click(screen, "Update all");
+
+    expect(testState.updateServer).toHaveBeenCalledTimes(1);
+    expect(testState.toast).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "success", title: "Office updated" }),
+    );
+  });
 });
 
 describe("bundled fork update", () => {
-  it("discovers the bundled SSH update when a Connections or composer button supplies no runtime", async () => {
-    using _state = setup();
-    const runtime = {
-      version: "0.1.2",
-      buildId: "a".repeat(64),
-      sha256: "b".repeat(64),
-      os: "darwin" as const,
-      arch: "arm64" as const,
-    };
-    const target = { alias: "mini", hostname: "mini.test", username: "developer", port: 22 };
-    testState.runtime = runtime;
-    testState.environment = {
-      environmentId: "env-test",
-      entry: { profile: Option.some({ _tag: "SshConnectionProfile", target }) },
-      serverConfig: {
-        settings: { continueThreadsAfterServerUpdate: false },
-        environment: { platform: { os: "darwin", arch: "arm64" }, serverVersion: "0.1.1" },
-      },
-    } as EnvironmentPresentation;
-    testState.updateServer.mockResolvedValue(AsyncResult.success(runtime));
-    await using screen = await renderAction({ selfUpdate: null, targetVersion: runtime.version });
-    await click(screen);
-    expect(testState.clipboard).not.toHaveBeenCalled();
-    expect(testState.updateServer).toHaveBeenCalledWith({
-      environmentId: "env-test",
-      target,
-      buildId: runtime.buildId,
-      version: runtime.version,
-      fromVersion: "0.1.1",
-    });
-  });
+  it.each([false, true])(
+    "selects the intended server build when a runtime is discovered (explicit track: %s)",
+    async (explicitTrack) => {
+      using _state = setup();
+      const runtime = {
+        version: "0.1.2",
+        buildId: "a".repeat(64),
+        sha256: "b".repeat(64),
+        os: "darwin" as const,
+        arch: "arm64" as const,
+      };
+      const target = { alias: "mini", hostname: "mini.test", username: "developer", port: 22 };
+      testState.runtime = runtime;
+      testState.environment = {
+        environmentId: "env-test",
+        entry: { profile: Option.some({ _tag: "SshConnectionProfile", target }) },
+        serverConfig: {
+          settings: { continueThreadsAfterServerUpdate: false },
+          environment: { platform: { os: "darwin", arch: "arm64" }, serverVersion: "0.1.1" },
+        },
+      } as EnvironmentPresentation;
+      testState.updateServer.mockResolvedValue(AsyncResult.success(runtime));
+      const targetVersion = explicitTrack ? "0.1.6-nightly.20261029.4000" : runtime.version;
+      await using screen = await renderAction({
+        selfUpdate: explicitTrack ? "boot-service" : null,
+        targetVersion,
+        ...(explicitTrack ? { channel: "nightly", targetDatabaseMigration: 77 } : {}),
+      });
+      await click(screen);
+      expect(testState.clipboard).not.toHaveBeenCalled();
+      expect(testState.updateServer).toHaveBeenCalledWith(
+        explicitTrack
+          ? {
+              environmentId: "env-test",
+              input: { targetVersion, channel: "nightly", targetDatabaseMigration: 77 },
+            }
+          : {
+              environmentId: "env-test",
+              target,
+              buildId: runtime.buildId,
+              version: runtime.version,
+              fromVersion: "0.1.1",
+            },
+      );
+    },
+  );
   it("uploads the app's runtime for a managed SSH environment instead of copying a public install command", async () => {
     using _state = setup();
     const runtime = {

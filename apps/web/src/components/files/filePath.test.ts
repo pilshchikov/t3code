@@ -7,6 +7,8 @@ import {
   firstFileInDirectory,
   parentDirectoryPath,
   workspaceDocumentDirectory,
+  breadcrumbPathOf,
+  isListableHostFolder,
   retainedBreadcrumbTrail,
 } from "./filePath";
 
@@ -27,6 +29,26 @@ describe("fileBreadcrumbs", () => {
       "\\\\server\\share",
       "\\\\server\\share\\report.md",
     ]);
+  });
+
+  it("builds home-relative breadcrumbs with navigable folders", () => {
+    expect(fileBreadcrumbs("t3code", "~/.claude/CLAUDE.md")).toEqual([
+      { label: "~", path: "~/", kind: "directory" },
+      { label: ".claude", path: "~/.claude", kind: "directory" },
+      { label: "CLAUDE.md", path: "~/.claude/CLAUDE.md", kind: "file" },
+    ]);
+    expect(isListableHostFolder("~/")).toBe(true);
+    expect(isListableHostFolder("~/.claude")).toBe(true);
+  });
+
+  it("keeps a project folder named ~ inside the project", () => {
+    expect(fileBreadcrumbs("t3code", "~").map((crumb) => crumb.path)).toEqual(["", "~"]);
+  });
+});
+
+describe("breadcrumbPathOf", () => {
+  it("keeps the home root listable", () => {
+    expect(breadcrumbPathOf("~/")).toBe("~/");
   });
 });
 

@@ -30,8 +30,8 @@ export class NpmLauncherCommandFailedError extends Schema.TaggedError<NpmLaunche
   }
 }
 
-/** engines requires import.meta.dirname and fetch. */
-export function npmLauncherPackageManifest(version: string) {
+/** engines requires import.meta.dirname and fetch. `t3code` is read back by npmReleaseDatabaseMigration. */
+export function npmLauncherPackageManifest(version: string, databaseMigration: number) {
   return {
     name: NPM_LAUNCHER_PACKAGE_NAME,
     version,
@@ -42,8 +42,24 @@ export function npmLauncherPackageManifest(version: string) {
     bin: { t3: "./bin/t3.mjs" },
     files: ["bin", "dist"],
     engines: { node: ">=20.11" },
+    t3code: { databaseMigration },
   };
 }
+
+// Fork registrations deliberately retain ids that differ from upstream filenames.
+const latestServerMigrationId = Effect.fn("latestServerMigrationId")(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const registryPath = yield* path.fromFileUrl(
+    new URL("../apps/server/src/persistence/Migrations.ts", import.meta.url),
+  );
+  const source = yield* fs.readFileString(registryPath);
+  const ids = [...source.matchAll(/^\s*\[(\d+), "\w+", Migration\w+\],/gm)].map((match) =>
+    Number(match[1]),
+  );
+  if (ids.length === 0) return yield* Effect.die("No registered server migrations found.");
+  return Math.max(...ids);
+});
 
 export const buildNpmLauncher = Effect.fn("buildNpmLauncher")(function* (input: {
   readonly version: string;
@@ -64,7 +80,9 @@ export const buildNpmLauncher = Effect.fn("buildNpmLauncher")(function* (input: 
   yield* fs.makeDirectory(path.join(stageDir, "dist"));
   yield* fs.writeFileString(
     path.join(stageDir, "package.json"),
-    `${yield* encodePackageJson(npmLauncherPackageManifest(input.version))}\n`,
+    `${yield* encodePackageJson(
+      npmLauncherPackageManifest(input.version, yield* latestServerMigrationId()),
+    )}\n`,
   );
   yield* fs.copyFile(path.join(sourceDir, "t3.mjs"), path.join(stageDir, "bin/t3.mjs"));
   yield* fs.chmod(path.join(stageDir, "bin/t3.mjs"), 0o755);

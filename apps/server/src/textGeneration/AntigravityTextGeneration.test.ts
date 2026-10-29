@@ -170,6 +170,7 @@ const makeFixture = Effect.fn("makeAntigravityTextGenerationFixture")(function* 
           Effect.sync(() => {
             state.selectedModels.push(model);
           }),
+        setConfigOption: () => Effect.succeed({ configOptions: [] }),
         prompt: (request) =>
           Effect.gen(function* () {
             state.prompts.push(request);
@@ -302,7 +303,7 @@ it.layer(NodeServices.layer)("AntigravityTextGeneration", (it) => {
         ).toEqual({
           subject: "Repair Google login",
           body: "Keep the remote callback.",
-          branch: "feature/repair-login",
+          branch: "spilshchikov/repair-login",
         });
         expect(
           yield* fixture.textGeneration.generatePrContent({

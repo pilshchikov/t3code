@@ -1,7 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
 import { migrationManifest, runMigrations } from "./Migrations.ts";
@@ -167,3 +170,24 @@ describe("runMigrations", () => {
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );
 });
+
+// Fork migration ids differ from upstream filenames; released ids must stay registered as-is.
+it.effect("imports every migration file", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const files = (yield* fs.readDirectory(path.join(import.meta.dirname, "Migrations"))).filter(
+      (name) => /^\d+_\w+\.ts$/.test(name),
+    );
+    const source = yield* fs.readFileString(path.join(import.meta.dirname, "Migrations.ts"));
+    const imported = new Set(
+      [...source.matchAll(/from "\.\/Migrations\/(\d+_\w+\.ts)"/g)].map((match) => match[1]),
+    );
+    assert.deepStrictEqual([...imported].sort(), files.sort());
+    // Keep the release launcher's source reader aligned with the executed registry.
+    const registered = [...source.matchAll(/^\s*\[(\d+), "(\w+)", Migration\w+\],/gm)].map(
+      (match) => [Number(match[1]), match[2]!] as const,
+    );
+    assert.deepStrictEqual(registered, migrationManifest);
+  }).pipe(Effect.provide(NodeServices.layer)),
+);

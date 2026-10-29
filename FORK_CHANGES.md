@@ -1,5 +1,43 @@
 # Fork Changes
 
+## Upstream synchronization — 2026-10-29 (08a463e299)
+
+- Merge 130 upstream commits through `08a463e29976617134de01e9341f898bc881d0eb`,
+  retaining both histories. Review 113 overlapping paths and reconcile 19 conflicts.
+  Adopt 0.1.5, Electron 44.10, provider usage fallback and refresh, scratch-thread project
+  promotion, timeline performance improvements, diff test-file filtering, configurable
+  thread details, scoped secret-provider settings and release-track migration safety.
+- Preserve dashboards and Appearance choices, project settlement/groups/order/colors,
+  the expanded composer, action orb, native multi-root Files viewer, worktree selection,
+  editor navigation/undo, recorded tool-call diffs, and the resizable diff tree. Integrate
+  upstream's Hide test files control into `apps/web/src/components/DiffPanel.tsx` without
+  replacing the fork viewer with upstream's separate explorer.
+- Keep Terra 6.1, Claude account/config isolation, agent-visible usage, continuous usage
+  bars, memory/workspace/peer tools, mobile desktop relay and bundled SSH server updates.
+  Preserve secondary-workspace cleanup protection and settlement-triggered cleanup while
+  adopting upstream's deferred worktree deletion. Analytics/client tracing remain no-ops;
+  OTLP exports and endpoint probes stay disabled.
+- Integrate explicit Stable/Nightly switching into `ServerUpdateAction.tsx` and the
+  sidebar update planner while keeping automatic same-version bundle fingerprint checks
+  and thread continuation. Explicit release switches bypass automatic bundle selection;
+  normal packaged SSH updates bypass npm publication checks. Keep registry queries behind
+  manual release actions or an explicitly opened track dialog, and keep shared-primary
+  hosts distinct from the app's own local server.
+- Preserve released migration slots 1–77 in `apps/server/src/persistence/Migrations.ts`.
+  Make `scripts/build-npm-launcher.ts` read that registered manifest for release safety
+  metadata instead of upstream filename ids. Retain strict context-budget checks with
+  Claude 10,240 bytes, Codex 11,964 bytes and MCP schemas 62,101 bytes. Adapt incoming tests
+  to fork branch prefixes, privacy opt-ins, source-control fixtures and macOS filesystems.
+- Validation: the 207-file suite passes 4,547 cases, and changed-file React Compiler
+  coverage passes 127 cases. Formatting/lint, both knip passes, generated GraphQL, dependency
+  patches and all 36 affected package typechecks pass after the final fixture corrections.
+  Isolated Chromium verifies both dashboard layouts, thread navigation/read state, custom
+  project filters, a phone viewport, Contrast, the native Files editor and diff test-file
+  filtering in both directions. A regression case reproduces explicit track switches selecting the wrong bundled build; all ten
+  server-update browser cases pass after the fix. Native lint requires unavailable
+  SwiftLint/ktlint/detekt; the real MCP eval requires an unavailable API key, and its dry
+  run succeeds. Package/stage the arm64 app without restarting local or remote processes.
+
 ## Upstream synchronization — 2026-10-28 (9826dbb990)
 
 - Merge 157 upstream commits through `9826dbb9904b2591bfbf60d1317486b59132f56b`,

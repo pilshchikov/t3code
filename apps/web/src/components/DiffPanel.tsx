@@ -1,3 +1,5 @@
+import { isTestChangedFile } from "@t3tools/shared/changedFileKind";
+import { useHideTestFiles } from "./diffs/useHideTestFiles";
 import { toolCallDiff } from "../lib/toolCallDiff";
 import type { ReviewDiffPreviewInput } from "@t3tools/contracts";
 import { RefreshIcon } from "~/components/ui/refresh-icon";
@@ -15,6 +17,7 @@ import {
   ChevronDownIcon,
   Columns2Icon,
   FolderGit2Icon,
+  FlaskConicalOffIcon,
   FolderTreeIcon,
   PilcrowIcon,
   Rows3Icon,
@@ -431,7 +434,8 @@ export default function DiffPanel({
       diffIgnoreWhitespace,
     ],
   );
-  const diffTreeFiles = useMemo<DiffTreeFile[]>(() => {
+  const [hideTestFiles, setHideTestFiles] = useHideTestFiles();
+  const allDiffTreeFiles = useMemo<DiffTreeFile[]>(() => {
     const byPath = (left: DiffTreeFile, right: DiffTreeFile) =>
       left.path.localeCompare(right.path, undefined, { numeric: true, sensitivity: "base" });
     if (isRecordedSelection) {
@@ -447,6 +451,15 @@ export default function DiffPanel({
       .map((file) => ({ path: file.path, additions: file.additions, deletions: file.deletions }))
       .toSorted(byPath);
   }, [checkpointRenderablePatch, selectedGitSource?.files, isRecordedSelection]);
+  const isFileShown = useCallback(
+    (path: string) => !hideTestFiles || path === selectedFilePath || !isTestChangedFile(path),
+    [hideTestFiles, selectedFilePath],
+  );
+  const diffTreeFiles = useMemo(
+    () => allDiffTreeFiles.filter((file) => isFileShown(file.path)),
+    [allDiffTreeFiles, isFileShown],
+  );
+  const testFileCount = allDiffTreeFiles.filter((file) => isTestChangedFile(file.path)).length;
   const resolvedTreeFilePath =
     diffTreeFiles.find((file) => file.path === treeSelectedFilePath)?.path ??
     diffTreeFiles.find((file) => file.path === selectedFilePath)?.path ??
@@ -656,8 +669,11 @@ export default function DiffPanel({
   const isRefreshingDiff =
     branchDiffPreview.isPending || areFilePatchesPending || selectedFileDiffPreview.isPending;
   const renderableFileEntries = useMemo(
-    () => renderableFiles.map(getCachedFileEntry),
-    [renderableFiles],
+    () =>
+      renderableFiles
+        .filter((file) => isFileShown(resolveFileDiffPath(file)))
+        .map(getCachedFileEntry),
+    [renderableFiles, isFileShown],
   );
   const defaultCollapsedDiffFileKeys = useMemo(
     () =>
@@ -733,14 +749,14 @@ export default function DiffPanel({
   const allDiffFilesCollapsed = areAllDiffFilesCollapsed(diffFileKeys, collapsedDiffFileKeys);
   const diffLineStat = useMemo(
     () =>
-      diffTreeFiles.reduce(
+      allDiffTreeFiles.reduce(
         (total, file) => ({
           additions: total.additions + (file.additions ?? 0),
           deletions: total.deletions + (file.deletions ?? 0),
         }),
         { additions: 0, deletions: 0 },
       ),
-    [diffTreeFiles],
+    [allDiffTreeFiles],
   );
   const selectedDiffFileKey = resolvedTreeFilePath
     ? (codeViewFiles.find((candidate) => candidate.filePath === resolvedTreeFilePath)?.fileKey ??
@@ -947,7 +963,9 @@ export default function DiffPanel({
       className="h-full min-h-0 overflow-auto"
       onRevealSearchMatch={unfoldDiffFile}
       files={visibleCodeViewFiles}
-      pendingFiles={renderableFiles.filter((file) => file.cacheKey?.endsWith(":pending"))}
+      pendingFiles={renderableFiles.filter(
+        (file) => file.cacheKey?.endsWith(":pending") && isFileShown(resolveFileDiffPath(file)),
+      )}
       renderCodeViewFooter={renderLoadingBoundary}
       sectionId={reviewSectionId}
       sectionTitle={reviewSectionTitle}
@@ -1308,6 +1326,26 @@ export default function DiffPanel({
             </TooltipPopup>
           </Tooltip>
         )}
+        {testFileCount > 0 ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Toggle
+                  aria-label="Hide test files"
+                  variant="ghost"
+                  size="sm"
+                  pressed={hideTestFiles}
+                  onPressedChange={(pressed) => setHideTestFiles(Boolean(pressed))}
+                />
+              }
+            >
+              <FlaskConicalOffIcon className="size-3.5" />
+            </TooltipTrigger>
+            <TooltipPopup side="top">
+              {hideTestFiles ? `Show ${testFileCount} hidden test files` : "Hide test files"}
+            </TooltipPopup>
+          </Tooltip>
+        ) : null}
         {diffFileKeys.length > 0 && (
           <Tooltip>
             <TooltipTrigger
