@@ -1,5 +1,34 @@
 # Fork Changes
 
+## Follow-up upstream synchronization — 2026-10-29 (dd14848153)
+
+- Merge 13 further upstream commits through `dd148481531a0a090780a2ade20588566db099a2`.
+  Review 24 overlapping paths and reconcile four conflicts. Adopt concurrent SQLite
+  readers, scoped recovery/run-preparation reads, smaller checkpoint payloads with full
+  totals, faster sidebar/startup queries, parallel Git status, fewer idle/background
+  queries, provider discovery/request caching, reconnect permission retries and iOS tabs.
+- Preserve the fork dashboards, project rail, multi-root Files/diff viewer, account usage,
+  Claude isolation, Terra 6.1, mobile relay and bundled SSH updates. Keep the generic
+  `DiffTreeFile` tree input in `apps/web/src/lib/turnDiffTree.ts` while adopting complete
+  checkpoint totals in changed-file cards. Retain the SQLite writer fairness logic and
+  fork settlement guards/defaults alongside the new reader pool and idle-sweep behavior.
+- Reserve migration 78 for upstream's `073_ActiveTurnItemIndexes.ts` in
+  `apps/server/src/persistence/Migrations.ts`; preserve released slots 1–77, upgrade
+  fixtures and the npm launcher's expected release migration metadata. Retain both fork
+  settlement regression cases and upstream's settings-change-during-sweep case.
+- New heap attribution in `apps/server/src/observability/HeapAttribution.ts` annotates local
+  traces. It does not enable external collection: analytics/client tracing remain no-ops
+  and OTLP trace/metric/log endpoints stay disabled in the fork configuration.
+- Keep project-delete retry assertions deterministic by awaiting the existing metadata
+  enrichment completion signal before taking the deletion snapshot in
+  `apps/server/src/project/ProjectService.test.ts`; faster reads exposed that fixture race.
+- Validation: all changed-file checks pass: 975 tests across 46 files, 15 changed-file
+  React Compiler cases, all 32 affected package typechecks, formatting/lint, both knip
+  passes and generated GraphQL. Isolated Chromium verifies both dashboard layouts,
+  navigation/read state, custom filters, phone viewport, Contrast, the native Files
+  editor and diff test-file filtering. Package/stage the arm64 app without restarting
+  the desktop app or remote servers.
+
 ## Upstream synchronization — 2026-10-29 (08a463e299)
 
 - Merge 130 upstream commits through `08a463e29976617134de01e9341f898bc881d0eb`,
