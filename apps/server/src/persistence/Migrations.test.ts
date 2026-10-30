@@ -50,6 +50,8 @@ describe("runMigrations", () => {
         [76, "PeerLinkFence"],
         [77, "WaitingLinkRequestIndex"],
         [78, "ActiveTurnItemIndexes"],
+        [79, "ExcludeAttachmentPlaceholdersFromSearch"],
+        [80, "SubagentDeliveryState"],
       ]);
       assert.deepStrictEqual(yield* history, [
         ...beforeHistory,
@@ -60,6 +62,8 @@ describe("runMigrations", () => {
         [76, "PeerLinkFence"],
         [77, "WaitingLinkRequestIndex"],
         [78, "ActiveTurnItemIndexes"],
+        [79, "ExcludeAttachmentPlaceholdersFromSearch"],
+        [80, "SubagentDeliveryState"],
       ]);
       assert.deepStrictEqual(yield* sql`SELECT * FROM project_memories`, memories);
       assert.deepStrictEqual(yield* sql`SELECT * FROM usage_limit_history`, usage);

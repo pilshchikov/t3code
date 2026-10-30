@@ -1,5 +1,40 @@
 # Fork Changes
 
+## Upstream synchronization — 2026-10-30 (c6ef3b46eb)
+
+- Merge 259 upstream commits through `c6ef3b46ebed34fbefa1706674fe5748254cee18`,
+  reviewing 140 overlapping paths and reconciling 29 conflicts. Adopt incremental/cached
+  Markdown rendering, formula-pipe table copying, commit previews and history in the Diff
+  pane, user-message media presentation, composer Markdown source controls, provider secret
+  refresh, subagent delivery fixes and remote connection/reconnect improvements.
+- Preserve dashboards/Appearance choices, settled/grouped project rail, custom composer,
+  multi-root Files/worktree selection, editor navigation/undo and resizable lazy diff tree.
+  Adapt commit previews to the fork's metadata-only and per-file patch requests in
+  `DiffPanel.tsx` and `GitVcsDriverCore.ts`. Keep truncated Markdown previews read-only.
+- Retain the table column-boundary fix and wrap/expand/Slack-copy controls: upstream's new
+  table fix concerns copying formulas containing pipes, not the reported cell overlap.
+  Integrate upstream's Markdown renderer caching with the fork's workspace-aware links.
+- Preserve Claude account isolation/fork recovery, Terra 6.1, agent-visible usage, continuous
+  usage bars, memory/workspace/peer tools, mobile desktop relay and bundled SSH updates.
+  Adapt fork usage readers to secret-backed environment values without attributing an
+  unresolved Codex home to another account. Keep the fork idle-compaction policy and
+  summary-only eligibility query; do not restore the replaced upstream idle service.
+- Append upstream search-placeholder and subagent-delivery migrations as slots 79/80 in
+  `apps/server/src/persistence/Migrations.ts`, retaining released slots 1–78. Analytics
+  and client tracing remain no-ops; OTLP exports remain disabled and automatic version checks
+  stay opt-in.
+- Canonicalize the managed worktree root in `AgentSessionScanner.ts` so macOS symlinks
+  cannot expose managed checkouts as importable projects. Keep usage popover dismissal
+  stable across the Base UI upgrade when an account or its reset control disappears.
+- Validation: the 362-file suite passes 7,952 cases; changed-file React Compiler coverage
+  passes 127 cases. All 39 affected package typechecks, formatting, lint (after focused
+  corrections), both knip passes, generated GraphQL and dependency patches pass. Isolated
+  Chromium verifies both dashboards, scoped navigation/read state, custom filters, phone
+  layout, Contrast, Files preview and diff test-file filtering. Table captures verify expanded
+  wrapping and compact clipping at desktop/phone widths. Native lint requires unavailable
+  SwiftLint/ktlint/detekt; the real MCP eval requires an unavailable API key, and its dry run
+  succeeds. Package/stage the arm64 app without restarting local or remote processes.
+
 ## Markdown table column boundaries — 2026-10-29
 
 - Fix overlapping table cells in `apps/web/src/index.css`: compact cells clip/ellipsize

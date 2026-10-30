@@ -300,9 +300,15 @@ const make = Effect.gen(function* () {
       // then ambient) - resolveCodexHomeLayout alone answers ~/.codex even
       // when the CLI it describes is writing somewhere else.
       let sessionsParent: string;
-      const envOverride = entry.environment
-        ?.find((variable) => variable.name === "CODEX_HOME")
-        ?.value.trim();
+      const envValue = entry.environment?.find((variable) => variable.name === "CODEX_HOME")?.value;
+      if (
+        envValue !== undefined &&
+        typeof envValue !== "string" &&
+        codexSettings.homePath.trim() === "" &&
+        codexSettings.shadowHomePath.trim() === ""
+      )
+        continue;
+      const envOverride = typeof envValue === "string" ? envValue.trim() : undefined;
       // A shadow overlay pins the layout: spawn overrides CODEX_HOME with
       // the overlay path, so an instance env value never reaches the CLI.
       const envHome =

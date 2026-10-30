@@ -5,7 +5,12 @@ import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
-import { ProviderDriverKind, ProviderInstanceId, type ServerSettings } from "@t3tools/contracts";
+import {
+  ProviderDriverKind,
+  ProviderInstanceId,
+  SecretProviderId,
+  type ServerSettings,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -552,7 +557,7 @@ it("evicts a row whose instance now runs a different driver", () =>
     }
   }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise));
 
-it("seeds a codex instance homed by its environment's CODEX_HOME", () =>
+it.each(["literal", "secret"] as const)("seeds only a resolved %s CODEX_HOME", (kind) =>
   Effect.gen(function* () {
     // No homePath configured: the spawned CLI would resolve CODEX_HOME from
     // its child env, so the seed must read the same place.
@@ -579,7 +584,19 @@ it("seeds a codex instance homed by its environment's CODEX_HOME", () =>
               },
               [asInstanceId("codex_env")]: {
                 driver: asDriver("codex"),
-                environment: [{ name: "CODEX_HOME", value: envHome, sensitive: false }],
+                environment: [
+                  {
+                    name: "CODEX_HOME",
+                    value:
+                      kind === "literal"
+                        ? envHome
+                        : {
+                            provider: SecretProviderId.make("vault"),
+                            reference: "op://Private/Codex/home",
+                          },
+                    sensitive: false,
+                  },
+                ],
               },
             },
           }),
@@ -591,11 +608,12 @@ it("seeds a codex instance homed by its environment's CODEX_HOME", () =>
           snapshot.source,
           snapshot.windows[0]?.usedPercent,
         ]),
-      ).toEqual([["codex_env", "transcript", 29]]);
+      ).toEqual(kind === "literal" ? [["codex_env", "transcript", 29]] : []);
     } finally {
       NodeFS.rmSync(envHome, { recursive: true, force: true });
     }
-  }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise));
+  }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise),
+);
 
 it("a shadow-overlay instance seeds from its layout, not its CODEX_HOME env", () =>
   Effect.gen(function* () {
@@ -627,11 +645,7 @@ it("a shadow-overlay instance seeds from its layout, not its CODEX_HOME env", ()
                 driver: asDriver("codex"),
                 environment: [{ name: "CODEX_HOME", value: plainEnvHome, sensitive: false }],
               },
-              // Shadow overlay: spawn pins CODEX_HOME to the overlay, so the
-              // instance env value never reaches the CLI - the seed must not
-              // read it either. (Its layout home may hold this machine's
-              // real transcripts; the assertions below stay independent of
-              // whatever that dir contains.)
+              // Shadow overlays pin CODEX_HOME; never seed from their unrelated environment home.
               [asInstanceId("codex_shadow")]: {
                 driver: asDriver("codex"),
                 config: { shadowHomePath: "/nonexistent/t3-test-codex-shadow" },

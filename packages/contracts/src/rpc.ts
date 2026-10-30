@@ -188,6 +188,8 @@ import {
   VcsStatusStreamEvent,
 } from "./git.ts";
 import {
+  ReviewBranchCommitsInput,
+  ReviewBranchCommitsResult,
   ReviewDiffFileContentsInput,
   ReviewDiffFileContentsResult,
   ReviewDiffPreviewError,
@@ -259,6 +261,7 @@ import {
   ORCHESTRATION_V2_WS_METHODS,
   OrchestrationGetWorkflowScriptError,
   OrchestrationV2StopWorkflowError,
+  OrchestrationV2ForceStopThreadError,
   OrchestrationV2DispatchCommandError,
   OrchestrationV2GetShellSnapshotError,
   OrchestrationV2CommandOutputError,
@@ -542,6 +545,7 @@ export const WS_METHODS = {
   projectMemorySave: "projectMemory.save",
   projectMemoryRemove: "projectMemory.remove",
 
+  reviewGetBranchCommits: "review.getBranchCommits",
   reviewGetDiffPreview: "review.getDiffPreview",
   reviewGetDiffFileContents: "review.getDiffFileContents",
 
@@ -732,6 +736,8 @@ export const WsServerRefreshProvidersRpc = Rpc.make(WS_METHODS.serverRefreshProv
     fresh: Schema.optional(Schema.Boolean),
     /** Bypass model caches; explicit rediscovery may open sessions, background refreshes must not. */
     refreshModels: Schema.optional(Schema.Boolean),
+    /** Read secret references again; unlocking a vault can prompt on the host, so only explicit user refreshes ask. */
+    reloadSecrets: Schema.optional(Schema.Boolean),
     /**
      * Reply without snapshots, or with only the requested instance's cwd snapshot. Snapshots then
      * reach the client only through these replies, so another client's scan shows on its next
@@ -1797,6 +1803,12 @@ const WsProjectMemoryRemoveRpc = Rpc.make(WS_METHODS.projectMemoryRemove, {
  * Not the persisted T3 Review model. Future review sessions should use
  * review.open* + review.getSnapshot.
  */
+const WsReviewGetBranchCommitsRpc = Rpc.make(WS_METHODS.reviewGetBranchCommits, {
+  payload: ReviewBranchCommitsInput,
+  success: ReviewBranchCommitsResult,
+  error: Schema.Union([ReviewDiffPreviewError, EnvironmentAuthorizationError]),
+});
+
 const WsReviewGetDiffPreviewRpc = Rpc.make(WS_METHODS.reviewGetDiffPreview, {
   payload: ReviewDiffPreviewInput,
   success: ReviewDiffPreviewResult,
@@ -2068,6 +2080,12 @@ const WsOrchestrationV2StopWorkflowRpc = Rpc.make(ORCHESTRATION_V2_WS_METHODS.st
   payload: OrchestrationV2RpcSchemas.stopWorkflow.input,
   success: OrchestrationV2RpcSchemas.stopWorkflow.output,
   error: Schema.Union([OrchestrationV2StopWorkflowError, EnvironmentAuthorizationError]),
+});
+
+const WsOrchestrationV2ForceStopThreadRpc = Rpc.make(ORCHESTRATION_V2_WS_METHODS.forceStopThread, {
+  payload: OrchestrationV2RpcSchemas.forceStopThread.input,
+  success: OrchestrationV2RpcSchemas.forceStopThread.output,
+  error: Schema.Union([OrchestrationV2ForceStopThreadError, EnvironmentAuthorizationError]),
 });
 
 const WsOrchestrationV2GetWorkflowScriptRpc = Rpc.make(
@@ -2416,6 +2434,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectMemoryReadRpc,
   WsProjectMemorySaveRpc,
   WsProjectMemoryRemoveRpc,
+  WsReviewGetBranchCommitsRpc,
   WsReviewGetDiffPreviewRpc,
   WsReviewGetDiffFileContentsRpc,
   WsTerminalOpenRpc,
@@ -2455,6 +2474,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationV2DispatchCommandRpc,
   WsOrchestrationV2GetWorkflowScriptRpc,
   WsOrchestrationV2StopWorkflowRpc,
+  WsOrchestrationV2ForceStopThreadRpc,
   WsOrchestrationV2GetTurnItemRpc,
   WsOrchestrationV2GetTurnDiffRpc,
   WsOrchestrationV2GetFullThreadDiffRpc,

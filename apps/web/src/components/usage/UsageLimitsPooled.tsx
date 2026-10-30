@@ -14,18 +14,8 @@ import {
   paceRemainingPercent,
   remainingPercent,
 } from "@t3tools/shared/usageLimits";
-import type { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import { AlertTriangleIcon, ExternalLinkIcon, TicketIcon } from "lucide-react";
-import {
-  createContext,
-  Fragment,
-  type ReactNode,
-  type RefObject,
-  use,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { createContext, Fragment, type ReactNode, use, useMemo } from "react";
 
 import { ensureLocalApi } from "../../localApi";
 import { usePrimarySettings } from "../../hooks/useSettings";
@@ -37,7 +27,12 @@ import { RedactedSensitiveText } from "../settings/RedactedSensitiveText";
 import { Button } from "../ui/button";
 import { OpenAI } from "../Icons";
 import { Alert, AlertTitle } from "../ui/alert";
-import { Popover, PopoverCreateHandle, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import {
+  Popover,
+  PopoverCreateHandle as createSegmentPopoverHandle,
+  PopoverPopup,
+  PopoverTrigger,
+} from "../ui/popover";
 import {
   PaceIcon,
   ResetCreditDialog,
@@ -230,42 +225,18 @@ function SegmentPopover({
  */
 type SegmentPayload = Omit<Parameters<typeof SegmentPopover>[0], "now" | "onRedeem">;
 const SegmentPopoverContext = createContext<ReturnType<
-  typeof PopoverCreateHandle<SegmentPayload>
+  typeof createSegmentPopoverHandle<SegmentPayload>
 > | null>(null);
 
 function ActiveSegmentPopover({
   handle,
-  actions,
   payload,
-  pools,
   now,
 }: {
-  readonly handle: ReturnType<typeof PopoverCreateHandle<SegmentPayload>>;
-  readonly actions: RefObject<PopoverPrimitive.Root.Actions | null>;
+  readonly handle: ReturnType<typeof createSegmentPopoverHandle<SegmentPayload>>;
   readonly payload: SegmentPayload;
-  readonly pools: readonly LimitPool[];
   readonly now: number;
 }) {
-  const available = pools.some((pool) =>
-    displayLimitWindows(pool).some((window) =>
-      window.members.some(
-        (member) =>
-          member.account.key === payload.account.key &&
-          member.window.id === payload.window.id &&
-          member.window.kind === payload.window.kind &&
-          Boolean(member.account.redeem) === Boolean(payload.redeem),
-      ),
-    ),
-  );
-  // The trigger is gone, so the popup has nothing to anchor to: an exit transition would
-  // slide it to the viewport origin. Unmount it outright, which also clears Base UI's
-  // active-trigger bookkeeping so the segment can open again when it comes back.
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- closes the popover handle and unmounts the Base UI popup before paint when its trigger is gone
-  useLayoutEffect(() => {
-    if (available) return;
-    handle.close();
-    actions.current?.unmount();
-  }, [available, handle, actions]);
   return (
     <PopoverPopup side="top" sideOffset={6}>
       <SegmentPopover
@@ -619,9 +590,24 @@ export function UsageLimitsPooled({
   readonly now: number;
   readonly cursorPrompt?: ReactNode;
 }) {
-  const [segmentPopover] = useState(() => PopoverCreateHandle<SegmentPayload>());
-  const segmentPopoverActions = useRef<PopoverPrimitive.Root.Actions | null>(null);
   const pools = collectLimitPools(collectLimitAccounts(presentations), now);
+  const segmentTriggerKey = JSON.stringify(
+    pools.flatMap((pool) =>
+      displayLimitWindows(pool).flatMap((window) =>
+        window.members.map((member) => [
+          member.account.key,
+          member.window.kind,
+          member.window.id,
+          Boolean(member.account.redeem),
+        ]),
+      ),
+    ),
+  );
+  // Replacing triggers must reset Base UI's active payload without remounting redemption feedback.
+  const segmentPopover = useMemo(
+    () => ({ key: segmentTriggerKey, handle: createSegmentPopoverHandle<SegmentPayload>() }),
+    [segmentTriggerKey],
+  );
   const notices = collectLimitNotices(presentations);
   const externalLinks = collectExternalUsageLinks(presentations);
   const cursorPromptAt =
@@ -636,7 +622,7 @@ export function UsageLimitsPooled({
           No provider on the selected environments reports subscription limits.
         </p>
       ) : null}
-      <SegmentPopoverContext value={segmentPopover}>
+      <SegmentPopoverContext value={segmentPopover.handle}>
         {pools.map((pool, index) => (
           <Fragment key={pool.driver}>
             {index === cursorPromptAt ? cursorPrompt : null}
@@ -644,16 +630,10 @@ export function UsageLimitsPooled({
           </Fragment>
         ))}
       </SegmentPopoverContext>
-      <Popover handle={segmentPopover} actionsRef={segmentPopoverActions}>
+      <Popover key={segmentPopover.key} handle={segmentPopover.handle}>
         {({ payload }) =>
           payload ? (
-            <ActiveSegmentPopover
-              handle={segmentPopover}
-              actions={segmentPopoverActions}
-              payload={payload}
-              pools={pools}
-              now={now}
-            />
+            <ActiveSegmentPopover handle={segmentPopover.handle} payload={payload} now={now} />
           ) : null
         }
       </Popover>
@@ -669,6 +649,9 @@ export function UsageLimitsPooled({
             ) : null}
             <div className="min-w-0 space-y-1">
               <h2 className="text-sm font-medium">{link.label}</h2>
+              <p className="text-xs break-words text-muted-foreground">
+                {link.accounts.join(", ")}
+              </p>
               {link.url === CHATGPT_USAGE_URL ? (
                 <p className="text-xs text-muted-foreground">
                   View usage in ChatGPT with your connected account.

@@ -355,12 +355,17 @@ export const make = Effect.gen(function* () {
         if (provider === "claude") {
           const instance = settings.providerInstances[instanceId];
           const decoded = decodeClaudeSettings(instance?.config ?? {});
+          const configDirOverride = instance?.environment?.find(
+            (variable) => variable.name === "CLAUDE_CONFIG_DIR",
+          )?.value;
+          const hasConfigDirOverride =
+            typeof configDirOverride === "string"
+              ? configDirOverride.trim() !== ""
+              : configDirOverride !== undefined;
           if (
             Option.isSome(decoded) &&
             !decoded.value.configDir.trim() &&
-            !instance?.environment
-              ?.find((variable) => variable.name === "CLAUDE_CONFIG_DIR")
-              ?.value.trim() &&
+            !hasConfigDirOverride &&
             !hostEnvironment.CLAUDE_CONFIG_DIR?.trim() &&
             decoded.value.homePath.trim() &&
             !(yield* fileSystem.exists(directory).pipe(Effect.orElseSucceed(() => false)))
