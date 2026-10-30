@@ -1,5 +1,19 @@
 # Fork Changes
 
+## Markdown table column boundaries — 2026-10-29
+
+- Fix overlapping table cells in `apps/web/src/index.css`: compact cells clip/ellipsize
+  text at their column boundary, while expanded headers and body cells explicitly use
+  normal whitespace and wrap within the existing width cap. The previous rules retained
+  `nowrap` in expanded body cells and allowed text to paint into neighboring columns.
+- Preserve the word-wrap preference, per-table expand/collapse control, horizontal
+  scrolling, copy formats, file-preview tables and natural-width mathematical content.
+- Validation: before/after captures in the isolated app reproduce and resolve the
+  overlap with long prose, links and code at 1728px and 390px viewports. Expanded prose
+  cells fit their columns, compact cells clip correctly and the page does not overflow.
+  Existing Markdown/copy checks pass all 13 cases; changed-file formatting and both
+  affected package typechecks pass. Use captures rather than adding layout-only tests.
+
 ## Follow-up upstream synchronization — 2026-10-29 (dd14848153)
 
 - Merge 13 further upstream commits through `dd148481531a0a090780a2ade20588566db099a2`.
