@@ -1,3 +1,4 @@
+import { PeerThreadQueueInput, ThreadQueueResult } from "@t3tools/contracts";
 import {
   EnvironmentId,
   OrchestratorMcpFailure,
@@ -128,12 +129,21 @@ const threadRead = Tool.make("t3_peer_thread_read", {
 const threadSend = Tool.make("t3_peer_thread_send", {
   ...shared,
   description:
-    "Send an attributed user-side message to another T3 thread or T3-managed child/sibling agent, on this machine or another environment. Parent agents can send and follow the same exchanges. Stable clientRequestId prevents duplicate delivery on retry. mode auto steers active work or starts a turn; queue waits behind active work. Choose watch none (default), once for this reply, or continuous for subsequent replies until stopped. Retain watchId; do not poll when watching. This genuinely dispatches the message; writing a shared Git note does not. For provider-native subagents use the provider's send_message/SendMessage tool; their imported backing threads cannot accept ordinary turns. This does not start a new delegated review round: use delegate_task for that. Target modes may not exceed yours.",
+    "Send an attributed user-side message to another T3 thread or T3-managed child/sibling agent, on this machine or another environment. Parent agents can send and follow the same exchanges. Stable clientRequestId prevents duplicate delivery on retry. mode auto steers active work or starts a turn; queue waits behind active work. Choose watch none (default), once for this reply, or continuous for subsequent replies until stopped. Retain watchId; do not poll when watching. This genuinely dispatches the message; writing a shared Git note does not. For provider-native subagents use the provider's send_message/SendMessage tool; their imported backing threads cannot accept ordinary turns. This does not start a new delegated review round: use delegate_task for that. Target modes may not exceed yours. Manage queued sends with t3_peer_thread_queue using the returned runId as queuedRunId.",
   parameters: PeerThreadMessageInput,
   success: PeerThreadMessageResult,
 })
   .annotate(Tool.Readonly, false)
   .annotate(Tool.Destructive, false);
+const threadQueue = Tool.make("t3_peer_thread_queue", {
+  ...shared,
+  description:
+    "Manage prompts queued for a T3-managed child or another conversation, locally or across environments through the app relay. list returns delivery order, queuedRunId, messageId and activeRunId. read fetches one prompt. edit replaces text and retains attachments. cancel removes a queued prompt. reorder moves it before beforeRunId, or to the end with null. promote_to_steer delivers it to targetRunId now; use activeRunId from list. A send receipt's runId is its queuedRunId. Reuse clientRequestId only when retrying the same change. Started turns and delivered steering cannot be recalled; stale queue writes fail. Native provider subagents use native messaging. Both environments need this feature installed.",
+  parameters: PeerThreadQueueInput,
+  success: ThreadQueueResult,
+})
+  .annotate(Tool.Readonly, false)
+  .annotate(Tool.Destructive, true);
 const threadWatch = Tool.make("t3_peer_thread_watch", {
   ...shared,
   description:
@@ -172,6 +182,7 @@ export const PeersToolkit = Toolkit.make(
   threadsList,
   threadRead,
   threadSend,
+  threadQueue,
   threadWatch,
   threadUnwatch,
   watches,
@@ -215,6 +226,23 @@ export const PeersHandlersLive = McpToolAccess.toLayer(
           if (reply.type !== "thread-read") return yield* unavailable();
           return reply.result;
         }),
+      ),
+      t3_peer_thread_queue: McpToolAccess.either(
+        (input) => input.action === "list" || input.action === "read",
+        McpToolAccess.readsAsCaller((input) =>
+          Effect.gen(function* () {
+            const { caller } = yield* readCaller();
+            if (caller === undefined) return yield* unavailable();
+            return yield* messaging.manageQueue(caller.id, input);
+          }),
+        ),
+        McpToolAccess.actsAsCaller((input) =>
+          Effect.gen(function* () {
+            const { caller } = yield* readCaller();
+            if (caller === undefined) return yield* unavailable();
+            return yield* messaging.manageQueue(caller.id, input);
+          }),
+        ),
       ),
       t3_peer_thread_send: McpToolAccess.actsAsCaller((input) =>
         Effect.gen(function* () {

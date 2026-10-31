@@ -17,6 +17,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -291,7 +292,11 @@ const make = Effect.gen(function* () {
       if (!environment?.httpBaseUrl || !environment.bearerToken)
         return yield* new SharedEnvironmentError({ reason: "unavailable" });
       const stop = sessions
-        .awaitInvalidation(actor.sessionId, actor.credentialScopes ?? actor.scopes)
+        .awaitInvalidation(
+          actor.sessionId,
+          actor.proofKeyThumbprint,
+          actor.credentialScopes ?? actor.scopes,
+        )
         .pipe(Effect.orDie);
       // The browser ticket belongs to the host. It must never be sent to the other server.
       const ticketUse =
@@ -329,7 +334,7 @@ const make = Effect.gen(function* () {
           }
           const ticket =
             yield* HttpClientResponse.schemaBodyJson(AuthWebSocketTicketResult)(response);
-          upstreamUrl.searchParams.set("wsTicket", ticket.ticket);
+          upstreamUrl.searchParams.set("wsTicket", Redacted.value(ticket.ticket));
         }
         upstreamUrl.protocol = upstreamUrl.protocol === "https:" ? "wss:" : "ws:";
         const upstream = yield* Socket.makeWebSocket(upstreamUrl.href, {

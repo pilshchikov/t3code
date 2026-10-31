@@ -52,6 +52,7 @@ describe("runMigrations", () => {
         [78, "ActiveTurnItemIndexes"],
         [79, "ExcludeAttachmentPlaceholdersFromSearch"],
         [80, "SubagentDeliveryState"],
+        [81, "ProjectionProjectsPinArchive"],
       ]);
       assert.deepStrictEqual(yield* history, [
         ...beforeHistory,
@@ -64,6 +65,7 @@ describe("runMigrations", () => {
         [78, "ActiveTurnItemIndexes"],
         [79, "ExcludeAttachmentPlaceholdersFromSearch"],
         [80, "SubagentDeliveryState"],
+        [81, "ProjectionProjectsPinArchive"],
       ]);
       assert.deepStrictEqual(yield* sql`SELECT * FROM project_memories`, memories);
       assert.deepStrictEqual(yield* sql`SELECT * FROM usage_limit_history`, usage);

@@ -1,6 +1,14 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Layer from "effect/Layer";
+import * as ThreadQueue from "../mcp/ThreadQueue.ts";
+import * as ThreadManagement from "./ThreadManagementService.ts";
+import * as CommandReceipts from "./CommandReceiptStore.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import { assert, it } from "@effect/vitest";
 import {
   CommandId,
+  EnvironmentId,
   MessageId,
   EventId,
   NodeId,
@@ -697,6 +705,7 @@ it.effect("force sends multiple queued messages and can force send a requeued me
       );
       yield* Effect.gen(function* () {
         const orchestrator = yield* Orchestrator.OrchestratorV2;
+        const prompts = yield* ThreadQueue.ThreadQueue;
         const worker = yield* EffectWorker.OrchestrationEffectWorkerV2;
         const threadId = yield* startFirstTurn;
         const queue = (text: string, commandId: string) =>
@@ -718,13 +727,27 @@ it.effect("force sends multiple queued messages and can force send a requeued me
             (run) =>
               run.status === "queued" && run.userMessageId === MessageId.make(`message:${text}`),
           )!;
-          yield* orchestrator.dispatch({
-            type: "queued-message.promote-to-steer",
-            commandId: CommandId.make(commandId),
+          const input = {
+            action: "promote_to_steer" as const,
+            clientRequestId: commandId,
             threadId,
             queuedRunId: queued.id,
             targetRunId: started[0]!.runId,
-          });
+          };
+          const scope = {
+            environmentId: EnvironmentId.make("test-queue"),
+            requestNamespace: "test-queue",
+            capabilities: new Set(["orchestration"] as const),
+            issuedAt: 0,
+            thread: undefined,
+            client: {
+              sessionId: "test-queue",
+              label: "Test queue",
+              access: "full-access" as const,
+            },
+          };
+          const receipt = yield* prompts.manage(scope, input);
+          assert.deepEqual(yield* prompts.manage(scope, input), receipt);
         });
         yield* promote("one", "promote-one");
         yield* promote("two", "promote-two");
@@ -756,7 +779,17 @@ it.effect("force sends multiple queued messages and can force send a requeued me
           assert.lengthOf(items, 1);
           assert.equal(items[0]?.status, "completed");
         }
-      }).pipe(Effect.provide(layer));
+      }).pipe(
+        Effect.provide(
+          ThreadQueue.layer.pipe(
+            Layer.provideMerge(ThreadManagement.layer),
+            Layer.provide(ServerSettings.layerTest()),
+            Layer.provide(CommandReceipts.layer.pipe(Layer.provide(SqlitePersistence.layerMemory))),
+            Layer.provideMerge(layer),
+            Layer.provide(NodeServices.layer),
+          ),
+        ),
+      );
     }),
   ),
 );
@@ -1543,6 +1576,85 @@ it.effect("stops the running turn when a goal clear ends the goal driving it", (
           started: ["first", "/goal clear"],
           stopRequested: true,
         });
+      }).pipe(Effect.provide(layer));
+    }),
+  ),
+);
+
+it.effect("a side chat that opens with /goal gets its context on the next question", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { events, layer, started, startFirstTurn } = yield* goalHarness("side-chat-goal");
+      yield* Effect.gen(function* () {
+        const orchestrator = yield* Orchestrator.OrchestratorV2;
+        const worker = yield* EffectWorker.OrchestrationEffectWorkerV2;
+        const parentId = yield* startFirstTurn;
+        const sideChatId = ThreadId.make("thread:side-chat-goal-child");
+        yield* orchestrator.dispatch({
+          type: "thread.fork",
+          commandId: CommandId.make("side-chat"),
+          sourceThreadId: parentId,
+          targetThreadId: sideChatId,
+          sourcePoint: { type: "latest_stable" },
+          sideChat: true,
+          createdBy: "user",
+          creationSource: "web",
+        });
+        const ask = (id: string, text: string) =>
+          orchestrator.dispatch({
+            type: "message.dispatch",
+            commandId: CommandId.make(id),
+            threadId: sideChatId,
+            messageId: MessageId.make(`message:${id}`),
+            text,
+            attachments: [],
+            modelSelection: runSelection,
+            dispatchMode: { type: "start_immediately" },
+            createdBy: "user",
+            creationSource: "web",
+          });
+        const sideChatEvent = (matches: (event: OrchestrationV2DomainEvent) => boolean) =>
+          orchestrator.streamDomainEvents.pipe(
+            Stream.filter((event) => event.threadId === sideChatId && matches(event)),
+            Stream.take(1),
+            Stream.runDrain,
+            Effect.forkScoped({ startImmediately: true }),
+          );
+        const running = yield* sideChatEvent(
+          (event) => event.type === "provider-turn.updated" && event.payload.status === "running",
+        );
+        const settled = yield* sideChatEvent(
+          (event) => event.type === "run.updated" && event.payload.status === "waiting",
+        );
+        yield* ask("goal", "/goal clear");
+        yield* worker.drain();
+        yield* Fiber.join(running);
+        const turn = (yield* orchestrator.getThreadProjection(sideChatId)).providerTurns[0]!;
+        yield* Queue.offer(events, {
+          type: "provider_turn.updated",
+          driver,
+          providerTurn: { ...turn, status: "completed", completedAt: yield* DateTime.now },
+        });
+        yield* Queue.offer(events, {
+          type: "turn.terminal",
+          driver,
+          providerThreadId: turn.providerThreadId,
+          providerTurnId: turn.id,
+          runOrdinal: started[1]!.runOrdinal,
+          status: "completed",
+          failure: null,
+          threadDisposition: "reusable",
+        });
+        yield* Fiber.join(settled);
+        yield* worker.drain();
+        yield* ask("question", "What is the main thread doing?");
+        yield* worker.drain();
+
+        const [first, goal, question] = started.map((turn) => turn.message.text);
+        assert.deepEqual([first, goal], ["first", "/goal clear"]);
+        assert.include(question, "You are in a side chat beside the main thread.");
+        assert.include(question, "- User: first");
+        assert.isTrue(question?.endsWith("What is the main thread doing?"));
       }).pipe(Effect.provide(layer));
     }),
   ),

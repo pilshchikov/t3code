@@ -84,6 +84,7 @@ describe("V2 preview upgrade", () => {
         [78, "ActiveTurnItemIndexes"],
         [79, "ExcludeAttachmentPlaceholdersFromSearch"],
         [80, "SubagentDeliveryState"],
+        [81, "ProjectionProjectsPinArchive"],
       ]);
       assert.deepStrictEqual(yield* runMigrations(), []);
       assert.deepStrictEqual(yield* sql`SELECT * FROM orchestration_v2_legacy_imports`, imports);
@@ -183,6 +184,7 @@ describe("V2 preview upgrade", () => {
         [78, "ActiveTurnItemIndexes"],
         [79, "ExcludeAttachmentPlaceholdersFromSearch"],
         [80, "SubagentDeliveryState"],
+        [81, "ProjectionProjectsPinArchive"],
       ]);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );

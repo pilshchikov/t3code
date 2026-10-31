@@ -13,7 +13,7 @@ import {
   TurnItemId,
   type ExecutionEnvironmentDescriptor,
   type PeerRelayReply,
-  type RunId,
+  RunId,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -149,6 +149,7 @@ const seed = Effect.fn("test.seedPeers")(function* (relay = true) {
           : operation.type === "threads-list" ||
               operation.type === "thread-read" ||
               operation.type === "thread-send" ||
+              operation.type === "thread-queue" ||
               operation.type === "thread-wait"
             ? recipient.perform(operation).pipe(
                 Effect.catch((error) =>
@@ -631,5 +632,127 @@ it.effect("provider-native transcripts stay readable without claiming ordinary t
       .pipe(Effect.flip);
     expect(unwatchable.code).toBe("invalid_request");
     expect((yield* threads.getThreadRecords(target, ["messages"])).messages).toEqual([]);
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("agents manage remote queued prompts atomically and retries do not change delivery", () =>
+  Effect.gen(function* () {
+    yield* seed();
+    const messaging = yield* PeerThreadMessaging.PeerThreadMessaging;
+    const threads = yield* ThreadManagement.ThreadManagementService;
+    const send = (message: string) =>
+      messaging.send(caller, {
+        environmentId: destination,
+        threadId: target,
+        message,
+        mode: "queue",
+        clientRequestId: message,
+        watch: "none",
+      });
+    const active = yield* messaging.send(caller, {
+      environmentId: destination,
+      threadId: target,
+      message: "Active task",
+      clientRequestId: "active",
+      watch: "none",
+    });
+    const first = yield* send("First task");
+    const second = yield* send("Second task");
+    expect(first.queuedRunId).toBe(first.runId);
+    const common = { environmentId: destination, threadId: target };
+    const queue = yield* messaging.manageQueue(caller, {
+      ...common,
+      action: "list",
+      clientRequestId: "list",
+    });
+    expect(queue).toMatchObject({
+      items: [{ queuedRunId: first.runId }, { queuedRunId: second.runId }],
+      nextCursor: null,
+      activeRunId: active.runId,
+    });
+    const edit = {
+      ...common,
+      action: "edit" as const,
+      queuedRunId: first.runId,
+      text: "Revised task",
+      clientRequestId: "edit-first",
+    };
+    yield* messaging.manageQueue(caller, edit);
+    expect(
+      yield* messaging.manageQueue(caller, {
+        ...common,
+        action: "read",
+        queuedRunId: first.runId,
+        clientRequestId: "read",
+      }),
+    ).toMatchObject({ text: "Revised task", messageId: first.messageId });
+    yield* messaging.manageQueue(caller, {
+      ...common,
+      action: "reorder",
+      queuedRunId: second.runId,
+      beforeRunId: first.runId,
+      clientRequestId: "reorder",
+    });
+    expect(
+      yield* messaging.manageQueue(caller, {
+        ...common,
+        action: "list",
+        limit: 1,
+        clientRequestId: "page",
+      }),
+    ).toMatchObject({ items: [{ queuedRunId: second.runId }], nextCursor: 1 });
+    const cancel = {
+      ...common,
+      action: "cancel" as const,
+      queuedRunId: first.runId,
+      clientRequestId: "cancel-first",
+    };
+    const receipt = yield* messaging.manageQueue(caller, cancel);
+    expect(yield* messaging.manageQueue(caller, cancel)).toEqual(receipt);
+    // A committed edit's retry must not resurrect a message cancelled afterwards.
+    yield* messaging.manageQueue(caller, edit);
+    const stale = yield* messaging
+      .manageQueue(caller, { ...edit, clientRequestId: "edit-after-cancel" })
+      .pipe(Effect.flip);
+    expect(stale.message).toContain("not queued");
+    const invalidTarget = yield* messaging
+      .manageQueue(caller, {
+        ...common,
+        action: "promote_to_steer",
+        queuedRunId: second.runId,
+        targetRunId: RunId.make("missing-active-run"),
+        clientRequestId: "stale-promotion",
+      })
+      .pipe(Effect.flip);
+    expect(invalidTarget.message).toContain("not found");
+    expect(
+      (yield* threads.getThreadRecords(target, ["runs"])).runs.find(
+        (run) => run.id === second.runId,
+      )?.status,
+    ).toBe("queued");
+    const recipient = yield* PeerThreads.PeerThreads;
+    const denied = yield* recipient
+      .perform({
+        type: "thread-queue",
+        environmentId: destination,
+        input: {
+          ...cancel,
+          queuedRunId: second.runId,
+          clientRequestId: "denied",
+          sender: {
+            environmentId: source,
+            environmentLabel: "MacBook",
+            threadId: caller,
+            threadTitle: "Lead",
+            runtimeMode: "approval-required",
+            interactionMode: "default",
+          },
+        },
+      })
+      .pipe(Effect.flip);
+    expect(denied.code).toBe("runtime_mode_escalation_denied");
+    expect(
+      yield* messaging.manageQueue(caller, { ...common, action: "list", clientRequestId: "final" }),
+    ).toMatchObject({ items: [{ queuedRunId: second.runId }] });
   }).pipe(Effect.provide(layerTest)),
 );

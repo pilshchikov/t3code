@@ -1,5 +1,44 @@
 # Fork Changes
 
+## Upstream synchronization and agent prompt queues — 2026-10-31 (54c5f25249)
+
+- Merge 171 upstream commits through `54c5f25249961a1aa0b61932329092eadbd9d6fc`,
+  reviewing 158 overlapping paths and reconciling 41 conflicts. Adopt 0.1.6, side-chat
+  panels, combined model/effort controls, project pin/archive, DPoP session renewal,
+  provider secret refresh, thread-opening query reductions and provider/device fixes.
+- Preserve dashboards/Appearance choices, the flat manually ordered sidebar and settled/
+  grouped project rail, multi-root Files/worktree selection, editor undo/navigation,
+  lazy/resizable diffs, Markdown table boundaries, Claude isolation/fork recovery, Terra
+  6.1, usage/history tools, mobile desktop relay and bundled fingerprint-based SSH updates.
+  Archive hides projects from the rail; settling continues to hide only quick access.
+  Retain disabled external telemetry/OTLP and explicit-only public npm release lookups.
+- Append upstream project pin/archive migration as slot 81 in
+  `apps/server/src/persistence/Migrations.ts`; preserve released slots 1–80. Keep fork
+  retention guards and summary-only idle compaction, excluding side chats as well as
+  delegated children. Preserve grant-change socket invalidation alongside DPoP renewals.
+- Agents can list/read, edit, cancel, reorder or promote pending prompts through
+  `t3_queue` and the new `t3_peer_thread_queue` relay tool. Centralize queue behavior in
+  `apps/server/src/mcp/ThreadQueue.ts`, share schemas in
+  `packages/contracts/src/threadQueue.ts`, and route relayed requests through
+  `PeerThreadMessaging.ts`, `PeerThreads.ts` and `peerRelayHost.ts`. Send receipts expose
+  queuedRunId; queue lists expose activeRunId. Atomic orchestration commands reject stale
+  writes and stable request IDs deduplicate retries. Permission ceilings apply at both
+  ends. Both relayed servers need the feature; native provider subagents keep native tools.
+- Read queue messages by their queued IDs rather than loading a whole conversation.
+  Restore keyboard context menus in the fork native Files tree and derive directory/Git
+  data from query atoms rather than copying child query results into parent React state.
+- Validation: over 5,900 affected tests and 201 React Compiler checks pass, with all
+  39 affected package typechecks, scoped lint, formatting, both knip passes and generated
+  GraphQL checks. Adapt the Homebrew version fixture to explicitly opt into the fork's
+  disabled-by-default discovery. Focused service/relay tests cover editing, ordering, cancellation, stale
+  promotion, permissions and idempotency; the running-provider integration verifies
+  promotion exactly once. The MCP eval case `manage-remote-pending-prompts` uses the real
+  tool inventory; dry run succeeds, live evaluation requires an unavailable API key.
+  Native static checks require unavailable SwiftLint/ktlint/detekt. Isolated Chromium
+  verifies both dashboards, navigation/read state, custom filters, phone layout, Contrast,
+  native Files previews and diff filtering. Table captures verify wrapping/clipping with
+  no visible column overlap at desktop/phone widths. Stage the app without restarting.
+
 ## Upstream synchronization — 2026-10-30 (c6ef3b46eb)
 
 - Merge 259 upstream commits through `c6ef3b46ebed34fbefa1706674fe5748254cee18`,

@@ -63,6 +63,35 @@ describe("RPC authorization scopes", () => {
       }),
     ).toEqual([AuthOrchestrationOperateScope]);
   });
+  it.each(["list", "read", "edit", "cancel", "reorder", "promote_to_steer"] as const)(
+    "checks remote queue %s permissions",
+    (action) => {
+      const environmentId = EnvironmentId.make("mini");
+      const threadId = ThreadId.make("recorder");
+      expect(
+        clientRpcRequiredScopes(WS_METHODS.peerThreadsRequest, {
+          type: "thread-queue",
+          environmentId,
+          input: {
+            action,
+            threadId,
+            sender: {
+              environmentId,
+              environmentLabel: "MacBook",
+              threadId,
+              threadTitle: "Lead",
+              runtimeMode: "full-access",
+              interactionMode: "default",
+            },
+          },
+        }),
+      ).toEqual([
+        action === "list" || action === "read"
+          ? AuthOrchestrationReadScope
+          : AuthOrchestrationOperateScope,
+      ]);
+    },
+  );
   it("declares exactly one scope for every RPC in the server group", () => {
     expect(new Set(Object.keys(RPC_REQUIRED_SCOPES))).toEqual(new Set(WsRpcGroup.requests.keys()));
   });

@@ -1,3 +1,4 @@
+import { type PeerThreadQueueInput, type ThreadQueueResult } from "@t3tools/contracts";
 import {
   CommandId,
   MessageId,
@@ -35,6 +36,10 @@ export class PeerThreadMessaging extends Context.Service<
   PeerThreadMessaging,
   {
     readonly request: (operation: PeerThreadOperation) => Effect.Effect<PeerRelayReply, Failure>;
+    readonly manageQueue: (
+      caller: ThreadId,
+      input: PeerThreadQueueInput,
+    ) => Effect.Effect<ThreadQueueResult, Failure>;
     readonly send: (
       caller: ThreadId,
       input: PeerThreadMessageInput,
@@ -143,6 +148,33 @@ const make = Effect.gen(function* () {
     return watch;
   });
 
+  const manageQueue: PeerThreadMessaging["Service"]["manageQueue"] = Effect.fn(
+    "PeerThreadMessaging.manageQueue",
+  )(function* (callerId, input) {
+    const caller = yield* threads.getThreadShell(callerId).pipe(Effect.mapError(unavailable));
+    if (caller === null || caller.deletedAt !== null)
+      return yield* invalid("The sending thread no longer exists.");
+    const descriptor = yield* environment.getDescriptor;
+    const reply = yield* request({
+      type: "thread-queue",
+      environmentId: input.environmentId,
+      input: {
+        ...input,
+        sender: {
+          environmentId: descriptor.environmentId,
+          environmentLabel: descriptor.label.slice(0, 256),
+          threadId: callerId,
+          threadTitle: caller.title.slice(0, 256),
+          runtimeMode: caller.runtimeMode,
+          interactionMode: caller.interactionMode,
+        },
+      },
+    });
+    if (reply.type === "failed")
+      return yield* new Peers.PeersError({ code: reply.code, message: reply.message });
+    if (reply.type !== "thread-queue") return yield* unavailable();
+    return reply.result;
+  });
   const send: PeerThreadMessaging["Service"]["send"] = Effect.fn("PeerThreadMessaging.send")(
     function* (callerId, input) {
       const caller = yield* threads.getThreadShell(callerId).pipe(Effect.mapError(unavailable));
@@ -346,6 +378,7 @@ const make = Effect.gen(function* () {
   );
 
   return PeerThreadMessaging.of({
+    manageQueue,
     request,
     send,
     watch,

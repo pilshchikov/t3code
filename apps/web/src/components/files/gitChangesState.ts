@@ -12,7 +12,7 @@ import type {
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
-import { AsyncResult } from "effect/reactivity";
+import { AsyncResult, Atom } from "effect/reactivity";
 import { useCallback } from "react";
 
 import { appAtomRegistry } from "~/rpc/atomRegistry";
@@ -35,11 +35,14 @@ export interface GitDetailedStatusState {
   readonly refresh: () => void;
 }
 
+const emptyStatusAtom = Atom.make(AsyncResult.initial<GitDetailedStatusResult>());
+
 export function useGitDetailedStatus(
   environmentId: EnvironmentId,
   cwd: string,
+  active = true,
 ): GitDetailedStatusState {
-  const atom = getGitDetailedStatusAtom(environmentId, cwd);
+  const atom = active ? getGitDetailedStatusAtom(environmentId, cwd) : emptyStatusAtom;
   const result = useAtomValue(atom);
   const refresh = useCallback(() => appAtomRegistry.refresh(atom), [atom]);
   return {

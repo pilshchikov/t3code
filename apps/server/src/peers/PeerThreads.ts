@@ -45,7 +45,10 @@ const make = Effect.gen(function* () {
           message: "This request reached a different environment.",
         });
       }
-      const sender = operation.type === "thread-send" ? operation.input.sender : undefined;
+      const sender =
+        operation.type === "thread-send" || operation.type === "thread-queue"
+          ? operation.input.sender
+          : undefined;
       const namespace =
         sender === undefined ? "peer-reader" : `peer:${sender.environmentId}:${sender.threadId}`;
       // The authenticated relay owns access to this environment. The sending agent's modes
@@ -72,6 +75,17 @@ const make = Effect.gen(function* () {
           return {
             type: "thread-read",
             result: { ...(yield* api.readThread(scope, operation.input)), sequence },
+          };
+        }
+        case "thread-queue": {
+          return {
+            type: "thread-queue",
+            result: yield* api.manageThreadQueue(scope, operation.input).pipe(
+              Effect.provideService(DispatchModeLimit, {
+                runtimeMode: operation.input.sender.runtimeMode,
+                interactionMode: operation.input.sender.interactionMode,
+              }),
+            ),
           };
         }
         case "thread-send": {

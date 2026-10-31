@@ -279,6 +279,7 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     "schedule-run",
   ),
   t3_queue: tool(["Manage", "Managing", "Managed", "queued messages"], "queue-edit"),
+  t3_peer_thread_queue: tool(["Manage", "Managing", "Managed", "queued messages"], "queue-edit"),
   t3_pending_request: tool(
     ["Handle", "Handling", "Handled", "pending questions"],
     "question-respond",
@@ -419,6 +420,7 @@ const asSummaryInput = (input: unknown): SummaryInput | undefined =>
 const ACTION_TOOLS: Readonly<Record<string, (action: string) => string | undefined>> = {
   preview_act: (action) => `preview_${action}`,
   t3_queue: (action) => `t3_queue_${action}`,
+  t3_peer_thread_queue: (action) => `t3_queue_${action}`,
   t3_pending_request: (action) => `t3_pending_request_${action}`,
   t3_thread_transfer: (action) =>
     ({ fork: "t3_thread_fork", merge_back: "t3_thread_merge_back", status: "t3_thread_transfers" })[

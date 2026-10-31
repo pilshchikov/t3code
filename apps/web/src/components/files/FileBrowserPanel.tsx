@@ -1,6 +1,6 @@
 import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { joinHostPath } from "./filePath";
-import type { EnvironmentId, GitFileChange, ProjectEntry } from "@t3tools/contracts";
+import type { EnvironmentId, ProjectEntry } from "@t3tools/contracts";
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
 import { ChevronsDownUpIcon, ChevronsUpDownIcon, Trash2Icon, XIcon } from "lucide-react";
 import {
@@ -30,7 +30,7 @@ import { useProjectPathSearch } from "~/state/queries";
 import { resolvePathLinkTarget } from "~/terminal-links";
 
 import { NativeProjectFileTree } from "./NativeProjectFileTree";
-import { useProjectEntriesQuery } from "./projectFilesQueryState";
+import { useProjectDirectoryListings, useProjectEntriesQuery } from "./projectFilesQueryState";
 import { mergeDirectoryListings } from "./directoryListings";
 import { useGitDetailedStatus } from "./gitChangesState";
 
@@ -41,43 +41,14 @@ function ExpandedDirectory(props: {
   refreshId: number;
   active: boolean;
   workspaceMutationId: string | null;
-  onEntries: (path: string, entries: readonly ProjectEntry[]) => void;
 }) {
   const query = useProjectEntriesQuery(props.environmentId, props.cwd, props.path, props.active);
-  useEffect(() => {
-    if (query.data) props.onEntries(props.path, query.data.entries);
-    else if (query.error) props.onEntries(props.path, []);
-  }, [props.onEntries, props.path, query.data, query.error]);
   useWorkspaceMutationRefresh({
     enabled: props.active,
     mutationId: `${props.refreshId}:${props.workspaceMutationId ?? ""}`,
     resourceKey: props.path,
     refresh: query.refresh,
   });
-  return null;
-}
-
-/** Status reads run only for the visible tree and follow its filesystem invalidations. */
-function FileTreeStatus(props: {
-  environmentId: EnvironmentId;
-  cwd: string;
-  revision: unknown;
-  mutationId: string | null;
-  refreshId: number;
-  onStatus: (files: readonly GitFileChange[]) => void;
-}) {
-  const status = useGitDetailedStatus(props.environmentId, props.cwd);
-  useEffect(() => {
-    status.refresh();
-  }, [props.revision, status.refresh]);
-  useWorkspaceMutationRefresh({
-    mutationId: `${props.refreshId}:${props.mutationId ?? ""}`,
-    resourceKey: `tree-status:${props.environmentId}:${props.cwd}`,
-    refresh: status.refresh,
-  });
-  useEffect(() => {
-    props.onStatus(status.data?.files ?? []);
-  }, [props.onStatus, status.data]);
   return null;
 }
 
@@ -204,9 +175,7 @@ export default function FileBrowserPanel({
   const fileContextMenu = useFileContextMenu(environmentId);
   const entriesQuery = useProjectEntriesQuery(environmentId, cwd, "", active);
   const [expandedDirectories, setExpandedDirectories] = useState<readonly string[]>([]);
-  const [directoryListings, setDirectoryListings] = useState<
-    ReadonlyMap<string, readonly ProjectEntry[]>
-  >(() => new Map());
+  const directoryListings = useProjectDirectoryListings(environmentId, cwd, expandedDirectories);
   const [refreshId, setRefreshId] = useState(0);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
@@ -219,15 +188,6 @@ export default function FileBrowserPanel({
       current.length === paths.length && current.every((path, i) => path === paths[i])
         ? current
         : paths,
-    );
-    setDirectoryListings((current) => {
-      if ([...current.keys()].every((path) => paths.includes(path))) return current;
-      return new Map([...current].filter(([path]) => paths.includes(path)));
-    });
-  }, []);
-  const onDirectoryEntries = useCallback((path: string, entries: readonly ProjectEntry[]) => {
-    setDirectoryListings((current) =>
-      current.get(path) === entries ? current : new Map(current).set(path, entries),
     );
   }, []);
   const deleteEntry = useAtomCommand(projectEnvironment.deleteEntry, { reportFailure: false });
@@ -268,7 +228,19 @@ export default function FileBrowserPanel({
   const [selectedPaths, setSelectedPaths] = useState<ReadonlyArray<string>>([]);
   const [collapseRequestId, setCollapseRequestId] = useState(0);
   const [expandAllRequestId, setExpandAllRequestId] = useState(0);
-  const [fileChanges, setFileChanges] = useState<readonly GitFileChange[]>([]);
+  const status = useGitDetailedStatus(environmentId, cwd, active);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Refresh the disk-backed Git query when filesystem listings change.
+  useEffect(() => {
+    if (active) status.refresh();
+  }, [active, treeRevision, status.refresh]);
+  useWorkspaceMutationRefresh({
+    enabled: active,
+    mutationId: `${refreshId}:${workspaceMutationId ?? ""}`,
+    resourceKey: `tree-status:${environmentId}:${cwd}`,
+    refresh: status.refresh,
+  });
+  const fileChanges = status.data?.files ?? [];
+
   const fileColors = useMemo(
     () =>
       new Map(
@@ -589,16 +561,6 @@ export default function FileBrowserPanel({
       className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background outline-none"
       data-file-browser-panel={`${environmentId}:${cwd}`}
     >
-      {active ? (
-        <FileTreeStatus
-          environmentId={environmentId}
-          cwd={cwd}
-          revision={treeRevision}
-          mutationId={workspaceMutationId}
-          refreshId={refreshId}
-          onStatus={setFileChanges}
-        />
-      ) : null}
       {!deferredQuery.trim() &&
         expandedDirectories
           .filter((path) => directoryListings.has(path) || pendingDirectories.indexOf(path) < 4)
@@ -609,7 +571,6 @@ export default function FileBrowserPanel({
               active={active}
               cwd={cwd}
               path={path}
-              onEntries={onDirectoryEntries}
               refreshId={refreshId}
               workspaceMutationId={workspaceMutationId}
             />

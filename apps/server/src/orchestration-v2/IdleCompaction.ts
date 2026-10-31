@@ -166,6 +166,7 @@ const make = Effect.gen(function* () {
           WHERE transfer.target_thread_id = t.thread_id AND transfer.type = 'merge_back' AND transfer.status = 'pending')
         AND json_extract(t.payload_json, '$.snoozedUntil') IS NULL
         AND json_extract(t.payload_json, '$.lineage.relationshipToParent') IS NOT 'subagent'
+        AND json_extract(t.payload_json, '$.lineage.sideChat') IS NOT 1
         AND p.driver IN ('claudeAgent', 'codex')
         AND p.status IN ('idle', 'not_loaded')
         AND r.completed_at <= ${cutoff}

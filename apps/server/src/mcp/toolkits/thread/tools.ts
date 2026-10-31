@@ -1,3 +1,5 @@
+import { ThreadQueueInput, ThreadQueueResult } from "@t3tools/contracts";
+import * as ThreadQueue from "../../ThreadQueue.ts";
 import {
   OrchestratorMcpEnvironmentTarget,
   ScheduledTaskId,
@@ -16,7 +18,6 @@ import {
   OrchestratorMcpFailure,
   OrchestrationV2DispatchCommandResult,
   ThreadId,
-  RunId,
   NonNegativeInt,
   ProjectId,
 } from "@t3tools/contracts";
@@ -74,38 +75,20 @@ const commandTool = {
     Crypto.Crypto,
   ],
 };
-const queueEntry = Schema.Struct({
-  queuedRunId: RunId,
-  text: Schema.String,
-  truncated: Schema.Boolean,
-});
-const QUEUE_READ_ACTIONS = ["list", "read"] as const;
 const QueueTool = Tool.make("t3_queue", {
   ...commandTool,
   description:
-    "Manage a thread's queued messages. Omit `threadId` for this thread. list: send order, paged by `cursor` and `limit`. read: up to 16,000 chars of one. edit: replace its `text`; attachments stay. cancel. reorder: before `beforeRunId`, or to the end with null. promote_to_steer: send it now as steering to active `targetRunId`. Writes fail once the run is no longer queued.",
+    "Manage queued prompts you sent to a child or any thread. Use a send receipt's runId as queuedRunId. Omit `threadId` for this thread. list: send order, paged by `cursor` and `limit`. read: up to 16,000 chars of one. edit: replace its `text`; attachments stay. cancel. reorder: before `beforeRunId`, or to the end with null. promote_to_steer: send it now as steering to active `targetRunId`. list also returns activeRunId for promotion. clientRequestId deduplicates a write. Writes fail once the run is no longer queued; delivered steering cannot be recalled.",
+  dependencies: [
+    McpInvocationContext.McpInvocationContext,
+    ThreadQueue.ThreadQueue,
+    ThreadManagementService.ThreadManagementService,
+  ],
   parameters: Schema.Struct({
-    action: Schema.Literals([
-      ...QUEUE_READ_ACTIONS,
-      "edit",
-      "cancel",
-      "reorder",
-      "promote_to_steer",
-    ]),
+    ...ThreadQueueInput.fields,
     environmentId: OrchestratorMcpEnvironmentTarget,
-    threadId: Schema.optional(ThreadId),
-    queuedRunId: Schema.optional(RunId),
-    text: Schema.optional(Schema.String.check(Schema.isMaxLength(100000))),
-    beforeRunId: Schema.optional(Schema.NullOr(RunId)),
-    targetRunId: Schema.optional(RunId),
-    cursor: Schema.optional(NonNegativeInt),
-    limit: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))),
   }),
-  success: Schema.Union([
-    Schema.Struct({ items: Schema.Array(queueEntry), nextCursor: Schema.NullOr(NonNegativeInt) }),
-    queueEntry,
-    OrchestrationV2DispatchCommandResult,
-  ]),
+  success: ThreadQueueResult,
 }).annotate(Tool.Destructive, true);
 
 const question = Schema.Struct({

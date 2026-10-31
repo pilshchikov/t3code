@@ -480,16 +480,7 @@ function RailEndDropZone() {
   return <div ref={setNodeRef} aria-hidden="true" className="min-h-6 w-full flex-1" />;
 }
 
-/**
- * A column of project icons left of the sidebar, so switching project is one
- * click instead of opening the picker first. Desktop only: the mobile sidebar
- * is a sheet with no room beside it.
- *
- * The rail always uses the manual project order, whatever the sidebar's sort is
- * set to. Groups sit at their first member's place in that order, and every
- * rail move writes the order back, so the rail and the manual order never
- * disagree.
- */
+/** Rail groups retain manual order independently of the sidebar's activity sort. */
 export const ProjectRail = memo(function ProjectRail() {
   const isMobile = useIsMobile();
   const [visible, setVisible] = useProjectRailVisible();
@@ -497,7 +488,11 @@ export const ProjectRail = memo(function ProjectRail() {
   const dragWidth = useProjectRailDragWidth((state) => state.width);
   const setDragWidth = useProjectRailDragWidth((state) => state.setWidth);
   const groupStyle = useClientSettings((settings) => settings.projectRailGroupStyle);
-  const { projectGroups } = useSidebarProjectGroups({ sortOrder: "manual" });
+  const { projectGroups: allProjectGroups } = useSidebarProjectGroups({ sortOrder: "manual" });
+  const projectGroups = useMemo(
+    () => allProjectGroups.filter((group) => !group.archived),
+    [allProjectGroups],
+  );
   const projects = useProjects();
   const threads = useThreadShells();
   const railGroups = useProjectRailGroupsStore((state) => state.groups);

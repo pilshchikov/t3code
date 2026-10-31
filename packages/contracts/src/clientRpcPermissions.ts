@@ -89,11 +89,13 @@ export function clientRpcRequiredScopes(
   input: unknown,
 ): readonly AuthEnvironmentScope[] {
   if (method === WS_METHODS.peerThreadsRequest && input !== undefined) {
-    return [
-      decodePeerThreadOperation(input).type === "thread-send"
-        ? AuthOrchestrationOperateScope
-        : AuthOrchestrationReadScope,
-    ];
+    const operation = decodePeerThreadOperation(input);
+    const writes =
+      operation.type === "thread-send" ||
+      (operation.type === "thread-queue" &&
+        operation.input.action !== "list" &&
+        operation.input.action !== "read");
+    return [writes ? AuthOrchestrationOperateScope : AuthOrchestrationReadScope];
   }
   if (method === WS_METHODS.gitPreparePullRequestThread && input !== undefined) {
     const payload = decodePrepareThread(input);

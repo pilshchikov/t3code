@@ -39,6 +39,8 @@ import { EnvironmentId, ORCHESTRATOR_MCP_RUNNING_TASK_NEXT, ThreadId } from "@t3
 import { projectComposerContextForProvider } from "@t3tools/shared/composerContextReferences";
 import { formatThreadLink } from "@t3tools/shared/threadLinks";
 import { buildCodexAdditionalContext } from "../../apps/server/src/provider/CodexDeveloperInstructions.ts";
+import { makeSideChatContext } from "../../apps/server/src/orchestration-v2/ContextHandoffService.ts";
+import { withInlineContext } from "../../apps/server/src/orchestration-v2/ContextHandoffDelivery.ts";
 import { AttachmentToolkit } from "../../apps/server/src/mcp/toolkits/attachment/tools.ts";
 import { DeviceToolkit } from "../../apps/server/src/mcp/toolkits/device/tools.ts";
 import { EnvironmentToolkit } from "../../apps/server/src/mcp/toolkits/environment/tools.ts";
@@ -51,6 +53,7 @@ import {
   CHILD_PULL_REQUEST_REPORT_NEXT,
   PullRequestsToolkit,
 } from "../../apps/server/src/mcp/toolkits/pullRequests/tools.ts";
+import { PeersToolkit } from "../../apps/server/src/mcp/toolkits/peers.ts";
 import { ThreadToolkit } from "../../apps/server/src/mcp/toolkits/thread/tools.ts";
 import { WorktreeToolkit } from "../../apps/server/src/mcp/toolkits/worktree/tools.ts";
 import {
@@ -249,6 +252,10 @@ export const McpToolUseCase = Schema.Struct({
     shellMocks: Schema.optional(
       Schema.Array(Schema.Struct({ match: Schema.String, output: Schema.String })),
     ),
+    /** The thread is a side chat's first turn: T3 puts the parent's digest ahead of `prompt`. */
+    sideChat: Schema.optional(
+      Schema.Struct({ parentThreadId: Schema.String, digest: Schema.Array(Schema.String) }),
+    ),
   }),
   prompt: Schema.String,
   /** Records for the context chips `prompt` links, projected as T3 sends them. */
@@ -355,6 +362,7 @@ export const normalizeToolInput = (name: string, input: unknown) =>
 const t3SourceTools: ReadonlyArray<Tool.Any> = [
   OrchestratorToolkit,
   ThreadToolkit,
+  PeersToolkit,
   AttachmentToolkit,
   ProjectToolkit,
   EnvironmentToolkit,
@@ -870,10 +878,21 @@ export const buildMessages = (sample: Sample) => {
     }
     if (turn.text) push(turn.role, text(turn.text));
   }
-  const prompt =
+  const userText =
     testCase.promptContext === undefined
       ? testCase.prompt
       : projectComposerContextForProvider({ text: testCase.prompt, ...testCase.promptContext });
+  const sideChat = testCase.setup.sideChat;
+  const prompt =
+    sideChat === undefined
+      ? userText
+      : withInlineContext(
+          makeSideChatContext({
+            parentThreadId: ThreadId.make(sideChat.parentThreadId),
+            digest: sideChat.digest,
+          }),
+          userText,
+        );
   const childPrompt = () => taskPrompt({ task: prompt, role: delegateRole });
   push("user", text(role === "delegated-child" ? childPrompt() : prompt));
   // Claude Code gives a subagent its SubagentStart hooks' context as a reminder after the task.

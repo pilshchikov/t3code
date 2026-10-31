@@ -1,6 +1,13 @@
 import type { ProjectEntry } from "@t3tools/contracts";
 import { ChevronRightIcon, FolderClosedIcon, FolderOpenIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 
 import {
   COMPOSER_MENTION_DRAG_TYPE,
@@ -345,6 +352,14 @@ export function NativeProjectFileTree(props: {
     [props, visibleFiles],
   );
 
+  const openKeyboardMenu = (event: ReactKeyboardEvent<HTMLElement>, path: string) => {
+    if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    props.onContextMenu(path, { x: rect.left, y: rect.bottom });
+    return true;
+  };
   const renderRow = ({ node, depth }: VisibleProjectTreeRow, index: number): React.ReactNode => {
     const paddingLeft = 8 + depth * 14;
     const rowStyle = {
@@ -376,6 +391,7 @@ export function NativeProjectFileTree(props: {
             });
           }}
           onKeyDown={(event) => {
+            if (openKeyboardMenu(event, node.path)) return;
             if ((event.key === "Delete" || event.key === "Backspace") && props.onDeleteEntry) {
               event.preventDefault();
               event.stopPropagation();
@@ -421,6 +437,9 @@ export function NativeProjectFileTree(props: {
               )}
               style={{ ...rowStyle, paddingLeft: paddingLeft + 18 }}
               onClick={(event) => selectFile(node.path, event)}
+              onKeyDown={(event) => {
+                openKeyboardMenu(event, node.path);
+              }}
               onContextMenu={(event) => {
                 event.preventDefault();
                 props.onContextMenu(node.path, { x: event.clientX, y: event.clientY });

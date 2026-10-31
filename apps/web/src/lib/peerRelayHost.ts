@@ -94,6 +94,7 @@ export const layer = Layer.effectDiscard(
         case "threads-list":
         case "thread-read":
         case "thread-send":
+        case "thread-queue":
         case "thread-wait":
           return Effect.promise(() => import("../rpc/peerThreads")).pipe(
             Effect.flatMap((rpc) => rpc.perform(operation.environmentId, operation)),

@@ -101,6 +101,7 @@ import { isMacPlatform } from "~/lib/utils";
 import { readLocalApi } from "../localApi";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
 import { selectProjectGroupingSettings } from "../logicalProject";
+import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
 import {
   projectGroupsSpanEnvironments,
   resolveSidebarProjectScopeKey,
@@ -118,6 +119,8 @@ import {
   useThreadActions,
 } from "../hooks/useThreadActions";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useOrderWhileOpen } from "../hooks/useOrderWhileOpen";
+import { useProjectPin } from "../hooks/useProjectGroupUpdate";
 import { useSidebarProjectGroups } from "../hooks/useSidebarProjectGroups";
 import { useTerminalFocus } from "../hooks/useTerminalFocus";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
@@ -217,6 +220,7 @@ import {
 } from "./sidebar/routeReveal";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { Button } from "./ui/button";
+import { ProjectPinButton } from "./ProjectPinButton";
 import {
   Combobox,
   ComboboxEmpty,
@@ -777,7 +781,10 @@ function useSidebarLookups() {
   );
   const projectScopeItems = [
     { value: "all", label: "All projects" },
-    ...projectGroups.map((project) => ({ value: project.projectKey, label: project.displayName })),
+    ...pickableProjectGroups(projectGroups).map((project) => ({
+      value: project.projectKey,
+      label: project.displayName,
+    })),
   ];
   return {
     projects,
@@ -839,7 +846,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     projectByKey,
     projectDisplayNameByKey,
     projectGroupByScopeKey,
-    projectScopeItems,
+    projectScopeItems: lookupProjectScopeItems,
   } = useSidebarLookups();
   const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
@@ -1117,6 +1124,12 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     }
     return environmentLabelById.get(thread.environmentId) ?? null;
   };
+  // Pinning from a row keeps rows in place while the menu is open.
+  const projectScopeItems = useOrderWhileOpen(
+    lookupProjectScopeItems,
+    (item) => item.value,
+    projectScopeMenuState.open,
+  );
   const selectedProjectScopeItem = scopedRailGroup
     ? { value: persistedProjectScopeKey ?? "all", label: railGroupName(scopedRailGroup) }
     : (projectScopeItems.find((item) => item.value === (projectScopeKey ?? "all")) ??
@@ -1179,6 +1192,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       });
     },
   );
+  const { canPinProjectGroup: canPinProject, toggleProjectGroupPin } = useProjectPin();
   const handleProjectSettings = useStableCallback(
     (
       event: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLInputElement>,
@@ -2540,12 +2554,13 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 AuthOrchestrationOperateScope,
               ),
               branch: thread.branch ?? null,
-              projectFilter: threadProjectGroup
-                ? {
-                    label: threadProjectGroup.displayName,
-                    isActive: projectScopeKey === threadProjectGroup.projectKey,
-                  }
-                : null,
+              projectFilter:
+                threadProjectGroup && !threadProjectGroup.archived
+                  ? {
+                      label: threadProjectGroup.displayName,
+                      isActive: projectScopeKey === threadProjectGroup.projectKey,
+                    }
+                  : null,
               isPinned,
               isSettled,
               autoSettleEnabled: thread.autoSettleDisabledAt == null,
@@ -2893,13 +2908,22 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const showJumpHints = useThreadJumpHintsVisible(shouldShowJumpHintsNow);
 
   const handleNewThreadClick = (event?: ReactMouseEvent) => {
-    if (shouldCreateNewThreadInCurrentProject(event?.shiftKey ?? false, projectGroups.length)) {
+    if (
+      shouldCreateNewThreadInCurrentProject(
+        event?.shiftKey ?? false,
+        pickableProjectGroups(projectGroups).length,
+        projectGroups.length,
+      )
+    ) {
       if (isMobile) setOpenMobile(false);
+      // With no current or open project, such as when every project is archived, pick one.
       void startNewThreadFromContext({
         activeDraftThread: newThreadContext.activeDraftThread,
         activeThread: newThreadContext.activeThread ?? undefined,
         defaultProjectRef: newThreadContext.defaultProjectRef,
         handleNewThread,
+      }).then((started) => {
+        if (!started) openCommandPalette({ open: "new-thread-in" });
       });
       return;
     }
@@ -2909,7 +2933,13 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
 
   const newThreadShortcutLabel =
     shortcutLabelForCommand(keybindings, "chat.new") ??
-    (projectGroups.length <= 1 ? shortcutLabelForCommand(keybindings, "chat.newLocal") : undefined);
+    (shouldCreateNewThreadInCurrentProject(
+      false,
+      pickableProjectGroups(projectGroups).length,
+      projectGroups.length,
+    )
+      ? shortcutLabelForCommand(keybindings, "chat.newLocal")
+      : undefined);
   const newThreadInProjectShortcutLabel = shortcutLabelForCommand(keybindings, "chat.newLocal");
   return (
     <>
@@ -3068,6 +3098,14 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                                 machineByEnvironmentId={environmentMachineById}
                               />
                             ) : null}
+                            {project && canPinProject(project) ? (
+                              <ProjectPinButton
+                                name={project.displayName}
+                                pinned={project.pinned}
+                                shortcutLabel={shortcutLabelForCommand(keybindings, "thread.pin")}
+                                onToggle={() => toggleProjectGroupPin(project)}
+                              />
+                            ) : null}
                             {project ? (
                               <Button
                                 size="icon-xs"
@@ -3075,7 +3113,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                                 tabIndex={-1}
                                 aria-hidden="true"
                                 title={`Project settings for ${project.displayName}`}
-                                className="ml-auto"
+                                className={canPinProject(project) ? undefined : "ml-auto"}
                                 onPointerDown={(event) => event.stopPropagation()}
                                 onClick={(event) => {
                                   void handleProjectSettings(event, project);

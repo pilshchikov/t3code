@@ -2,6 +2,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import { ProviderInstanceId } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -24,7 +25,15 @@ const layerTest = TestProviderHost.layer({ runBackgroundWork: false }).pipe(
   Layer.provideMerge(NodeServices.layer),
   Layer.provideMerge(IdAllocator.layer),
   Layer.provideMerge(McpProviderSessions.layer),
-  Layer.provideMerge(ProviderLatestVersions.layer),
+  Layer.provideMerge(
+    ProviderLatestVersions.layer.pipe(
+      Layer.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromEnv({ env: { T3CODE_ENABLE_PROVIDER_VERSION_CHECKS: "true" } }),
+        ),
+      ),
+    ),
+  ),
   Layer.provideMerge(
     Layer.succeed(
       ProviderEventLoggers.ProviderEventLoggers,
@@ -117,6 +126,8 @@ it.layer(layerTest)("GrokDriver", (it) => {
         executable: binaryPath,
         args: ["update"],
         lockKey: "grok",
+        // npm 12 otherwise skips the postinstall that installs the new binary.
+        env: expect.objectContaining({ npm_config_allow_scripts: "@xai-official/grok" }),
       }),
     },
   ] as const;
@@ -150,7 +161,17 @@ it.layer(layerTest)("GrokDriver", (it) => {
         expect(brewArgs).toEqual(testCase.brewArgs);
         expect(capabilities.update).toEqual(update && expect.objectContaining(update));
         if (testCase.latestVersion !== undefined) {
-          expect(yield* resolveLatestProviderVersion(capabilities)).toBe(testCase.latestVersion);
+          expect(
+            yield* resolveLatestProviderVersion(capabilities).pipe(
+              Effect.provide(
+                ConfigProvider.layer(
+                  ConfigProvider.fromEnv({
+                    env: { T3CODE_ENABLE_PROVIDER_VERSION_CHECKS: "true" },
+                  }),
+                ),
+              ),
+            ),
+          ).toBe(testCase.latestVersion);
           expect(brewArgs).toEqual([...testCase.brewArgs, ["info", "--json=v2", "grok-build"]]);
         }
       }).pipe(

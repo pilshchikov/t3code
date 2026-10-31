@@ -12,8 +12,7 @@ describe("buildRuntimeInstructions", () => {
     assert.include(instructions, "If linking fails, say so.");
     assert.notInclude(instructions, "git log -1");
     assert.notInclude(instructions, "work on");
-    // Listing linked PRs as an end-of-work check found nothing to add in audited threads.
-    assert.notInclude(instructions, "list_thread_pull_requests");
+    assert.include(instructions, "list_thread_pull_requests");
   });
 
   it("waits on a PR only with the watch, never with a poll loop", () => {
@@ -35,7 +34,10 @@ describe("buildRuntimeInstructions", () => {
       instructions,
       "After PR work, a child's last line is: PR <full URL>, head <SHA>, checks and reviews <state>.",
     );
-    assert.include(instructions, "Never wait with sleep");
+    assert.include(
+      instructions,
+      "For PR waits, no sleep, loops, gh --watch, Monitor or ScheduleWakeup.",
+    );
     assert.include(instructions, "call unwatch_pull_request");
   });
 });

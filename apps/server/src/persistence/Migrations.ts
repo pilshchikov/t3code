@@ -102,6 +102,8 @@ import Migration0078 from "./Migrations/073_ActiveTurnItemIndexes.ts";
 import Migration0079 from "./Migrations/074_ExcludeAttachmentPlaceholdersFromSearch.ts";
 import Migration0080 from "./Migrations/075_SubagentDeliveryState.ts";
 
+import Migration0081 from "./Migrations/076_ProjectionProjectsPinArchive.ts";
+
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
   [2, "OrchestrationCommandReceipts", Migration0002],
@@ -183,6 +185,7 @@ const migrationEntries = [
   [78, "ActiveTurnItemIndexes", Migration0078],
   [79, "ExcludeAttachmentPlaceholdersFromSearch", Migration0079],
   [80, "SubagentDeliveryState", Migration0080],
+  [81, "ProjectionProjectsPinArchive", Migration0081],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

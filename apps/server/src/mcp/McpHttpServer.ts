@@ -57,6 +57,7 @@ import { ProjectToolkit } from "./toolkits/project/tools.ts";
 import * as ProjectHandlers from "./toolkits/project/handlers.ts";
 import { AttachmentToolkit } from "./toolkits/attachment/tools.ts";
 import * as AttachmentHandlers from "./toolkits/attachment/handlers.ts";
+import * as ThreadQueue from "./ThreadQueue.ts";
 import { ThreadToolkit } from "./toolkits/thread/tools.ts";
 import * as ThreadHandlers from "./toolkits/thread/handlers.ts";
 import * as ThreadMetadataMcpService from "./ThreadMetadataMcpService.ts";
@@ -1102,7 +1103,9 @@ export const layerOrchestratorToolkit = toolkitRegistration(
   OrchestratorHandlers.layer,
 ).pipe(Layer.provide(OrchestratorMcpService.layer), Layer.provide(ThreadMetadataMcpService.layer));
 
-export const layerThreadToolkit = toolkitRegistration(ThreadToolkit, ThreadHandlers.layer);
+export const layerThreadToolkit = toolkitRegistration(ThreadToolkit, ThreadHandlers.layer).pipe(
+  Layer.provide(ThreadQueue.layer),
+);
 
 const layerWorktreeToolkitRegistration = toolkitRegistration(
   WorktreeToolkit,

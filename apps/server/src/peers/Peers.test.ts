@@ -89,6 +89,7 @@ const startRelay = Effect.gen(function* () {
       case "usage-limits":
       case "thread-read":
       case "thread-send":
+      case "thread-queue":
       case "thread-wait":
         return Effect.succeed({
           type: "failed",

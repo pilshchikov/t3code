@@ -3,6 +3,7 @@ import type { ProjectEntriesChangedEvent, ProjectFileChangedEvent } from "@t3too
 import {
   type EnvironmentId,
   type ProjectFileLocation,
+  type ProjectEntry,
   type ProjectListEntriesResult,
   type ProjectLocateFileResult,
   ProjectReadFileError,
@@ -76,6 +77,37 @@ function getProjectEntriesQueryAtom(environmentId: EnvironmentId, cwd: string, d
     environmentId,
     input: { cwd, ...(directoryPath !== undefined ? { directoryPath } : {}) },
   });
+}
+
+const directoryListingsAtom = Atom.family((key: string) => {
+  const { environmentId, cwd, paths } = JSON.parse(key) as {
+    environmentId: EnvironmentId;
+    cwd: string;
+    paths: string[];
+  };
+  return Atom.make((get) => {
+    const listings = new Map<string, readonly ProjectEntry[]>();
+    let pending = 0;
+    for (const path of paths) {
+      if (pending === 4) break;
+      const result = get(getProjectEntriesQueryAtom(environmentId, cwd, path));
+      const data = Option.getOrNull(AsyncResult.value(result));
+      if (data) listings.set(path, data.entries);
+      else if (result._tag === "Failure") listings.set(path, []);
+      else pending++;
+    }
+    return listings;
+  });
+});
+export function useProjectDirectoryListings(
+  environmentId: EnvironmentId,
+  cwd: string,
+  paths: readonly string[],
+): ReadonlyMap<string, readonly ProjectEntry[]> {
+  const { canReadFiles } = useFilesystemReadAccess(environmentId);
+  return useAtomValue(
+    directoryListingsAtom(JSON.stringify({ environmentId, cwd, paths: canReadFiles ? paths : [] })),
+  );
 }
 
 export function getProjectFileQueryAtom(

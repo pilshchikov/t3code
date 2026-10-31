@@ -1,11 +1,9 @@
+import * as ThreadQueue from "../../ThreadQueue.ts";
 import {
-  type CommandId,
   type RuntimeRequestId,
-  ThreadId,
-  type OrchestrationV2ThreadProjection,
-  type RunId,
-  OrchestratorMcpFailure,
   type OrchestrationV2Command,
+  ThreadId,
+  OrchestratorMcpFailure,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import { modelSelectionCommandType } from "@t3tools/shared/model";
@@ -21,34 +19,7 @@ import {
 } from "../../threadAccess.ts";
 import * as ThreadSearch from "../../../orchestration-v2/ThreadSearch.ts";
 import * as ScheduledTasks from "../../../scheduledTasks/ScheduledTaskService.ts";
-import { queuedRunsInDeliveryOrder } from "../../../orchestration-v2/QueuedRunOrder.ts";
 import { ThreadToolkit } from "./tools.ts";
-
-function queueEntry(
-  projection: Pick<OrchestrationV2ThreadProjection, "runs" | "messages">,
-  runId: RunId,
-  limit: number,
-) {
-  const run = projection.runs.find((run) => run.id === runId && run.status === "queued");
-  const message = projection.messages.find((message) => message.id === run?.userMessageId);
-  if (run === undefined || message === undefined) return undefined;
-  const characters = Array.from(message.text);
-  return {
-    queuedRunId: run.id,
-    text: characters.slice(0, limit).join(""),
-    truncated: characters.length > limit,
-  };
-}
-const dispatch = Effect.fn("mcp.dispatchThreadCommand")(function* (
-  threadId: ThreadId | undefined,
-  command: (common: { commandId: CommandId; threadId: ThreadId }) => OrchestrationV2Command,
-) {
-  const { threads, projection } = yield* readThread(threadId);
-  const result = yield* threads
-    .dispatch(command({ commandId: yield* newCommandId(), threadId: projection.thread.id }))
-    .pipe(Effect.mapError(dispatchFailure));
-  return { sequence: result.sequence };
-});
 
 const readQuestion = Effect.fn("mcp.readQuestion")(function* (input: {
   threadId?: ThreadId | undefined;
@@ -263,67 +234,16 @@ export const layer = McpToolAccess.toLayer(ThreadToolkit, {
     (input) => input.action === "list" || input.action === "read",
     McpToolAccess.reads((input) =>
       Effect.gen(function* () {
-        const { projection } = yield* readThread(input.threadId, ["runs", "messages"]);
-        if (input.action === "list") {
-          const runs = queuedRunsInDeliveryOrder(projection);
-          const cursor = input.cursor ?? 0;
-          const end = cursor + (input.limit ?? 20);
-          return {
-            items: runs.slice(cursor, end).flatMap((run) => {
-              const entry = queueEntry(projection, run.id, 1000);
-              return entry === undefined ? [] : [entry];
-            }),
-            nextCursor: end < runs.length ? end : null,
-          };
-        }
-        const queuedRunId = yield* required(input.queuedRunId, "queuedRunId");
-        return (
-          queueEntry(projection, queuedRunId, 16000) ??
-          (yield* new OrchestratorMcpFailure({
-            code: "invalid_request",
-            message: "The queued message was not found.",
-          }))
-        );
+        const scope = yield* McpInvocationContext.McpInvocationContext;
+        const service = yield* ThreadQueue.ThreadQueue;
+        return yield* service.manage(scope, input);
       }),
     ),
     writesThread((input) =>
       Effect.gen(function* () {
-        const runId = yield* required(input.queuedRunId, "queuedRunId");
-        switch (input.action) {
-          case "edit": {
-            const text = yield* required(input.text, "text");
-            return yield* dispatch(input.threadId, (common) => ({
-              ...common,
-              type: "queued-run.edit",
-              runId,
-              text,
-            }));
-          }
-          case "reorder": {
-            const beforeRunId = yield* required(input.beforeRunId, "beforeRunId");
-            return yield* dispatch(input.threadId, (common) => ({
-              ...common,
-              type: "queued-run.reorder",
-              runId,
-              beforeRunId,
-            }));
-          }
-          case "promote_to_steer": {
-            const targetRunId = yield* required(input.targetRunId, "targetRunId");
-            return yield* dispatch(input.threadId, (common) => ({
-              ...common,
-              type: "queued-message.promote-to-steer",
-              queuedRunId: runId,
-              targetRunId,
-            }));
-          }
-          default:
-            return yield* dispatch(input.threadId, (common) => ({
-              ...common,
-              type: "queued-run.cancel",
-              runId,
-            }));
-        }
+        const scope = yield* McpInvocationContext.McpInvocationContext;
+        const service = yield* ThreadQueue.ThreadQueue;
+        return yield* service.manage(scope, input);
       }),
     ),
   ),

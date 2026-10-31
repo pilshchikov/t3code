@@ -1,3 +1,4 @@
+import { ThreadQueueInput, ThreadQueueResult } from "./threadQueue.ts";
 import * as Schema from "effect/Schema";
 import { McpUsageLimitsSnapshot } from "./usageMcp.ts";
 
@@ -86,6 +87,14 @@ export const PeerThreadMessageInput = Schema.Struct({
   watch: Schema.optionalKey(Schema.Literals(["none", "once", "continuous"])),
 });
 export type PeerThreadMessageInput = typeof PeerThreadMessageInput.Type;
+export const PeerThreadQueueInput = Schema.Struct({
+  ...ThreadQueueInput.fields,
+  threadId: ThreadId,
+  environmentId: EnvironmentId,
+  clientRequestId: PeerThreadWatchInput.fields.clientRequestId,
+});
+export type PeerThreadQueueInput = typeof PeerThreadQueueInput.Type;
+
 export const PeerThreadMessageResult = Schema.Struct({
   ...PeerThreadSendResult.fields,
   watchId: Schema.NullOr(TrimmedNonEmptyString),
@@ -202,6 +211,15 @@ export type PeerEnvironment = typeof PeerEnvironment.Type;
 
 export const PeerThreadOperation = Schema.Union([
   Schema.Struct({
+    type: Schema.Literal("thread-queue"),
+    environmentId: EnvironmentId,
+    input: Schema.Struct({
+      ...ThreadQueueInput.fields,
+      threadId: ThreadId,
+      sender: PeerThreadSender,
+    }),
+  }),
+  Schema.Struct({
     type: Schema.Literal("threads-list"),
     environmentId: EnvironmentId,
     input: PeerThreadsListInput,
@@ -257,6 +275,7 @@ export const PeerRelayRequest = Schema.Struct({
 export type PeerRelayRequest = typeof PeerRelayRequest.Type;
 
 export const PeerRelayReply = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("thread-queue"), result: ThreadQueueResult }),
   Schema.Struct({
     type: Schema.Literal("usage-limits"),
     environmentId: EnvironmentId,

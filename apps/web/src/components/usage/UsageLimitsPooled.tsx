@@ -14,6 +14,7 @@ import {
   paceRemainingPercent,
   remainingPercent,
 } from "@t3tools/shared/usageLimits";
+import { normalizeProviderAccentColor } from "@t3tools/client-runtime/state/provider-instance-display";
 import { AlertTriangleIcon, ExternalLinkIcon, TicketIcon } from "lucide-react";
 import { createContext, Fragment, type ReactNode, use, useMemo } from "react";
 
@@ -495,7 +496,7 @@ function PoolBar({
               window={member.window}
               reset={restores.get(member.account.key)}
               refillPercent={member.refillPercent}
-              color={member.account.accentColor ?? color}
+              color={normalizeProviderAccentColor(member.account.accentColor) ?? color}
               now={now}
               index={position + 1}
               showAccountName={pool.columns.length > 1}
