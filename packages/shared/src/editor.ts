@@ -63,7 +63,7 @@ export const resolveEditorCommand = Effect.fn("editor.resolveEditorCommand")(fun
       for (const bundle of bundles) {
         const contents = path.join(root, bundle, "Contents");
         candidates.push(
-          ...(jetbrains || editor.id === "zed"
+          ...(jetbrains || editor.id === "zed" || editor.id === "openidea"
             ? [path.join(contents, "MacOS", editor.id === "zed" ? "cli" : command)]
             : [
                 path.join(contents, "Resources/app/bin", command),
@@ -111,6 +111,9 @@ export const resolveEditorCommand = Effect.fn("editor.resolveEditorCommand")(fun
           path.join(root, name, "bin", `${command}.cmd`),
           path.join(root, name, "bin/code.cmd"),
         );
+        if (editor.id === "openidea") {
+          candidates.push(path.join(root, name, "openidea.exe"));
+        }
         if (editor.id === "zed") {
           candidates.push(
             path.join(root, name, "bin", "zed.exe"),

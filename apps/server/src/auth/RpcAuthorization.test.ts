@@ -561,3 +561,47 @@ it.effect("denies manual cleanup before the handler without settings permission"
     expect(handled).toBe(false);
   }).pipe(Effect.scoped),
 );
+
+it.effect.each([false, true])(
+  "requires command execution permission for custom editor launches: %s",
+  (allowed) =>
+    Effect.gen(function* () {
+      const group = WsRpcGroup.omit(
+        ...[...WsRpcGroup.requests.keys()].filter(
+          (
+            method,
+          ): method is Exclude<
+            keyof typeof RPC_REQUIRED_SCOPES,
+            typeof WS_METHODS.shellOpenInEditor
+          > => method !== WS_METHODS.shellOpenInEditor,
+        ),
+      );
+      const handled: string[] = [];
+      const client = yield* RpcTest.makeClient(group).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            group.toLayerHandler(WS_METHODS.shellOpenInEditor, (input) =>
+              Effect.sync(() => {
+                handled.push(input.editor);
+              }),
+            ),
+            RpcAuthorization.layer([
+              AuthOrchestrationOperateScope,
+              ...(allowed ? [AuthTerminalOperateScope] : []),
+            ]),
+          ),
+        ),
+      );
+      yield* client[WS_METHODS.shellOpenInEditor]({ editor: "openidea", cwd: "/work/project" });
+      const result = yield* client[WS_METHODS.shellOpenInEditor]({
+        editor: "custom",
+        cwd: "/work/project",
+        customCommand: { command: "tool", args: ["{path}"] },
+      }).pipe(Effect.exit);
+      if (allowed) expect(handled).toEqual(["openidea", "custom"]);
+      else {
+        expect(handled).toEqual(["openidea"]);
+        expect(result).toMatchObject({ _tag: "Failure" });
+      }
+    }).pipe(Effect.scoped),
+);

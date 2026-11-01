@@ -146,6 +146,8 @@ function resolveCommandEditorArgs(
   const parsedTarget = parseTargetPathAndPosition(target);
 
   switch (editor.launchStyle) {
+    case "path-only":
+      return [Option.isSome(parsedTarget) ? parsedTarget.value.path : target];
     case "direct-path":
       return [target];
     case "goto":
@@ -409,6 +411,10 @@ const buildAvailableEditors = Effect.fn("externalLauncher.buildAvailableEditors"
   const available: EditorId[] = [];
 
   for (const editor of EDITORS) {
+    if (editor.id === "custom") {
+      available.push(editor.id);
+      continue;
+    }
     if (editor.commands === null) {
       if ((yield* resolveUsableFileManagerCommand(platform, env)) !== undefined) {
         available.push(editor.id);
@@ -480,6 +486,30 @@ const resolveEditorLaunch = Effect.fn("resolveEditorLaunch")(function* (
     "externalLauncher.cwd": input.cwd,
     "externalLauncher.platform": platform,
   });
+  if (input.editor === "custom") {
+    if (!input.customCommand)
+      return yield* new ExternalLauncherUnsupportedEditorError({ editor: "custom" });
+    const parsed = parseTargetPathAndPosition(input.cwd);
+    const path = Option.isSome(parsed) ? parsed.value.path : input.cwd;
+    const replacements: Record<string, string> = {
+      "{path}": path,
+      "{target}": input.cwd,
+      "{line}": Option.isSome(parsed) ? parsed.value.line : "1",
+      "{column}": Option.isSome(parsed) ? Option.getOrElse(parsed.value.column, () => "1") : "1",
+    };
+    const hasTarget = input.customCommand.args.some((arg) => /\{(?:path|target)\}/.test(arg));
+    return {
+      editor: "custom",
+      target: input.cwd,
+      command: input.customCommand.command,
+      args: [
+        ...input.customCommand.args.map((arg) =>
+          arg.replace(/\{(?:path|target|line|column)\}/g, (token) => replacements[token]!),
+        ),
+        ...(hasTarget ? [] : [path]),
+      ],
+    };
+  }
   const editorDef = EDITORS.find((editor) => editor.id === input.editor);
   if (!editorDef) {
     return yield* new ExternalLauncherUnknownEditorError({ editor: input.editor });

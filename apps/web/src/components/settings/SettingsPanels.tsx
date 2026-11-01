@@ -1,3 +1,4 @@
+import { CustomEditorSettings } from "./CustomEditorSettings";
 import { useOptionalSettingsScope } from "./SettingsScopeContext";
 import { SettledThreadCleanupSection } from "./StorageSettings";
 import { IdleCompactionSettings } from "./IdleCompactionSettings";
@@ -418,6 +419,10 @@ export function useSettingsRestore(onRestored?: () => void) {
   const isThreadSettlingDirty = hasChangedThreadSettlingSettings(settings);
 
   const changedSettingLabels = [
+    ...(settings.preferredEditor !== DEFAULT_UNIFIED_SETTINGS.preferredEditor
+      ? ["Preferred editor"]
+      : []),
+    ...(settings.customEditorCommand !== null ? ["Custom editor command"] : []),
     ...(theme !== "system" ? ["Theme"] : []),
     ...(!followSystem ? ["Follow system"] : []),
     ...(themeHalves !== null ? ["Theme mix"] : []),
@@ -607,6 +612,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       return;
     }
     updateSettings({
+      preferredEditor: DEFAULT_UNIFIED_SETTINGS.preferredEditor,
+      customEditorCommand: DEFAULT_UNIFIED_SETTINGS.customEditorCommand,
       accentColor: DEFAULT_UNIFIED_SETTINGS.accentColor,
       showEditorTabs: DEFAULT_UNIFIED_SETTINGS.showEditorTabs,
       appearanceContrast: DEFAULT_UNIFIED_SETTINGS.appearanceContrast,
@@ -779,6 +786,7 @@ export function GeneralSettingsPanel() {
 
   return (
     <SettingsPageContainer>
+      <CustomEditorSettings />
       <SettingsSection id="notifications" title="Notifications">
         <NotificationSettings />
         <SettingsRow

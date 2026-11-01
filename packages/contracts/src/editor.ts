@@ -1,7 +1,12 @@
 import * as Schema from "effect/Schema";
 import { TrimmedNonEmptyString } from "./baseSchemas.ts";
 
-export const EditorLaunchStyle = Schema.Literals(["direct-path", "goto", "line-column"]);
+export const EditorLaunchStyle = Schema.Literals([
+  "direct-path",
+  "path-only",
+  "goto",
+  "line-column",
+]);
 export type EditorLaunchStyle = typeof EditorLaunchStyle.Type;
 
 type EditorDefinition = {
@@ -15,6 +20,7 @@ type EditorDefinition = {
 };
 
 export const EDITORS = [
+  { id: "openidea", label: "OpenIDEA", commands: ["openidea"], launchStyle: "path-only" },
   {
     id: "cursor",
     label: "Cursor",
@@ -145,6 +151,7 @@ export const EDITORS = [
     launchStyle: "line-column",
     jetbrainsProductCode: "WS",
   },
+  { id: "custom", label: "Custom command", commands: null, launchStyle: "direct-path" },
   { id: "file-manager", label: "File Manager", commands: null, launchStyle: "direct-path" },
 ] as const satisfies ReadonlyArray<EditorDefinition>;
 
@@ -154,9 +161,16 @@ export type EditorId = typeof EditorId.Type;
 export const FileManagerRevealKind = Schema.Literals(["finder", "file-explorer", "files"]);
 export type FileManagerRevealKind = typeof FileManagerRevealKind.Type;
 
+export const CustomEditorCommand = Schema.Struct({
+  command: TrimmedNonEmptyString,
+  args: Schema.Array(Schema.String),
+});
+export type CustomEditorCommand = typeof CustomEditorCommand.Type;
+
 export const LaunchEditorInput = Schema.Struct({
   cwd: TrimmedNonEmptyString,
   editor: EditorId,
+  customCommand: Schema.optionalKey(CustomEditorCommand),
   /** Only for file-manager; requires the server's shellRevealInFileManager capability. */
   reveal: Schema.optional(Schema.Boolean),
 });

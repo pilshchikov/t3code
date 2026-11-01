@@ -1,6 +1,7 @@
 import { ThreadDetailsControl } from "./ThreadDetailsControl";
 import {
   AuthOrchestrationOperateScope,
+  AuthTerminalOperateScope,
   buildRemoteOpenUrl,
   EditorId,
   type EnvironmentId,
@@ -10,7 +11,7 @@ import { memo, use, useRef } from "react";
 import { BackgroundThreadContext } from "./backgroundThread";
 import { shortcutLabelForCommand } from "../../keybindings";
 import { OPEN_FAVORITE_EDITOR_ATTRIBUTE } from "./OpenInPickerShortcut";
-import { usePreferredEditor } from "../../editorPreferences";
+import { editorLaunchInput, usePreferredEditor } from "../../editorPreferences";
 import { editorLabelForPlatform } from "../../editorLabels";
 import {
   openRemoteEditorUrl,
@@ -19,7 +20,16 @@ import {
   useRemoteOpenState,
 } from "../../remoteOpen";
 import { useEnvironment } from "../../state/environments";
-import { ChevronDownIcon, FolderClosedIcon, SquareArrowOutUpRightIcon } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { useClientSettings } from "../../hooks/useSettings";
+import {
+  ChevronDownIcon,
+  SquareCodeIcon,
+  TerminalIcon,
+  SettingsIcon,
+  FolderClosedIcon,
+  SquareArrowOutUpRightIcon,
+} from "lucide-react";
 
 import { Group, GroupSeparator } from "../ui/group";
 import {
@@ -83,6 +93,8 @@ type OpenInOption = {
 
 const resolveOpenInOptions = (platform: string, availableEditors: ReadonlyArray<EditorId>) => {
   const baseOptions: ReadonlyArray<Omit<OpenInOption, "label">> = [
+    { Icon: SquareCodeIcon, value: "openidea", kind: "generic" },
+    { Icon: TerminalIcon, value: "custom", kind: "generic" },
     {
       Icon: CursorIcon,
       value: "cursor",
@@ -231,6 +243,7 @@ export const OpenInPicker = memo(function OpenInPicker({
   const panelAnchorRef = useRef<HTMLDivElement | null>(null);
   const openInEditorMutation = useAtomCommand(shellEnvironment.openInEditor, "open in editor");
   const remote = useRemoteOpenState(environmentId);
+  const canRunCustomCommand = useEnvironmentScope(environmentId, AuthTerminalOperateScope);
   const canOperateHost = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
   const isHostEditorDenied = remote.mode === "local-exec" && !canOperateHost;
   const canOpenEditor = remote.mode !== "remote-unavailable" && !isHostEditorDenied;
@@ -239,13 +252,19 @@ export const OpenInPicker = memo(function OpenInPicker({
   const [remoteHintSeen, markRemoteHintSeen] = useRemoteOpenHint();
   const environmentLabel = useEnvironment(environmentId)?.label ?? "this machine";
   // Remote editors run on the viewing machine; only desktop can probe that PATH.
-  const effectiveEditors = remote.mode === "local-exec" ? availableEditors : remoteCapableEditors;
+  const customCommand = useClientSettings((settings) => settings.customEditorCommand);
+  const effectiveEditors =
+    remote.mode === "local-exec"
+      ? availableEditors.filter((id) => id !== "custom" || customCommand !== null)
+      : remoteCapableEditors;
   const [preferredEditor, setPreferredEditor] = usePreferredEditor(effectiveEditors);
 
   const openInEditor = async (editorId: EditorId | null): Promise<boolean> => {
     if (!openInCwd) return false;
     const editor = editorId ?? preferredEditor;
     if (!editor) return false;
+    if (editor === "custom" && !readEnvironmentScope(environmentId, AuthTerminalOperateScope))
+      return false;
     if (remote.mode === "remote-unavailable") return false;
     if (remote.mode === "remote-links") {
       const url = buildRemoteOpenUrl({
@@ -267,8 +286,7 @@ export const OpenInPicker = memo(function OpenInPicker({
     const result = openInEditorMutation({
       environmentId,
       input: {
-        cwd: openInCwd,
-        editor,
+        ...editorLaunchInput(openInCwd, editor),
         ...(revealFileManager && editor === "file-manager" ? { reveal: true } : {}),
       },
     });
@@ -283,6 +301,7 @@ export const OpenInPicker = memo(function OpenInPicker({
 
   const backgroundThread = use(BackgroundThreadContext);
   const options = resolveOpenInOptions(navigator.platform, effectiveEditors);
+  const canOpenPreferred = canOpenEditor && (preferredEditor !== "custom" || canRunCustomCommand);
   const primaryOption = options.find(({ value }) => value === preferredEditor) ?? null;
   const primaryLabel = isPanel ? `Open in ${primaryOption?.label ?? "editor"}` : "Open";
 
@@ -302,7 +321,9 @@ export const OpenInPicker = memo(function OpenInPicker({
           {options.map(({ label, Icon, value, kind }) => (
             <MenuItem
               density={presentation === "menu" ? "touch" : "default"}
-              disabled={!openInCwd || !canOpenEditor}
+              disabled={
+                !openInCwd || !canOpenEditor || (value === "custom" && !canRunCustomCommand)
+              }
               key={value}
               onClick={() => {
                 if (presentation === "menu") {
@@ -319,6 +340,10 @@ export const OpenInPicker = memo(function OpenInPicker({
               )}
             </MenuItem>
           ))}
+          <MenuItem render={<Link to="/settings/general" hash="open-in" />}>
+            <SettingsIcon />
+            <MenuItemLabel>Configure custom command…</MenuItemLabel>
+          </MenuItem>
           {remote.mode === "remote-links" && !remoteHintSeen && (
             <MenuItem density={presentation === "menu" ? "touch" : "default"} disabled>
               Opens over SSH. Needs your key on {environmentLabel}
@@ -335,7 +360,7 @@ export const OpenInPicker = memo(function OpenInPicker({
           <MenuItem
             density={presentation === "menu" ? "touch" : "default"}
 
-            disabled={!openInCwd || !canOpenEditor}
+            disabled={!openInCwd || !canOpenPreferred}
             onClick={() => openInEditor(preferredEditor)}
           >
             <primaryOption.Icon className={cn("size-4", getOpenInIconClass(primaryOption.kind))} />
@@ -370,7 +395,7 @@ export const OpenInPicker = memo(function OpenInPicker({
         variant={isPanel ? "ghost" : "outline"}
         part="primary"
         panel={isPanel}
-        disabled={!preferredEditor || !openInCwd || !canOpenEditor}
+        disabled={!preferredEditor || !openInCwd || !canOpenPreferred}
         {...(enableShortcut && !backgroundThread ? { [OPEN_FAVORITE_EDITOR_ATTRIBUTE]: "" } : {})}
         onClick={() => {
           if (!preferredEditor) return;

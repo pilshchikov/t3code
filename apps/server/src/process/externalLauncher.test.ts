@@ -523,45 +523,43 @@ it.effect.skipIf(windowsHost)("prefers zeditor in a later Linux fallback directo
 it.effect.each([
   { editor: "webstorm", installPath: "Applications/WebStorm 2026.2.app/Contents/MacOS/webstorm" },
   { editor: "idea", installPath: "Applications/IntelliJ IDEA 2026.1.4.app/Contents/MacOS/idea" },
-] as const)(
-  "discovers and launches $editor from a versioned macOS bundle",
-  ({ editor, installPath }) =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const home = yield* fs.makeTempDirectoryScoped({ prefix: "t3-editor-versioned-" });
-      const executable = path.join(home, installPath);
-      yield* fs.makeDirectory(path.dirname(executable), { recursive: true });
-      yield* fs.writeFileString(executable, "#!/bin/sh\n");
-      yield* fs.chmod(executable, 0o755);
+  { editor: "openidea", installPath: "Applications/OpenIDEA.app/Contents/MacOS/openidea" },
+] as const)("discovers and launches $editor from its macOS app bundle", ({ editor, installPath }) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "t3-editor-versioned-" });
+    const executable = path.join(home, installPath);
+    yield* fs.makeDirectory(path.dirname(executable), { recursive: true });
+    yield* fs.writeFileString(executable, "#!/bin/sh\n");
+    yield* fs.chmod(executable, 0o755);
 
-      let spawned: ChildProcess.StandardCommand | undefined;
-      yield* Effect.gen(function* () {
-        const launcher = yield* ExternalLauncher.ExternalLauncher;
-        assert.include(yield* launcher.resolveAvailableEditors(), editor);
-        yield* launcher.launchEditor({ editor, cwd: "/workspace with spaces/file.ts:12:4" });
-      }).pipe(
-        Effect.provide(
-          layerTest({
-            platform: "darwin",
-            env: { HOME: home, PATH: path.join(home, "empty") },
-            onSpawn: (command) => {
-              spawned = command;
-            },
-          }),
-        ),
-      );
+    let spawned: ChildProcess.StandardCommand | undefined;
+    yield* Effect.gen(function* () {
+      const launcher = yield* ExternalLauncher.ExternalLauncher;
+      assert.include(yield* launcher.resolveAvailableEditors(), editor);
+      yield* launcher.launchEditor({ editor, cwd: "/workspace with spaces/file.ts:12:4" });
+    }).pipe(
+      Effect.provide(
+        layerTest({
+          platform: "darwin",
+          env: { HOME: home, PATH: path.join(home, "empty") },
+          onSpawn: (command) => {
+            spawned = command;
+          },
+        }),
+      ),
+    );
 
-      assert.ok(spawned);
-      assert.equal(spawned.command, executable);
-      assert.deepEqual(spawned.args, [
-        "--line",
-        "12",
-        "--column",
-        "3",
-        "/workspace with spaces/file.ts",
-      ]);
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    assert.ok(spawned);
+    assert.equal(spawned.command, executable);
+    assert.deepEqual(
+      spawned.args,
+      editor === "openidea"
+        ? ["/workspace with spaces/file.ts"]
+        : ["--line", "12", "--column", "3", "/workspace with spaces/file.ts"],
+    );
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 
 it.effect("matches macOS bundles on the name boundary only", () =>
@@ -854,4 +852,50 @@ it.effect("starts a Windows command shim for unicode paths with cmd metacharacte
       ),
     );
   }),
+);
+
+it.effect.each([
+  {
+    args: ["--file={path}", "{line}", "{column}", "{target}"],
+    expected: ["--file=/work/a b;$(touch nope).ts", "12", "4", "/work/a b;$(touch nope).ts:12:4"],
+  },
+  { args: ["--new-window"], expected: ["--new-window", "/work/a b;$(touch nope).ts"] },
+])("passes custom command paths and positions as literal arguments: $args", ({ args, expected }) =>
+  Effect.gen(function* () {
+    let spawned: ChildProcess.StandardCommand | undefined;
+    yield* Effect.gen(function* () {
+      const launcher = yield* ExternalLauncher.ExternalLauncher;
+      yield* launcher.launchEditor({
+        editor: "custom",
+        cwd: "/work/a b;$(touch nope).ts:12:4",
+        customCommand: { command: "/bin/echo", args },
+      });
+    }).pipe(
+      Effect.provide(
+        layerTest({
+          platform: "linux",
+          onSpawn: (command) => {
+            spawned = command;
+          },
+        }),
+      ),
+    );
+    assert.ok(spawned);
+    assert.equal(spawned.command, "/bin/echo");
+    assert.deepEqual(spawned.args, expected);
+    assert.equal(spawned.options.shell, false);
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+it.effect("rejects a custom editor without a configured command", () =>
+  Effect.gen(function* () {
+    const launcher = yield* ExternalLauncher.ExternalLauncher;
+    const error = yield* launcher
+      .launchEditor({ editor: "custom", cwd: "/work/project" })
+      .pipe(Effect.flip);
+    assert.equal(error._tag, "ExternalLauncherUnsupportedEditorError");
+  }).pipe(
+    Effect.provide(layerTest({ platform: "linux" })),
+    Effect.scoped,
+    Effect.provide(NodeServices.layer),
+  ),
 );

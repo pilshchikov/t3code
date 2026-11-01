@@ -1,5 +1,9 @@
+import { useEnvironmentScope } from "./state/session";
+import { editorLaunchInput } from "./editorPreferences";
+import { useClientSettings } from "./hooks/useSettings";
 import {
   EDITORS,
+  AuthTerminalOperateScope,
   type ContextMenuItem,
   type EditorId,
   type EnvironmentId,
@@ -90,7 +94,11 @@ export function useFileContextMenu(environmentId: EnvironmentId | null) {
   const openInEditor = useAtomCommand(shellEnvironment.openInEditor, { reportFailure: false });
   const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
 
-  const availableEditors = serverConfig?.availableEditors ?? [];
+  const canRunCustomCommand = useEnvironmentScope(environmentId, AuthTerminalOperateScope);
+  const customCommand = useClientSettings((settings) => settings.customEditorCommand);
+  const availableEditors = (serverConfig?.availableEditors ?? []).filter(
+    (id) => id !== "custom" || (customCommand !== null && canRunCustomCommand),
+  );
   const capabilities: FileContextMenuCapabilities = {
     // WSL can reveal in Windows Explorer despite reporting Linux; use server wording.
     revealLabel:
@@ -121,7 +129,7 @@ export function useFileContextMenu(environmentId: EnvironmentId | null) {
 
     const result = await openInEditor({
       environmentId,
-      input: { cwd: absolutePath, editor, ...(reveal ? { reveal: true } : {}) },
+      input: { ...editorLaunchInput(absolutePath, editor), ...(reveal ? { reveal: true } : {}) },
     });
     if (result._tag !== "Failure") return;
     toastManager.add({

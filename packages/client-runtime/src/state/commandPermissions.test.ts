@@ -8,6 +8,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { vi } from "vite-plus/test";
 import {
   AuthAccessReadScope,
+  AuthTerminalOperateScope,
   AuthAccessWriteScope,
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
@@ -67,6 +68,38 @@ const setup = Effect.gen(function* () {
 });
 
 describe("command permissions", () => {
+  it.effect("requires terminal permission only for the destination's custom editor command", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const registry = yield* setup;
+        const editor = createCommandPermissions(runtime, WS_METHODS.shellOpenInEditor);
+        const ordinary = { editor: "openidea", cwd: "/work/project" };
+        const custom = {
+          editor: "custom",
+          cwd: "/work/project",
+          customCommand: { command: "tool", args: [] },
+        };
+        registry.set(sessions(env), AsyncResult.success(grant(true)));
+        expect(registry.get(editor.permissionAtom(env, ordinary))).toBe(true);
+        expect(registry.get(editor.permissionAtom(env, custom))).toBe(false);
+        expect(
+          (yield* editor.authorize(registry, env, custom).pipe(Effect.flip)).requiredPermission,
+        ).toBe(AuthTerminalOperateScope);
+        registry.set(
+          sessions(env),
+          AsyncResult.success({
+            ...grant(true),
+            scopes: [AuthOrchestrationOperateScope, AuthTerminalOperateScope],
+            permissions: [AuthOrchestrationOperateScope, AuthTerminalOperateScope],
+          }),
+        );
+        yield* editor.authorize(registry, env, custom);
+        registry.set(sessions(other), AsyncResult.success(grant(true)));
+        expect(registry.get(editor.permissionAtom(other, custom))).toBe(false);
+      }),
+    ),
+  );
+
   it.effect("authorizes peer reads and sends using the destination's distinct grants", () =>
     Effect.scoped(
       Effect.gen(function* () {

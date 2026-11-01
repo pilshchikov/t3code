@@ -451,6 +451,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/appearance",
   },
   {
+    id: "open-in",
+    title: "Open in / custom editor command",
+    to: "/settings/general",
+    searchTerms: ["OpenIDEA default editor executable arguments path command"],
+  },
+  {
     id: "project-grouping",
     title: "Project grouping",
     to: "/settings/general",

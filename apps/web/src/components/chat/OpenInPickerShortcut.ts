@@ -6,7 +6,7 @@ import {
 } from "@t3tools/contracts";
 import { useEffect } from "react";
 
-import { usePreferredEditor } from "../../editorPreferences";
+import { editorLaunchInput, usePreferredEditor } from "../../editorPreferences";
 import { editorLabelForPlatform } from "../../editorLabels";
 import { isOpenFavoriteEditorShortcut } from "../../keybindings";
 import { announce } from "../../lib/announce";
@@ -89,10 +89,7 @@ export function useOpenFavoriteEditorShortcut({
       }
       void openInEditorMutation({
         environmentId,
-        input: {
-          cwd: openInCwd,
-          editor: preferredEditor,
-        },
+        input: editorLaunchInput(openInCwd, preferredEditor),
       }).then((result) => {
         if (result._tag === "Success") announce(`Opened in ${label}`);
       });

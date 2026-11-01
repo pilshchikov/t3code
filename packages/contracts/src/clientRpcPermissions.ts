@@ -1,3 +1,4 @@
+import { LaunchEditorInput } from "./editor.ts";
 import * as Schema from "effect/Schema";
 import { GitPreparePullRequestThreadInput, GitRunStackedActionInput } from "./git.ts";
 import {
@@ -16,6 +17,7 @@ import { PeerThreadOperation } from "./peers.ts";
 
 /** Incremental client enforcement; the server still authorizes every request. */
 export const CLIENT_GUARDED_RPC_SCOPES = {
+  [WS_METHODS.shellOpenInEditor]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerThreadsRequest]: AuthOrchestrationOperateScope,
   [WS_METHODS.previewClose]: AuthPreviewOperateScope,
   // Stopping a server signals its processes, as closing a terminal does.
@@ -80,6 +82,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 
+const decodeEditorLaunch = Schema.decodeUnknownSync(LaunchEditorInput);
 const decodePrepareThread = Schema.decodeUnknownSync(GitPreparePullRequestThreadInput);
 const decodePeerThreadOperation = Schema.decodeUnknownSync(PeerThreadOperation);
 const decodeStackedAction = Schema.decodeUnknownSync(GitRunStackedActionInput);
@@ -88,6 +91,13 @@ export function clientRpcRequiredScopes(
   method: string,
   input: unknown,
 ): readonly AuthEnvironmentScope[] {
+  if (
+    method === WS_METHODS.shellOpenInEditor &&
+    input !== undefined &&
+    decodeEditorLaunch(input).editor === "custom"
+  ) {
+    return [AuthOrchestrationOperateScope, AuthTerminalOperateScope];
+  }
   if (method === WS_METHODS.peerThreadsRequest && input !== undefined) {
     const operation = decodePeerThreadOperation(input);
     const writes =

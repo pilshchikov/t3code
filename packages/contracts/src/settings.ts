@@ -1,3 +1,4 @@
+import { CustomEditorCommand, EditorId } from "./editor.ts";
 import { EasDeviceHostConfigs, SimlockDeviceHostConfigs, SshDeviceHostConfigs } from "./device.ts";
 import {
   AuthOrchestrationOperateScope,
@@ -410,6 +411,10 @@ export type ModelPreferences = {
 };
 
 export const ClientSettingsSchema = Schema.Struct({
+  preferredEditor: EditorId.pipe(Schema.withDecodingDefault(Effect.succeed("openidea"))),
+  customEditorCommand: Schema.NullOr(CustomEditorCommand).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   notificationMode: NotificationMode.pipe(
     Schema.withDecodingDefault(Effect.succeed("off" as const)),
   ),
@@ -1898,6 +1903,8 @@ export function requiredScopesForProjectMutation(
 }
 
 export const ClientSettingsPatch = Schema.Struct({
+  preferredEditor: Schema.optionalKey(EditorId),
+  customEditorCommand: Schema.optionalKey(Schema.NullOr(CustomEditorCommand)),
   notificationMode: Schema.optionalKey(NotificationMode),
   inAppNotificationsEnabled: Schema.optionalKey(Schema.Boolean),
   diffColorScheme: Schema.optionalKey(DiffColorScheme),

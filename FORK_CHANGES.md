@@ -1,5 +1,25 @@
 # Fork Changes
 
+## OpenIDEA default and custom editor commands — 2026-11-01
+
+- Add OpenIDEA discovery from PATH and native app bundles in `packages/contracts/src/editor.ts`
+  and `packages/shared/src/editor.ts`. Its launcher receives a real project/file path, stripping
+  unsupported line/column suffixes. Prefer it when installed over the legacy last-editor choice;
+  a newly selected editor remains authoritative through client settings.
+- Add a configurable executable/argument vector under General → Open in, reachable from the
+  existing custom menu. Save/use and removal persist client preferences. `{path}`, `{target}`,
+  `{line}`, and `{column}` placeholders are expanded into literal arguments in the existing
+  ExternalLauncher service; omitted path placeholders append the path. Preserve RPC grants,
+  existing Windows shim guards, other editors and remote SSH routing. Custom commands apply to
+  local execution and appear only when configured and supported by the destination. Custom
+  launches additionally require the destination terminal-operation grant in both shared client
+  authorization and server RPC enforcement; built-in editors keep their existing grant.
+- Route project/file pickers, shortcuts, Markdown file links and Files/diff context menus through
+  the same preference and launch-input helpers. Validation covers bundle discovery, default/
+  explicit preferences, missing custom definitions, template positions and shell-metacharacter
+  paths, plus isolated browser verification of configuration, persistence and actual dispatch.
+  Rebuild/stage without restarting the active desktop app or remote environments.
+
 ## Chat attachment image containment — 2026-10-31
 
 - Restore per-image Hide/Show controls for uploaded chat images after the upstream

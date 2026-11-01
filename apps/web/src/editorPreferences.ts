@@ -1,7 +1,9 @@
 import {
   AuthOrchestrationOperateScope,
+  AuthTerminalOperateScope,
   EDITORS,
   EditorId,
+  type LaunchEditorInput,
   EnvironmentAuthorizationError,
   EnvironmentId,
 } from "@t3tools/contracts";
@@ -17,6 +19,8 @@ import { getLocalStorageItem, setLocalStorageItem, useLocalStorage } from "./hoo
 import { shellEnvironment } from "./state/shell";
 import { useAtomCommand } from "./state/use-atom-command";
 import { readEnvironmentScope } from "./state/session";
+
+import { getClientSettings, updateClientSettings, useClientSettings } from "./hooks/useSettings";
 
 const LAST_EDITOR_KEY = "t3code:last-editor";
 
@@ -44,23 +48,50 @@ export class PreferredEditorUnavailableError extends Schema.TaggedError<Preferre
   }
 }
 
+function chooseEditor(
+  availableEditors: readonly EditorId[],
+  preferred: EditorId,
+  stored: EditorId | null,
+  hasCustom: boolean,
+): EditorId | null {
+  const available = new Set(availableEditors.filter((id) => id !== "custom" || hasCustom));
+  if (available.has(preferred)) return preferred;
+  if (stored && available.has(stored)) return stored;
+  return EDITORS.find((editor) => available.has(editor.id))?.id ?? null;
+}
+
+export function editorLaunchInput(cwd: string, editor: EditorId): LaunchEditorInput {
+  const customCommand = getClientSettings().customEditorCommand;
+  return { cwd, editor, ...(editor === "custom" && customCommand ? { customCommand } : {}) };
+}
+
 export function usePreferredEditor(availableEditors: ReadonlyArray<EditorId>) {
   const [lastEditor, setLastEditor] = useLocalStorage(LAST_EDITOR_KEY, null, EditorId);
 
-  const effectiveEditor =
-    lastEditor && availableEditors.includes(lastEditor)
-      ? lastEditor
-      : (EDITORS.find((editor) => availableEditors.includes(editor.id))?.id ?? null);
-
-  return [effectiveEditor, setLastEditor] as const;
+  const preferredEditor = useClientSettings((settings) => settings.preferredEditor);
+  const customCommand = useClientSettings((settings) => settings.customEditorCommand);
+  const effectiveEditor = chooseEditor(
+    availableEditors,
+    preferredEditor,
+    lastEditor,
+    customCommand !== null,
+  );
+  const setPreferredEditor = (editor: EditorId | null) => {
+    setLastEditor(editor);
+    void updateClientSettings({ preferredEditor: editor ?? "openidea" });
+  };
+  return [effectiveEditor, setPreferredEditor] as const;
 }
 
-function resolveAndPersistPreferredEditor(availableEditors: readonly EditorId[]): EditorId | null {
-  const availableEditorIds = new Set(availableEditors);
+function resolvePreferredEditor(availableEditors: readonly EditorId[]): EditorId | null {
+  const settings = getClientSettings();
   const stored = getLocalStorageItem(LAST_EDITOR_KEY, EditorId);
-  if (stored && availableEditorIds.has(stored)) return stored;
-  const editor = EDITORS.find((editor) => availableEditorIds.has(editor.id))?.id ?? null;
-  if (editor) setLocalStorageItem(LAST_EDITOR_KEY, editor, EditorId);
+  const editor = chooseEditor(
+    availableEditors,
+    settings.preferredEditor,
+    stored,
+    settings.customEditorCommand !== null,
+  );
   return editor ?? null;
 }
 
@@ -103,7 +134,7 @@ export function useOpenInPreferredEditor(
         ),
       );
     }
-    const editor = resolveAndPersistPreferredEditor(availableEditors);
+    const editor = resolvePreferredEditor(availableEditors);
     if (!editor) {
       return AsyncResult.failure(
         Cause.fail(
@@ -115,12 +146,20 @@ export function useOpenInPreferredEditor(
         ),
       );
     }
+    if (editor === "custom" && !readEnvironmentScope(environmentId, AuthTerminalOperateScope)) {
+      return AsyncResult.failure(
+        Cause.fail(
+          new EnvironmentAuthorizationError({
+            requiredScope: AuthTerminalOperateScope,
+            message: "This connection cannot run custom commands on this environment.",
+          }),
+        ),
+      );
+    }
+    setLocalStorageItem(LAST_EDITOR_KEY, editor, EditorId);
     const result = await openInEditor({
       environmentId,
-      input: {
-        cwd: targetPath,
-        editor,
-      },
+      input: editorLaunchInput(targetPath, editor),
     });
     return mapAtomCommandResult(result, () => editor);
   };

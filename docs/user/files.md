@@ -32,3 +32,19 @@ confirmation tells you which of the two it is going to be before you commit.
 A link in a rendered Markdown file opens against the checkout the document itself was read from. A
 plan file read from your project checkout links to files in that checkout, even while the thread
 you are in is working in a worktree.
+
+## Open in an editor
+
+OpenIDEA is selected by default when installed. Choose another installed editor in the **Open in**
+menu to remember that choice for projects, file links and the editor shortcut.
+
+For another tool, choose **Configure custom command…** in that menu or go to
+**Settings → General → Open in**. Enter an executable and one argument per line, then choose
+**Save and use command**. `{path}` inserts the path without a line suffix; `{line}` and `{column}`
+insert the position, defaulting to 1. `{target}` keeps the complete path and position. The path is
+appended when neither path placeholder is present. Arguments do not need shell quoting. To run a
+shell script or pipeline, select the shell executable and pass its script as an argument.
+
+Custom commands run through the selected local environment. Remote projects retain their SSH
+editor links; OpenIDEA does not currently advertise an SSH editor protocol. **Remove command**
+clears the custom command and returns to the OpenIDEA default where available.
