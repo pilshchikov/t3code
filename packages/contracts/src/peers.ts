@@ -1,3 +1,8 @@
+import {
+  PeerEnvironmentReadInput,
+  PeerEnvironmentSnapshot,
+  PeerWorkspace,
+} from "./peerEnvironment.ts";
 import { ThreadQueueInput, ThreadQueueResult } from "./threadQueue.ts";
 import * as Schema from "effect/Schema";
 import { McpUsageLimitsSnapshot } from "./usageMcp.ts";
@@ -196,6 +201,7 @@ export const PeerProject = Schema.Struct({
   projectId: ProjectId,
   title: Schema.String,
   workspaceRoot: Schema.String,
+  workspaceRoots: Schema.optional(Schema.Array(PeerWorkspace)),
   /** Whether the user's client groups it with the project the request came from. */
   sameProject: Schema.Boolean,
 });
@@ -244,6 +250,11 @@ export type PeerThreadOperation = typeof PeerThreadOperation.Type;
 
 export const PeerRelayOperation = Schema.Union([
   Schema.Struct({
+    type: Schema.Literal("environment-read"),
+    environmentId: EnvironmentId,
+    input: PeerEnvironmentReadInput,
+  }),
+  Schema.Struct({
     type: Schema.Literal("usage-limits"),
     environmentId: EnvironmentId,
     refresh: Schema.Boolean,
@@ -275,6 +286,7 @@ export const PeerRelayRequest = Schema.Struct({
 export type PeerRelayRequest = typeof PeerRelayRequest.Type;
 
 export const PeerRelayReply = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("environment-read"), result: PeerEnvironmentSnapshot }),
   Schema.Struct({ type: Schema.Literal("thread-queue"), result: ThreadQueueResult }),
   Schema.Struct({
     type: Schema.Literal("usage-limits"),

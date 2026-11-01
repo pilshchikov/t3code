@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./peerEnvironmentSnapshot": {
+      "types": "./src/peerEnvironmentSnapshot.ts",
+      "import": "./src/peerEnvironmentSnapshot.ts"
+    },
     "./accentColors": {
       "types": "./src/accentColors.ts",
       "import": "./src/accentColors.ts"

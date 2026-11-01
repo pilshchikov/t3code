@@ -1,12 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off
-/**
- * The files this environment lets another one list, read and write for agents (see
- * `packages/contracts/src/peers.ts`). Every path must resolve inside a project folder or a thread
- * worktree of this environment, so a request relayed from another machine cannot reach the rest
- * of the disk.
- *
- * @module PeerFiles
- */
+/** Relayed file paths must remain inside registered workspace roots or thread worktrees. */
 import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
@@ -167,7 +160,9 @@ const make = Effect.gen(function* () {
     const shells = yield* threads.getShellSnapshot();
     return [
       ...snapshot.projects.flatMap((project) =>
-        project.deletedAt === null ? [project.workspaceRoot] : [],
+        project.deletedAt === null
+          ? [project.workspaceRoot, ...(project.workspaceRoots ?? []).map((root) => root.path)]
+          : [],
       ),
       ...shells.threads.flatMap((thread) =>
         thread.worktreePath === null ? [] : [thread.worktreePath],

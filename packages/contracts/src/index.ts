@@ -82,3 +82,4 @@ export * from "./settingsSecretValue.ts";
 export * from "./clientRpcPermissions.ts";
 
 export * from "./threadQueue.ts";
+export * from "./peerEnvironment.ts";

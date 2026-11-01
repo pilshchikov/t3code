@@ -1,3 +1,4 @@
+import { peerEnvironmentSnapshot } from "@t3tools/shared/peerEnvironmentSnapshot";
 // @effect-diagnostics nodeBuiltinImport:off - modes, symlinks and random bytes need node:fs.
 import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
@@ -8,6 +9,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
+  DEFAULT_SERVER_SETTINGS,
   type PeerFilesError,
   type PeerRelayReply,
   type PeerRelayRequest,
@@ -36,7 +38,16 @@ const layerTest = Peers.layer.pipe(
       snapshot: Effect.sync(
         () =>
           ({
-            projects: projectFolders.map((workspaceRoot) => ({ workspaceRoot, deletedAt: null })),
+            projects:
+              projectFolders.length === 0
+                ? []
+                : [
+                    {
+                      workspaceRoot: projectFolders[0],
+                      workspaceRoots: projectFolders.map((path) => ({ path })),
+                      deletedAt: null,
+                    },
+                  ],
           }) as never,
       ),
     }),
@@ -87,6 +98,7 @@ const startRelay = Effect.gen(function* () {
         return Effect.succeed({ type: "described", peers: [] });
       case "threads-list":
       case "usage-limits":
+      case "environment-read":
       case "thread-read":
       case "thread-send":
       case "thread-queue":
@@ -282,3 +294,59 @@ it.layer(layerTest, { excludeTestServices: true })("Peers", (it) => {
     );
   });
 });
+
+it.effect.each(["success", "wrong-environment", "denied", "unexpected"] as const)(
+  "relays environment configuration and handles %s",
+  (scenario) =>
+    Effect.gen(function* () {
+      const peers = yield* Peers.Peers;
+      const snapshot = peerEnvironmentSnapshot(
+        {
+          environment: {
+            environmentId: scenario === "wrong-environment" ? EnvironmentId.make("other") : peer,
+            label: "Build Mac",
+            serverVersion: "0.1.2",
+            platform: { os: "darwin", arch: "arm64" },
+            capabilities: { repositoryIdentity: true },
+          },
+          cwd: "/srv",
+          settings: DEFAULT_SERVER_SETTINGS,
+          providers: [],
+        },
+        [],
+        { environmentId: peer },
+        "2026-10-31T12:00:00.000Z",
+      );
+      yield* peers.connect.pipe(
+        Stream.runForEach(({ requestId, operation }) => {
+          expect(operation).toMatchObject({
+            type: "environment-read",
+            environmentId: peer,
+            input: { includeModels: false },
+          });
+          const reply: PeerRelayReply =
+            scenario === "denied"
+              ? {
+                  type: "failed",
+                  code: "capability_denied",
+                  message: "Destination read access denied.",
+                }
+              : scenario === "unexpected"
+                ? { type: "described", peers: [] }
+                : { type: "environment-read", result: snapshot };
+          return peers.respond({ requestId, reply });
+        }),
+        Effect.forkScoped({ startImmediately: true }),
+      );
+      const read = peers.readEnvironment({ environmentId: peer, includeModels: false });
+      if (scenario === "success") expect(yield* read).toEqual(snapshot);
+      else
+        expect((yield* read.pipe(Effect.flip)).code).toBe(
+          scenario === "denied"
+            ? "capability_denied"
+            : scenario === "unexpected"
+              ? "io_failed"
+              : "peer_unreachable",
+        );
+    }).pipe(Effect.provide(layerTest)),
+);

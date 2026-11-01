@@ -3,6 +3,8 @@ import {
   EnvironmentId,
   OrchestratorMcpFailure,
   PeerEnvironment,
+  PeerEnvironmentReadInput,
+  PeerEnvironmentSnapshot,
   PeerFilesListResult,
   PeerThreadsListInput,
   PeerThreadsListResult,
@@ -41,7 +43,7 @@ const peerPath = (description: string) => Schema.String.annotate({ description }
 const list = Tool.make("t3_peers_list", {
   ...shared,
   description:
-    "List the user's other machines (environments) that T3 Code can reach right now, with each project's id and absolute folder. sameProject marks matching folders. self gives this environmentId and folders. Start here before cross-environment thread messaging or file transfer; pass the destination projectId to t3_peer_threads_list. For same-environment conversations use self.environmentId and the caller's projectId. Tracked work moves through Git; peer file tools transfer what Git does not carry. Needs the desktop/web app open and connected to both machines for cross-environment calls.",
+    "List the user's other machines (environments) that T3 Code can reach right now, with each project's id and absolute folder. sameProject marks matching folders. self gives this environmentId and folders. Read remote models, defaults and all workspace roots with t3_peer_environment_read. Start here before cross-environment thread messaging or file transfer; pass the destination projectId to t3_peer_threads_list. For same-environment conversations use self.environmentId and the caller's projectId. Tracked work moves through Git; peer file tools transfer what Git does not carry. Needs the desktop/web app open and connected to both machines for cross-environment calls.",
   success: Schema.Struct({
     self: Schema.Struct({
       environmentId: EnvironmentId,
@@ -51,6 +53,16 @@ const list = Tool.make("t3_peers_list", {
     }),
     peers: Schema.Array(PeerEnvironment),
   }),
+})
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false);
+
+const environmentRead = Tool.make("t3_peer_environment_read", {
+  ...shared,
+  description:
+    "Read another connected environment's configuration through the desktop/web relay, including older SSH servers without environment linking. Use an environmentId from t3_peers_list. Returns identity/version/platform, server/project/worktree paths, saved project defaults, provider/account instance IDs and status, and configured model IDs with effort/options. Credentials and environment-variable values are omitted. Project and model pages have independent projectCursor/modelCursor and next cursors; limit defaults to 25, max 100. Filter projectId, providerInstanceId or modelSearch; includeProjects/includeModels false skips that section. Hidden models stay hidden. Available means configured/enabled/installed with no known auth/availability block, not a live quota probe. Use t3_peer_files_list and t3_peer_file_read for folder contents. For this environment use t3_environment_read, t3_project_list/read and orchestrator_capabilities. Both environments must be connected in the app; no environment-link setup is needed.",
+  parameters: PeerEnvironmentReadInput,
+  success: PeerEnvironmentSnapshot,
 })
   .annotate(Tool.Readonly, true)
   .annotate(Tool.Destructive, false);
@@ -176,6 +188,7 @@ const watches = Tool.make("t3_peer_thread_watches", {
 
 export const PeersToolkit = Toolkit.make(
   list,
+  environmentRead,
   filesList,
   fileRead,
   copy,
@@ -196,6 +209,9 @@ export const PeersHandlersLive = McpToolAccess.toLayer(
     const projects = yield* ProjectService.ProjectService;
     const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
     return {
+      t3_peer_environment_read: McpToolAccess.readsAsCaller((input) =>
+        peers.readEnvironment(input),
+      ),
       t3_peer_threads_list: McpToolAccess.readsAsCaller((input) =>
         Effect.gen(function* () {
           const { caller } = yield* readCaller();

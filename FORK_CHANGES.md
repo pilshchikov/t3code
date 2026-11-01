@@ -1,5 +1,33 @@
 # Fork Changes
 
+## Agent discovery of app-connected environments — 2026-10-31
+
+- Add read-only `t3_peer_environment_read` through the existing desktop/web relay in
+  `packages/contracts/src/peerEnvironment.ts`, `apps/server/src/peers/Peers.ts`, the
+  peer MCP toolkit and `apps/web/src/lib/peerEnvironment.ts`/`peerRelayHost.ts`. It reads
+  the destination's ordinary server config and synchronized project catalog, so discovery
+  works with older remote servers without requiring a separate server-to-server link.
+- Expose environment/version/platform, server/project/worktree paths, all project workspace
+  roots, saved model/runtime/workspace defaults, per-project provider enablement, account
+  instance names/status, configured model IDs and options. Bound project/model pages,
+  support provider/project/search filters, respect hidden model preferences, and distinguish
+  configured readiness from a live auth/quota probe. Do not return credentials, environment
+  variables, account email/home paths or private per-directory guidance. The shared allowlist
+  lives in `packages/shared/src/peerEnvironmentSnapshot.ts`.
+- Expand quick peer project listings to include workspace roots. Fix `PeerFiles.ts` to allow
+  registered secondary project roots while retaining path traversal and symlink containment.
+  Distinguish app relay discovery from linked-environment actions in shared provider guidance;
+  agents use destination IDs/paths and no longer mistake a missing link for an offline SSH host.
+- Validation: regression tests cover paged/filterable metadata, saved project overrides,
+  secret omission, older-server reads, destination identity and read permissions, relayed
+  replies, and secondary-root file operations. The model-tool eval adds
+  `app-connected-environment-discovery`; dry run succeeds, with exact context budgets
+  updated. Live model evaluation requires an unavailable API key. A real MCP dispatch
+  transcript with a scripted relay verifies metadata reads while environment linking is
+  disabled. Changed-file checks cover 39 affected package typechecks, focused tests,
+  formatting/lint, both knip passes and generated GraphQL. Rebuild/stage without
+  restarting the active app or remote servers.
+
 ## Upstream synchronization and agent prompt queues — 2026-10-31 (54c5f25249)
 
 - Merge 171 upstream commits through `54c5f25249961a1aa0b61932329092eadbd9d6fc`,

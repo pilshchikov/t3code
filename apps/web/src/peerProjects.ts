@@ -27,6 +27,14 @@ export function peerProjects(
       projectId: project.id,
       title: project.title,
       workspaceRoot: project.workspaceRoot,
+      workspaceRoots: (project.workspaceRoots?.length
+        ? project.workspaceRoots
+        : [{ path: project.workspaceRoot }]
+      ).map(({ path, label, defaultThreadEnvMode }) => ({
+        path,
+        ...(label === undefined ? {} : { label }),
+        ...(defaultThreadEnvMode === undefined ? {} : { defaultThreadEnvMode }),
+      })),
       sameProject: deriveLogicalProjectKeyFromSettings(project, settings) === ownKey,
     }));
 }

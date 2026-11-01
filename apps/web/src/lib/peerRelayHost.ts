@@ -1,5 +1,6 @@
 import { EnvironmentRegistry } from "@t3tools/client-runtime/connection";
 import { request, subscribe } from "@t3tools/client-runtime/rpc";
+import { readPeerEnvironment } from "./peerEnvironment";
 import { readPeerUsageLimits } from "./peerUsageLimits";
 import {
   type EnvironmentId,
@@ -73,7 +74,7 @@ export const layer = Layer.effectDiscard(
             Effect.map(reply),
             Effect.catch((error) =>
               Effect.succeed(
-                isPeerFilesError(error)
+                isPeerFilesError(error) || isThreadError(error)
                   ? ({ type: "failed", code: error.code, message: error.message } as const)
                   : unreachable(`The app could not reach that environment (${error._tag}).`),
               ),
@@ -82,6 +83,13 @@ export const layer = Layer.effectDiscard(
 
     const perform = (source: EnvironmentId, operation: PeerRelayOperation) => {
       switch (operation.type) {
+        case "environment-read":
+          return onPeer(
+            source,
+            operation.environmentId,
+            readPeerEnvironment(operation.input),
+            (result) => ({ type: "environment-read", result }),
+          );
         case "usage-limits":
           return onPeer(
             source,

@@ -279,6 +279,7 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     "schedule-run",
   ),
   t3_queue: tool(["Manage", "Managing", "Managed", "queued messages"], "queue-edit"),
+  t3_peer_environment_read: tool(["Read", "Reading", "Read", "an environment"], "environment-read"),
   t3_peer_thread_queue: tool(["Manage", "Managing", "Managed", "queued messages"], "queue-edit"),
   t3_pending_request: tool(
     ["Handle", "Handling", "Handled", "pending questions"],

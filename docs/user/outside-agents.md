@@ -119,3 +119,12 @@ result that always includes the thread id.
 Approved agents appear under **Settings → Sharing & access** like other clients.
 Revoke one there to cut off its access immediately. A sign-in lasts 30 days;
 after that the agent asks you to approve it again.
+
+## Discover environments connected to the desktop
+
+Agents running in a T3 thread can use the desktop or web app's existing connections to
+inspect another environment, including an SSH host. Ask for its projects, workspace
+folders, defaults, provider accounts and model IDs. The app must remain connected to both
+environments. Agents can then inspect project folders and files through the same relay.
+This does not require a separate server-to-server environment link. Discovery includes
+saved configuration metadata, not credentials, and does not start a model session.

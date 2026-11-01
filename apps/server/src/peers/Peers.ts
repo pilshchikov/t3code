@@ -1,16 +1,12 @@
 // @effect-diagnostics nodeBuiltinImport:off
-/**
- * What an agent here can do with the user's other environments: discover them, exchange files
- * and relay conversation requests. This server cannot reach another one, so every request goes to a
- * client connected to both (a relay), which answers through `respond`.
- *
- * @module Peers
- */
+/** Requests to other environments are relayed by a client connected to both. */
 import * as NodeCrypto from "node:crypto";
 import * as NodePath from "node:path";
 
 import {
   type EnvironmentId,
+  type PeerEnvironmentReadInput,
+  type PeerEnvironmentSnapshot,
   PEER_FILE_CHUNK_BYTES,
   type PeerEnvironment,
   PeerFilesFailureCode,
@@ -82,6 +78,9 @@ export class Peers extends Context.Service<
       { readonly text: string; readonly size: number; readonly truncated: boolean },
       PeersError
     >;
+    readonly readEnvironment: (
+      input: PeerEnvironmentReadInput,
+    ) => Effect.Effect<PeerEnvironmentSnapshot, PeersError>;
     /** Copies a file, or every regular file under a folder, verifying each by checksum. */
     readonly copy: (input: PeerCopyInput) => Effect.Effect<PeerCopyResult, PeersError>;
   }
@@ -181,6 +180,23 @@ const make = Effect.gen(function* () {
     const reply = yield* invoke({ type: "describe", projectId });
     return reply.type === "described" ? reply.peers : yield* failed(reply);
   });
+
+  const readEnvironment: Peers["Service"]["readEnvironment"] = Effect.fn("Peers.readEnvironment")(
+    function* (input) {
+      const reply = yield* invoke({
+        type: "environment-read",
+        environmentId: input.environmentId,
+        input,
+      });
+      if (reply.type !== "environment-read") return yield* failed(reply);
+      if (reply.result.environment.environmentId !== input.environmentId)
+        return yield* new PeersError({
+          code: "peer_unreachable",
+          message: "The relaying app returned configuration for a different environment.",
+        });
+      return reply.result;
+    },
+  );
 
   const list: Peers["Service"]["list"] = Effect.fn("Peers.list")(function* (environmentId, input) {
     const reply = yield* invoke({ type: "list", environmentId, input });
@@ -295,7 +311,16 @@ const make = Effect.gen(function* () {
     return { files: copied, bytes, skipped };
   });
 
-  return Peers.of({ connect, respond, request: invoke, describe, list, readText, copy });
+  return Peers.of({
+    connect,
+    respond,
+    request: invoke,
+    describe,
+    readEnvironment,
+    list,
+    readText,
+    copy,
+  });
 });
 
 export const layer = Layer.effect(Peers, make);
