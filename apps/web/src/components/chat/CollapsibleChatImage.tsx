@@ -1,3 +1,4 @@
+import { cn } from "../../lib/utils";
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { useSyncExternalStore, type ReactNode } from "react";
 
@@ -16,10 +17,12 @@ export function CollapsibleChatImage({
   imageKey,
   label,
   children,
+  className,
 }: {
   imageKey: string;
   label: string;
   children: ReactNode;
+  className?: string;
 }) {
   const collapsed = useSyncExternalStore(
     subscribe,
@@ -28,12 +31,12 @@ export function CollapsibleChatImage({
   );
   const Icon = collapsed ? ChevronRightIcon : ChevronDownIcon;
   return (
-    <span className="block min-w-0 max-w-full">
+    <span className={cn("flex min-h-0 min-w-0 max-w-full flex-col", className)}>
       <button
         type="button"
         aria-expanded={!collapsed}
         aria-label={`${collapsed ? "Show" : "Hide"} image: ${label || "Image"}`}
-        className="flex max-w-full items-center gap-1 rounded px-1 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+        className="flex min-w-0 max-w-full shrink-0 items-center gap-1 rounded px-1 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
         onClick={(event) => {
           event.stopPropagation();
           if (collapsed) collapsedImages.delete(imageKey);
@@ -42,7 +45,7 @@ export function CollapsibleChatImage({
         }}
       >
         <Icon aria-hidden className="size-3 shrink-0" />
-        <span className="shrink-0">{collapsed ? "Show image" : "Hide image"}</span>
+        <span className="truncate">{collapsed ? "Show image" : "Hide image"}</span>
         {collapsed && label ? <span className="truncate opacity-70">{label}</span> : null}
       </button>
       {collapsed ? null : children}

@@ -1,3 +1,4 @@
+import { CollapsibleChatImage } from "./CollapsibleChatImage";
 import { InlineAudioPreview } from "../files/InlineAudioPreview";
 import { filePreviewKind } from "@t3tools/shared/filePreview";
 import { findRevealRef } from "./markdownFindContext";
@@ -666,81 +667,86 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
         )}
       >
         {regularImages.map((image, index) => (
-          <div
+          <CollapsibleChatImage
             key={image.id}
+            imageKey={`attachment:${row.message.id}:${image.id}`}
+            label={image.name}
             className={cn(
-              "bg-background/70",
-              image.source?.kind === "snap-shot" && image.previewUrl
-                ? cn(
-                    "col-span-2",
-                    standaloneMedia
-                      ? cn(
-                          MEDIA_EDGE_CLASS_NAME,
-                          "min-h-16 justify-self-end overflow-hidden rounded-2xl",
-                          loneImage && mediaCornerClassName,
-                        )
-                      : SNAP_SHOT_ATTACHMENT_FRAME_CLASS,
-                  )
-                : loneImage
-                  ? cn(MEDIA_EDGE_CLASS_NAME, "overflow-hidden rounded-2xl", mediaCornerClassName)
-                  : collage
-                    ? cn(
-                        "overflow-hidden bg-background",
-                        regularImages.length === 3 && index === 0 && "row-span-2",
-                        regularImages.length > 3 &&
-                          regularImages.length % 2 === 1 &&
-                          index === regularImages.length - 1 &&
-                          "col-span-2",
-                      )
-                    : standaloneMedia
-                      ? cn(MEDIA_EDGE_CLASS_NAME, "aspect-[4/3] overflow-hidden rounded-2xl")
-                      : "aspect-[4/3] overflow-hidden rounded-lg border border-border/80",
+              image.source?.kind === "snap-shot" && image.previewUrl && "col-span-2",
+              collage && regularImages.length === 3 && index === 0 && "row-span-2",
+              collage &&
+                regularImages.length > 3 &&
+                regularImages.length % 2 === 1 &&
+                index === regularImages.length - 1 &&
+                "col-span-2",
             )}
           >
-            {image.previewUrl ? (
-              <button
-                type="button"
-                className="block h-full w-full cursor-zoom-in"
-                aria-label={`Preview ${image.name}`}
-                onClick={() => {
-                  const preview = buildExpandedImagePreview(regularImages, image.id);
-                  if (!preview) return;
-                  ctx.onImageExpand(preview);
-                }}
-              >
-                {/* Isolate the thumbnail raster from nearby activity repaints in Chromium. */}
-                <AttachmentImage
-                  name={image.name}
-                  mimeType={image.mimeType}
-                  src={image.previewUrl}
-                  alt={image.name}
-                  decoding="async"
-                  loading="lazy"
+            <div
+              className={cn(
+                "min-h-0 bg-background/70",
+                collage && "flex-1",
+                image.source?.kind === "snap-shot" && image.previewUrl
+                  ? standaloneMedia
+                    ? cn(
+                        MEDIA_EDGE_CLASS_NAME,
+                        "min-h-16 justify-self-end overflow-hidden rounded-2xl",
+                        loneImage && mediaCornerClassName,
+                      )
+                    : SNAP_SHOT_ATTACHMENT_FRAME_CLASS
+                  : loneImage
+                    ? cn(MEDIA_EDGE_CLASS_NAME, "overflow-hidden rounded-2xl", mediaCornerClassName)
+                    : collage
+                      ? "overflow-hidden bg-background"
+                      : standaloneMedia
+                        ? cn(MEDIA_EDGE_CLASS_NAME, "aspect-[4/3] overflow-hidden rounded-2xl")
+                        : "aspect-[4/3] overflow-hidden rounded-lg border border-border/80",
+              )}
+            >
+              {image.previewUrl ? (
+                <button
+                  type="button"
+                  className="block h-full w-full cursor-zoom-in"
+                  aria-label={`Preview ${image.name}`}
+                  onClick={() => {
+                    const preview = buildExpandedImagePreview(regularImages, image.id);
+                    if (!preview) return;
+                    ctx.onImageExpand(preview);
+                  }}
+                >
+                  {/* Isolate the thumbnail raster from nearby activity repaints in Chromium. */}
+                  <AttachmentImage
+                    name={image.name}
+                    mimeType={image.mimeType}
+                    src={image.previewUrl}
+                    alt={image.name}
+                    decoding="async"
+                    loading="lazy"
+                    className={cn(
+                      "block transform-gpu",
+                      standaloneMedia && image.source?.kind === "snap-shot"
+                        ? "h-auto max-h-48 w-auto min-w-24 max-w-full object-contain"
+                        : loneImage
+                          ? "h-48 w-auto min-w-24 max-w-full object-cover"
+                          : "size-full object-cover",
+                    )}
+                  />
+                </button>
+              ) : (
+                <div
                   className={cn(
-                    "block transform-gpu",
-                    standaloneMedia && image.source?.kind === "snap-shot"
-                      ? "h-auto max-h-48 w-auto min-w-24 max-w-full object-contain"
-                      : loneImage
-                        ? "h-48 w-auto min-w-24 max-w-full object-cover"
-                        : "size-full object-cover",
+                    "flex min-h-[72px] items-center justify-center px-2 py-3 text-center text-2xs text-muted-foreground/70",
+                    loneImage && "h-48 w-64 max-w-full",
+                    collage && "h-full",
                   )}
-                />
-              </button>
-            ) : (
-              <div
-                className={cn(
-                  "flex min-h-[72px] items-center justify-center px-2 py-3 text-center text-2xs text-muted-foreground/70",
-                  loneImage && "h-48 w-64 max-w-full",
-                  collage && "h-full",
-                )}
-              >
-                {image.name}
-              </div>
-            )}
-            {image.previewUrl && image.source?.kind === "snap-shot" ? (
-              <SnapShotAttachmentDetails source={image.source} />
-            ) : null}
-          </div>
+                >
+                  {image.name}
+                </div>
+              )}
+              {image.previewUrl && image.source?.kind === "snap-shot" ? (
+                <SnapShotAttachmentDetails source={image.source} />
+              ) : null}
+            </div>
+          </CollapsibleChatImage>
         ))}
         {userVideos.map((file) => (
           <UserVideoAttachment

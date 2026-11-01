@@ -236,6 +236,65 @@ async function click(element: HTMLElement) {
   await act(async () => element.click());
 }
 
+it.each([
+  [390, 1],
+  [390, 3],
+  [900, 1],
+  [900, 4],
+])("keeps %i px image messages in flow with %i collapsible attachments", async (width, count) => {
+  const src = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="1200"><rect width="600" height="1200" fill="#555"/></svg>')}`;
+  const onImageExpand = vi.fn();
+  await using screen = await renderTimeline(
+    [
+      message(
+        "Reference sheet. The text must stay below the images.",
+        {
+          attachments: Array.from({ length: count }, (_, index) => ({
+            type: "image" as const,
+            id: `reference-${index}`,
+            name: `reference-${index}.png`,
+            mimeType: "image/png",
+            sizeBytes: 100,
+            previewUrl: src,
+          })),
+        },
+        `image-layout-${width}-${count}`,
+      ),
+    ],
+    { onImageExpand },
+  );
+  screen.container.style.width = `${width}px`;
+  const images = () => [
+    ...screen.container.querySelectorAll<HTMLImageElement>('img[alt^="reference-"]'),
+  ];
+  await vi.waitFor(() => {
+    expect(images()).toHaveLength(count);
+    expect(images().every((image) => image.complete && image.naturalWidth > 0)).toBe(true);
+  });
+  const checkLayout = () => {
+    const textTop = screen.container
+      .querySelector("[data-user-message-body]")!
+      .getBoundingClientRect().top;
+    const bounds = screen.container.getBoundingClientRect();
+    for (const image of images()) {
+      const rect = image.getBoundingClientRect();
+      expect(rect.height).toBeGreaterThan(0);
+      expect(rect.bottom).toBeLessThanOrEqual(textTop);
+      expect(rect.right).toBeLessThanOrEqual(bounds.right + 1);
+    }
+  };
+  checkLayout();
+  expect(screen.buttons(/^Hide image:/)).toHaveLength(count);
+  await click(screen.button("Preview reference-0.png"));
+  expect(onImageExpand).toHaveBeenCalledOnce();
+  await click(screen.button("Hide image: reference-0.png"));
+  expect(images()).toHaveLength(count - 1);
+  checkLayout();
+  await click(screen.button("Show image: reference-0.png"));
+  await vi.waitFor(() => expect(images()).toHaveLength(count));
+  checkLayout();
+});
+
 describe("MessagesTimeline work rows", () => {
   it.each([
     ["Enter", "{Enter}"],

@@ -1,5 +1,17 @@
 # Fork Changes
 
+## Chat attachment image containment — 2026-10-31
+
+- Restore per-image Hide/Show controls for uploaded chat images after the upstream
+  timeline media-layout merge. Keep controls outside thumbnail sizing in
+  `TimelineUserMessageRow.tsx` and use a bounded flex column in `CollapsibleChatImage.tsx`,
+  so thumbnails and collage cells reserve their height before the message text.
+  Preserve preview navigation, SnapShot details, and session-local collapsed-image choices.
+- Validation: browser regressions check narrow/wide message layouts, single images and
+  collages, image/text boundaries, hide/show, and preview callbacks. Isolated full-app
+  Chromium checks cover desktop/phone widths, hide/show and opening the image preview.
+  Rebuild/stage without restarting the active desktop app or remote servers.
+
 ## Agent discovery of app-connected environments — 2026-10-31
 
 - Add read-only `t3_peer_environment_read` through the existing desktop/web relay in
