@@ -1,5 +1,21 @@
 # Fork Changes
 
+## Claude Mythos model catalog — 2026-11-02
+
+- Add current `claude-mythos-5-1` and legacy `claude-mythos-5` to
+  `apps/server/src/provider/model-manifest.json`, including aliases, release dates and
+  Claude Code version gates. Reuse the Fable capability profile for 1M native context,
+  effort controls and existing Ultracode/Ultrathink mappings; preserve account-specific
+  settings, hidden-model choices and the default Opus selection.
+- Include Mythos 5.1 in current-model classification and bump the bundle timestamp so
+  an older cached catalog cannot hide it. Refreshing access alone could not add either
+  model because Claude's built-in list comes from this catalog, not the auth probe.
+- Validation: 32 existing Claude catalog/cache/probe tests and all changed-file checks
+  pass. An isolated runtime transcript confirms aliases, CLI gates, native context and
+  outgoing model IDs. Full-client checks verify both provider instances, hide/show
+  persistence and explicit refresh. Rebuild/stage without restarting active local or
+  remote work. Anthropic account authorization still applies.
+
 ## Upstream synchronization — 2026-11-01 (05c0ed7da6)
 
 - Merge 322 upstream commits through `05c0ed7da69ee6aceab8fad84e8a0dc0c474138a`,
