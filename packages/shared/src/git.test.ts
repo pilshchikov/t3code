@@ -283,6 +283,12 @@ describe("sanitizeFeatureBranchName", () => {
       `spilshchikov/fix/${"x".repeat(60)}`,
     );
   });
+
+  it("keeps accented letters as their plain letters", () => {
+    expect(sanitizeFeatureBranchName("fix/Añadir validación del café")).toBe(
+      "spilshchikov/fix/anadir-validacion-del-cafe",
+    );
+  });
 });
 
 describe("resolveAutoFeatureBranchName", () => {

@@ -1,5 +1,32 @@
 # Fork Changes
 
+## Upstream synchronization — 2026-11-01 (05c0ed7da6)
+
+- Merge 322 upstream commits through `05c0ed7da69ee6aceab8fad84e8a0dc0c474138a`,
+  reviewing 196 overlapping paths and reconciling 41 conflicts. Adopt provider startup/
+  maintenance, Claude fork/rollback, bounded MCP reads, worktree/Git and reconnect fixes,
+  usage provider/model filters, rendering/input fixes, managed policy controls and the
+  updated preview-browser security release.
+- Preserve OpenIDEA/custom commands and their permission guards, chat-image containment,
+  app-connected environment discovery and agent prompt-queue management. Keep dashboards,
+  settled/grouped project rail with flat manual thread ordering, multi-root Files/worktree
+  selection, lazy/resizable diff navigation, Markdown table boundaries, Claude account
+  isolation, Terra 6.1, connected usage tools, mobile desktop relay and bundled SSH updates.
+- External analytics and relay/OTLP exports remain disabled despite upstream analytics
+  changes. Keep public update discovery opt-in, summary-only idle compaction and fork
+  cleanup defaults. Integrate managed update refusals with bundled updates; retain the
+  fork PR-expiry policy alongside upstream mergeability stabilization and batch PR linking.
+  Extend upstream branch search to ignore both the owner namespace and legacy T3 prefixes;
+  adapt recovery/settlement fixtures to the fork's explicit opt-ins and migration numbering.
+- Validation: all 438 selected test files pass (8,675 tests; 19 skipped), alongside
+  changed-file lint/format/dependency checks, affected-package typechecks and React Compiler
+  coverage. Four model-tool eval requests build; integrated isolated-client checks cover
+  dashboard navigation/read status, both layouts, custom pickers, Files/lazy diffs, table
+  boundaries and actual OpenIDEA/custom-command dispatch.
+  Live model evals require an unavailable API key; native mobile lint is blocked by absent
+  SwiftLint, ktlint and detekt. Stage the rebuilt arm64 app without restarting the active
+  desktop or remote servers.
+
 ## OpenIDEA default and custom editor commands — 2026-11-01
 
 - Add OpenIDEA discovery from PATH and native app bundles in `packages/contracts/src/editor.ts`

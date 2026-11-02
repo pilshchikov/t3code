@@ -29,6 +29,7 @@ import {
 import * as HttpApi from "effect/http-api/HttpApi";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as ServerConfig from "../config.ts";
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as AuthHttp from "../auth/http.ts";
 import * as SessionStore from "../auth/SessionStore.ts";
@@ -49,6 +50,7 @@ const authLayer = (id: EnvironmentId) =>
         getEnvironmentId: Effect.succeed(id),
       }),
     ),
+    Layer.provide(ManagedPolicy.layerTest()),
     Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "shared-env-test-" })),
   );
 class RemoteApi extends HttpApi.make("environment").add(EnvironmentHttpApi.groups.auth) {}

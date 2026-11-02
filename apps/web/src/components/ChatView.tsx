@@ -4,6 +4,7 @@ import { resolveThreadWorkspaces } from "@t3tools/shared/threadWorkspaces";
 import { fileSurfaceId } from "../rightPanelStore";
 import { ComposerContextStripCollapsedByProjectSchema } from "./ChatView.logic";
 import { COMPOSER_CONTEXT_STRIP_COLLAPSED_BY_PROJECT_KEY } from "./ChatView.logic";
+import { ChildThreadApprovals } from "./chat/ChildThreadApprovals";
 import { workspaceAreaProps } from "../lib/workspaceFocus";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { resolveNewThreadModelSelection } from "@t3tools/shared/usageLimits";
@@ -48,10 +49,6 @@ import { RightPanelSurfaceContent } from "./chat/RightPanelSurfaceContent";
 import { usePendingThreadRequests } from "./chat/usePendingThreadRequests";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
-import {
-  latestExecutedRun,
-  latestRootProviderFailure,
-} from "@t3tools/shared/orchestrationV2ThreadError";
 import type { UsageLimitSourceSnapshots } from "@t3tools/contracts";
 import { feedbackBannerItem } from "./chat/ComposerFeedback";
 import { useUsageLimitsPanel } from "./chat/useUsageLimitsPanel";
@@ -81,6 +78,7 @@ import {
 import {
   deriveProviderSubagentStatus,
   deriveReportedModelSelection,
+  deriveResumableRunId,
   formatModelSelectionEffort,
   deriveRunlessWorkStartedAt,
   deriveThreadActivityRun,
@@ -394,6 +392,7 @@ const EMPTY_FEEDBACK_SUBMISSIONS: ReadonlyArray<CodexFeedbackSubmission> = [];
 const EMPTY_PROVIDER_SKILLS: ServerProvider["skills"] = [];
 const EMPTY_TURN_ITEMS: ThreadStructure["turnItems"] = [];
 const EMPTY_AUTO_UPDATE_ENVIRONMENTS: ReadonlyArray<EnvironmentPresentation> = [];
+const EMPTY_COMPOSER_BANNER_ITEMS: ReadonlyArray<ComposerBannerStackItem> = [];
 
 const FilePreviewPanel = lazy(() => import("./files/FilePreviewPanel"));
 const EMPTY_PENDING_FILE_SURFACE_IDS: ReadonlySet<string> = new Set();
@@ -826,16 +825,10 @@ export default function ChatView(props: ChatViewProps) {
     isServerThread &&
     serverProjection?.runs.some((run) => run.status === "queued" && run.queueHeld === true) ===
       true;
-  const resumableRunId = (() => {
-    if (!isServerThread || serverProjection === null) return null;
-    const run = latestExecutedRun(serverProjection.runs);
-    if (run?.status === "interrupted") return run.id;
-    return run?.status === "failed" &&
-      serverRuntime?.lastErrorClass === "usage_limit" &&
-      latestRootProviderFailure(run, serverProjection.turnItems)?.class === "usage_limit"
-      ? run.id
-      : null;
-  })();
+  const resumableRunId =
+    !isServerThread || serverProjection === null
+      ? null
+      : deriveResumableRunId(serverProjection, serverRuntime);
   const parentSubagentThreadId =
     activeThread?.lineage.relationshipToParent === "subagent"
       ? activeThread.lineage.parentThreadId
@@ -885,20 +878,18 @@ export default function ChatView(props: ChatViewProps) {
   const sideChatParent = useQuietThreadShell(sideChatParentRef);
   const parentThreadLink = (() => {
     if (sideChatParentRef !== null) {
+      const title = sideChatParent?.title ?? "Parent thread";
+      // Embedded, the parent is the view around it.
+      if (embedded) return { title, sideChat: true };
       return {
-        title: sideChatParent?.title ?? "Parent thread",
+        title,
         sideChat: true,
-        // Embedded, the parent is the view around it.
-        ...(embedded
-          ? {}
-          : {
-              open: (): void => {
-                void navigate({
-                  to: "/$environmentId/$threadId",
-                  params: buildThreadRouteParams(sideChatParentRef),
-                });
-              },
-            }),
+        open: (): void => {
+          void navigate({
+            to: "/$environmentId/$threadId",
+            params: buildThreadRouteParams(sideChatParentRef),
+          });
+        },
       };
     }
     if (parentSubagentThreadRef !== null) {
@@ -3162,6 +3153,11 @@ export default function ChatView(props: ChatViewProps) {
     (folders: Parameters<ChatComposerHandle["addDroppedFolders"]>[0]) =>
       composerRef.current?.addDroppedFolders(folders),
   );
+  // Above the early return, where React Compiler can cache it for the side chat pane.
+  const sideChatParentPanel = {
+    openToolDiff: onOpenToolDiffStable,
+    runShellCommand: runSideChatShellCommandStable,
+  };
 
   if (!activeThread) {
     return embedded ? null : <NoActiveThreadState />;
@@ -3181,10 +3177,7 @@ export default function ChatView(props: ChatViewProps) {
       getShortcutContext={getShortcutContextStable}
       onSendAnnotation={sendPreviewAnnotationStable}
       onCloseSurface={closeRightPanelSurface}
-      sideChatParentPanel={{
-        openToolDiff: onOpenToolDiffStable,
-        runShellCommand: runSideChatShellCommandStable,
-      }}
+      sideChatParentPanel={sideChatParentPanel}
       terminal={{
         launchContext: activeTerminalLaunchContext ?? null,
         keybindings,
@@ -3589,6 +3582,7 @@ export default function ChatView(props: ChatViewProps) {
                         : undefined
                     }
                   >
+                    <ChildThreadApprovals threadRef={activeThreadRef} />
                     <ComposerSurface.Shell contextRow={showComposerContextStrip}>
                       <ComposerSurface.Host
                         inert={queuedRunEdit.isSaving}
@@ -3634,9 +3628,7 @@ export default function ChatView(props: ChatViewProps) {
                               activeThreadId={activeThreadId}
                               activeThread={activeThread}
                               activeThreadShell={activeThreadShell}
-                              promptHistoryMessages={timelineMessages}
-                              // Keep the prompt and controls stable when scrolling dismisses
-                              // the keyboard, including in existing conversations.
+                              promptHistoryEntries={timelineEntries}
                               forceExpandedOnMobile
                               projectSelectionRequired={
                                 isLocalDraftThread && activeProject === null
@@ -3669,7 +3661,11 @@ export default function ChatView(props: ChatViewProps) {
                                             : projectCloneSendBlockReason
                               }
                               isPreparingWorktree={isPreparingWorktree && !sendQueuesBehindSetup}
-                              bannerItems={isDraftHeroState ? [] : composerBannerItems}
+                              bannerItems={
+                                isDraftHeroState || composerBannerItems.length === 0
+                                  ? EMPTY_COMPOSER_BANNER_ITEMS
+                                  : composerBannerItems
+                              }
                               sideChatAvailable={sideChat.available}
                               sideChatDisabledReason={sideChatDisabledReason}
                               onUsageLimitsCommand={
@@ -3706,7 +3702,9 @@ export default function ChatView(props: ChatViewProps) {
                               }
                               activeThreadModelSelection={activeThread?.modelSelection}
                               activeProjectId={activeProject?.id ?? null}
-                              activeContextWindow={activeContextWindow}
+                              contextWindowEntries={serverVisibleTurnItems}
+                              contextWindowLiveUsage={activeThreadLiveTokenUsage}
+                              contextWindowProviderThread={activeProviderThread}
                               compactThreadUnavailable={compactThreadUnavailable}
                               compactDisabled={compactDisabled}
                               compactDisabledReason={compactDisabledReason}

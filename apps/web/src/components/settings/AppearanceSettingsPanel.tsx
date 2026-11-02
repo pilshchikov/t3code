@@ -1,3 +1,8 @@
+import {
+  resolveSidebarStageBackdropVariant,
+  type SidebarStageBackdropVariant,
+  useEnvironmentStageLabel,
+} from "../SidebarStageBackdrop";
 import { ProjectRailGroupStylePicker } from "./ProjectRailGroupStylePicker";
 import { ChatCustomWidthControl } from "./ChatCustomWidthControl";
 import { cn } from "../../lib/utils";
@@ -24,6 +29,7 @@ import {
   MIN_PANEL_ANIMATION_DURATION_MS,
 } from "@t3tools/contracts/settings";
 import { useCustomThemes } from "../../hooks/useCustomThemes";
+import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { useTheme } from "../../hooks/useTheme";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
@@ -47,6 +53,34 @@ const ENVIRONMENT_IDENTIFICATION_LABELS: Record<EnvironmentIdentificationMode, s
   pill: "Version pill",
   none: "None",
 };
+
+function environmentIdentificationOptions(
+  stageVariant: SidebarStageBackdropVariant | null,
+): ReadonlyArray<readonly [EnvironmentIdentificationMode, string]> {
+  if (stageVariant === "dev") {
+    return [
+      ["artwork", "Dev artwork"],
+      ["nightly-artwork", "Nightly artwork"],
+      ["pill", "Version pill"],
+      ["none", "None"],
+    ];
+  }
+  if (stageVariant === "nightly") {
+    return [
+      ["artwork", "Nightly artwork"],
+      ["dev-artwork", "Dev artwork"],
+      ["pill", "Version pill"],
+      ["none", "None"],
+    ];
+  }
+  return [
+    ["artwork", "None"],
+    ["nightly-artwork", "Nightly artwork"],
+    ["dev-artwork", "Dev artwork"],
+    ["pill", "Version pill"],
+    ["none", "None"],
+  ];
+}
 
 const CHAT_WIDTH_LABELS: Record<ChatWidth, string> = {
   comfortable: "Comfortable",
@@ -110,6 +144,28 @@ export function AppearanceSettingsPanel() {
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
   const showEnvironmentIdentification = true;
+  const environmentStageLabel = useEnvironmentStageLabel();
+  const environmentStageVariant = resolveSidebarStageBackdropVariant(environmentStageLabel);
+  const environmentIdentificationOptionList =
+    environmentIdentificationOptions(environmentStageVariant);
+  const environmentIdentificationLabel =
+    environmentIdentificationOptionList.find(
+      ([value]) => value === settings.environmentIdentificationMode,
+    )?.[1] ?? ENVIRONMENT_IDENTIFICATION_LABELS[settings.environmentIdentificationMode];
+  const effectiveEnvironmentIdentificationMode = useEnvironmentIdentificationMode();
+  const themeHidesEnvironmentArtwork =
+    effectiveEnvironmentIdentificationMode === "pill" &&
+    resolveSidebarStageBackdropVariant(
+      environmentStageLabel,
+      settings.environmentIdentificationMode,
+    ) !== null;
+  const environmentIdentificationDescription = themeHidesEnvironmentArtwork
+    ? environmentStageVariant
+      ? "Only built-in themes show artwork, so this theme shows the version pill."
+      : "Only built-in themes show artwork."
+    : environmentStageVariant
+      ? "Choose how Dev and Nightly environments are identified."
+      : "Show Dev or Nightly artwork in the sidebar header.";
   const glassOpacityRatio =
     (settings.glassOpacity - MIN_GLASS_OPACITY) / (MAX_GLASS_OPACITY - MIN_GLASS_OPACITY);
   const glassOpacitySliderStyle = {
@@ -427,7 +483,7 @@ export function AppearanceSettingsPanel() {
         {showEnvironmentIdentification ? (
           <SettingsRow
             {...searchableSetting("environment-identification")}
-            description="Choose how Dev and Nightly environments are identified."
+            description={environmentIdentificationDescription}
             resetAction={
               settings.environmentIdentificationMode !== DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE ? (
                 <SettingResetButton
@@ -460,12 +516,10 @@ export function AppearanceSettingsPanel() {
                   className="w-full sm:w-40"
                   aria-label="Environment identification"
                 >
-                  <SelectValue>
-                    {ENVIRONMENT_IDENTIFICATION_LABELS[settings.environmentIdentificationMode]}
-                  </SelectValue>
+                  <SelectValue>{environmentIdentificationLabel}</SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
-                  {Object.entries(ENVIRONMENT_IDENTIFICATION_LABELS).map(([value, label]) => (
+                  {environmentIdentificationOptionList.map(([value, label]) => (
                     <SelectItem hideIndicator key={value} value={value}>
                       {label}
                     </SelectItem>

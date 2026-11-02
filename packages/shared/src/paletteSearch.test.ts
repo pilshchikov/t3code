@@ -162,9 +162,18 @@ describe("scoreThreadSearch", () => {
   });
 
   it("finds a branch pasted with the app's worktree prefix", () => {
-    const subject = thread("Cmd+K search", { branch: "t3/cmdk-search-v2" });
-    expect(scoreThreadSearch(foldSearchQuery("t3/cmdk-search-v2"), subject, NOW)).not.toBeNull();
-    expect(scoreThreadSearch(foldSearchQuery("t3/cmdk"), subject, NOW)).not.toBeNull();
+    for (const prefix of ["spilshchikov", "t3", "t3code"]) {
+      const subject = thread("Improve search", { branch: `${prefix}/cmdk-search-v2` });
+      expect(
+        scoreThreadSearch(foldSearchQuery(`${prefix}/cmdk-search-v2`), subject, NOW),
+      ).not.toBeNull();
+      expect(scoreThreadSearch(foldSearchQuery(`${prefix}/cmdk`), subject, NOW)).not.toBeNull();
+      expect(scoreThreadSearch("cmdk", subject, NOW)?.explain?.()).toEqual({
+        label: "Branch",
+        text: "cmdk-search-v2",
+        ranges: [{ start: 0, end: 4 }],
+      });
+    }
   });
 
   it("ranks a title holding the words above the app's own branch prefix and project name", () => {
