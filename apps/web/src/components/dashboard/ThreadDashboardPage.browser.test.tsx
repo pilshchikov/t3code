@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
   listeners: new Set<() => void>(),
 }));
 vi.mock(import("../../state/entities"), () => ({
+  useHiddenThreadKeys: () => new Set<string>(),
   useQuietThreadShells: () =>
     useSyncExternalStore(
       (listener) => {

@@ -8,7 +8,7 @@ import {
   type ThreadQueueResult,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { queuedRunsInDeliveryOrder } from "../orchestration-v2/QueuedRunOrder.ts";
@@ -33,7 +33,7 @@ export class ThreadQueue extends Context.Service<
   }
 >()("t3/mcp/ThreadQueue") {}
 const make = Effect.gen(function* () {
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
   const threadManagement = yield* ThreadManagementService.ThreadManagementService;
   return ThreadQueue.of({
     manage: Effect.fn("ThreadQueue.manage")(function* (scope, input) {
@@ -115,7 +115,7 @@ const make = Effect.gen(function* () {
               "mcp-queue",
               scope.requestNamespace,
               input.action,
-              input.clientRequestId ?? (yield* crypto.randomUUIDv4().pipe(Effect.orDie)),
+              input.clientRequestId ?? (yield* random.uuidV4()),
             ]
               .map(encodeURIComponent)
               .join(":"),

@@ -2,6 +2,7 @@ import { type PointerEvent as ReactPointerEvent } from "react";
 import { ResumeSessionsSection } from "./sidebar/ResumeSessionsSection";
 import { PROJECT_JUMP_KEYBINDING_COMMANDS } from "@t3tools/contracts";
 import { liveShellEnvironmentIdsAtom } from "../state/shell";
+import { attachSidebarTree } from "../lib/sidebarTree";
 import { type EnvironmentId, type ScopedProjectRef } from "@t3tools/contracts";
 import type { EnvironmentServerConfig } from "@t3tools/client-runtime/connection";
 import { ThreadContextDragGhost } from "./chat/ThreadContextDragGhost";
@@ -1676,6 +1677,15 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     };
   };
 
+  const attachTreeRef = (node: HTMLUListElement) => {
+    const detachMotion = attachListMotionRef(node);
+    const detachTree = attachSidebarTree(node);
+    return () => {
+      detachTree?.();
+      detachMotion();
+    };
+  };
+
   const isContextDrag = dragState?.contextDrag === true || dragState?.activeSection === "working";
   const dragTargetSection = isContextDrag ? null : (dragState?.targetSection ?? null);
   const finishThreadDrag = (started: boolean) => {
@@ -3138,19 +3148,19 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                                 {projectSlotLabels[slot - 1] ?? slot}
                               </Kbd>
                             )}
-                            {project && showProjectEnvironments ? (
-                              <ProjectEnvironmentBadge
-                                group={project}
-                                primaryEnvironmentId={primaryEnvironmentId}
-                                machineByEnvironmentId={environmentMachineById}
-                              />
-                            ) : null}
                             {project && canPinProject(project) ? (
                               <ProjectPinButton
                                 name={project.displayName}
                                 pinned={project.pinned}
                                 shortcutLabel={shortcutLabelForCommand(keybindings, "thread.pin")}
                                 onToggle={() => toggleProjectGroupPin(project)}
+                              />
+                            ) : null}
+                            {project && showProjectEnvironments ? (
+                              <ProjectEnvironmentBadge
+                                group={project}
+                                primaryEnvironmentId={primaryEnvironmentId}
+                                machineByEnvironmentId={environmentMachineById}
                               />
                             ) : null}
                             {project ? (
@@ -3302,7 +3312,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               >
                 <SortableContext items={sortableIds} strategy={sidebarSortingStrategy}>
                   <ul
-                    ref={attachListMotionRef}
+                    ref={attachTreeRef}
                     // Presentation flattens VoiceOver's list interaction boundary while preserving descendant
                     // controls.
                     role="presentation"
@@ -3559,6 +3569,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                       <li className="list-none">
                         <button
                           type="button"
+                          data-sidebar-row="settled:more"
+                          data-sidebar-parent="shelf:settled"
                           disabled={olderSettledShelf.loading}
                           onClick={() => {
                             olderSettledShelf.retry();

@@ -1,3 +1,4 @@
+import * as NodePlatformCrypto from "@effect/platform-node/NodeCrypto";
 import * as ProjectCloneTracker from "../../../project/ProjectCloneTracker.ts";
 import { RemoteDelegation } from "../../../peer/RemoteDelegation.ts";
 import { PeerLinkRequests } from "../../../peer/PeerLinkRequests.ts";
@@ -202,9 +203,9 @@ it.effect("production mcp layer lists worktree tools over http", () =>
       Layer.mergeAll(
         NodeHttpServer.layerTest,
         ServerConfig.layerTest(process.cwd(), { prefix: "t3-worktree-mcp-" }).pipe(
-          Layer.provide(NodeServices.layer),
+          Layer.provide(Layer.mergeAll(NodeServices.layer, NodePlatformCrypto.layer)),
         ),
-        NodeServices.layer,
+        Layer.mergeAll(NodeServices.layer, NodePlatformCrypto.layer),
       ),
     ),
   ),

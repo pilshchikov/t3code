@@ -21,7 +21,7 @@ import { useClientSettings } from "../../hooks/useSettings";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useNowMinute } from "../../hooks/useNowMinute";
 import { useSidebarProjectScope } from "../../hooks/useSidebarProjectScope";
-import { useQuietThreadShells } from "../../state/entities";
+import { useQuietThreadShells, useHiddenThreadKeys } from "../../state/entities";
 import { useEnvironments, useEnvironmentProviders } from "../../state/environments";
 import { useUiStateStore } from "../../uiStateStore";
 import { useThreadSelectionStore } from "../../threadSelectionStore";
@@ -81,6 +81,7 @@ function Status({ status }: { status: DashboardStatus }) {
 
 export function ThreadDashboardPage() {
   const threads = useQuietThreadShells();
+  const hiddenThreadKeys = useHiddenThreadKeys();
   const { projectGroups } = useSidebarProjectGroups();
   const { environments } = useEnvironments();
   const providers = useEnvironmentProviders();
@@ -104,6 +105,7 @@ export function ThreadDashboardPage() {
   );
   const collected = collectDashboardItems({
     threads,
+    hiddenThreadKeys,
     projects: projectGroups,
     localVisits,
     now: Date.parse(`${now}Z`),

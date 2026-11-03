@@ -4,6 +4,7 @@ import { EnvironmentAuthenticatedAuth } from "@t3tools/contracts";
 import { AuthSessionId } from "@t3tools/contracts";
 import { HttpServerRequest } from "effect/http";
 import * as Tracer from "effect/Tracer";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   AuthTokenExchangeGrantType,
@@ -13,7 +14,7 @@ import {
 } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -62,11 +63,11 @@ const layerRoutes = HttpApiBuilder.layer(AuthTestApi).pipe(
   Layer.provide(layerConfig),
   Layer.provideMerge(
     HttpPlatform.layer.pipe(
-      Layer.provideMerge(NodeServices.layer),
+      Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
       Layer.provideMerge(Etag.layerWeak),
     ),
   ),
-  Layer.provide(NodeServices.layer),
+  Layer.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
 );
 
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
@@ -79,7 +80,7 @@ const postJson = (path: string, body: unknown, headers?: Readonly<Record<string,
 
 it.effect("sets the selected browser session cookies through the HTTP route", () =>
   Effect.gen(function* () {
-    const crypto = yield* Crypto.Crypto;
+    const random = yield* SecureRandom.SecureRandom;
     const unusedSecretStore = ServerSecretStore.ServerSecretStore.of({
       get: () => Effect.succeedNone,
       set: () => Effect.void,
@@ -87,7 +88,7 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
       getOrCreateRandom: () => Effect.die("Not used by these routes."),
       remove: () => Effect.void,
     });
-    const requestContext = Context.make(Crypto.Crypto, crypto).pipe(
+    const requestContext = Context.make(SecureRandom.SecureRandom, random).pipe(
       Context.add(ServerSecretStore.ServerSecretStore, unusedSecretStore),
     );
     return yield* Effect.acquireUseRelease(
@@ -161,7 +162,7 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
       ([environmentA, environmentB]) =>
         Effect.promise(() => Promise.all([environmentA.dispose(), environmentB.dispose()])),
     );
-  }).pipe(Effect.provide(NodeServices.layer)),
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
 );
 
 it.effect("exports only verified T3 Connect requests", () =>
@@ -243,7 +244,7 @@ it.effect(
   "edits a paired browser's permissions without re-pairing and enforces the new grant",
   () =>
     Effect.gen(function* () {
-      const crypto = yield* Crypto.Crypto;
+      const cryptoContext = yield* Layer.build(NodeCrypto.layer);
       const unusedSecretStore = ServerSecretStore.ServerSecretStore.of({
         get: () => Effect.succeedNone,
         set: () => Effect.void,
@@ -251,8 +252,10 @@ it.effect(
         getOrCreateRandom: () => Effect.die("Not used by these routes."),
         remove: () => Effect.void,
       });
-      const context = Context.make(Crypto.Crypto, crypto).pipe(
-        Context.add(ServerSecretStore.ServerSecretStore, unusedSecretStore),
+      const context = Context.add(
+        cryptoContext,
+        ServerSecretStore.ServerSecretStore,
+        unusedSecretStore,
       );
       return yield* Effect.acquireUseRelease(
         Effect.sync(() => HttpRouter.toWebHandler(layerRoutes, { disableLogger: true })),

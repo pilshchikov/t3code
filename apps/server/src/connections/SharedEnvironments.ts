@@ -22,10 +22,11 @@ import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/socket/Socket";
-import * as NodeSocket from "@effect/platform-node/NodeSocket";
+import * as NodeWS from "@effect/platform-node/NodeWS";
 import {
   HttpClient,
   HttpClientRequest,
+  HttpMethod,
   HttpClientResponse,
   HttpServerRequest,
   HttpServerResponse,
@@ -340,7 +341,7 @@ const make = Effect.gen(function* () {
         const upstream = yield* Socket.makeWebSocket(upstreamUrl.href, {
           headers: outgoingHeaders,
           openTimeout: "10 seconds",
-        }).pipe(Effect.provide(NodeSocket.layerWebSocketConstructorWS));
+        }).pipe(Effect.provide(NodeWS.layerWebSocketConstructor));
         const socket = yield* request.upgrade;
         yield* Effect.scoped(
           Effect.gen(function* () {
@@ -354,6 +355,8 @@ const make = Effect.gen(function* () {
         ).pipe(Effect.ignoreCause);
         return HttpServerResponse.empty();
       }
+      if (!HttpMethod.isHttpMethod(request.method))
+        return HttpServerResponse.empty({ status: 405 });
       const scopedClient = HttpClient.withScope(client);
       const outbound = HttpClientRequest.make(request.method)(upstreamUrl.href).pipe(
         HttpClientRequest.setHeaders(outgoingHeaders),

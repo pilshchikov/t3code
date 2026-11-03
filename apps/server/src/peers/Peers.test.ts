@@ -1,3 +1,4 @@
+import * as NodePlatformCrypto from "@effect/platform-node/NodeCrypto";
 import { peerEnvironmentSnapshot } from "@t3tools/shared/peerEnvironmentSnapshot";
 // @effect-diagnostics nodeBuiltinImport:off - modes, symlinks and random bytes need node:fs.
 import * as NodeCrypto from "node:crypto";
@@ -63,7 +64,7 @@ const layerTest = Peers.layer.pipe(
       Layer.provide(VcsProcess.layer),
     ),
   ),
-  Layer.provideMerge(NodeServices.layer),
+  Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodePlatformCrypto.layer)),
 );
 
 const makeFolders = Effect.acquireRelease(

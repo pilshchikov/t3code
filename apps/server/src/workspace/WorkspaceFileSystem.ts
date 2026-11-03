@@ -19,6 +19,7 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 import { isNetworkPath } from "@t3tools/shared/path";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -550,36 +551,44 @@ export const make = Effect.gen(function* () {
         const watchedDirectory = path.dirname(target.realTargetPath);
         const watchedFile = path.basename(target.realTargetPath);
         const watchedPath = path.resolve(target.realTargetPath);
-        const pullChanges = yield* Stream.toPull(fileSystem.watch(watchedDirectory));
-        const changes = Stream.fromPull(Effect.succeed(pullChanges)).pipe(
-          Stream.filter(
-            (event) =>
-              event.path === watchedFile ||
-              event.path === watchedPath ||
-              path.resolve(watchedDirectory, event.path) === watchedPath,
+        const ready = yield* Deferred.make<void>();
+        const changes = fileSystem
+          .watch(watchedDirectory, {
+            onReady: () => {
+              Deferred.doneUnsafe(ready, Effect.void);
+            },
+          })
+          .pipe(
+            Stream.filter(
+              (event) =>
+                event.path === watchedFile ||
+                event.path === watchedPath ||
+                path.resolve(watchedDirectory, event.path) === watchedPath,
+            ),
+            Stream.debounce(Duration.millis(50)),
+            Stream.mapAccum(
+              () => 1,
+              (revision): readonly [number, ReadonlyArray<ProjectFileChangedEvent>] => [
+                revision + 1,
+                [{ relativePath: target.relativePath, revision }],
+              ],
+            ),
+            Stream.mapError(
+              (cause) =>
+                new WorkspaceFileSystemOperationError({
+                  workspaceRoot: input.cwd,
+                  relativePath: input.relativePath,
+                  resolvedPath: watchedPath,
+                  operationPath: watchedDirectory,
+                  operation: "watch",
+                  cause,
+                }),
+            ),
+          );
+        return Stream.merge(
+          Stream.fromEffect(Deferred.await(ready)).pipe(
+            Stream.as({ relativePath: target.relativePath, revision: 0 }),
           ),
-          Stream.debounce(Duration.millis(50)),
-          Stream.mapAccum(
-            () => 1,
-            (revision): readonly [number, ReadonlyArray<ProjectFileChangedEvent>] => [
-              revision + 1,
-              [{ relativePath: target.relativePath, revision }],
-            ],
-          ),
-          Stream.mapError(
-            (cause) =>
-              new WorkspaceFileSystemOperationError({
-                workspaceRoot: input.cwd,
-                relativePath: input.relativePath,
-                resolvedPath: watchedPath,
-                operationPath: watchedDirectory,
-                operation: "watch",
-                cause,
-              }),
-          ),
-        );
-        return Stream.concat(
-          Stream.succeed({ relativePath: target.relativePath, revision: 0 }),
           changes,
         );
       }),

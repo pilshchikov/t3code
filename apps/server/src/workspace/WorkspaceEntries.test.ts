@@ -1,3 +1,4 @@
+import * as NodePlatformCrypto from "@effect/platform-node/NodeCrypto";
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeFSP from "node:fs/promises";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -36,7 +37,7 @@ const layerTest = Layer.empty.pipe(
       prefix: "t3-workspace-entries-test-",
     }),
   ),
-  Layer.provideMerge(NodeServices.layer),
+  Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodePlatformCrypto.layer)),
 );
 
 const makeTempDir = Effect.fn(function* (opts?: { prefix?: string; git?: boolean }) {
@@ -820,6 +821,29 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceEntries", (it) => {
         const match = result.matches[0]!;
         const range = match.matchRanges[0]!;
         expect(match.lineContent.slice(range.start, range.end)).toBe("wörld");
+      }),
+    );
+
+    it.effect("keeps matches past the truncated part of a long line", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTempDir({ prefix: "t3code-workspace-content-long-line-" });
+        yield* writeTextFile(cwd, "dist/app.min.js", `${"x".repeat(600)} needleSuffix\n`);
+
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        const search = (wholeWord: boolean) =>
+          workspaceEntries.searchContents({
+            cwd,
+            query: "needle",
+            limit: 100,
+            caseSensitive: true,
+            wholeWord,
+            useRegex: false,
+          });
+
+        expect((yield* search(false)).matches).toEqual([
+          expect.objectContaining({ path: "dist/app.min.js", lineNumber: 1 }),
+        ]);
+        expect((yield* search(true)).matches).toEqual([]);
       }),
     );
 

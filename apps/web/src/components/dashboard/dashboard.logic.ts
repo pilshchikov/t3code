@@ -27,6 +27,7 @@ export function collectDashboardItems(input: {
   readonly projects: ReadonlyArray<SidebarProjectSnapshot>;
   readonly localVisits: Readonly<Record<string, string>>;
   readonly now: number;
+  readonly hiddenThreadKeys?: ReadonlySet<string>;
 }): DashboardItem[] {
   const projects = new Map(
     input.projects.flatMap((project) =>
@@ -42,6 +43,7 @@ export function collectDashboardItems(input: {
     const project = projects.get(`${thread.environmentId}:${thread.projectId}`);
     if (!project) continue;
     const key = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+    if (input.hiddenThreadKeys?.has(key)) continue;
     const phase = resolveSidebarThreadStatus(thread);
     const attention =
       phase === "request"

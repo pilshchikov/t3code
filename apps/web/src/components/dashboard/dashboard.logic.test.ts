@@ -90,6 +90,17 @@ describe("thread dashboard", () => {
       ]),
     ).toEqual([]);
     expect(
+      collectDashboardItems({
+        threads: [thread],
+        projects: dashboardProjects(),
+        localVisits: {},
+        now: Date.parse(DASHBOARD_NOW),
+        hiddenThreadKeys: new Set([
+          scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+        ]),
+      }),
+    ).toEqual([]);
+    expect(
       collect([dashboardThread({ settledAt: DASHBOARD_NOW, settledOverride: "settled" })])[0]
         ?.status,
     ).toBe("ready");

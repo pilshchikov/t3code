@@ -2,7 +2,7 @@ import * as DateTime from "effect/DateTime";
 import { RegistryProvider } from "@effect/atom-react";
 import { flushSync } from "react-dom";
 import { AudioPreview } from "../files/AudioPreview";
-import { page } from "vite-plus/test/browser";
+import { cdp, page } from "vite-plus/test/browser";
 import {
   ApprovalRequestId,
   CheckpointRef,
@@ -294,6 +294,91 @@ it.each([
   await vi.waitFor(() => expect(images()).toHaveLength(count));
   checkLayout();
 });
+
+function usageLimitEntries(resetAt: string) {
+  const threadId = ThreadId.make("usage-limit-thread");
+  const at = DateTime.makeUnsafe(CREATED_AT);
+  return deriveTimelineEntriesFromVisibleTurnItems({
+    visibleTurnItems: [
+      {
+        position: 0,
+        visibility: "local",
+        sourceThreadId: threadId,
+        sourceItemId: TurnItemId.make("usage-limit"),
+        item: {
+          id: TurnItemId.make("usage-limit"),
+          threadId,
+          runId: RunId.make("usage-limit-run"),
+          nodeId: null,
+          providerThreadId: null,
+          providerTurnId: null,
+          nativeItemRef: null,
+          parentItemId: null,
+          ordinal: 0,
+          title: null,
+          startedAt: at,
+          completedAt: at,
+          updatedAt: at,
+          type: "error",
+          status: "failed",
+          failure: {
+            class: "usage_limit",
+            message: "You've hit your usage limit.",
+            code: null,
+            retryable: true,
+            resetAt,
+          },
+        },
+      },
+    ],
+    optimisticMessages: [],
+  });
+}
+
+describe("MessagesTimeline usage limit notice", () => {
+  it("labels the retry time with the viewer's timezone", async () => {
+    await using screen = await renderTimeline(usageLimitEntries("2026-03-17T19:30:00.000Z"));
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(screen.text()).toMatch(/Usage limit reached\. Retry after .+\./);
+    expect(screen.text()).toContain(`(${timeZone})`);
+  });
+
+  it("keeps the retry time in the named zone after the viewer's timezone changes", async () => {
+    const resetAt = "2026-07-01T19:30:00.000Z";
+    const session = cdp();
+    await session.send("Emulation.setTimezoneOverride", { timezoneId: "Europe/Madrid" });
+    try {
+      {
+        await using _madrid = await renderTimeline(usageLimitEntries(resetAt));
+      }
+      await session.send("Emulation.setTimezoneOverride", { timezoneId: "America/New_York" });
+      await using screen = await renderTimeline(usageLimitEntries(resetAt));
+      const newYorkTime = new Date(resetAt).toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: "America/New_York",
+      });
+      expect(screen.text()).toContain(`${newYorkTime} (America/New_York)`);
+    } finally {
+      await session.send("Emulation.setTimezoneOverride", { timezoneId: "" });
+    }
+  });
+});
+
+const CITATION_REQUEST = {
+  key: "activation-1",
+  citation: {
+    version: 1,
+    environmentId: ENVIRONMENT_ID,
+    threadId: ThreadId.make("thread-cited"),
+    messageId: MessageId.make("cited"),
+    text: "the cited answer",
+    start: 0,
+    end: 16,
+    prefix: "",
+    suffix: "",
+  },
+} satisfies NonNullable<TimelineProps["citationRequest"]>;
 
 describe("MessagesTimeline work rows", () => {
   it.each([
@@ -587,6 +672,54 @@ describe("MessagesTimeline work rows", () => {
 });
 
 describe("MessagesTimeline work rows", () => {
+  it("keeps the worked-for heading in place when expanded at the bottom", async () => {
+    const props = baseProps();
+    const runId = RunId.make("completed-run");
+    const container = document.createElement("div");
+    container.style.cssText = "height: 300px; width: 900px; display: flex; flex-direction: column;";
+    await using screen = await render(
+      <MessagesTimeline
+        {...props}
+        latestRun={{
+          runId,
+          status: "completed",
+          startedAt: CREATED_AT,
+          completedAt: "2026-03-17T19:12:38.000Z",
+        }}
+        timelineEntries={[
+          ...Array.from({ length: 4 }, (_, index) =>
+            message(
+              `Earlier context ${index}\nMore context\nFinal context`,
+              {},
+              `context-${index}`,
+            ),
+          ),
+          message("I will check the details.", { role: "assistant", runId }, "intro"),
+          message("Progress details\n\n".repeat(50), { role: "assistant", runId }, "progress"),
+          message("Done", { role: "assistant", runId }, "final"),
+        ]}
+      />,
+      { container },
+    );
+    const heading = screen.getByRole("button", { name: /^Worked for/ });
+    await expect.element(heading).toBeVisible();
+    const viewport = props.listRef.current!.getScrollableNode()!;
+    await vi.waitFor(() =>
+      expect(viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThan(2),
+    );
+    expect(viewport.scrollTop).toBeGreaterThan(0);
+    const top = heading.element().getBoundingClientRect().top;
+    const height = viewport.scrollHeight;
+    await heading.click();
+    await vi.waitFor(() => {
+      expect(viewport.scrollHeight).toBeGreaterThan(height + 500);
+      expect(heading.element().getBoundingClientRect().top).toBeCloseTo(top, 0);
+      expect(viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeGreaterThan(
+        500,
+      );
+    });
+  });
+
   it.each(["delegated", "legacy", "missing"] as const)(
     "uses the reported task for %s completion notifications",
     async (source) => {
@@ -2374,21 +2507,6 @@ it("renders automatic compaction as one live divider that finishes with its reas
   expect(container.querySelectorAll('[role="separator"]')).toHaveLength(1);
   expect(container.textContent).not.toContain("Compacting before");
 });
-
-const CITATION_REQUEST = {
-  key: "activation-1",
-  citation: {
-    version: 1,
-    environmentId: ENVIRONMENT_ID,
-    threadId: ThreadId.make("thread-cited"),
-    messageId: MessageId.make("cited"),
-    text: "the cited answer",
-    start: 0,
-    end: 16,
-    prefix: "",
-    suffix: "",
-  },
-} satisfies NonNullable<TimelineProps["citationRequest"]>;
 
 describe("MessagesTimeline citations", () => {
   it("lands a citation present at mount under StrictMode", async () => {

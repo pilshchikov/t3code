@@ -17,6 +17,7 @@ import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as ClaudeSdk from "@anthropic-ai/claude-agent-sdk";
 import { describe, expect, it } from "@effect/vitest";
 import { vi } from "vite-plus/test";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NodeOS from "node:os";
 import {
@@ -184,7 +185,7 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
         endpoint: Effect.succeed("unused-private-pipe"),
       }),
     ),
-    Layer.provideMerge(NodeServices.layer),
+    Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
     Layer.provideMerge(
       Layer.mock(CodexInstallation.CodexInstallation)({
         managedDirectory: "unused-managed-installation",
@@ -828,7 +829,7 @@ describe("ProviderInstanceRegistry — all drivers slice", () => {
         endpoint: Effect.succeed("unused-private-pipe"),
       }),
     ),
-    Layer.provideMerge(NodeServices.layer),
+    Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
     Layer.provideMerge(Layer.mock(SecretResolver.SecretResolver)({})),
     Layer.provideMerge(
       Layer.mock(CodexInstallation.CodexInstallation)({

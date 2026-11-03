@@ -1,5 +1,36 @@
 # Fork Changes
 
+## Reviewed upstream integration — 2026-11-02 (bb221f0e1f)
+
+- Integrate the reviewed 151 commits through `bb221f0e1f50001e296fa3269bb75e2ea88e573a`
+  after auditing 161 overlapping files and 34 simulated conflicts. Adopt upstream sidebar
+  keyboard/screen-reader navigation, centralized provider model-cache invalidation,
+  native/npm Claude maintenance, parent-session environment stripping, SDK fork-history
+  and native-subagent recovery fixes, narrower database reads and Git/diff correctness.
+- Replace the unused retained sidebar focus helper in `apps/web/src/lib/sidebarTree.ts` and attach upstream navigation to the
+  fork's flat list. Keep project rail groups/settlement, manual ordering, project slots,
+  dashboards, multi-directory projects and explicit workspace/worktree selection. Combine
+  per-checkout grouping controls with directory/attachment controls in `ProjectSettingsPanel.tsx`. Apply tag hiding to
+  the dashboard and project-rail status inputs as well as upstream lists; preserve the
+  dashboard's quiet shell subscription to avoid streaming-driven re-renders.
+- Preserve separate Claude HOME/config directories, account-aware history workers,
+  native subagent effort, fresh explicit quota refreshes, Mythos/Terra, OpenIDEA/custom
+  commands and grants, complete lazy diff overviews, table/image containment, connected
+  environment and usage tools, agent queue controls, mobile relay and bundled SSH updates.
+  Adapt fork-owned UUID services and the header-preserving mobile relay to Effect 4.1.2.
+  In `WorkspaceFileSystem.ts`, wait for native watcher readiness before announcing file-preview subscriptions; the new
+  lazy watcher otherwise loses the first external edit. Keep external analytics/exporters disabled,
+  update/version discovery opt-in, summary-only compaction and fork cleanup defaults.
+- Retain all released migration IDs/names and compatibility steps. Append upstream boolean
+  settlement repair and correlation-index removal as fork migrations 82/83. Keep the
+  automatic IdleCompactionService deleted.
+- Validation: all changed-file checks pass, including 8,436 tests across 403 selected files
+  (nine tests and one file skipped), 40 affected package typechecks and React Compiler checks.
+  The 281 focused preservation tests, four model-tool request constructions and isolated
+  full-client navigation/rendering checks pass. Live model evals need an unavailable API key;
+  native mobile lint is blocked by missing SwiftLint, ktlint and detekt. Rebuild/stage the app
+  without restarting active local or remote work.
+
 ## Claude Mythos model catalog — 2026-11-02
 
 - Add current `claude-mythos-5-1` and legacy `claude-mythos-5` to

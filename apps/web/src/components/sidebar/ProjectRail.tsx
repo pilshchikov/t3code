@@ -33,7 +33,7 @@ import {
   resolveSidebarProjectScopeKey,
   type SidebarProjectSnapshot,
 } from "../../sidebarProjectGrouping";
-import { useProjects, useThreadShells } from "../../state/entities";
+import { useProjects, useVisibleThreadShells } from "../../state/entities";
 import { useUiStateStore } from "../../uiStateStore";
 import { cn } from "~/lib/utils";
 import { ProjectFavicon } from "../ProjectFavicon";
@@ -494,7 +494,7 @@ export const ProjectRail = memo(function ProjectRail() {
     [allProjectGroups],
   );
   const projects = useProjects();
-  const threads = useThreadShells();
+  const threads = useVisibleThreadShells();
   const railGroups = useProjectRailGroupsStore((state) => state.groups);
   const setRailGroups = useProjectRailGroupsStore((state) => state.setGroups);
   const settledProjectKeys = useProjectRailGroupsStore((state) => state.settledProjectKeys);

@@ -13,7 +13,7 @@ import {
 import type { PersistedSavedEnvironmentRecord } from "@t3tools/contracts";
 import { fromLenientJson } from "@t3tools/shared/schemaJson";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
 import * as FileSystem from "effect/FileSystem";
@@ -390,7 +390,7 @@ export const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const safeStorage = yield* ElectronSafeStorage.ElectronSafeStorage;
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
   const savedEnvironments = yield* DesktopSavedEnvironments.DesktopSavedEnvironments;
   const catalogPath = path.join(environment.stateDir, "connection-catalog.json");
   // Preserve inaccessible Keychain catalogs for an explicitly opted-in migration later.
@@ -442,8 +442,8 @@ export const make = Effect.gen(function* () {
         cause: new Error("The key for the existing local connection catalog is missing."),
       });
     }
-    const key = yield* crypto.randomBytes(32);
-    const suffix = yield* crypto.randomUUIDv4();
+    const key = yield* random.randomBytes(32);
+    const suffix = yield* random.uuidV4();
     const temporary = path.join(keyDirectory, `${suffix}.tmp`);
     return yield* Effect.gen(function* () {
       yield* Effect.scoped(
@@ -476,16 +476,7 @@ export const make = Effect.gen(function* () {
   const writeLocalCatalog = Effect.fn("desktop.connectionCatalogStore.writeLocalCatalog")(
     function* (catalog: string) {
       const key = yield* createLocalKey;
-      const nonce = yield* crypto.randomBytes(12).pipe(
-        Effect.mapError(
-          (cause) =>
-            new DesktopConnectionCatalogStoreProtectionError({
-              operation: "encrypt-catalog",
-              catalogPath: localCatalogPath,
-              cause,
-            }),
-        ),
-      );
+      const nonce = yield* random.randomBytes(12);
       const encryptedCatalog = Base64.encode(
         yield* Effect.try({
           try: () => encryptLocalCatalog(catalog, key, nonce),
@@ -497,16 +488,7 @@ export const make = Effect.gen(function* () {
             }),
         }),
       );
-      const suffix = yield* crypto.randomUUIDv4().pipe(
-        Effect.mapError(
-          (cause) =>
-            new DesktopConnectionCatalogStoreWriteError({
-              operation: "create-temporary-file-name",
-              path: localCatalogPath,
-              cause,
-            }),
-        ),
-      );
+      const suffix = yield* random.uuidV4();
       yield* writeDocument({
         fileSystem,
         path,
@@ -532,16 +514,7 @@ export const make = Effect.gen(function* () {
         ),
       ),
     );
-    const suffix = (yield* crypto.randomUUIDv4().pipe(
-      Effect.mapError(
-        (cause) =>
-          new DesktopConnectionCatalogStoreWriteError({
-            operation: "create-temporary-file-name",
-            path: catalogPath,
-            cause,
-          }),
-      ),
-    )).replace(/-/g, "");
+    const suffix = (yield* random.uuidV4()).replace(/-/g, "");
     yield* writeDocument({
       fileSystem,
       path,
