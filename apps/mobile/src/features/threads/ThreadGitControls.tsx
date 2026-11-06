@@ -1,3 +1,5 @@
+import { projectScriptMenuLabel } from "@t3tools/shared/projectScripts";
+import { basename, getTerminalStatusLabel, projectScriptMenuIcon } from "../terminal/terminalMenu";
 import { Toolbar } from "../../components/ui/Toolbar";
 import * as Dialog from "../../components/ui/Dialog";
 import { useOpenPullRequest } from "../../native/useOpenPullRequest";
@@ -92,7 +94,7 @@ export type ThreadGitMenuProps = {
   readonly onRunAction: (input: GitActionRequestInput) => Promise<GitRunStackedActionResult | null>;
 };
 
-type ThreadGitControlsProps = ThreadGitMenuProps & {
+export type ThreadGitControlsProps = ThreadGitMenuProps & {
   readonly auxiliaryPaneControl?: {
     readonly accessibilityLabel: string;
     readonly onPress: () => void;
@@ -331,6 +333,59 @@ export function ThreadGitControls(props: ThreadGitControlsProps) {
 export function ThreadGitMenu(props: ThreadGitMenuProps) {
   const menu = useThreadGitMenuDefinition(props);
   return menu ? createNativeHeaderMenu(menu) : null;
+}
+
+export function threadTerminalMenu(props: ThreadGitControlsProps): AppBarMenu | null {
+  if (!props.canOpenTerminal) return null;
+  return {
+    title: "Terminal",
+    icon: "terminal",
+    separateBackground: false,
+    items: [
+      ...(props.projectScripts.length > 0
+        ? props.projectScripts.map((script) => ({
+            id: `script-${script.id}`,
+            title: projectScriptMenuLabel(script),
+            icon: projectScriptMenuIcon(script.icon),
+            subtitle: script.command,
+            disabled: !props.canOperateTerminal,
+            onPress: () => void props.onRunProjectScript(script),
+          }))
+        : [
+            {
+              id: "script-none",
+              title: "No project scripts",
+              icon: "play",
+              subtitle: "This project has no saved scripts yet",
+              disabled: true,
+              onPress: () => {},
+            },
+          ]),
+      ...props.terminalSessions.map((session) => ({
+        id: `terminal-${session.terminalId}`,
+        title: session.displayLabel,
+        icon: "terminal",
+        subtitle: [
+          getTerminalStatusLabel({
+            status: session.status,
+            hasRunningSubprocess: session.hasRunningSubprocess,
+          }),
+          basename(session.cwd),
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        onPress: () => props.onOpenTerminal(session.terminalId),
+      })),
+      {
+        id: "terminal-new",
+        title: "Open new terminal",
+        icon: "plus",
+        subtitle: "Start another shell for this thread",
+        disabled: !props.canOperateTerminal,
+        onPress: props.onOpenNewTerminal,
+      },
+    ],
+  };
 }
 
 /** Returns menu data because native toolbars serialize direct items rather than rendering component children. */

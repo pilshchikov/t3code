@@ -34,6 +34,10 @@ import * as AuthHttp from "./http.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 
 const DEV_TOKEN = "reusable-dev-auth-token-that-is-long-enough";
+class AuthBoundaryTestError extends Schema.TaggedError<AuthBoundaryTestError>()(
+  "AuthBoundaryTestError",
+  { cause: Schema.Defect() },
+) {}
 class AuthTestApi extends HttpApi.make("environment").add(EnvironmentHttpApi.groups.auth) {}
 
 const layerConfig = Layer.effect(
@@ -100,7 +104,7 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
           ] as const,
       ),
       ([environmentA, environmentB]) =>
-        Effect.tryPromise(async () => {
+        Effect.promise(async () => {
           const devResponse = await environmentA.handler(
             postJson("/api/auth/browser-session", { credential: DEV_TOKEN }),
             requestContext,
@@ -163,6 +167,145 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
         Effect.promise(() => Promise.all([environmentA.dispose(), environmentB.dispose()])),
     );
   }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+);
+
+it.effect.each(["DPoP", "dpop"])("challenges a refused %s request with DPoP", (scheme) =>
+  Effect.gen(function* () {
+    const random = yield* SecureRandom.SecureRandom;
+    const unusedSecretStore = ServerSecretStore.ServerSecretStore.of({
+      get: () => Effect.succeedNone,
+      set: () => Effect.void,
+      create: () => Effect.void,
+      getOrCreateRandom: () => Effect.die("Not used by these routes."),
+      remove: () => Effect.void,
+    });
+    const requestContext = Context.make(SecureRandom.SecureRandom, random).pipe(
+      Context.add(ServerSecretStore.ServerSecretStore, unusedSecretStore),
+    );
+    return yield* Effect.acquireUseRelease(
+      Effect.sync(() => HttpRouter.toWebHandler(layerRoutes, { disableLogger: true })),
+      (environment) =>
+        Effect.promise(async () => {
+          const refused = await environment.handler(
+            postJson(
+              "/api/auth/pairing-token",
+              { scopes: ["orchestration:read"] },
+              { authorization: `${scheme} not-a-valid-token` },
+            ),
+            requestContext,
+          );
+          expect(refused.status).toBe(401);
+          expect(refused.headers.get("www-authenticate")).toBe("DPoP");
+        }),
+      (environment) => Effect.promise(() => environment.dispose()),
+    );
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+);
+
+it.effect(
+  "edits a paired browser's permissions without re-pairing and enforces the new grant",
+  () =>
+    Effect.gen(function* () {
+      const cryptoContext = yield* Layer.build(NodeCrypto.layer);
+      const unusedSecretStore = ServerSecretStore.ServerSecretStore.of({
+        get: () => Effect.succeedNone,
+        set: () => Effect.void,
+        create: () => Effect.void,
+        getOrCreateRandom: () => Effect.die("Not used by these routes."),
+        remove: () => Effect.void,
+      });
+      const context = Context.add(
+        cryptoContext,
+        ServerSecretStore.ServerSecretStore,
+        unusedSecretStore,
+      );
+      return yield* Effect.acquireUseRelease(
+        Effect.sync(() => HttpRouter.toWebHandler(layerRoutes, { disableLogger: true })),
+        ({ handler }) =>
+          Effect.tryPromise({
+            try: async () => {
+              const ownerResponse = await handler(
+                postJson("/api/auth/browser-session", { credential: DEV_TOKEN }),
+                context,
+              );
+              const ownerCookie = ownerResponse.headers
+                .getSetCookie()
+                .filter((value) => !value.includes("Max-Age=0"))
+                .map((value) => value.split(";")[0])
+                .join("; ");
+              const owner = { cookie: ownerCookie };
+              const pairingResponse = await handler(
+                postJson(
+                  "/api/auth/pairing-token",
+                  { scopes: ["orchestration:read"], label: "Phone" },
+                  owner,
+                ),
+                context,
+              );
+              expect(pairingResponse.status).toBe(200);
+              const pairing = (await pairingResponse.json()) as { credential: string };
+              const phoneResponse = await handler(
+                postJson("/api/auth/browser-session", { credential: pairing.credential }),
+                context,
+              );
+              expect(phoneResponse.status).toBe(200);
+              const phone = {
+                cookie: phoneResponse.headers
+                  .getSetCookie()
+                  .filter((value) => !value.includes("Max-Age=0"))
+                  .map((value) => value.split(";")[0])
+                  .join("; "),
+              };
+              const list = async (headers: Record<string, string>) =>
+                handler(new Request("http://127.0.0.1/api/auth/clients", { headers }), context);
+              expect((await list(phone)).status).toBe(403);
+              const initial = (await (await list(owner)).json()) as Array<{
+                sessionId: string;
+                current: boolean;
+                client: unknown;
+              }>;
+              const target = initial.find((client) => !client.current)!;
+              const current = initial.find((client) => client.current)!;
+              expect(target).toBeDefined();
+              const update = (sessionId: string, scopes: string[], headers = owner) =>
+                handler(
+                  postJson("/api/auth/clients/scopes", { sessionId, scopes }, headers),
+                  context,
+                );
+              expect((await update(target.sessionId, ["access:write"], phone)).status).toBe(403);
+              expect((await update(current.sessionId, ["orchestration:read"])).status).toBe(403);
+              expect((await update(target.sessionId, [])).status).toBe(400);
+              expect(
+                (await update(target.sessionId, ["orchestration:read", "orchestration:read"]))
+                  .status,
+              ).toBe(400);
+              const updated = await update(target.sessionId, [
+                "orchestration:read",
+                "filesystem:read",
+                "access:read",
+                "relay:read",
+              ]);
+              expect(updated.status).toBe(200);
+              expect(await updated.json()).toEqual({ updated: true });
+              expect(updated.headers.getSetCookie()).toEqual([]);
+              expect((await list(phone)).status).toBe(200);
+              const after = (await (await list(owner)).json()) as Array<{
+                sessionId: string;
+                permissions: string[];
+                client: unknown;
+              }>;
+              expect(after.find((client) => client.sessionId === target.sessionId)).toMatchObject({
+                client: target.client,
+                permissions: ["orchestration:read", "filesystem:read", "access:read", "relay:read"],
+              });
+              expect((await update(target.sessionId, ["orchestration:read"])).status).toBe(200);
+              expect((await list(phone)).status).toBe(403);
+            },
+            catch: (cause) => new AuthBoundaryTestError({ cause }),
+          }),
+        ({ dispose }) => Effect.promise(() => dispose()),
+      );
+    }).pipe(Effect.provide(NodeServices.layer)),
 );
 
 it.effect("exports only verified T3 Connect requests", () =>
@@ -238,106 +381,4 @@ it.effect("exports only verified T3 Connect requests", () =>
     expect(productSpans).toEqual([]);
     expect(localSpans).toEqual(["EnvironmentAuth.authenticateHttpRequest", "environment.handler"]);
   }).pipe(Effect.scoped),
-);
-
-it.effect(
-  "edits a paired browser's permissions without re-pairing and enforces the new grant",
-  () =>
-    Effect.gen(function* () {
-      const cryptoContext = yield* Layer.build(NodeCrypto.layer);
-      const unusedSecretStore = ServerSecretStore.ServerSecretStore.of({
-        get: () => Effect.succeedNone,
-        set: () => Effect.void,
-        create: () => Effect.void,
-        getOrCreateRandom: () => Effect.die("Not used by these routes."),
-        remove: () => Effect.void,
-      });
-      const context = Context.add(
-        cryptoContext,
-        ServerSecretStore.ServerSecretStore,
-        unusedSecretStore,
-      );
-      return yield* Effect.acquireUseRelease(
-        Effect.sync(() => HttpRouter.toWebHandler(layerRoutes, { disableLogger: true })),
-        ({ handler }) =>
-          Effect.tryPromise(async () => {
-            const ownerResponse = await handler(
-              postJson("/api/auth/browser-session", { credential: DEV_TOKEN }),
-              context,
-            );
-            const ownerCookie = ownerResponse.headers
-              .getSetCookie()
-              .filter((value) => !value.includes("Max-Age=0"))
-              .map((value) => value.split(";")[0])
-              .join("; ");
-            const owner = { cookie: ownerCookie };
-            const pairingResponse = await handler(
-              postJson(
-                "/api/auth/pairing-token",
-                { scopes: ["orchestration:read"], label: "Phone" },
-                owner,
-              ),
-              context,
-            );
-            expect(pairingResponse.status).toBe(200);
-            const pairing = (await pairingResponse.json()) as { credential: string };
-            const phoneResponse = await handler(
-              postJson("/api/auth/browser-session", { credential: pairing.credential }),
-              context,
-            );
-            expect(phoneResponse.status).toBe(200);
-            const phone = {
-              cookie: phoneResponse.headers
-                .getSetCookie()
-                .filter((value) => !value.includes("Max-Age=0"))
-                .map((value) => value.split(";")[0])
-                .join("; "),
-            };
-            const list = async (headers: Record<string, string>) =>
-              handler(new Request("http://127.0.0.1/api/auth/clients", { headers }), context);
-            expect((await list(phone)).status).toBe(403);
-            const initial = (await (await list(owner)).json()) as Array<{
-              sessionId: string;
-              current: boolean;
-              client: unknown;
-            }>;
-            const target = initial.find((client) => !client.current)!;
-            const current = initial.find((client) => client.current)!;
-            expect(target).toBeDefined();
-            const update = (sessionId: string, scopes: string[], headers = owner) =>
-              handler(
-                postJson("/api/auth/clients/scopes", { sessionId, scopes }, headers),
-                context,
-              );
-            expect((await update(target.sessionId, ["access:write"], phone)).status).toBe(403);
-            expect((await update(current.sessionId, ["orchestration:read"])).status).toBe(403);
-            expect((await update(target.sessionId, [])).status).toBe(400);
-            expect(
-              (await update(target.sessionId, ["orchestration:read", "orchestration:read"])).status,
-            ).toBe(400);
-            const updated = await update(target.sessionId, [
-              "orchestration:read",
-              "filesystem:read",
-              "access:read",
-              "relay:read",
-            ]);
-            expect(updated.status).toBe(200);
-            expect(await updated.json()).toEqual({ updated: true });
-            expect(updated.headers.getSetCookie()).toEqual([]);
-            expect((await list(phone)).status).toBe(200);
-            const after = (await (await list(owner)).json()) as Array<{
-              sessionId: string;
-              permissions: string[];
-              client: unknown;
-            }>;
-            expect(after.find((client) => client.sessionId === target.sessionId)).toMatchObject({
-              client: target.client,
-              permissions: ["orchestration:read", "filesystem:read", "access:read", "relay:read"],
-            });
-            expect((await update(target.sessionId, ["orchestration:read"])).status).toBe(200);
-            expect((await list(phone)).status).toBe(403);
-          }),
-        ({ dispose }) => Effect.promise(() => dispose()),
-      );
-    }).pipe(Effect.provide(NodeServices.layer)),
 );

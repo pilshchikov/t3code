@@ -1,3 +1,4 @@
+import { useStableCallback } from "~/hooks/useStableCallback";
 import { isTestChangedFile } from "@t3tools/shared/changedFileKind";
 import { useHideTestFiles } from "./diffs/useHideTestFiles";
 import { toolCallDiff } from "../lib/toolCallDiff";
@@ -141,13 +142,11 @@ function DiffFileCollapseToggle({
   filePath,
   fileKey,
   collapsed,
-  unavailable,
   onToggle,
 }: {
   filePath: string;
   fileKey: string;
   collapsed: boolean;
-  unavailable: boolean;
   onToggle: (fileKey: string) => void;
 }) {
   return (
@@ -160,7 +159,6 @@ function DiffFileCollapseToggle({
             className="-ms-0.5"
             aria-label={collapsed ? `Expand ${filePath}` : `Collapse ${filePath}`}
             aria-expanded={!collapsed}
-            disabled={unavailable}
             onClick={(event) => {
               event.stopPropagation();
               onToggle(fileKey);
@@ -393,7 +391,7 @@ export default function DiffPanel({
           ...(selectedCommitSha !== null ? { commitSha: selectedCommitSha } : {}),
           ignoreWhitespace: diffIgnoreWhitespace,
           sourceKind: activeSourceKind,
-          includePatch: false,
+          metadataOnly: true,
         }
       : undefined;
   const branchDiffPreview = useEnvironmentQuery(
@@ -546,7 +544,10 @@ export default function DiffPanel({
     null;
   // With the tree hidden the panel stacks every file and loads their patches progressively.
   // Everything else loads exactly the file on screen.
-  const showStackedPatch = !isRecordedSelection && !filesTreeOpen && diffTreeFiles.length > 1;
+  const showStackedPatch =
+    !isRecordedSelection &&
+    (!filesTreeOpen || diffTreeFiles.length === 1) &&
+    diffTreeFiles.length > 0;
   const gitPatchCwd = branchDiffPreview.data?.cwd ?? null;
   const selectedFileDiffPreview = useEnvironmentQuery(
     !isRecordedSelection && activeThread && gitPatchCwd && !showStackedPatch && resolvedTreeFilePath
@@ -566,9 +567,10 @@ export default function DiffPanel({
         })
       : null,
   );
-  const activeGitPatchSource = showStackedPatch
-    ? selectedGitSource
-    : selectedFileDiffPreview.data?.sources.find((source) => source.kind === activeSourceKind);
+  const activeGitPatchSource =
+    showStackedPatch || selectedGitSource?.files === undefined
+      ? selectedGitSource
+      : selectedFileDiffPreview.data?.sources.find((source) => source.kind === activeSourceKind);
   const refreshSelectedFilePatch = selectedFileDiffPreview.refresh;
   // Refreshing has to move both queries: the file list and the patch on screen come from separate
   // requests, so refreshing one alone leaves the other showing the previous state.
@@ -690,8 +692,15 @@ export default function DiffPanel({
   const hasResolvedPatch = typeof selectedPatch === "string";
   const hasNoNetChanges = isRecordedSelection
     ? hasResolvedPatch && selectedPatch.trim().length === 0
-    : branchDiffPreview.data !== null && diffTreeFiles.length === 0;
-  const lazySource = showStackedPatch ? (selectedGitSource ?? null) : null;
+    : branchDiffPreview.data !== null &&
+      diffTreeFiles.length === 0 &&
+      (!hasResolvedPatch || selectedPatch.trim().length === 0);
+  const lazySource =
+    showStackedPatch &&
+    selectedGitSource?.files?.length &&
+    (selectedGitSource.patchesDeferred || selectedGitSource.truncated)
+      ? selectedGitSource
+      : null;
   const renderablePatch = useMemo(
     () =>
       lazySource
@@ -719,7 +728,6 @@ export default function DiffPanel({
     fileStates,
     retry,
     requestFile,
-    readyFilePaths,
     renderableFiles,
     settledFileCount,
     loadNextFiles,
@@ -748,13 +756,18 @@ export default function DiffPanel({
 
   const isRefreshingDiff =
     branchDiffPreview.isPending || areFilePatchesPending || selectedFileDiffPreview.isPending;
-  const renderableFileEntries = useMemo(
-    () =>
-      renderableFiles
-        .filter((file) => isFileShown(resolveFileDiffPath(file)))
-        .map(getCachedFileEntry),
-    [renderableFiles, isFileShown],
-  );
+  const renderableFileEntries = useMemo(() => {
+    const occurrences = new Map<string, number>();
+    return renderableFiles
+      .filter((file) => isFileShown(resolveFileDiffPath(file)))
+      .map((file) => {
+        const pathKey = JSON.stringify([file.prevName ?? file.name, file.name]);
+        const occurrence = occurrences.get(pathKey) ?? 0;
+        occurrences.set(pathKey, occurrence + 1);
+        return { ...getCachedFileEntry(file), fileKey: `${pathKey}:${occurrence}` };
+      });
+  }, [renderableFiles, isFileShown]);
+
   const defaultCollapsedDiffFileKeys = useMemo(
     () =>
       settings.diffFilesCollapsed
@@ -796,20 +809,17 @@ export default function DiffPanel({
   );
   const codeViewFiles = useMemo(
     () =>
-      renderableFileEntries
-        .filter(({ fileDiff }) => !lazySource || readyFilePaths.has(resolveFileDiffPath(fileDiff)))
-        .map(({ fileDiff, fileKey, fileVersion }) => {
-          return {
-            fileDiff,
-            filePath: resolveFileDiffPath(fileDiff),
-            fileKey,
-            fileVersion,
-            collapsed:
-              collapsedDiffFileKeys.has(fileKey) ||
-              fileDiff.cacheKey?.endsWith(":pending") === true,
-          };
-        }),
-    [collapsedDiffFileKeys, renderableFileEntries, lazySource, readyFilePaths],
+      renderableFileEntries.map(({ fileDiff, fileKey, fileVersion }) => {
+        return {
+          fileDiff,
+          filePath: resolveFileDiffPath(fileDiff),
+          fileKey,
+          fileVersion,
+          collapsed:
+            collapsedDiffFileKeys.has(fileKey) || fileDiff.cacheKey?.endsWith(":pending") === true,
+        };
+      }),
+    [collapsedDiffFileKeys, renderableFileEntries],
   );
   const diffFileKeys = useMemo(
     () => renderableFileEntries.map((file) => file.fileKey),
@@ -842,9 +852,17 @@ export default function DiffPanel({
     ? (codeViewFiles.find((candidate) => candidate.filePath === resolvedTreeFilePath)?.fileKey ??
       null)
     : null;
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Reveal the chosen file in the imperative diff viewer.
+  const revealedSelectionRef = useRef<string | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Reveal each selection once without reopening a file the user collapses.
   useEffect(() => {
     if (!selectedDiffFileKey || !codeView?.getInstance()) return;
+    const selection = JSON.stringify([
+      collapseScopeKey,
+      selectedDiffFileKey,
+      selectedFileRevealRequestId,
+    ]);
+    if (revealedSelectionRef.current === selection) return;
+    revealedSelectionRef.current = selection;
     setCollapsedDiffFiles((current) => {
       if (!current.fileKeys.has(selectedDiffFileKey)) return current;
       const next = new Set(current.fileKeys);
@@ -884,7 +902,7 @@ export default function DiffPanel({
         return { scopeKey: collapseScopeKey, fileKeys: next };
       });
       if (lazySource && index >= settledFileCount) {
-        requestFile(index);
+        requestFile(filePath);
       }
       requestTreeReveal.request(file.fileKey);
     },
@@ -907,7 +925,7 @@ export default function DiffPanel({
     const key = `${selectedFilePath}:${selectedFileRevealRequestId}`;
     if (
       externalRevealRef.current?.cache === filePatchScope &&
-      externalRevealRef.current.key === key
+      externalRevealRef.current?.key === key
     )
       return;
     externalRevealRef.current = { cache: filePatchScope, key };
@@ -955,21 +973,18 @@ export default function DiffPanel({
       setCollapsedDiffFiles,
     };
   }, [collapseScopeKey, defaultCollapsedDiffFileKeys, setCollapsedDiffFiles]);
-  const toggleDiffFileCollapsed = useCallback((fileKey: string) => {
-    const { collapseScopeKey, defaultCollapsedDiffFileKeys, setCollapsedDiffFiles } =
-      collapseDefaultsRef.current;
+  const toggleDiffFileCollapsed = useStableCallback((fileKey: string) => {
+    const file = renderableFileEntries.find((file) => file.fileKey === fileKey);
+    if (lazySource && file) requestFile(resolveFileDiffPath(file.fileDiff));
+    const pending = file?.fileDiff.cacheKey?.endsWith(":pending") === true;
     setCollapsedDiffFiles((current) => {
-      const next = new Set(
-        current.scopeKey === collapseScopeKey ? current.fileKeys : defaultCollapsedDiffFileKeys,
-      );
-      if (next.has(fileKey)) {
-        next.delete(fileKey);
-      } else {
-        next.add(fileKey);
-      }
+      const next = new Set(current.fileKeys);
+      if (pending || next.has(fileKey)) next.delete(fileKey);
+      else next.add(fileKey);
       return { scopeKey: collapseScopeKey, fileKeys: next };
     });
-  }, []);
+  });
+
   const selectDiffFileFromTree = useCallback(
     (filePath: string) => {
       if (!diffTreeFiles.some((candidate) => candidate.path === filePath)) return;
@@ -1089,7 +1104,6 @@ export default function DiffPanel({
             filePath={resolveFileDiffPath(fileDiff)}
             fileKey={fileKey}
             collapsed={unavailable || viewerCollapsed}
-            unavailable={unavailable}
             onToggle={toggleDiffFileCollapsed}
           />
         );

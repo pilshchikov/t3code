@@ -1415,19 +1415,32 @@ export function planComposerTurn(input: {
   readonly activeThreadBranch: string | null;
   readonly phase: SessionPhase;
   readonly dispatchMode: ComposerDispatchMode;
+  /** The turn starts a new provider session, so it neither compacts first nor steers. */
+  readonly freshContext: boolean;
+  readonly resumeCompactionTokens?: number | null;
+  readonly keepFullHistory?: boolean;
 }) {
   const isFirstMessage =
     !input.sendQueuesBehindSetup && (!input.isServerThread || input.activeMessageCount === 0);
   const shouldCreateWorktree =
     isFirstMessage && input.sendEnvMode !== "local" && !input.worktreePath;
+  const compactBeforeSend = false;
+  const dispatchMode =
+    input.freshContext && (input.dispatchMode === "steer" || input.dispatchMode === "restart")
+      ? "queue"
+      : input.dispatchMode;
   return {
     // In worktree mode, require an explicit base branch so we don't silently
     // fall back to local execution when branch selection is missing.
     missingWorktreeBaseBranch: shouldCreateWorktree && !input.activeThreadBranch,
     baseBranchForWorktree: shouldCreateWorktree ? input.activeThreadBranch : null,
-    turnDispatchMode: input.sendQueuesBehindSetup ? ("queue" as const) : input.dispatchMode,
+    compactBeforeSend,
+    turnDispatchMode:
+      compactBeforeSend || input.sendQueuesBehindSetup ? ("queue" as const) : dispatchMode,
     shouldQueueBehindActiveRun:
-      input.sendQueuesBehindSetup || (input.phase === "running" && input.dispatchMode === "queue"),
+      compactBeforeSend ||
+      input.sendQueuesBehindSetup ||
+      (input.phase === "running" && dispatchMode === "queue"),
   };
 }
 

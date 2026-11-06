@@ -1,4 +1,4 @@
-import type { EnvironmentSupervisor } from "@t3tools/client-runtime/connection";
+import { EnvironmentSupervisor } from "@t3tools/client-runtime/connection";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { request, subscribe } from "@t3tools/client-runtime/rpc";
 import { WS_METHODS } from "@t3tools/contracts";
@@ -11,7 +11,7 @@ import * as Stream from "effect/Stream";
 type PeerUsageLimitsError =
   | Effect.Error<
       | ReturnType<typeof request<typeof WS_METHODS.serverGetConfig>>
-      | ReturnType<typeof request<typeof WS_METHODS.serverRefreshProviders>>
+      | ReturnType<typeof import("../rpc/peerUsageRefresh").refresh>
     >
   | Stream.Error<ReturnType<typeof subscribe<typeof WS_METHODS.subscribeServerConfig>>>
   | Cause.NoSuchElementError
@@ -24,7 +24,11 @@ export const readPeerUsageLimits = Effect.fn("web.peerUsageLimits.read")(functio
   PeerUsageLimitsError,
   EnvironmentSupervisor.EnvironmentSupervisor
 > {
-  if (refresh) yield* request(WS_METHODS.serverRefreshProviders, { fresh: true });
+  if (refresh) {
+    const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+    const rpc = yield* Effect.promise(() => import("../rpc/peerUsageRefresh"));
+    yield* rpc.refresh(supervisor.target.environmentId);
+  }
   const config = yield* request(WS_METHODS.serverGetConfig, {});
   // Hub snapshots arrive on the config stream, rather than server.getConfig.
   const sources =

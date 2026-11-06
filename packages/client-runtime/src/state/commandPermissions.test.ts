@@ -1,3 +1,4 @@
+import { AuthTerminalOperateScope } from "@t3tools/contracts";
 import { requestGuarded, runStreamGuarded } from "../rpc/client.ts";
 import { EnvironmentSupervisor } from "../connection/supervisor.ts";
 import * as SubscriptionRef from "effect/SubscriptionRef";
@@ -8,7 +9,6 @@ import { describe, expect, it } from "@effect/vitest";
 import { vi } from "vite-plus/test";
 import {
   AuthAccessReadScope,
-  AuthTerminalOperateScope,
   AuthAccessWriteScope,
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
@@ -32,7 +32,7 @@ import { Atom, AtomRegistry, AsyncResult } from "effect/reactivity";
 import { EnvironmentRegistry } from "../connection/registry.ts";
 import { createCommandPermissions } from "./commandPermissions.ts";
 import { createEnvironmentRpcCommand } from "./runtime.ts";
-import { AVAILABLE_CONNECTION_STATE } from "../connection/model.ts";
+import { AVAILABLE_CONNECTION_STATE, BearerConnectionTarget } from "../connection/model.ts";
 import { createPeerLinkEnvironmentAtoms } from "./peerLinks.ts";
 
 vi.mock("./session.ts", () => ({
@@ -68,61 +68,16 @@ const setup = Effect.gen(function* () {
 });
 
 describe("command permissions", () => {
-  it.effect("requires terminal permission only for the destination's custom editor command", () =>
+  it.effect("requires the destination read grant to refresh providers", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const registry = yield* setup;
-        const editor = createCommandPermissions(runtime, WS_METHODS.shellOpenInEditor);
-        const ordinary = { editor: "openidea", cwd: "/work/project" };
-        const custom = {
-          editor: "custom",
-          cwd: "/work/project",
-          customCommand: { command: "tool", args: [] },
-        };
+        const refresh = createCommandPermissions(runtime, WS_METHODS.serverRefreshProviders);
         registry.set(sessions(env), AsyncResult.success(grant(true)));
-        expect(registry.get(editor.permissionAtom(env, ordinary))).toBe(true);
-        expect(registry.get(editor.permissionAtom(env, custom))).toBe(false);
-        expect(
-          (yield* editor.authorize(registry, env, custom).pipe(Effect.flip)).requiredPermission,
-        ).toBe(AuthTerminalOperateScope);
-        registry.set(
-          sessions(env),
-          AsyncResult.success({
-            ...grant(true),
-            scopes: [AuthOrchestrationOperateScope, AuthTerminalOperateScope],
-            permissions: [AuthOrchestrationOperateScope, AuthTerminalOperateScope],
-          }),
+        expect(registry.get(refresh.permissionAtom(env))).toBe(false);
+        expect((yield* refresh.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
+          "EnvironmentAuthorizationError",
         );
-        yield* editor.authorize(registry, env, custom);
-        registry.set(sessions(other), AsyncResult.success(grant(true)));
-        expect(registry.get(editor.permissionAtom(other, custom))).toBe(false);
-      }),
-    ),
-  );
-
-  it.effect("authorizes peer reads and sends using the destination's distinct grants", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const registry = yield* setup;
-        const peer = createCommandPermissions(runtime, WS_METHODS.peerThreadsRequest);
-        const threadId = ThreadId.make("recorder");
-        const read = { type: "thread-read", environmentId: env, input: { threadId } };
-        const send = {
-          type: "thread-send",
-          environmentId: env,
-          input: {
-            threadId,
-            message: "Hello",
-            sender: {
-              environmentId: other,
-              environmentLabel: "MacBook",
-              threadId,
-              threadTitle: "Lead",
-              runtimeMode: "full-access",
-              interactionMode: "default",
-            },
-          },
-        };
         registry.set(
           sessions(env),
           AsyncResult.success({
@@ -131,19 +86,22 @@ describe("command permissions", () => {
             permissions: [AuthOrchestrationReadScope],
           }),
         );
-        expect(registry.get(peer.permissionAtom(env, read))).toBe(true);
-        yield* peer.authorize(registry, env, read);
-        expect(registry.get(peer.permissionAtom(env, send))).toBe(false);
-        expect(
-          (yield* peer.authorize(registry, env, send).pipe(Effect.flip)).requiredPermission,
-        ).toBe(AuthOrchestrationOperateScope);
-        registry.set(sessions(env), AsyncResult.success(grant(true)));
-        yield* peer.authorize(registry, env, send);
+        expect(registry.get(refresh.permissionAtom(env))).toBe(true);
+        yield* refresh.authorize(registry, env);
         registry.set(sessions(other), AsyncResult.success(grant(false)));
-        expect(registry.get(peer.permissionAtom(other, send))).toBe(false);
+        expect(registry.get(refresh.permissionAtom(other))).toBe(false);
+        expect((yield* refresh.authorize(registry, other).pipe(Effect.flip))._tag).toBe(
+          "EnvironmentAuthorizationError",
+        );
+        registry.set(sessions(env), AsyncResult.success(grant(false)));
+        expect(registry.get(refresh.permissionAtom(env))).toBe(false);
+        expect((yield* refresh.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
+          "EnvironmentAuthorizationError",
+        );
       }),
     ),
   );
+
   it.effect("requires the destination preview grant to close a browser tab", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -311,6 +269,83 @@ describe("command permissions", () => {
       registry.dispose();
     }
   });
+
+  it.effect("authorizes peer reads and sends using the destination's distinct grants", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const registry = yield* setup;
+        const peer = createCommandPermissions(runtime, WS_METHODS.peerThreadsRequest);
+        const threadId = ThreadId.make("recorder");
+        const read = { type: "thread-read", environmentId: env, input: { threadId } };
+        const send = {
+          type: "thread-send",
+          environmentId: env,
+          input: {
+            threadId,
+            message: "Hello",
+            sender: {
+              environmentId: other,
+              environmentLabel: "MacBook",
+              threadId,
+              threadTitle: "Lead",
+              runtimeMode: "full-access",
+              interactionMode: "default",
+            },
+          },
+        };
+        registry.set(
+          sessions(env),
+          AsyncResult.success({
+            ...grant(false),
+            scopes: [AuthOrchestrationReadScope],
+            permissions: [AuthOrchestrationReadScope],
+          }),
+        );
+        expect(registry.get(peer.permissionAtom(env, read))).toBe(true);
+        yield* peer.authorize(registry, env, read);
+        expect(registry.get(peer.permissionAtom(env, send))).toBe(false);
+        expect(
+          (yield* peer.authorize(registry, env, send).pipe(Effect.flip)).requiredPermission,
+        ).toBe(AuthOrchestrationOperateScope);
+        registry.set(sessions(env), AsyncResult.success(grant(true)));
+        yield* peer.authorize(registry, env, send);
+        registry.set(sessions(other), AsyncResult.success(grant(false)));
+        expect(registry.get(peer.permissionAtom(other, send))).toBe(false);
+      }),
+    ),
+  );
+
+  it.effect("requires terminal permission only for the destination's custom editor command", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const registry = yield* setup;
+        const editor = createCommandPermissions(runtime, WS_METHODS.shellOpenInEditor);
+        const ordinary = { editor: "openidea", cwd: "/work/project" };
+        const custom = {
+          editor: "custom",
+          cwd: "/work/project",
+          customCommand: { command: "tool", args: [] },
+        };
+        registry.set(sessions(env), AsyncResult.success(grant(true)));
+        expect(registry.get(editor.permissionAtom(env, ordinary))).toBe(true);
+        expect(registry.get(editor.permissionAtom(env, custom))).toBe(false);
+        expect(
+          (yield* editor.authorize(registry, env, custom).pipe(Effect.flip)).requiredPermission,
+        ).toBe(AuthTerminalOperateScope);
+        registry.set(
+          sessions(env),
+          AsyncResult.success({
+            ...grant(true),
+            scopes: [AuthOrchestrationOperateScope, AuthTerminalOperateScope],
+            permissions: [AuthOrchestrationOperateScope, AuthTerminalOperateScope],
+          }),
+        );
+        yield* editor.authorize(registry, env, custom);
+        registry.set(sessions(other), AsyncResult.success(grant(true)));
+        expect(registry.get(editor.permissionAtom(other, custom))).toBe(false);
+      }),
+    ),
+  );
 });
 
 it.effect(
@@ -433,7 +468,11 @@ it.effect(
           ),
         };
         const supervisor = {
-          target: { environmentId: env },
+          target: new BearerConnectionTarget({
+            environmentId: env,
+            label: "Test",
+            connectionId: "test",
+          }),
           session: yield* SubscriptionRef.make(Option.some({ client } as unknown as RpcSession)),
           state: yield* SubscriptionRef.make({
             ...AVAILABLE_CONNECTION_STATE,

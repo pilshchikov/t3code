@@ -18,7 +18,6 @@ import { SidebarMenuButton } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 export interface SidebarThreadHeaderProps {
-  searchFieldRef?: RefObject<HTMLDivElement | null>;
   hasProjects: boolean;
   projectScope: ReactNode;
   /** Present only while the project rail is hidden, and never on mobile. */
@@ -50,7 +49,6 @@ export function SidebarThreadHeader({
   newThreadInProjectShortcutLabel,
   showNewThreadInProjectHint,
   searchInputRef,
-  searchFieldRef,
   searchQuery,
   onSearchQueryChange,
   onSearchKeyDown,
@@ -69,10 +67,7 @@ export function SidebarThreadHeader({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-1">
-        <div
-          ref={searchFieldRef}
-          className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground md:h-8"
-        >
+        <div className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground md:h-8">
           <SearchIcon className="size-4 shrink-0 text-[var(--sidebar-icon-color)]" />
           <Input
             ref={searchInputRef}

@@ -19,6 +19,9 @@ vi.mock("@t3tools/client-runtime/rpc", () => ({
   request: (...args: unknown[]) => call(...args),
   subscribe: (...args: unknown[]) => watch(...args),
 }));
+vi.mock("../rpc/peerUsageRefresh", () => ({
+  refresh: () => call(WS_METHODS.serverRefreshProviders, { fresh: true }),
+}));
 import { readPeerUsageLimits } from "./peerUsageLimits";
 
 const layerSupervisor = Layer.effect(

@@ -980,6 +980,50 @@ describe("PullRequestSyncReactor", () => {
     ),
   );
 
+  it.effect("refreshes expired closed links before applying fork retention", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* TestClock.setTime(Date.parse(NOW));
+        const closed = (closedAt: string | null) => ({ state: "closed" as const, closedAt });
+        const fixture = yield* makeHarness({
+          snapshot: makeSnapshot([
+            makeThread("closed", {
+              pullRequests: [
+                makeLink(1, closed("2026-08-20T00:00:00.000Z")),
+                makeLink(2, closed("2026-08-26T00:00:00.000Z")),
+                makeLink(3, closed("2026-08-28T11:00:00.000Z")),
+                makeLink(4, closed(null)),
+              ],
+            }),
+          ]),
+          summary: (input) =>
+            Effect.succeed(makeSummary(input, { state: "closed", closedAt: NOW })),
+        });
+        const reads = Ref.get(fixture.summaryCalls).pipe(
+          Effect.map((calls) => calls.map((call) => call.number).toSorted()),
+        );
+
+        yield* Effect.gen(function* () {
+          const reactor = yield* startAndSweep(fixture);
+          // The fork refreshes terminal links before its two-hour retention removes them.
+          assert.deepStrictEqual(yield* reads, [1, 2, 3, 4]);
+          yield* applyRecordedSyncs(fixture);
+          for (let index = 0; index < 15; index += 1) yield* sweepAgain(fixture, reactor);
+          assert.deepStrictEqual(yield* reads, [1, 1, 2, 2, 3, 3, 4, 4]);
+
+          yield* reactor.requestSync({
+            host: "github.com",
+            repository: "owner/repository",
+            number: 1,
+          });
+          yield* Queue.take(fixture.snapshotReads);
+          yield* reactor.drain;
+          assert.deepStrictEqual(yield* reads, [1, 1, 1, 2, 2, 3, 3, 4, 4]);
+        }).pipe(Effect.provide(fixture.layer));
+      }),
+    ),
+  );
+
   it.effect("re-reads a merged pull request until the host supplies its merge time", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -1578,46 +1622,55 @@ describe("PullRequestSyncReactor", () => {
     ),
   );
 
-  it.effect("reads open links fresh as soon as a merge command ends, before its run ends", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        yield* TestClock.setTime(Date.parse(NOW));
-        const state = yield* Ref.make<PullRequestSummary["state"]>("open");
-        const fixture = yield* makeHarness({
-          snapshot: makeSnapshot([
-            makeThread("agent", { pullRequests: [makeLink(7, { state: "open" })] }),
-          ]),
-          summary: (input) =>
-            Ref.get(state).pipe(
-              Effect.map((current) =>
-                makeSummary(input, current === "merged" ? { state: current, mergedAt: NOW } : {}),
-              ),
-            ),
-        });
-
-        yield* Effect.gen(function* () {
-          const reactor = yield* startAndSweep(fixture);
-          yield* Ref.set(state, "merged");
-          yield* Ref.set(fixture.summaryCalls, []);
-
-          yield* Queue.offer(
-            fixture.domainEvents,
-            commandRan(ThreadId.make("agent"), "gh pr merge 7"),
-          );
-          yield* Queue.take(fixture.snapshotReads);
-          yield* Queue.take(fixture.snapshotReads);
-          yield* reactor.drain;
-
-          assert.deepStrictEqual(
-            (yield* Ref.get(fixture.syncCommands)).map((command) => [
-              command.number,
-              command.snapshot.state,
+  it.effect.each(["open", "closed"] as const)(
+    "reads %s links fresh as soon as a merge command ends, before its run ends",
+    (initialState) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* TestClock.setTime(Date.parse(NOW));
+          const state = yield* Ref.make<PullRequestSummary["state"]>(initialState);
+          const initialSnapshot = {
+            state: initialState,
+            closedAt: initialState === "closed" ? "2026-08-20T00:00:00.000Z" : null,
+          };
+          const fixture = yield* makeHarness({
+            snapshot: makeSnapshot([
+              makeThread("agent", { pullRequests: [makeLink(7, initialSnapshot)] }),
             ]),
-            [[7, "merged"]],
-          );
-        }).pipe(Effect.provide(fixture.layer));
-      }),
-    ),
+            summary: (input) =>
+              Ref.get(state).pipe(
+                Effect.map((current) =>
+                  makeSummary(
+                    input,
+                    current === "merged" ? { state: current, mergedAt: NOW } : initialSnapshot,
+                  ),
+                ),
+              ),
+          });
+
+          yield* Effect.gen(function* () {
+            const reactor = yield* startAndSweep(fixture);
+            yield* Ref.set(state, "merged");
+            yield* Ref.set(fixture.summaryCalls, []);
+
+            yield* Queue.offer(
+              fixture.domainEvents,
+              commandRan(ThreadId.make("agent"), "gh pr merge 7"),
+            );
+            yield* Queue.take(fixture.snapshotReads);
+            yield* Queue.take(fixture.snapshotReads);
+            yield* reactor.drain;
+
+            assert.deepStrictEqual(
+              (yield* Ref.get(fixture.syncCommands)).map((command) => [
+                command.number,
+                command.snapshot.state,
+              ]),
+              [[7, "merged"]],
+            );
+          }).pipe(Effect.provide(fixture.layer));
+        }),
+      ),
   );
 
   it.effect.each([

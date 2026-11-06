@@ -1,3 +1,4 @@
+import * as AssetSigner from "../../../assets/AssetSigner.ts";
 import * as NodePlatformCrypto from "@effect/platform-node/NodeCrypto";
 import * as ProjectCloneTracker from "../../../project/ProjectCloneTracker.ts";
 import { RemoteDelegation } from "../../../peer/RemoteDelegation.ts";
@@ -51,6 +52,7 @@ import * as UsageService from "../../../usage/UsageService.ts";
 import * as UsageLimitSources from "../../../usage/UsageLimitSources.ts";
 
 const layerStubServices = Layer.mergeAll(
+  Layer.mock(AssetSigner.AssetSigner)({}),
   Layer.mock(ProjectCloneTracker.ProjectCloneTracker)({}),
   Layer.mock(RemoteDelegation)({}),
   Layer.mock(PeerLinkRequests)({}),

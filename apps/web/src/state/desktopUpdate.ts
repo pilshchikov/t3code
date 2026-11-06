@@ -85,12 +85,19 @@ export function useDesktopUpdateState(): DesktopUpdateState | null {
   return AsyncResult.getOrElse(useAtomValue(desktopUpdateStateAtom), () => null);
 }
 
+class BundledServerRuntimeReadError extends Schema.TaggedError<BundledServerRuntimeReadError>()(
+  "BundledServerRuntimeReadError",
+  { cause: Schema.Defect() },
+) {}
+
 const bundledServerRuntimeAtom = Atom.make(
-  Effect.tryPromise(async () =>
-    typeof window === "undefined"
-      ? null
-      : ((await window.desktopBridge?.getBundledServerRuntime?.()) ?? null),
-  ),
+  Effect.tryPromise({
+    try: async () =>
+      typeof window === "undefined"
+        ? null
+        : ((await window.desktopBridge?.getBundledServerRuntime?.()) ?? null),
+    catch: (cause) => new BundledServerRuntimeReadError({ cause }),
+  }),
 ).pipe(Atom.keepAlive);
 export function useBundledServerRuntime(): BundledServerRuntime | null {
   return AsyncResult.getOrElse(useAtomValue(bundledServerRuntimeAtom), () => null);

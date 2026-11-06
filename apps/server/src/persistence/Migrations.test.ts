@@ -55,6 +55,8 @@ describe("runMigrations", () => {
         [81, "ProjectionProjectsPinArchive"],
         [82, "RepairBooleanSettledOverride"],
         [83, "DropOrchestrationEventCorrelationIndex"],
+        [84, "DelegatedRecoveryIndexes"],
+        [85, "ScheduledTaskThreadMode"],
       ]);
       assert.deepStrictEqual(yield* history, [
         ...beforeHistory,
@@ -70,6 +72,8 @@ describe("runMigrations", () => {
         [81, "ProjectionProjectsPinArchive"],
         [82, "RepairBooleanSettledOverride"],
         [83, "DropOrchestrationEventCorrelationIndex"],
+        [84, "DelegatedRecoveryIndexes"],
+        [85, "ScheduledTaskThreadMode"],
       ]);
       assert.deepStrictEqual(yield* sql`SELECT * FROM project_memories`, memories);
       assert.deepStrictEqual(yield* sql`SELECT * FROM usage_limit_history`, usage);

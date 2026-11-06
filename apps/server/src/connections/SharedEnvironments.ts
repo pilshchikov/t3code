@@ -159,18 +159,21 @@ const make = Effect.gen(function* () {
           return yield* new SharedEnvironmentError({ reason: "invalid_registration" });
         ids.add(entry.environmentId);
         if (entry.httpBaseUrl === null && entry.bearerToken === null) continue;
-        const valid = yield* Effect.try(() => {
-          const url = new URL(entry.httpBaseUrl ?? "");
-          // Only authenticated routes from the host are published. Nested gateways and URL credentials are rejected.
-          return (
-            ["http:", "https:"].includes(url.protocol) &&
-            url.pathname === "/" &&
-            !url.username &&
-            !url.password &&
-            !url.search &&
-            !url.hash &&
-            !!entry.bearerToken
-          );
+        const valid = yield* Effect.try({
+          try: () => {
+            const url = new URL(entry.httpBaseUrl ?? "");
+            // Only authenticated routes from the host are published. Nested gateways and URL credentials are rejected.
+            return (
+              ["http:", "https:"].includes(url.protocol) &&
+              url.pathname === "/" &&
+              !url.username &&
+              !url.password &&
+              !url.search &&
+              !url.hash &&
+              !!entry.bearerToken
+            );
+          },
+          catch: (cause) => new SharedEnvironmentError({ reason: "invalid_registration", cause }),
         }).pipe(Effect.orElseSucceed(() => false));
         if (!valid) return yield* new SharedEnvironmentError({ reason: "invalid_registration" });
       }
@@ -263,9 +266,10 @@ const make = Effect.gen(function* () {
       const rest = url.value.pathname.slice(SHARED_ENVIRONMENT_PROXY_PREFIX.length);
       const split = rest.indexOf("/");
       if (split <= 0) return yield* new SharedEnvironmentError({ reason: "unavailable" });
-      const id = yield* Effect.try(() =>
-        EnvironmentId.make(decodeURIComponent(rest.slice(0, split))),
-      );
+      const id = yield* Effect.try({
+        try: () => EnvironmentId.make(decodeURIComponent(rest.slice(0, split))),
+        catch: (cause) => new SharedEnvironmentError({ reason: "unavailable", cause }),
+      });
       const path = rest.slice(split);
       if (
         !(

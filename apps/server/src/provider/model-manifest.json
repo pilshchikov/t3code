@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-03T03:48:31Z",
+  "updatedAt": "2026-11-06T21:03:10Z",
   "compatibility": [
     {
       "driver": "codex",
@@ -43,7 +43,7 @@
     {
       "driver": "claudeAgent",
       "t3CodeRange": ">=0.0.42",
-      "recommendedRange": ">=2.1.280",
+      "recommendedRange": ">=2.1.301",
       "ranges": [
         {
           "range": ">=2.1.280",
@@ -756,6 +756,58 @@
             }
           }
         },
+        "sonnet-5-5": {
+          "capabilities": {
+            "optionDescriptors": [
+              {
+                "id": "effort",
+                "label": "Reasoning",
+                "type": "select",
+                "options": [
+                  {
+                    "id": "low",
+                    "label": "Low"
+                  },
+                  {
+                    "id": "medium",
+                    "label": "Medium"
+                  },
+                  {
+                    "id": "high",
+                    "label": "High",
+                    "isDefault": true
+                  },
+                  {
+                    "id": "xhigh",
+                    "label": "Extra High"
+                  },
+                  {
+                    "id": "max",
+                    "label": "Max"
+                  },
+                  {
+                    "id": "ultracode",
+                    "label": "Ultracode",
+                    "description": "xhigh effort plus multi-agent workflow orchestration"
+                  },
+                  {
+                    "id": "ultrathink",
+                    "label": "Ultrathink"
+                  }
+                ],
+                "promptInjectedValues": ["ultrathink"]
+              }
+            ]
+          },
+          "adapter": {
+            "claudeCode": {
+              "effortMap": {
+                "ultrathink": null
+              },
+              "fixedContextWindowTokens": 1000000
+            }
+          }
+        },
         "sonnet-4-6": {
           "capabilities": {
             "optionDescriptors": [
@@ -854,16 +906,16 @@
                     "label": "Max"
                   },
                   {
+                    "id": "ultracode",
+                    "label": "Ultracode",
+                    "description": "xhigh effort plus multi-agent workflow orchestration"
+                  },
+                  {
                     "id": "ultrathink",
                     "label": "Ultrathink"
                   }
                 ],
                 "promptInjectedValues": ["ultrathink"]
-              },
-              {
-                "id": "thinking",
-                "label": "Thinking",
-                "type": "boolean"
               }
             ]
           },
@@ -896,30 +948,6 @@
       },
       "models": [
         {
-          "slug": "claude-opus-5-5",
-          "name": "Claude Opus 5.5",
-          "aliases": ["opus", "opus-5.5", "claude-opus-5.5"],
-          "status": "current",
-          "profile": "opus-5-5",
-          "adapter": {
-            "claudeCode": {
-              "minVersion": "2.1.280"
-            }
-          }
-        },
-        {
-          "slug": "claude-sonnet-5-5",
-          "name": "Claude Sonnet 5.5",
-          "aliases": ["sonnet", "sonnet-5.5", "claude-sonnet-5.5"],
-          "status": "current",
-          "profile": "sonnet-5",
-          "adapter": {
-            "claudeCode": {
-              "minVersion": "2.1.284"
-            }
-          }
-        },
-        {
           "slug": "claude-mythos-5-1",
           "name": "Claude Mythos 5.1",
           "aliases": ["mythos", "mythos-5.1", "claude-mythos-5.1"],
@@ -942,6 +970,30 @@
           "adapter": {
             "claudeCode": {
               "minVersion": "2.1.170"
+            }
+          }
+        },
+        {
+          "slug": "claude-opus-5-5",
+          "name": "Claude Opus 5.5",
+          "aliases": ["opus", "opus-5.5", "claude-opus-5.5"],
+          "status": "current",
+          "profile": "opus-5-5",
+          "adapter": {
+            "claudeCode": {
+              "minVersion": "2.1.280"
+            }
+          }
+        },
+        {
+          "slug": "claude-sonnet-5-5",
+          "name": "Claude Sonnet 5.5",
+          "aliases": ["sonnet", "sonnet-5.5", "claude-sonnet-5.5"],
+          "status": "current",
+          "profile": "sonnet-5-5",
+          "adapter": {
+            "claudeCode": {
+              "minVersion": "2.1.284"
             }
           }
         },

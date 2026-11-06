@@ -1,9 +1,8 @@
 import * as PlatformError from "effect/PlatformError";
 import * as Cause from "effect/Cause";
-import * as Path from "effect/Path";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Option from "effect/Option";
 import * as CodexErrors from "effect-codex-app-server/errors";
-import * as FileSystem from "effect/FileSystem";
 import { vi } from "vite-plus/test";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as CodexInstallation from "./CodexInstallation.ts";
@@ -11,17 +10,18 @@ import * as CodexManagedTokenBroker from "./CodexManagedTokenBroker.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import type { ModelInfo } from "@anthropic-ai/claude-agent-sdk";
 import { describe, it, assert, expect } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
-import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
@@ -43,11 +43,13 @@ import {
 } from "@t3tools/contracts";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { ChildProcessSpawner } from "effect/process";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { deepMerge } from "@t3tools/shared/Struct";
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 
 import { checkCodexProviderStatus, type CodexAppServerProviderSnapshot } from "./CodexProvider.ts";
+import { BUNDLED_CLAUDE_MODEL_CATALOG } from "./ClaudeModelCatalog.ts";
 import { checkClaudeProviderStatus } from "./ClaudeProvider.ts";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as AntigravityInstallation from "./AntigravityInstallation.ts";
@@ -179,6 +181,7 @@ type TestClaudeCapabilities = {
   readonly apiKeySource: string | undefined;
   readonly apiProvider: string | undefined;
   readonly slashCommands: ReadonlyArray<ServerProviderSlashCommand>;
+  readonly models?: ReadonlyArray<ModelInfo>;
 };
 
 function claudeCapabilities(overrides: Partial<TestClaudeCapabilities> = {}) {
@@ -1952,6 +1955,139 @@ it.layer(
       }),
     );
 
+    it.effect("ignores a probe from an instance that settings replaced mid-refresh", () =>
+      Effect.gen(function* () {
+        const scenario = Effect.fn(function* (
+          probeFails: boolean,
+          run: (
+            registry: ProviderRegistry.ProviderRegistry["Service"],
+          ) => Effect.Effect<ReadonlyArray<ServerProvider>>,
+        ) {
+          const driver = ProviderDriverKind.make("codex");
+          const instanceId = ProviderInstanceId.make("codex");
+          const provider = {
+            instanceId,
+            driver,
+            status: "ready",
+            enabled: true,
+            installed: true,
+            auth: { status: "authenticated" },
+            checkedAt: "2026-06-10T00:00:00.000Z",
+            version: "2.0.0",
+            models: [],
+            slashCommands: [],
+            skills: [],
+          } as const satisfies ServerProvider;
+          const retiredProbe = {
+            ...provider,
+            status: "error",
+            installed: false,
+            version: "1.0.0",
+            message: "Codex CLI is not installed.",
+          } as const satisfies ServerProvider;
+          const probeStarted = yield* Deferred.make<void>();
+          const releaseProbe = yield* Deferred.make<void>();
+          const makeInstance = (snapshot: ServerProvider, refresh: Effect.Effect<void>) =>
+            ({
+              instanceId,
+              driverKind: driver,
+              continuationIdentity: { driverKind: driver, continuationKey: "codex:instance:codex" },
+              displayName: undefined,
+              enabled: true,
+              snapshot: {
+                resolveMaintenance: () =>
+                  Effect.succeed(
+                    makeManualOnlyProviderMaintenanceCapabilities({
+                      provider: driver,
+                      packageName: null,
+                    }),
+                  ),
+                getSnapshot: Effect.succeed(snapshot),
+                refresh: Effect.as(refresh, snapshot),
+                streamChanges: Stream.empty,
+                applyUsageLimits: () => Effect.void,
+              },
+              orchestrationAdapter: {} as ProviderInstance["orchestrationAdapter"],
+              textGeneration: {} as ProviderInstance["textGeneration"],
+            }) satisfies ProviderInstance;
+          const retiredInstance = makeInstance(
+            retiredProbe,
+            Deferred.succeed(probeStarted, undefined).pipe(
+              Effect.andThen(Deferred.await(releaseProbe)),
+              Effect.andThen(probeFails ? Effect.die(new Error("probe failed")) : Effect.void),
+            ),
+          );
+          const rebuiltInstance = makeInstance(provider, Effect.void);
+          const instances = yield* Ref.make<ReadonlyArray<ProviderInstance>>([retiredInstance]);
+          const changes = yield* PubSub.unbounded<void>();
+          const instanceRegistryLayer = Layer.succeed(
+            ProviderInstanceRegistry.ProviderInstanceRegistry,
+            {
+              getInstance: (requestedId) =>
+                Ref.get(instances).pipe(
+                  Effect.map((current) =>
+                    current.find((instance) => instance.instanceId === requestedId),
+                  ),
+                ),
+              listInstances: Ref.get(instances),
+              listUnavailable: Effect.succeed([]),
+              streamChanges: Stream.empty,
+              subscribeChanges: PubSub.subscribe(changes),
+            },
+          );
+          const scope = yield* Scope.make();
+          yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+          const runtimeServices = yield* Layer.build(
+            ProviderRegistry.layer.pipe(
+              Layer.provide(layerUnusedMutator),
+              Layer.provideMerge(instanceRegistryLayer),
+              Layer.provideMerge(
+                ServerConfig.layerTest(process.cwd(), {
+                  prefix: "t3-provider-registry-retired-refresh-",
+                }),
+              ),
+              Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+            ),
+          ).pipe(Scope.provide(scope));
+
+          return yield* Effect.gen(function* () {
+            const registry = yield* ProviderRegistry.ProviderRegistry;
+            const rebuiltPublished = yield* Stream.toPull(
+              registry.streamChanges.pipe(
+                Stream.filter((providers) => providers[0]?.version === provider.version),
+              ),
+            );
+            const refresh = yield* run(registry).pipe(Effect.forkChild);
+            yield* Deferred.await(probeStarted);
+            yield* Ref.set(instances, [rebuiltInstance]);
+            yield* PubSub.publish(changes, undefined);
+            yield* rebuiltPublished;
+            yield* Deferred.succeed(releaseProbe, undefined);
+            return {
+              provider,
+              result: yield* Fiber.join(refresh),
+              providers: yield* registry.getProviders,
+            };
+          }).pipe(Effect.provide(runtimeServices));
+        });
+        const driver = ProviderDriverKind.make("codex");
+        const instanceId = ProviderInstanceId.make("codex");
+
+        const manual = yield* scenario(false, (registry) => registry.refresh());
+        expect(manual.result).toEqual([expect.objectContaining(manual.provider)]);
+        expect(manual.providers).toEqual([expect.objectContaining(manual.provider)]);
+
+        // Neither the retired probe's failure nor its cached row can stand in for the replacement.
+        for (const probeFails of [true, false]) {
+          const afterUpdate = yield* scenario(probeFails, (registry) =>
+            registry.refreshAfterUpdate(driver, instanceId),
+          );
+          expect(afterUpdate.result).toEqual([]);
+          expect(afterUpdate.providers).toEqual([expect.objectContaining(afterUpdate.provider)]);
+        }
+      }),
+    );
+
     it.effect("keeps an enriched snapshot that streams in before a manual refresh returns", () =>
       Effect.gen(function* () {
         const driver = ProviderDriverKind.make("acpRegistry");
@@ -2585,238 +2721,6 @@ it.layer(
       }),
     );
 
-    it.effect("keeps consuming registry changes after one sync fails", () =>
-      Effect.gen(function* () {
-        const codexDriver = ProviderDriverKind.make("codex");
-        const codexInstanceId = ProviderInstanceId.make("codex");
-        const claudeDriver = ProviderDriverKind.make("claudeAgent");
-        const claudeInstanceId = ProviderInstanceId.make("claudeAgent");
-        const codexProvider = {
-          instanceId: codexInstanceId,
-          driver: codexDriver,
-          status: "ready",
-          enabled: true,
-          installed: true,
-          auth: { status: "authenticated" },
-          checkedAt: "2026-04-29T10:00:00.000Z",
-          version: "1.0.0",
-          models: [],
-          slashCommands: [],
-          skills: [],
-        } as const satisfies ServerProvider;
-        const claudeProvider = {
-          instanceId: claudeInstanceId,
-          driver: claudeDriver,
-          status: "ready",
-          enabled: true,
-          installed: true,
-          auth: { status: "authenticated" },
-          checkedAt: "2026-04-29T10:01:00.000Z",
-          version: "1.0.0",
-          models: [],
-          slashCommands: [],
-          skills: [],
-        } as const satisfies ServerProvider;
-        const makeInstance = (provider: ServerProvider): ProviderInstance => ({
-          instanceId: provider.instanceId,
-          driverKind: provider.driver,
-          continuationIdentity: {
-            driverKind: provider.driver,
-            continuationKey: `${provider.driver}:instance:${provider.instanceId}`,
-          },
-          displayName: undefined,
-          enabled: true,
-          snapshot: {
-            resolveMaintenance: () =>
-              Effect.succeed(
-                makeManualOnlyProviderMaintenanceCapabilities({
-                  provider: provider.driver,
-                  packageName: null,
-                }),
-              ),
-            getSnapshot: Effect.succeed(provider),
-            refresh: Effect.succeed(provider),
-            streamChanges: Stream.empty,
-            applyUsageLimits: () => Effect.void,
-          },
-          orchestrationAdapter: {} as ProviderInstance["orchestrationAdapter"],
-          textGeneration: {} as ProviderInstance["textGeneration"],
-        });
-        const codexInstance = makeInstance(codexProvider);
-        const claudeInstance = makeInstance(claudeProvider);
-        const changes = yield* PubSub.unbounded<void>();
-        const instancesRef = yield* Ref.make<ReadonlyArray<ProviderInstance>>([codexInstance]);
-        const failNextList = yield* Ref.make(false);
-        const wait = () => Effect.yieldNow;
-        const layerInstanceRegistry = Layer.succeed(
-          ProviderInstanceRegistry.ProviderInstanceRegistry,
-          {
-            getInstance: (instanceId) =>
-              Ref.get(instancesRef).pipe(
-                Effect.map((instances) =>
-                  instances.find((instance) => instance.instanceId === instanceId),
-                ),
-              ),
-            listInstances: Effect.gen(function* () {
-              const shouldFail = yield* Ref.get(failNextList);
-              if (shouldFail) {
-                yield* Ref.set(failNextList, false);
-                return yield* Effect.die(new Error("simulated registry list failure"));
-              }
-              return yield* Ref.get(instancesRef);
-            }),
-            listUnavailable: Effect.succeed([]),
-            streamChanges: Stream.fromPubSub(changes),
-            subscribeChanges: PubSub.subscribe(changes),
-          },
-        );
-        const scope = yield* Scope.make();
-        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
-        const runtimeServices = yield* Layer.build(
-          ProviderRegistry.layer.pipe(
-            Layer.provide(layerUnusedMutator),
-            Layer.provideMerge(ProviderLatestVersions.layer),
-            Layer.provideMerge(ModelManifest.layerTest),
-            Layer.provideMerge(layerInstanceRegistry),
-            Layer.provideMerge(
-              ServerConfig.layerTest(process.cwd(), {
-                prefix: "t3-provider-registry-sync-failure-",
-              }),
-            ),
-            Layer.provideMerge(layerBackgroundPolicyAlwaysRun),
-            Layer.provideMerge(Layer.merge(NodeServices.layer, PortScanner.layerTest)),
-          ),
-        ).pipe(Scope.provide(scope));
-
-        yield* Effect.gen(function* () {
-          const registry = yield* ProviderRegistry.ProviderRegistry;
-          assert.deepStrictEqual(yield* registry.getProviders, [
-            withBundledCompatibility(codexProvider),
-          ]);
-
-          yield* Ref.set(failNextList, true);
-          yield* PubSub.publish(changes, undefined);
-
-          yield* Ref.set(instancesRef, [codexInstance, claudeInstance]);
-          yield* PubSub.publish(changes, undefined);
-
-          let providers = yield* registry.getProviders;
-          for (
-            let attempt = 0;
-            attempt < 50 && !providers.some((provider) => provider.instanceId === claudeInstanceId);
-            attempt += 1
-          ) {
-            yield* wait();
-            providers = yield* registry.getProviders;
-          }
-
-          assert.deepStrictEqual(
-            providers.map((provider) => provider.instanceId).toSorted(),
-            [codexInstanceId, claudeInstanceId].toSorted(),
-          );
-        }).pipe(Effect.provide(runtimeServices));
-      }),
-    );
-
-    it.effect("propagates real Codex probe failures to the aggregator at boot", () =>
-      Effect.gen(function* () {
-        const missingBinary = `t3code_codex_missing_`;
-        const serverSettings = yield* makeMutableServerSettingsService(
-          decodeServerSettings(
-            deepMerge(encodedDefaultServerSettings, {
-              providerInstances: {
-                ...disabledDefaultSlots("codex", "claudeAgent", "cursor", "grok", "opencode"),
-                codex_personal: {
-                  driver: "codex",
-                  displayName: "Codex Personal",
-                  enabled: true,
-                  config: {
-                    binaryPath: missingBinary,
-                    homePath: `/tmp/${missingBinary}_home`,
-                  },
-                },
-              },
-            }),
-          ),
-        );
-        const scope = yield* Scope.make();
-        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
-        const layerProviderRegistry = ProviderRegistry.layer.pipe(
-          Layer.provideMerge(
-            ProviderInstanceRegistryHydration.layer.pipe(Layer.provide(PortScanner.layerTest)),
-          ),
-          Layer.provideMerge(AntigravityInstallation.AntigravityInstallation.layer),
-          Layer.provideMerge(
-            Layer.succeed(ServerSettingsModule.ServerSettingsService, serverSettings),
-          ),
-          Layer.provideMerge(ServerSecretStore.layer),
-          Layer.provideMerge(
-            ServerConfig.layerTest(process.cwd(), {
-              prefix: "t3-provider-registry-",
-            }),
-          ),
-          Layer.provideMerge(layerTestHttpClient),
-          Layer.provideMerge(
-            Layer.succeed(
-              ProviderEventLoggers.ProviderEventLoggers,
-              ProviderEventLoggers.NoOpProviderEventLoggers,
-            ),
-          ),
-          Layer.provideMerge(ProviderLatestVersions.layer),
-          Layer.provideMerge(McpProviderSessions.layer),
-          Layer.provideMerge(ModelManifest.layerTest),
-          Layer.provideMerge(ResetCreditCoordinator.layerTest),
-          Layer.provideMerge(
-            OpenCodeRuntime.layer.pipe(Layer.provide(OpenCodeServerLedger.layerTest)),
-          ),
-          Layer.provideMerge(layerBackgroundPolicyAlwaysRun),
-        );
-        const runtimeServices = yield* Layer.build(layerProviderRegistry).pipe(
-          Scope.provide(scope),
-          Effect.provide(
-            ConfigProvider.layer(
-              ConfigProvider.fromUnknown({ T3CODE_ENABLE_PROVIDER_AUTO_REFRESH: true }),
-            ),
-          ),
-        );
-
-        yield* Effect.gen(function* () {
-          const registry = yield* ProviderRegistry.ProviderRegistry;
-          const hasProbeFailure = (providers: ReadonlyArray<ServerProvider>) =>
-            providers.some(
-              (provider) => provider.instanceId === "codex_personal" && provider.status === "error",
-            );
-          const probeFailure = yield* registry.streamChanges.pipe(
-            Stream.filter(hasProbeFailure),
-            Stream.runHead,
-            Effect.forkChild({ startImmediately: true }),
-          );
-          const current = yield* registry.getProviders;
-          const providers = hasProbeFailure(current)
-            ? current
-            : Option.getOrElse(yield* Fiber.join(probeFailure), () => current);
-          const codexPersonal = providers.find(
-            (provider) => provider.instanceId === "codex_personal",
-          );
-          assert.notStrictEqual(
-            codexPersonal,
-            undefined,
-            `Expected the aggregator to know about codex_personal; instead saw: ${providers
-              .map((provider) => provider.instanceId)
-              .join(", ")}`,
-          );
-          assert.strictEqual(
-            codexPersonal?.status,
-            "error",
-            "Real Codex probe against a missing binary should surface as 'error' in the aggregator",
-          );
-          assert.strictEqual(codexPersonal?.installed, false);
-          assert.include(codexPersonal?.message, missingBinary);
-          assert.include(codexPersonal?.message, "Settings → Providers → Codex → Binary path");
-        }).pipe(Effect.provide(runtimeServices));
-      }),
-    );
-
     it.effect("re-probes when settings change the codex binaryPath", () =>
       Effect.gen(function* () {
         const firstMissing = `t3code_codex_first_`;
@@ -3172,9 +3076,307 @@ it.layer(
           assert.notInclude(unavailable, "ghost_stale");
         }),
     );
+
+    it.effect("propagates real Codex probe failures to the aggregator at boot", () =>
+      Effect.gen(function* () {
+        const missingBinary = `t3code_codex_missing_`;
+        const serverSettings = yield* makeMutableServerSettingsService(
+          decodeServerSettings(
+            deepMerge(encodedDefaultServerSettings, {
+              providerInstances: {
+                ...disabledDefaultSlots("codex", "claudeAgent", "cursor", "grok", "opencode"),
+                codex_personal: {
+                  driver: "codex",
+                  displayName: "Codex Personal",
+                  enabled: true,
+                  config: {
+                    binaryPath: missingBinary,
+                    homePath: `/tmp/${missingBinary}_home`,
+                  },
+                },
+              },
+            }),
+          ),
+        );
+        const scope = yield* Scope.make();
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+        const layerProviderRegistry = ProviderRegistry.layer.pipe(
+          Layer.provideMerge(
+            ProviderInstanceRegistryHydration.layer.pipe(Layer.provide(PortScanner.layerTest)),
+          ),
+          Layer.provideMerge(AntigravityInstallation.AntigravityInstallation.layer),
+          Layer.provideMerge(
+            Layer.succeed(ServerSettingsModule.ServerSettingsService, serverSettings),
+          ),
+          Layer.provideMerge(ServerSecretStore.layer),
+          Layer.provideMerge(
+            ServerConfig.layerTest(process.cwd(), {
+              prefix: "t3-provider-registry-",
+            }),
+          ),
+          Layer.provideMerge(layerTestHttpClient),
+          Layer.provideMerge(
+            Layer.succeed(
+              ProviderEventLoggers.ProviderEventLoggers,
+              ProviderEventLoggers.NoOpProviderEventLoggers,
+            ),
+          ),
+          Layer.provideMerge(ProviderLatestVersions.layer),
+          Layer.provideMerge(McpProviderSessions.layer),
+          Layer.provideMerge(ModelManifest.layerTest),
+          Layer.provideMerge(ResetCreditCoordinator.layerTest),
+          Layer.provideMerge(
+            OpenCodeRuntime.layer.pipe(Layer.provide(OpenCodeServerLedger.layerTest)),
+          ),
+          Layer.provideMerge(layerBackgroundPolicyAlwaysRun),
+        );
+        const runtimeServices = yield* Layer.build(layerProviderRegistry).pipe(
+          Scope.provide(scope),
+          Effect.provide(
+            ConfigProvider.layer(
+              ConfigProvider.fromUnknown({ T3CODE_ENABLE_PROVIDER_AUTO_REFRESH: true }),
+            ),
+          ),
+        );
+
+        yield* Effect.gen(function* () {
+          const registry = yield* ProviderRegistry.ProviderRegistry;
+          const hasProbeFailure = (providers: ReadonlyArray<ServerProvider>) =>
+            providers.some(
+              (provider) => provider.instanceId === "codex_personal" && provider.status === "error",
+            );
+          const probeFailure = yield* registry.streamChanges.pipe(
+            Stream.filter(hasProbeFailure),
+            Stream.runHead,
+            Effect.forkChild({ startImmediately: true }),
+          );
+          const current = yield* registry.getProviders;
+          const providers = hasProbeFailure(current)
+            ? current
+            : Option.getOrElse(yield* Fiber.join(probeFailure), () => current);
+          const codexPersonal = providers.find(
+            (provider) => provider.instanceId === "codex_personal",
+          );
+          assert.notStrictEqual(
+            codexPersonal,
+            undefined,
+            `Expected the aggregator to know about codex_personal; instead saw: ${providers
+              .map((provider) => provider.instanceId)
+              .join(", ")}`,
+          );
+          assert.strictEqual(
+            codexPersonal?.status,
+            "error",
+            "Real Codex probe against a missing binary should surface as 'error' in the aggregator",
+          );
+          assert.strictEqual(codexPersonal?.installed, false);
+          assert.include(codexPersonal?.message, missingBinary);
+          assert.include(codexPersonal?.message, "Settings → Providers → Codex → Binary path");
+        }).pipe(Effect.provide(runtimeServices));
+      }),
+    );
+
+    it.effect("keeps consuming registry changes after one sync fails", () =>
+      Effect.gen(function* () {
+        const codexDriver = ProviderDriverKind.make("codex");
+        const codexInstanceId = ProviderInstanceId.make("codex");
+        const claudeDriver = ProviderDriverKind.make("claudeAgent");
+        const claudeInstanceId = ProviderInstanceId.make("claudeAgent");
+        const codexProvider = {
+          instanceId: codexInstanceId,
+          driver: codexDriver,
+          status: "ready",
+          enabled: true,
+          installed: true,
+          auth: { status: "authenticated" },
+          checkedAt: "2026-04-29T10:00:00.000Z",
+          version: "1.0.0",
+          models: [],
+          slashCommands: [],
+          skills: [],
+        } as const satisfies ServerProvider;
+        const claudeProvider = {
+          instanceId: claudeInstanceId,
+          driver: claudeDriver,
+          status: "ready",
+          enabled: true,
+          installed: true,
+          auth: { status: "authenticated" },
+          checkedAt: "2026-04-29T10:01:00.000Z",
+          version: "1.0.0",
+          models: [],
+          slashCommands: [],
+          skills: [],
+        } as const satisfies ServerProvider;
+        const makeInstance = (provider: ServerProvider): ProviderInstance => ({
+          instanceId: provider.instanceId,
+          driverKind: provider.driver,
+          continuationIdentity: {
+            driverKind: provider.driver,
+            continuationKey: `${provider.driver}:instance:${provider.instanceId}`,
+          },
+          displayName: undefined,
+          enabled: true,
+          snapshot: {
+            resolveMaintenance: () =>
+              Effect.succeed(
+                makeManualOnlyProviderMaintenanceCapabilities({
+                  provider: provider.driver,
+                  packageName: null,
+                }),
+              ),
+            getSnapshot: Effect.succeed(provider),
+            refresh: Effect.succeed(provider),
+            streamChanges: Stream.empty,
+            applyUsageLimits: () => Effect.void,
+          },
+          orchestrationAdapter: {} as ProviderInstance["orchestrationAdapter"],
+          textGeneration: {} as ProviderInstance["textGeneration"],
+        });
+        const codexInstance = makeInstance(codexProvider);
+        const claudeInstance = makeInstance(claudeProvider);
+        const changes = yield* PubSub.unbounded<void>();
+        const instancesRef = yield* Ref.make<ReadonlyArray<ProviderInstance>>([codexInstance]);
+        const failNextList = yield* Ref.make(false);
+        const wait = () => Effect.yieldNow;
+        const layerInstanceRegistry = Layer.succeed(
+          ProviderInstanceRegistry.ProviderInstanceRegistry,
+          {
+            getInstance: (instanceId) =>
+              Ref.get(instancesRef).pipe(
+                Effect.map((instances) =>
+                  instances.find((instance) => instance.instanceId === instanceId),
+                ),
+              ),
+            listInstances: Effect.gen(function* () {
+              const shouldFail = yield* Ref.get(failNextList);
+              if (shouldFail) {
+                yield* Ref.set(failNextList, false);
+                return yield* Effect.die(new Error("simulated registry list failure"));
+              }
+              return yield* Ref.get(instancesRef);
+            }),
+            listUnavailable: Effect.succeed([]),
+            streamChanges: Stream.fromPubSub(changes),
+            subscribeChanges: PubSub.subscribe(changes),
+          },
+        );
+        const scope = yield* Scope.make();
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+        const runtimeServices = yield* Layer.build(
+          ProviderRegistry.layer.pipe(
+            Layer.provide(layerUnusedMutator),
+            Layer.provideMerge(ProviderLatestVersions.layer),
+            Layer.provideMerge(ModelManifest.layerTest),
+            Layer.provideMerge(layerInstanceRegistry),
+            Layer.provideMerge(
+              ServerConfig.layerTest(process.cwd(), {
+                prefix: "t3-provider-registry-sync-failure-",
+              }),
+            ),
+            Layer.provideMerge(layerBackgroundPolicyAlwaysRun),
+            Layer.provideMerge(Layer.merge(NodeServices.layer, PortScanner.layerTest)),
+          ),
+        ).pipe(Scope.provide(scope));
+
+        yield* Effect.gen(function* () {
+          const registry = yield* ProviderRegistry.ProviderRegistry;
+          assert.deepStrictEqual(yield* registry.getProviders, [
+            withBundledCompatibility(codexProvider),
+          ]);
+
+          yield* Ref.set(failNextList, true);
+          yield* PubSub.publish(changes, undefined);
+
+          yield* Ref.set(instancesRef, [codexInstance, claudeInstance]);
+          yield* PubSub.publish(changes, undefined);
+
+          let providers = yield* registry.getProviders;
+          for (
+            let attempt = 0;
+            attempt < 50 && !providers.some((provider) => provider.instanceId === claudeInstanceId);
+            attempt += 1
+          ) {
+            yield* wait();
+            providers = yield* registry.getProviders;
+          }
+
+          assert.deepStrictEqual(
+            providers.map((provider) => provider.instanceId).toSorted(),
+            [codexInstanceId, claudeInstanceId].toSorted(),
+          );
+        }).pipe(Effect.provide(runtimeServices));
+      }),
+    );
   });
 
   describe("checkClaudeProviderStatus", () => {
+    it.effect("adds models Claude Code reports that the catalog does not know", () =>
+      Effect.gen(function* () {
+        const status = yield* checkClaudeProviderStatus(
+          {
+            ...defaultClaudeSettings,
+            customModels: [{ slug: "gateway/kimi-3[1m]", name: "Kimi (mine)" }],
+          },
+          claudeCapabilities({
+            models: [
+              { value: "default", displayName: "Default", description: "" },
+              { value: "sonnet", displayName: "Sonnet", description: "" },
+              { value: "claude-haiku-4-5[1m]", displayName: "Haiku", description: "" },
+              {
+                value: "best",
+                resolvedModel: "claude-opus-5[1m]",
+                displayName: "Best",
+                description: "",
+              },
+              { value: "gateway/kimi-3[1m]", displayName: "Kimi 3", description: "" },
+              { value: "gateway/glm-5[1m]", displayName: "GLM 5", description: "" },
+              { value: "gateway/glm-5", displayName: "GLM 5 again", description: "" },
+              {
+                value: "gateway/claude-relay",
+                displayName: "Claude Relay",
+                description: "",
+                supportsEffort: true,
+                supportedEffortLevels: ["low", "high"],
+              },
+            ],
+          }),
+        );
+        const catalogSlugs = new Set(BUNDLED_CLAUDE_MODEL_CATALOG.models.map((m) => m.model.slug));
+        const added = status.models.filter((model) => !catalogSlugs.has(model.slug));
+
+        assert.deepStrictEqual(
+          added.map((model) => [model.slug, model.name, model.isCustom]),
+          [
+            ["gateway/glm-5[1m]", "GLM 5", false],
+            ["gateway/claude-relay", "Claude Relay", false],
+            ["gateway/kimi-3[1m]", "Kimi (mine)", true],
+          ],
+        );
+        assert.deepStrictEqual(added[0]?.capabilities?.optionDescriptors, []);
+        assert.deepStrictEqual(added[1]?.capabilities?.optionDescriptors, [
+          {
+            id: "effort",
+            label: "Reasoning",
+            type: "select",
+            options: [
+              { id: "default", label: "Default", isDefault: true },
+              { id: "low", label: "Low" },
+              { id: "high", label: "High" },
+            ],
+          },
+        ]);
+      }).pipe(
+        Effect.provide(
+          layerMockSpawner((args) => {
+            const joined = args.join(" ");
+            if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+            throw new Error(`Unexpected args: ${joined}`);
+          }),
+        ),
+      ),
+    );
+
     it.effect("reports a logged-out CLI as unauthenticated", () =>
       Effect.gen(function* () {
         const status = yield* checkClaudeProviderStatus(
@@ -3413,193 +3615,75 @@ it.layer(
       ),
     );
 
-    it.effect("returns a display label for claude subscription types", () =>
+    it.effect("advertises Ultracode as a toggle on custom models", () =>
       Effect.gen(function* () {
-        const status = yield* checkClaudeProviderStatus(
-          defaultClaudeSettings,
-          claudeCapabilities({ subscriptionType: "maxplan" }),
-        );
-        assert.strictEqual(status.status, "ready");
-        assert.strictEqual(status.auth.status, "authenticated");
-        assert.strictEqual(status.auth.type, "maxplan");
-        assert.strictEqual(status.auth.label, "Claude Max Subscription");
-      }).pipe(
-        Effect.provide(
-          layerMockSpawner((args) => {
-            const joined = args.join(" ");
-            if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
-            if (joined === "auth status")
-              return {
-                stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
-                stderr: "",
-                code: 0,
-              };
-            throw new Error(`Unexpected args: ${joined}`);
-          }),
-        ),
-      ),
-    );
-
-    it.effect("reads banked resets only for subscription logins", () =>
-      Effect.gen(function* () {
-        const check = (overrides: Partial<TestClaudeCapabilities>) =>
-          checkClaudeProviderStatus(
-            defaultClaudeSettings,
-            () =>
-              Effect.succeed({
-                email: undefined,
-                subscriptionType: undefined,
-                tokenSource: undefined,
-                apiKeySource: undefined,
-                apiProvider: undefined,
-                slashCommands: [],
-                usage: { rate_limits_available: true, rate_limits: {} },
-                ...overrides,
-              }),
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            () => Effect.succeed({ availableCount: 2 }),
-          );
-        const subscription = yield* check({ subscriptionType: "max" });
-        const bedrock = yield* check({ apiProvider: "bedrock" });
-        assert.deepStrictEqual(subscription.usageLimits?.resetCredits, { availableCount: 2 });
-        assert.strictEqual(bedrock.usageLimits?.resetCredits, undefined);
-      }).pipe(
-        Effect.provide(
-          layerMockSpawner((args) => {
-            const joined = args.join(" ");
-            if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
-            throw new Error(`Unexpected args: ${joined}`);
-          }),
-        ),
-      ),
-    );
-
-    it.effect("does not duplicate Claude in full subscription labels", () =>
-      Effect.gen(function* () {
-        const status = yield* checkClaudeProviderStatus(
-          defaultClaudeSettings,
-          claudeCapabilities({
-            subscriptionType: "Claude Max Subscription",
-          }),
-        );
-        assert.strictEqual(status.auth.status, "authenticated");
-        assert.strictEqual(status.auth.type, "Claude Max Subscription");
-        assert.strictEqual(status.auth.label, "Claude Max Subscription");
-      }).pipe(
-        Effect.provide(
-          layerMockSpawner((args) => {
-            const joined = args.join(" ");
-            if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
-            throw new Error(`Unexpected args: ${joined}`);
-          }),
-        ),
-      ),
-    );
-
-    it.effect("does not duplicate Claude in provider-prefixed subscription names", () =>
-      Effect.gen(function* () {
-        const status = yield* checkClaudeProviderStatus(
-          defaultClaudeSettings,
-          claudeCapabilities({
-            subscriptionType: "Claude Max",
-          }),
-        );
-        assert.strictEqual(status.auth.status, "authenticated");
-        assert.strictEqual(status.auth.type, "Claude Max");
-        assert.strictEqual(status.auth.label, "Claude Max Subscription");
-      }).pipe(
-        Effect.provide(
-          layerMockSpawner((args) => {
-            const joined = args.join(" ");
-            if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
-            throw new Error(`Unexpected args: ${joined}`);
-          }),
-        ),
-      ),
-    );
-
-    it.effect("returns claude auth email from initialization result", () =>
-      Effect.gen(function* () {
-        const status = yield* checkClaudeProviderStatus(
-          defaultClaudeSettings,
-          claudeCapabilities({ email: "claude@example.com" }),
-        );
-        assert.strictEqual(status.auth.status, "authenticated");
-        assert.strictEqual(status.auth.email, "claude@example.com");
-      }).pipe(
-        Effect.provide(
-          layerMockSpawner((args) => {
-            const joined = args.join(" ");
-            if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
-            if (joined === "auth status")
-              return {
-                stdout:
-                  '{"loggedIn":true,"authMethod":"claude.ai","account":{"email":"claude@example.com"}}\n',
-                stderr: "",
-                code: 0,
-              };
-            throw new Error(`Unexpected args: ${joined}`);
-          }),
-        ),
-      ),
-    );
-
-    it.effect("runs Claude status probes with the configured CLAUDE_CONFIG_DIR", () => {
-      const claudeConfigDir = "/tmp/t3code-claude-home";
-      const recorded = recordingMockSpawnerLayer((args) => {
-        const joined = args.join(" ");
-        if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
-        if (joined === "auth status")
-          return {
-            stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
-            stderr: "",
-            code: 0,
-          };
-        throw new Error(`Unexpected args: ${joined}`);
-      });
-
-      return Effect.gen(function* () {
         const status = yield* checkClaudeProviderStatus(
           {
             ...defaultClaudeSettings,
-            configDir: claudeConfigDir,
+            customModels: [
+              {
+                slug: "claude-custom-tuned",
+                capabilities: {
+                  optionDescriptors: [
+                    {
+                      id: "effort",
+                      label: "Reasoning",
+                      type: "select",
+                      options: [
+                        { id: "high", label: "High", isDefault: true },
+                        { id: "ultracode", label: "Ultracode" },
+                      ],
+                    },
+                  ],
+                },
+              },
+            ],
           },
           claudeCapabilities(),
         );
-        assert.strictEqual(status.status, "ready");
+        const custom = status.models.find((model) => model.slug === "claude-custom-tuned");
         assert.deepStrictEqual(
-          recorded.commands.map((command) => command.env?.CLAUDE_CONFIG_DIR),
-          [(yield* Path.Path).resolve(claudeConfigDir)],
+          custom?.capabilities?.optionDescriptors?.map((descriptor) =>
+            descriptor.type === "select"
+              ? `${descriptor.id}:${descriptor.options.map((option) => option.id).join("|")}`
+              : `${descriptor.id}:${descriptor.type}`,
+          ),
+          ["effort:high|xhigh", "ultracode:boolean"],
         );
-      }).pipe(Effect.provide(recorded.layer));
-    });
+      }).pipe(
+        Effect.provide(
+          layerMockSpawner((args) => {
+            const joined = args.join(" ");
+            if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+            throw new Error(`Unexpected args: ${joined}`);
+          }),
+        ),
+      ),
+    );
 
-    it.effect("includes probed claude slash commands in the provider snapshot", () =>
+    it.effect("returns warning when the Claude initialization result is unavailable", () =>
       Effect.gen(function* () {
         const status = yield* checkClaudeProviderStatus(
           defaultClaudeSettings,
-          claudeCapabilities({
-            subscriptionType: "maxplan",
-            slashCommands: [
-              {
-                name: "review",
-                description: "Review a pull request",
-                input: { hint: "pr-or-branch" },
-              },
-            ],
-          }),
+          noClaudeCapabilities,
+        );
+        assert.strictEqual(status.status, "warning");
+        assert.strictEqual(status.installed, true);
+        assert.strictEqual(status.auth.status, "unknown");
+        assert.strictEqual(
+          status.message,
+          "Could not verify Claude authentication status from initialization result.",
         );
 
-        assert.deepStrictEqual(status.slashCommands.slice(1), [
-          {
-            name: "review",
-            description: "Review a pull request",
-            input: { hint: "pr-or-branch" },
-          },
-        ]);
+        const timedOut = yield* checkClaudeProviderStatus(defaultClaudeSettings, () =>
+          Effect.fail(new Cause.TimeoutError()),
+        );
+        assert.strictEqual(timedOut.status, "warning");
+        assert.strictEqual(timedOut.auth.status, "unknown");
+        assert.strictEqual(
+          timedOut.message,
+          "Timed out after 25s while checking Claude account status.",
+        );
       }).pipe(
         Effect.provide(
           layerMockSpawner((args) => {
@@ -3607,7 +3691,74 @@ it.layer(
             if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
             if (joined === "auth status")
               return {
-                stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
+                stdout: '{"loggedIn":false}\n',
+                stderr: "",
+                code: 1,
+              };
+            throw new Error(`Unexpected args: ${joined}`);
+          }),
+        ),
+      ),
+    );
+
+    it.effect("returns error when version check fails with non-zero exit code", () => {
+      const secretStderr = "Something went wrong: secret-token-value";
+      return Effect.gen(function* () {
+        const status = yield* checkClaudeProviderStatus(
+          defaultClaudeSettings,
+          claudeCapabilities(),
+        );
+        assert.strictEqual(status.status, "error");
+        assert.strictEqual(status.installed, true);
+        assert.strictEqual(status.message, "Claude Agent CLI is installed but failed to run.");
+        assert.ok(!(status.message ?? "").includes(secretStderr));
+      }).pipe(
+        Effect.provide(
+          layerMockSpawner((args) => {
+            const joined = args.join(" ");
+            if (joined === "--version")
+              return {
+                stdout: "",
+                stderr: secretStderr,
+                code: 1,
+              };
+            throw new Error(`Unexpected args: ${joined}`);
+          }),
+        ),
+      );
+    });
+
+    it.effect("returns unavailable when claude is missing", () =>
+      Effect.gen(function* () {
+        const status = yield* checkClaudeProviderStatus(
+          defaultClaudeSettings,
+          claudeCapabilities(),
+        );
+        assert.strictEqual(status.status, "error");
+        assert.strictEqual(status.installed, false);
+        assert.strictEqual(status.auth.status, "unknown");
+        assert.strictEqual(status.message, "Claude Agent CLI (`claude`) was not found on PATH.");
+      }).pipe(Effect.provide(layerFailingSpawner("spawn claude ENOENT"))),
+    );
+
+    it.effect("returns an api key label for claude api key auth", () =>
+      Effect.gen(function* () {
+        const status = yield* checkClaudeProviderStatus(
+          defaultClaudeSettings,
+          claudeCapabilities({ tokenSource: "ANTHROPIC_AUTH_TOKEN" }),
+        );
+        assert.strictEqual(status.status, "ready");
+        assert.strictEqual(status.auth.status, "authenticated");
+        assert.strictEqual(status.auth.type, "apiKey");
+        assert.strictEqual(status.auth.label, "Claude API Key");
+      }).pipe(
+        Effect.provide(
+          layerMockSpawner((args) => {
+            const joined = args.join(" ");
+            if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+            if (joined === "auth status")
+              return {
+                stdout: '{"loggedIn":true,"authMethod":"api-key"}\n',
                 stderr: "",
                 code: 0,
               };
@@ -3661,16 +3812,29 @@ it.layer(
       ),
     );
 
-    it.effect("returns an api key label for claude api key auth", () =>
+    it.effect("includes probed claude slash commands in the provider snapshot", () =>
       Effect.gen(function* () {
         const status = yield* checkClaudeProviderStatus(
           defaultClaudeSettings,
-          claudeCapabilities({ tokenSource: "ANTHROPIC_AUTH_TOKEN" }),
+          claudeCapabilities({
+            subscriptionType: "maxplan",
+            slashCommands: [
+              {
+                name: "review",
+                description: "Review a pull request",
+                input: { hint: "pr-or-branch" },
+              },
+            ],
+          }),
         );
-        assert.strictEqual(status.status, "ready");
-        assert.strictEqual(status.auth.status, "authenticated");
-        assert.strictEqual(status.auth.type, "apiKey");
-        assert.strictEqual(status.auth.label, "Claude API Key");
+
+        assert.deepStrictEqual(status.slashCommands.slice(1), [
+          {
+            name: "review",
+            description: "Review a pull request",
+            input: { hint: "pr-or-branch" },
+          },
+        ]);
       }).pipe(
         Effect.provide(
           layerMockSpawner((args) => {
@@ -3678,7 +3842,7 @@ it.layer(
             if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
             if (joined === "auth status")
               return {
-                stdout: '{"loggedIn":true,"authMethod":"api-key"}\n',
+                stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
                 stderr: "",
                 code: 0,
               };
@@ -3688,69 +3852,44 @@ it.layer(
       ),
     );
 
-    it.effect("returns unavailable when claude is missing", () =>
-      Effect.gen(function* () {
-        const status = yield* checkClaudeProviderStatus(
-          defaultClaudeSettings,
-          claudeCapabilities(),
-        );
-        assert.strictEqual(status.status, "error");
-        assert.strictEqual(status.installed, false);
-        assert.strictEqual(status.auth.status, "unknown");
-        assert.strictEqual(status.message, "Claude Agent CLI (`claude`) was not found on PATH.");
-      }).pipe(Effect.provide(layerFailingSpawner("spawn claude ENOENT"))),
-    );
+    it.effect("runs Claude status probes with the configured CLAUDE_CONFIG_DIR", () => {
+      const claudeConfigDir = "/tmp/t3code-claude-home";
+      const recorded = recordingMockSpawnerLayer((args) => {
+        const joined = args.join(" ");
+        if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+        if (joined === "auth status")
+          return {
+            stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
+            stderr: "",
+            code: 0,
+          };
+        throw new Error(`Unexpected args: ${joined}`);
+      });
 
-    it.effect("returns error when version check fails with non-zero exit code", () => {
-      const secretStderr = "Something went wrong: secret-token-value";
       return Effect.gen(function* () {
         const status = yield* checkClaudeProviderStatus(
-          defaultClaudeSettings,
+          {
+            ...defaultClaudeSettings,
+            configDir: claudeConfigDir,
+          },
           claudeCapabilities(),
         );
-        assert.strictEqual(status.status, "error");
-        assert.strictEqual(status.installed, true);
-        assert.strictEqual(status.message, "Claude Agent CLI is installed but failed to run.");
-        assert.ok(!(status.message ?? "").includes(secretStderr));
-      }).pipe(
-        Effect.provide(
-          layerMockSpawner((args) => {
-            const joined = args.join(" ");
-            if (joined === "--version")
-              return {
-                stdout: "",
-                stderr: secretStderr,
-                code: 1,
-              };
-            throw new Error(`Unexpected args: ${joined}`);
-          }),
-        ),
-      );
+        assert.strictEqual(status.status, "ready");
+        assert.deepStrictEqual(
+          recorded.commands.map((command) => command.env?.CLAUDE_CONFIG_DIR),
+          [(yield* Path.Path).resolve(claudeConfigDir)],
+        );
+      }).pipe(Effect.provide(recorded.layer));
     });
 
-    it.effect("returns warning when the Claude initialization result is unavailable", () =>
+    it.effect("returns claude auth email from initialization result", () =>
       Effect.gen(function* () {
         const status = yield* checkClaudeProviderStatus(
           defaultClaudeSettings,
-          noClaudeCapabilities,
+          claudeCapabilities({ email: "claude@example.com" }),
         );
-        assert.strictEqual(status.status, "warning");
-        assert.strictEqual(status.installed, true);
-        assert.strictEqual(status.auth.status, "unknown");
-        assert.strictEqual(
-          status.message,
-          "Could not verify Claude authentication status from initialization result.",
-        );
-
-        const timedOut = yield* checkClaudeProviderStatus(defaultClaudeSettings, () =>
-          Effect.fail(new Cause.TimeoutError()),
-        );
-        assert.strictEqual(timedOut.status, "warning");
-        assert.strictEqual(timedOut.auth.status, "unknown");
-        assert.strictEqual(
-          timedOut.message,
-          "Timed out after 25s while checking Claude account status.",
-        );
+        assert.strictEqual(status.auth.status, "authenticated");
+        assert.strictEqual(status.auth.email, "claude@example.com");
       }).pipe(
         Effect.provide(
           layerMockSpawner((args) => {
@@ -3758,9 +3897,118 @@ it.layer(
             if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
             if (joined === "auth status")
               return {
-                stdout: '{"loggedIn":false}\n',
+                stdout:
+                  '{"loggedIn":true,"authMethod":"claude.ai","account":{"email":"claude@example.com"}}\n',
                 stderr: "",
-                code: 1,
+                code: 0,
+              };
+            throw new Error(`Unexpected args: ${joined}`);
+          }),
+        ),
+      ),
+    );
+
+    it.effect("does not duplicate Claude in provider-prefixed subscription names", () =>
+      Effect.gen(function* () {
+        const status = yield* checkClaudeProviderStatus(
+          defaultClaudeSettings,
+          claudeCapabilities({
+            subscriptionType: "Claude Max",
+          }),
+        );
+        assert.strictEqual(status.auth.status, "authenticated");
+        assert.strictEqual(status.auth.type, "Claude Max");
+        assert.strictEqual(status.auth.label, "Claude Max Subscription");
+      }).pipe(
+        Effect.provide(
+          layerMockSpawner((args) => {
+            const joined = args.join(" ");
+            if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+            throw new Error(`Unexpected args: ${joined}`);
+          }),
+        ),
+      ),
+    );
+
+    it.effect("does not duplicate Claude in full subscription labels", () =>
+      Effect.gen(function* () {
+        const status = yield* checkClaudeProviderStatus(
+          defaultClaudeSettings,
+          claudeCapabilities({
+            subscriptionType: "Claude Max Subscription",
+          }),
+        );
+        assert.strictEqual(status.auth.status, "authenticated");
+        assert.strictEqual(status.auth.type, "Claude Max Subscription");
+        assert.strictEqual(status.auth.label, "Claude Max Subscription");
+      }).pipe(
+        Effect.provide(
+          layerMockSpawner((args) => {
+            const joined = args.join(" ");
+            if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+            throw new Error(`Unexpected args: ${joined}`);
+          }),
+        ),
+      ),
+    );
+
+    it.effect("reads banked resets only for subscription logins", () =>
+      Effect.gen(function* () {
+        const check = (overrides: Partial<TestClaudeCapabilities>) =>
+          checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            () =>
+              Effect.succeed({
+                email: undefined,
+                subscriptionType: undefined,
+                tokenSource: undefined,
+                apiKeySource: undefined,
+                apiProvider: undefined,
+                slashCommands: [],
+                usage: { rate_limits_available: true, rate_limits: {} },
+                ...overrides,
+              }),
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            () => Effect.succeed({ availableCount: 2 }),
+          );
+        const subscription = yield* check({ subscriptionType: "max" });
+        const bedrock = yield* check({ apiProvider: "bedrock" });
+        assert.deepStrictEqual(subscription.usageLimits?.resetCredits, { availableCount: 2 });
+        assert.strictEqual(bedrock.usageLimits?.resetCredits, undefined);
+      }).pipe(
+        Effect.provide(
+          layerMockSpawner((args) => {
+            const joined = args.join(" ");
+            if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+            throw new Error(`Unexpected args: ${joined}`);
+          }),
+        ),
+      ),
+    );
+
+    it.effect("returns a display label for claude subscription types", () =>
+      Effect.gen(function* () {
+        const status = yield* checkClaudeProviderStatus(
+          defaultClaudeSettings,
+          claudeCapabilities({ subscriptionType: "maxplan" }),
+        );
+        assert.strictEqual(status.status, "ready");
+        assert.strictEqual(status.auth.status, "authenticated");
+        assert.strictEqual(status.auth.type, "maxplan");
+        assert.strictEqual(status.auth.label, "Claude Max Subscription");
+      }).pipe(
+        Effect.provide(
+          layerMockSpawner((args) => {
+            const joined = args.join(" ");
+            if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
+            if (joined === "auth status")
+              return {
+                stdout: '{"loggedIn":true,"authMethod":"claude.ai"}\n',
+                stderr: "",
+                code: 0,
               };
             throw new Error(`Unexpected args: ${joined}`);
           }),
@@ -3769,6 +4017,25 @@ it.layer(
     );
   });
 });
+
+const noClaudeCapabilities = () =>
+  Effect.sync(() => undefined as TestClaudeCapabilities | undefined);
+
+function layerFailingSpawner(description: string) {
+  return Layer.succeed(
+    ChildProcessSpawner.ChildProcessSpawner,
+    ChildProcessSpawner.make(() =>
+      Effect.fail(
+        PlatformError.systemError({
+          _tag: "NotFound",
+          module: "ChildProcess",
+          method: "spawn",
+          description,
+        }),
+      ),
+    ),
+  );
+}
 
 function recordingMockSpawnerLayer(
   handler: (args: ReadonlyArray<string>) => {
@@ -3796,22 +4063,3 @@ function recordingMockSpawnerLayer(
   );
   return { layer, commands };
 }
-
-function layerFailingSpawner(description: string) {
-  return Layer.succeed(
-    ChildProcessSpawner.ChildProcessSpawner,
-    ChildProcessSpawner.make(() =>
-      Effect.fail(
-        PlatformError.systemError({
-          _tag: "NotFound",
-          module: "ChildProcess",
-          method: "spawn",
-          description,
-        }),
-      ),
-    ),
-  );
-}
-
-const noClaudeCapabilities = () =>
-  Effect.sync(() => undefined as TestClaudeCapabilities | undefined);

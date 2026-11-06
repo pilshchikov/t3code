@@ -35,7 +35,7 @@ export function ThreadFileNavigatorPane(props: {
   }) => ReactNode;
   readonly cwd: string;
   readonly environmentId: EnvironmentId;
-  readonly headerInset: number;
+  readonly headerInset?: number;
   readonly projectName: string;
   readonly selectedPath: string | null;
   readonly onSelectFile: (path: string) => void;
@@ -190,7 +190,7 @@ export function ThreadFileNavigatorPane(props: {
     >
       <View
         className="ios:border-b ios:border-border android:bg-header"
-        style={{ paddingTop: Platform.OS === "android" ? 0 : props.headerInset }}
+        style={{ paddingTop: Platform.OS === "android" ? 0 : (props.headerInset ?? 0) }}
       >
         {Platform.OS === "android" ? (
           <FilesHeader

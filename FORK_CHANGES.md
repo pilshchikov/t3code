@@ -1,5 +1,36 @@
 # Fork Changes
 
+## Upstream integration — 2026-11-06 (32a0531748)
+
+- Merge 474 upstream commits through `32a0531748c44b25072d7495ce0b9bd7e9450a87`.
+  Adopt compatible provider/MCP app support, session recovery, fresh-session dispatch,
+  Git/status and database performance improvements, dictation fixes and Markdown fixes.
+- Preserve the fork's flat ordered sidebar, project rail groups/settlement/actions,
+  both dashboard layouts, multi-root Files/worktree selection, persistent dirty editors,
+  resizable lazy diffs, OpenIDEA/custom commands, model catalog additions, account-aware
+  Claude history/forking and observed native-subagent effort. Adapt those paths to the
+  upstream RPC permission boundary, lazy patch hooks, shared keyboard matching and mobile
+  layout modules. Keep connected-environment discovery, usage tools, queued-prompt controls,
+  mobile relay and bundled SSH server updates.
+- Retain every released migration ID/name. Append delegated recovery indexes and scheduled
+  task thread mode as migrations 84/85; reuse the existing unsettled-at migration. Keep
+  summary-only explicit compaction, first-assistant visibility, two-hour PR retention,
+  retention guards, opt-in provider version discovery and
+  background refresh, and disabled external analytics/tracing. Block new mobile crash reporting
+  in JavaScript and its native endpoint, including persisted reporting preferences.
+- Main integration paths: `apps/server/src/{ws.ts,orchestration-v2,persistence,provider}`,
+  `apps/web/src/{components,lib/peerUsageLimits.ts}`, `apps/mobile/src/features`, and
+  `packages/{contracts,client-runtime,shared}`. Exclude read-only `.repos` reference sources
+  from changed-file format/lint/test selection in `scripts/check-changed.ts`.
+- Validation: changed-file format/lint/knip/GraphQL and React Compiler checks, 40 package
+  typechecks and
+  13,343 tests across 706 files pass (21 tests skipped). Isolated browser checks cover both
+  dashboards, Appearance, project menus, card navigation, Replay output, Files/worktree switching,
+  persistent editors and diff loading/collapse; OpenIDEA remains available. The 19 native resource
+  monitor tests and three MCP eval request constructions pass. Live model evals need an unavailable
+  API key; native mobile lint needs unavailable SwiftLint/ktlint/detekt, and native UI tools are
+  unavailable. Build and stage the packaged app without restarting local or remote work.
+
 ## Reviewed upstream integration — 2026-11-02 (bb221f0e1f)
 
 - Integrate the reviewed 151 commits through `bb221f0e1f50001e296fa3269bb75e2ea88e573a`

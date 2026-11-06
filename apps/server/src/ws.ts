@@ -64,6 +64,8 @@ import {
   OrchestrationGetTurnDiffError,
   ORCHESTRATION_V2_WS_METHODS,
   ORCHESTRATION_PROTOCOL_QUERY_PARAM,
+  CLIENT_CAPABILITIES_QUERY_PARAM,
+  SETTINGS_SECRET_REFERENCES_CAPABILITY,
   ORCHESTRATION_PROTOCOL_VERSION,
   OrchestrationV2DispatchCommandError,
   OrchestrationV2GetShellSnapshotError,
@@ -172,6 +174,7 @@ import {
   makeLiveBodyDeduper,
   projectDomainEventForWire,
   projectThreadProjectionForWire,
+  threadStreamEventItem,
 } from "./orchestration-v2/WireProjection.ts";
 import { dedupeSnapshotBodies } from "@t3tools/shared/orchestrationV2DedupedBodies";
 import * as ProjectStore from "./orchestration-v2/ProjectStore.ts";
@@ -195,7 +198,7 @@ import { invalidateSettingsSecrets } from "./sourceControl/sourceControlHostSecr
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
-import { terminalOutputStream, withTerminalOutputWindow } from "./terminal/OutputProtocol.ts";
+import { terminalOutputStream, withOutputWindow } from "./terminal/OutputProtocol.ts";
 import * as ServerBrowser from "./preview/ServerBrowser.ts";
 import * as DeviceService from "./device/DeviceService.ts";
 import { remoteSshDeviceHosts } from "./device/localSshDeviceHost.ts";
@@ -273,6 +276,10 @@ import * as SessionStore from "./auth/SessionStore.ts";
 import { failEnvironmentAuthInvalid, failEnvironmentInternal } from "./auth/http.ts";
 
 import * as RelayClient from "@t3tools/shared/relayClient";
+import {
+  SOCKET_FRAME_PARTS_QUERY_PARAM,
+  splitLargeSocketFrames,
+} from "@t3tools/shared/socketFrameParts";
 import { isTelemetryIdHash } from "@t3tools/shared/telemetryId";
 import {
   sameUsageLimitCommandCoverage,
@@ -433,8 +440,44 @@ export const resolveOpenDiscoveryForConfig = <T, D, E1, R1, E2, R2, E3, R3, E4, 
     },
     { concurrency: "unbounded" },
   ).pipe(Effect.map(({ editorConfig, ...endpoints }) => ({ ...editorConfig, ...endpoints })));
-function withoutWorkspaceSnapshots(providers: ReadonlyArray<ServerProvider>): ServerProvider[] {
-  return providers.map(({ workspaceSnapshots: _workspaceSnapshots, ...provider }) => provider);
+// A failed scan leaves no cwd snapshot, so a client without the machine catalog gets it
+// as a pending snapshot, which it shows while it retries the scan.
+function workspaceSnapshotOrCatalog(
+  provider: ServerProvider,
+  cwd: string,
+  catalogOnDemand: boolean,
+) {
+  const snapshots = (provider.workspaceSnapshots ?? []).filter((snapshot) => snapshot.cwd === cwd);
+  if (snapshots.length > 0 || !catalogOnDemand) return snapshots;
+  return [
+    {
+      cwd,
+      checkedAt: provider.checkedAt,
+      slashCommands: provider.slashCommands,
+      slashCommandsPending: true,
+      skills: provider.skills,
+    },
+  ];
+}
+
+// On-demand catalog clients read full entries from the cwd snapshot they fetch. Names still
+// change the config when the machine catalog does, so the client refetches, and skill names
+// and labels keep skill links working where no snapshot is fetched.
+function withoutWorkspaceSnapshots(
+  providers: ReadonlyArray<ServerProvider>,
+  catalogsPerCwd: ReadonlySet<string> = new Set(),
+): ServerProvider[] {
+  return providers.map(({ workspaceSnapshots: _workspaceSnapshots, ...provider }) =>
+    catalogsPerCwd.has(provider.instanceId)
+      ? {
+          ...provider,
+          slashCommands: provider.slashCommands.map(({ name }) => ({ name })),
+          skills: provider.skills.map(
+            ({ description: _d, shortDescription: _s, ...skill }) => skill,
+          ),
+        }
+      : provider,
+  );
 }
 
 function unexpectedCompatibilityError(error: never): never {
@@ -574,6 +617,7 @@ function filesystemBrowseFailureContext(error: WorkspaceEntries.WorkspaceEntries
   readonly failure: FilesystemBrowseFailure;
   readonly parentPath?: string;
   readonly platform?: string;
+  readonly pathMissing?: boolean;
 } {
   switch (error._tag) {
     case "WorkspaceEntriesWindowsPathUnsupportedError":
@@ -581,7 +625,11 @@ function filesystemBrowseFailureContext(error: WorkspaceEntries.WorkspaceEntries
     case "WorkspaceEntriesCurrentProjectRequiredError":
       return { failure: "current_project_required" };
     case "WorkspaceEntriesReadDirectoryError":
-      return { failure: "read_directory_failed", parentPath: error.parentPath };
+      return {
+        failure: "read_directory_failed",
+        parentPath: error.parentPath,
+        ...(error.pathMissing ? { pathMissing: true } : {}),
+      };
     default:
       return unexpectedCompatibilityError(error);
   }
@@ -795,6 +843,11 @@ function hasCompatibleOrchestrationProtocol(url: URL): boolean {
   );
 }
 
+function readSettingsClient(url: URL) {
+  const capabilities = url.searchParams.get(CLIENT_CAPABILITIES_QUERY_PARAM)?.split(",") ?? [];
+  return { secretReferences: capabilities.includes(SETTINGS_SECRET_REFERENCES_CAPABILITY) };
+}
+
 function shouldUseBoundedThreadSnapshot(input: {
   readonly acceptBoundedSnapshot?: boolean;
   readonly acceptDeferredWork?: boolean;
@@ -880,6 +933,7 @@ const canReplayPersistedRange = Effect.fnUntraced(function* (
   if (replayGap < 0 || replayGap > maxGap) {
     return false;
   }
+  if (afterSequence < (yield* applicationEvents.prunedThroughSequence)) return false;
   const stats = yield* applicationEvents.getReplayStats({
     afterSequence,
     throughSequence: headSequence,
@@ -964,11 +1018,7 @@ export const subscribeOrchestrationV2Thread = Effect.fn("ws.orchestrationV2.subs
           afterSequence,
         })
         .pipe(
-          Stream.map((stored) => ({
-            kind: "event" as const,
-            sequence: stored.sequence,
-            event: stored.event,
-          })),
+          Stream.map(threadStreamEventItem),
           coalesceThreadLiveStream,
           Stream.mapError(
             (cause) =>
@@ -1068,7 +1118,21 @@ export const subscribeOrchestrationV2Thread = Effect.fn("ws.orchestrationV2.subs
             }),
         ),
       );
-      if (input.afterSequence > highWater) {
+      const prunedThrough = yield* applicationEvents.prunedThroughSequence.pipe(
+        Effect.mapError(
+          (cause) =>
+            new OrchestrationV2GetThreadProjectionError({
+              threadId: input.threadId,
+              message: `Failed to prepare orchestration V2 thread ${input.threadId} replay`,
+              cause,
+            }),
+        ),
+      );
+      // An idle thread's cursor sits at its own high-water: nothing was missed, so replay nothing.
+      if (
+        input.afterSequence > highWater ||
+        (input.afterSequence < highWater && input.afterSequence < prunedThrough)
+      ) {
         return yield* snapshotThenLive();
       }
       const stats = yield* applicationEvents
@@ -1109,9 +1173,25 @@ export const subscribeOrchestrationV2Thread = Effect.fn("ws.orchestrationV2.subs
         // Retained creation events may describe deleted threads; replace replay only if a snapshot exists.
         if (shell !== null) return yield* snapshotThenLive();
       }
-      const replay = coalesceLiveUpdatedEvents(
-        yield* loadReplayThrough(input.afterSequence, highWater),
-      );
+      const replayed = yield* loadReplayThrough(input.afterSequence, highWater);
+      // Pruning publishes its boundary before deleting, so a pass during the read shows up here.
+      if (
+        input.afterSequence < highWater &&
+        input.afterSequence <
+          (yield* applicationEvents.prunedThroughSequence.pipe(
+            Effect.mapError(
+              (cause) =>
+                new OrchestrationV2GetThreadProjectionError({
+                  threadId: input.threadId,
+                  message: `Failed to prepare orchestration V2 thread ${input.threadId} replay`,
+                  cause,
+                }),
+            ),
+          ))
+      ) {
+        return yield* snapshotThenLive();
+      }
+      const replay = coalesceLiveUpdatedEvents(replayed);
       const plan = decideThreadResume({
         afterSequence: input.afterSequence,
         highWater,
@@ -1345,31 +1425,38 @@ export const subscribeOrchestrationV2Shell = Effect.fn("ws.orchestrationV2.subsc
         });
       }
 
-      const highWater = yield* applicationEvents.latestApplicationSequence;
-      if (!(yield* canReplayPersistedRange(input.afterSequence, highWater, SHELL_RESUME_MAX_GAP))) {
+      const fromSnapshot = Effect.gen(function* () {
         const loaded = yield* loadSnapshot();
         return composeShellStreamWithEnrichment({
           initial: initialSnapshotItems(loaded),
           tail: completionThenLive(loaded.snapshot.snapshotSequence),
           enrichment: enrichmentRefreshes,
         });
+      });
+      const highWater = yield* applicationEvents.latestApplicationSequence;
+      if (!(yield* canReplayPersistedRange(input.afterSequence, highWater, SHELL_RESUME_MAX_GAP))) {
+        return yield* fromSnapshot;
       }
 
       subagentThreadIds = new Set(yield* threadManagement.listActiveSubagentThreadIds());
 
       const loaded = yield* loadProjectMetadataSnapshot(highWater);
-      const replay = toShellStream(
-        applicationEvents
-          .readApplicationEvents({
-            afterSequence: input.afterSequence,
-            throughSequence: highWater,
-            // A row a newer build wrote (e.g. after a downgrade) must not fail
-            // every shell resubscribe. The live tail below resumes from
-            // highWater, so a dropped row never hides later events.
-            skipUnknownEventTypes: true,
-          })
-          .pipe(Stream.filter(filterSubagentTranscript)),
-      );
+      // Read before replying: the range is budgeted above, and a prune pass during the read
+      // publishes its boundary first, so the recheck below catches deleted rows.
+      const replayed = yield* applicationEvents
+        .readApplicationEvents({
+          afterSequence: input.afterSequence,
+          throughSequence: highWater,
+          // A row a newer build wrote (e.g. after a downgrade) must not fail
+          // every shell resubscribe. The live tail below resumes from
+          // highWater, so a dropped row never hides later events.
+          skipUnknownEventTypes: true,
+        })
+        .pipe(Stream.filter(filterSubagentTranscript), Stream.runCollect);
+      if (input.afterSequence < (yield* applicationEvents.prunedThroughSequence)) {
+        return yield* fromSnapshot;
+      }
+      const replay = toShellStream(Stream.fromIterable(replayed));
       return composeShellStreamWithEnrichment({
         initial: initialEnrichmentItems(loaded),
         tail: Stream.concat(Stream.concat(replay, completionMarker), liveFrom(highWater)),
@@ -1403,6 +1490,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
   clientAnalyticsProps: Readonly<Record<string, unknown>>,
   serverBrowser: ServerBrowser.ServerBrowser["Service"],
   reportProfiles: ServerBrowser.ProfileReporter,
+  settingsClient: { readonly secretReferences: boolean },
 ) {
   const currentSessionId = currentSession.sessionId;
   const sql = yield* SqlClient.SqlClient;
@@ -1909,6 +1997,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
     readonly usageLimitsCommand: boolean;
     readonly workspaceSnapshotsOnDemand: boolean;
     readonly deferNetworkDiscovery: boolean;
+    readonly catalogsPerCwd?: ReadonlySet<string>;
   }) {
     const keybindingsConfig = yield* keybindings.loadConfigState;
     const currentProviders = yield* providerRegistry.getProviders;
@@ -1916,10 +2005,11 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
       ? withUsageLimitsCommands(currentProviders, yield* usageLimitSources.current)
       : currentProviders;
     const providers = options.workspaceSnapshotsOnDemand
-      ? withoutWorkspaceSnapshots(commandProviders)
+      ? withoutWorkspaceSnapshots(commandProviders, options.catalogsPerCwd)
       : commandProviders;
     const settings = ServerSettings.redactServerSettingsForClient(
       yield* serverSettings.getSettings,
+      settingsClient,
     );
     const environment = yield* serverEnvironment.getDescriptor;
     const auth = yield* serverAuth.getDescriptor();
@@ -1986,6 +2076,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
       threadFindProgressive: true,
       secretProviderSettings: true,
       secretReferences: true,
+      secretRequestReferences: true,
       ...Option.match(scratchWorkspaceRoot, {
         onNone: () => ({}),
         onSome: (root) => ({ scratchWorkspaceRoot: root }),
@@ -2166,6 +2257,16 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
       getOrchestrationV2ArchivedShellSnapshot,
     [ORCHESTRATION_V2_WS_METHODS.getThreadFamily]: (input) =>
       readOmittableShellRows({ familyOf: input.threadId }, "Failed to load the thread family"),
+    [ORCHESTRATION_V2_WS_METHODS.getThreadTitles]: (input) =>
+      threadManagement.getThreadTitles(input.threadIds).pipe(
+        Effect.mapError(
+          (cause) =>
+            new OrchestrationV2GetShellSnapshotError({
+              message: "Failed to load thread titles",
+              cause,
+            }),
+        ),
+      ),
     [ORCHESTRATION_V2_WS_METHODS.getOlderSettledThreads]: (input) =>
       loadOlderSettledThreadsPage({
         sql,
@@ -2476,12 +2577,12 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
             fresh: input.fresh,
           });
         }
+        if (input.reloadSecrets === true && input.instanceId === undefined) {
+          yield* invalidateSettingsSecrets(secretResolver, serverSettings.getSettings);
+        }
         // Await refresh; RPC scope closure would interrupt a fork before the hub answered.
         if (input.instanceId === undefined) {
           yield* usageLimitSources.refresh;
-        }
-        if (input.reloadSecrets === true && input.instanceId === undefined) {
-          yield* invalidateSettingsSecrets(secretResolver, serverSettings.getSettings);
         }
         let providers = yield* input.cwd !== undefined && input.instanceId !== undefined
           ? providerRegistry.refreshWorkspaceSnapshot({
@@ -2530,6 +2631,9 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
         if (instanceId === undefined || cwd === undefined) {
           return { providers: withoutWorkspaceSnapshots(commandProviders) };
         }
+        const catalogOnDemand =
+          input.providerCatalogsOnDemand === true &&
+          (yield* providerInstances.getInstance(instanceId))?.snapshotForCwd !== undefined;
         return {
           providers: commandProviders
             .filter((provider) => provider.instanceId === instanceId)
@@ -2539,9 +2643,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
               models: [],
               slashCommands: [],
               skills: [],
-              workspaceSnapshots: (provider.workspaceSnapshots ?? []).filter(
-                (snapshot) => snapshot.cwd === cwd,
-              ),
+              workspaceSnapshots: workspaceSnapshotOrCatalog(provider, cwd, catalogOnDemand),
             })),
         };
       }),
@@ -2684,7 +2786,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
         const settings = yield* providerInstanceMutation === undefined
           ? serverSettings.updateSettings(nextPatch)
           : serverSettings.updateProviderInstance(providerInstanceMutation, nextPatch);
-        return ServerSettings.redactServerSettingsForClient(settings);
+        return ServerSettings.redactServerSettingsForClient(settings, settingsClient);
       }),
     [WS_METHODS.serverDiscoverSourceControl]: (_input) => sourceControlDiscovery.discover,
     [WS_METHODS.serverGetTraceDiagnostics]: (_input) =>
@@ -2841,6 +2943,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
     [WS_METHODS.sourceControlSignInCancel]: (input) => sourceControlSignIn.cancel(input),
     [WS_METHODS.sourceControlAppAccess]: (input) => sourceControlSignIn.access(input),
     [WS_METHODS.sourceControlStarred]: (input) => sourceControlSignIn.starred(input),
+    [WS_METHODS.sourceControlStar]: (input) => sourceControlSignIn.star(input),
     [WS_METHODS.projectCloneStart]: (input) =>
       projectCloneTracker.start(input, {
         createProject: (project) =>
@@ -2907,8 +3010,12 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
     [WS_METHODS.subscribeProjectClones]: () => projectCloneTracker.stream,
     [WS_METHODS.sourceControlPublishRepository]: (input) =>
       sourceControlRepositories.publishRepository(input).pipe(
-        Effect.tap(() => repositoryIdentityResolver.resolve(input.cwd, { refresh: true })),
-        Effect.tap(() => refreshGitStatus(input.cwd)),
+        // A failed push still leaves the new remote added.
+        Effect.ensuring(
+          repositoryIdentityResolver
+            .resolve(input.cwd, { refresh: true })
+            .pipe(Effect.andThen(refreshGitStatus(input.cwd))),
+        ),
       ),
     [WS_METHODS.projectsSearchEntries]: (input) =>
       workspaceEntries.search(input).pipe(
@@ -3334,7 +3441,22 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
         Effect.gen(function* () {
           const usageLimitsCommand = input.usageLimitsCommand === true;
           const workspaceSnapshotsOnDemand = input.workspaceSnapshotsOnDemand === true;
-          // Buffer changes through discovery and the initial snapshot's RPC ACK wait.
+          // Only providers that can scan a cwd answer the client's on-demand catalog fetch.
+          // Read per update, since a replaced instance can change that.
+          const currentCatalogsPerCwd =
+            workspaceSnapshotsOnDemand && input.providerCatalogsOnDemand === true
+              ? providerInstances.listInstances.pipe(
+                  Effect.map(
+                    (instances) =>
+                      new Set(
+                        instances
+                          .filter((instance) => instance.snapshotForCwd !== undefined)
+                          .map((instance) => instance.instanceId),
+                      ),
+                  ),
+                )
+              : Effect.succeed(new Set<string>());
+          // Buffer changes through discovery and the initial snapshot's send.
           const keybindingsChanges = yield* keybindings.subscribeChanges;
           const settingsChanges = yield* serverSettings.subscribeChanges;
           const remoteTargets = yield* Effect.forkScoped(remoteOpenTargets.resolveTargets(), {
@@ -3350,6 +3472,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
             usageLimitsCommand,
             workspaceSnapshotsOnDemand,
             deferNetworkDiscovery: true,
+            catalogsPerCwd: yield* currentCatalogsPerCwd,
           });
           const keybindingsUpdates = keybindingsChanges.pipe(
             Stream.map((event) => ({
@@ -3370,16 +3493,19 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
             usageLimitSources.streamChanges.pipe(
               Stream.changesWith(usageLimitsCommand ? sameUsageLimitCommandCoverage : () => true),
             ),
-            (providers, sources) => {
-              const commandProviders = usageLimitsCommand
-                ? withUsageLimitsCommands(providers, sources)
-                : providers;
-              // Stripped before the de-dupe below, so snapshot-only changes send nothing.
-              return workspaceSnapshotsOnDemand
-                ? withoutWorkspaceSnapshots(commandProviders)
-                : commandProviders;
-            },
+            (providers, sources) =>
+              usageLimitsCommand ? withUsageLimitsCommands(providers, sources) : providers,
           ).pipe(
+            // Stripped before the de-dupe below, so snapshot-only changes send nothing.
+            Stream.mapEffect((commandProviders) =>
+              workspaceSnapshotsOnDemand
+                ? currentCatalogsPerCwd.pipe(
+                    Effect.map((catalogsPerCwd) =>
+                      withoutWorkspaceSnapshots(commandProviders, catalogsPerCwd),
+                    ),
+                  )
+                : Effect.succeed(commandProviders),
+            ),
             // Compare initial paired values with the snapshot; blindly dropping them loses changes between snapshot and subscription.
             (updates) => Stream.concat(rpcInitialItems([config.providers]), updates),
             Stream.changesWith(
@@ -3415,7 +3541,9 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
                 )
               : Stream.empty;
           const settingsUpdates = settingsChanges.pipe(
-            Stream.map((settings) => ServerSettings.redactServerSettingsForClient(settings)),
+            Stream.map((settings) =>
+              ServerSettings.redactServerSettingsForClient(settings, settingsClient),
+            ),
             Stream.map((settings) => ({
               version: 1 as const,
               type: "settingsUpdated" as const,
@@ -3579,7 +3707,7 @@ export const layer = Layer.unwrap(
         const rpcWebSocketHttpEffect = yield* Effect.gen(function* () {
           const { protocol, httpEffect } = yield* RpcServer.makeProtocolWithHttpEffectWebsocket;
           yield* RpcServer.make(ServerWsRpcGroup, WS_RPC_SERVER_OPTIONS).pipe(
-            Effect.provideService(RpcServer.Protocol, withTerminalOutputWindow(protocol)),
+            Effect.provideService(RpcServer.Protocol, withOutputWindow(protocol)),
             Effect.provide(
               Layer.merge(
                 RpcAuthorization.layer(session.scopes, (method, payload) => {
@@ -3605,7 +3733,13 @@ export const layer = Layer.unwrap(
           return httpEffect;
         }).pipe(
           Effect.provide(
-            layerWsRpc(session, clientAnalyticsProps, serverBrowser, reportProfiles).pipe(
+            layerWsRpc(
+              session,
+              clientAnalyticsProps,
+              serverBrowser,
+              reportProfiles,
+              readSettingsClient(url.value),
+            ).pipe(
               Layer.provideMerge(RpcSerialization.layerJson),
               // Handler-context reporters see only request defects, not server-wide defects.
               Layer.provide(DefectReporter.layer),
@@ -3641,11 +3775,25 @@ export const layer = Layer.unwrap(
             ),
           ),
         );
+        const framedRpcWebSocketHttpEffect = url.value.searchParams.has(
+          SOCKET_FRAME_PARTS_QUERY_PARAM,
+        )
+          ? rpcWebSocketHttpEffect.pipe(
+              Effect.provideService(
+                HttpServerRequest.HttpServerRequest,
+                // The RPC server upgrades the request itself, so its socket is
+                // wrapped through the request it reads.
+                Object.create(request, {
+                  upgrade: { value: Effect.map(request.upgrade, splitLargeSocketFrames) },
+                }),
+              ),
+            )
+          : rpcWebSocketHttpEffect;
         return yield* Effect.acquireUseRelease(
           sessions.markConnected(session.sessionId),
           () =>
             Effect.raceFirst(
-              rpcWebSocketHttpEffect,
+              framedRpcWebSocketHttpEffect,
               sessions
                 .awaitInvalidation(
                   session.sessionId,

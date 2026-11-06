@@ -1,3 +1,4 @@
+import * as Config from "effect/Config";
 import * as NodeOS from "node:os";
 
 import * as Clock from "effect/Clock";
@@ -230,7 +231,10 @@ const make: Effect.Effect<
       const resolved = path.resolve(expandHome(dir));
       if (!stores.has(resolved)) stores.set(resolved, { instanceId, label });
     };
-    const envConfigDir = process.env.CLAUDE_CONFIG_DIR;
+    const envConfigDir = yield* Config.String("CLAUDE_CONFIG_DIR").pipe(
+      Config.withDefault(""),
+      Effect.orElseSucceed(() => ""),
+    );
     add(
       envConfigDir && envConfigDir.trim().length > 0
         ? envConfigDir
@@ -347,7 +351,10 @@ const make: Effect.Effect<
   });
 
   const listCodexSessions = Effect.fn("listCodexSessions")(function* (cwd: string, now: number) {
-    const codexHomeRaw = process.env.CODEX_HOME;
+    const codexHomeRaw = yield* Config.String("CODEX_HOME").pipe(
+      Config.withDefault(""),
+      Effect.orElseSucceed(() => ""),
+    );
     const codexHome =
       codexHomeRaw && codexHomeRaw.trim().length > 0
         ? path.resolve(expandHome(codexHomeRaw))
