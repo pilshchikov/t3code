@@ -1,5 +1,12 @@
 # Fork Changes
 
+## Compact project rail hover — 2026-11-06
+
+- Show the resize-edge hover highlight only in the expanded project rail. Keep the compact
+  rail clear on mouse hover while retaining drag resizing and keyboard focus feedback.
+- Source: `apps/web/src/components/sidebar/projectRail.css`. Isolated before/after captures
+  confirm both hover states; keyboard toggling and dragging from compact to expanded pass.
+
 ## Upstream integration — 2026-11-06 (32a0531748)
 
 - Merge 474 upstream commits through `32a0531748c44b25072d7495ce0b9bd7e9450a87`.

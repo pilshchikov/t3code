@@ -651,7 +651,7 @@
   background: transparent;
   transition: background-color 120ms;
 }
-[data-rail="edge"]:hover::after,
+[data-rail-root][data-named="true"] [data-rail="edge"]:hover::after,
 [data-rail="edge"]:focus-visible::after,
 [data-rail="edge"][data-resizing="true"]::after {
   background: var(--primary);
