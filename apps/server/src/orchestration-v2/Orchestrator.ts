@@ -4791,9 +4791,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             }),
         ),
       );
-    // Only side chat forks lock the source; validate the modes copied here, not an earlier read.
+    // Use the locked source state so expiry and mode changes cannot race the fork.
     yield* refuseAboveDispatchModeLimit(command, command.sourceThreadId, sourceProjection.thread);
-    if (command.sideChat === true && sourceProjection.thread.deletedAt !== null) {
+    if (sourceProjection.thread.deletedAt !== null) {
       return yield* new OrchestratorDispatchError({
         commandId: command.commandId,
         commandType: command.type,
@@ -13699,7 +13699,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             return { events: [], effects: [] };
           }
         }
-        // The dispatch wrapper holds each side chat's lock, so none can commit after this plan.
+        // The dispatch wrapper holds every managed child's lock, so none can commit after this plan.
         const plans = [
           yield* planDeletion(command),
           ...(yield* Effect.forEach(sideChatIds, (threadId) =>
@@ -14057,7 +14057,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     } satisfies OrchestratorV2DispatchResult;
   });
 
-  /** `sideChatIds` are the live side chats a `thread.delete` cascades to, read under their locks. */
+  /** Locked deletion children; automatic retention also includes native subagent descendants. */
   const dispatchWithReceiptEffect = Effect.fn("orchestrationV2.dispatch.withReceipt")(function* (
     command: OrchestrationV2ServerCommand,
     sideChatIds: ReadonlyArray<ThreadId> = [],
@@ -14292,17 +14292,14 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       commandThreadId(command),
       dispatchWithReceiptEffect(command),
     );
-    // A parent's lock comes before its side chats' locks, so a delete cascade and a side chat
-    // fork or command never interleave. A fork from a side chat or onto an existing thread would
-    // invert that order; dispatch rejects both, so they skip the source lock.
-    if (
-      command.type === "thread.fork" &&
-      command.sideChat === true &&
-      command.sourceThreadId !== command.targetThreadId
-    ) {
+    // Source reads must serialize with deletion and history purge. A new target cannot be
+    // an ancestor; forbidden side-chat forks and existing targets reject without the source lock.
+    if (command.type === "thread.fork" && command.sourceThreadId !== command.targetThreadId) {
       const source = yield* findThread(command.sourceThreadId);
       const target = yield* findThread(command.targetThreadId);
-      return yield* source === null || source.lineage.sideChat === true || target !== null
+      return yield* source === null ||
+      target !== null ||
+      (command.sideChat === true && source.lineage.sideChat === true)
         ? dispatch
         : threadDispatch.withLock(command.sourceThreadId, dispatch);
     }

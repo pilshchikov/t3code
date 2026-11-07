@@ -617,6 +617,93 @@ it.layer(layerProjectDeletionTest)("project deletion during thread commands", (i
     }),
   );
 
+  it.effect("an ordinary fork waits while retention holds its source lock", () =>
+    Effect.gen(function* () {
+      const projects = yield* ProjectService.ProjectService;
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const executor = yield* ThreadCommandExecutor.ThreadCommandExecutor;
+      const projectId = ProjectId.make("retention-fork-lock-project");
+      const sourceId = ThreadId.make("retention-fork-lock-source");
+      yield* projects.create({
+        commandId: CommandId.make("retention-fork-lock-project"),
+        projectId,
+        title: "Retention",
+        workspaceRoot: "/work/retention-fork-lock",
+      });
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("retention-fork-lock-create"),
+        createdBy: "user",
+        creationSource: "web",
+        threadId: sourceId,
+        projectId,
+        title: "Source",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+      });
+      const acquired = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const queued = yield* Deferred.make<void>();
+      const hold = yield* executor
+        .withLock(
+          sourceId,
+          Deferred.succeed(acquired, undefined).pipe(Effect.andThen(Deferred.await(release))),
+        )
+        .pipe(Effect.forkChild({ startImmediately: true }));
+      yield* Deferred.await(acquired);
+      const withLock = executor.withLock;
+      const observe: ThreadCommandExecutor.ThreadCommandExecutor["Service"]["withLock"] = (
+        key,
+        effect,
+      ) =>
+        key === sourceId
+          ? Deferred.succeed(queued, undefined).pipe(Effect.andThen(withLock(key, effect)))
+          : withLock(key, effect);
+      using _spy = vi.spyOn(executor, "withLock").mockImplementation(observe);
+      const fork = yield* orchestrator
+        .dispatch({
+          type: "thread.fork",
+          commandId: CommandId.make("retention-fork-lock-fork"),
+          sourceThreadId: sourceId,
+          targetThreadId: ThreadId.make("retention-fork-lock-target"),
+          sourcePoint: { type: "latest_stable" },
+          createdBy: "user",
+          creationSource: "web",
+        })
+        .pipe(Effect.exit, Effect.forkChild({ startImmediately: true }));
+      yield* Effect.raceFirst(
+        Deferred.await(queued),
+        Fiber.join(fork).pipe(
+          Effect.andThen(Effect.die("The fork read history while retention held its source lock.")),
+        ),
+      );
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(hold);
+      yield* Fiber.join(fork);
+      yield* orchestrator.dispatch({
+        type: "thread.delete",
+        commandId: CommandId.make("retention-fork-lock-delete"),
+        threadId: sourceId,
+      });
+      const rejected = yield* Effect.flip(
+        orchestrator.dispatch({
+          type: "thread.fork",
+          commandId: CommandId.make("retention-fork-lock-after-delete"),
+          sourceThreadId: sourceId,
+          targetThreadId: ThreadId.make("retention-fork-lock-deleted-target"),
+          sourcePoint: { type: "latest_stable" },
+          createdBy: "user",
+          creationSource: "web",
+        }),
+      );
+      assert.instanceOf(rejected, Orchestrator.OrchestratorDispatchError);
+      assert.equal(rejected.cause, `Thread ${sourceId} was deleted.`);
+    }),
+  );
+
   it.effect.each(["side chat", "native subagent", "live fork", "pinned side chat"] as const)(
     "applies settled retention to a parent with a %s",
     (scenario) =>
