@@ -16,6 +16,7 @@ import * as StorageCleanup from "./storageCleanup.ts";
 import * as PullRequestSyncReactor from "./orchestration-v2/PullRequestSyncReactor.ts";
 import * as PullRequestWatchReactor from "./orchestration-v2/PullRequestWatchReactor.ts";
 import * as PeerThreads from "./peers/PeerThreads.ts";
+import * as PeerOrchestration from "./peers/PeerOrchestration.ts";
 import * as OrchestratorMcpService from "./mcp/OrchestratorMcpService.ts";
 import * as PeerThreadMessaging from "./peers/PeerThreadMessaging.ts";
 import * as DelegatedTaskQuestionReactor from "./orchestration-v2/DelegatedTaskQuestionReactor.ts";
@@ -688,7 +689,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
     // Core Services
     Layer.provideMerge(PeerThreadMessaging.layer),
     Layer.provideMerge(
-      PeerThreads.layer.pipe(
+      Layer.merge(PeerThreads.layer, PeerOrchestration.layer).pipe(
         Layer.provide(OrchestratorMcpService.layer),
         Layer.provide(ProviderAdapterRegistry.layerFromProviderInstanceRegistry),
       ),

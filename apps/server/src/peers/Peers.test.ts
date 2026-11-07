@@ -97,6 +97,7 @@ const startRelay = Effect.gen(function* () {
     switch (operation.type) {
       case "describe":
         return Effect.succeed({ type: "described", peers: [] });
+      case "orchestration-call":
       case "threads-list":
       case "usage-limits":
       case "environment-read":
@@ -169,6 +170,21 @@ it.layer(layerTest, { excludeTestServices: true })("Peers", (it) => {
         expect(copied.large.equals(large)).toBe(true);
         expect(copied.envMode).toBe(0o600);
         expect(copied.entries).toEqual([".env", "data"]);
+
+        // A remote worker's binary outputs return through the same chunked relay, including
+        // files larger than a chunk, without touching an existing local destination.
+        const returned = NodePath.join(here, "remote-results");
+        const downloaded = yield* peers.copy({
+          environmentId: peer,
+          direction: "from_peer",
+          localPath: returned,
+          peerPath: NodePath.join(there, "data"),
+          overwrite: false,
+        });
+        expect(downloaded).toEqual({ files: 1, bytes: large.length, skipped: [] });
+        expect(
+          yield* Effect.promise(() => NodeFSP.readFile(NodePath.join(returned, "large.bin"))),
+        ).toEqual(large);
 
         const again = yield* peers.copy({
           environmentId: peer,

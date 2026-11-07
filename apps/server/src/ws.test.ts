@@ -2,6 +2,7 @@ import * as AccountLimitsService from "./usage/AccountLimitsService.ts";
 import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
 import * as PeerFiles from "./peers/PeerFiles.ts";
 import * as PeerThreads from "./peers/PeerThreads.ts";
+import * as PeerOrchestration from "./peers/PeerOrchestration.ts";
 import * as Peers from "./peers/Peers.ts";
 import * as ResumableSessionDiscovery from "./sessions/ResumableSessionDiscovery.ts";
 import * as ThreadWorkspaces from "./workspace/ThreadWorkspaces.ts";
@@ -775,6 +776,7 @@ const layerUnusedConfigRpcServices = Layer.mergeAll(
   Layer.mock(GitVcsDriver.GitVcsDriver)({}),
   Layer.mock(PeerFiles.PeerFiles)({}),
   Layer.mock(PeerThreads.PeerThreads)({}),
+  Layer.mock(PeerOrchestration.PeerOrchestration)({}),
   Layer.mock(Peers.Peers)({}),
   Layer.mock(ResumableSessionDiscovery.ResumableSessionDiscovery)({}),
   Layer.mock(ThreadWorkspaces.ThreadWorkspaces)({}),

@@ -40,6 +40,7 @@ import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolv
 import { forkParked } from "../serverActivation.ts";
 import * as PeerForwarding from "./PeerForwarding.ts";
 import * as PeerLinks from "./PeerLinks.ts";
+import * as Peers from "../peers/Peers.ts";
 
 /** How long one follow of a remote task waits on its thread there before checking again. */
 const FOLLOW_WAIT_MS = 10 * 60 * 1_000;
@@ -117,6 +118,7 @@ const make = Effect.gen(function* () {
   const followRetry = yield* FollowRetrySchedule;
   const forwarding = yield* PeerForwarding.PeerForwarding;
   const links = yield* PeerLinks.PeerLinks;
+  const relay = yield* Effect.serviceOption(Peers.Peers);
   const threads = yield* ThreadManagement.ThreadManagementService;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const projects = yield* ProjectService.ProjectService;
@@ -258,6 +260,15 @@ const make = Effect.gen(function* () {
       // the forwarder scopes the launch's, and the record's names it.
       const key = input.clientRequestId ?? (yield* random.uuidV4());
       const task = taskPrompt(input);
+      const link = yield* links
+        .get(target.environmentId)
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new OrchestratorMcpFailure({ code: "orchestration_error", message: error.message }),
+          ),
+        );
+      const route = Option.isSome(link) ? "linked" : "relay";
       const launched = yield* forwarding.call(
         scope,
         ProjectToolkit.tools.t3_thread_launch,
@@ -277,18 +288,26 @@ const make = Effect.gen(function* () {
             title: parent.thread.title,
           },
         },
+        route,
       );
-      const link = yield* links.get(target.environmentId).pipe(
-        Effect.map(Option.getOrUndefined),
-        Effect.orElseSucceed(() => undefined),
-      );
+      const connected =
+        route === "relay" && Option.isSome(relay)
+          ? yield* relay.value
+              .describe(parent.thread.projectId)
+              .pipe(Effect.orElseSucceed(() => []))
+          : [];
+      const label = Option.isSome(link)
+        ? link.value.label
+        : connected.find((peer) => peer.environmentId === target.environmentId)?.label;
+
       const commandId = CommandId.make(
         `command:mcp:${encodeURIComponent(scope.requestNamespace)}:remote-delegate:${encodeURIComponent(key)}`,
       );
       const remoteChild: OrchestrationV2RemoteTaskChild = {
         environmentId: target.environmentId,
         threadId: launched.threadId,
-        label: link?.label ?? target.environmentId,
+        label: label ?? target.environmentId,
+        ...(route === "relay" ? { transport: "relay" as const } : {}),
         ...(launched.runId === null ? {} : { runId: launched.runId }),
       };
       const recorded = yield* threads
@@ -423,12 +442,17 @@ const make = Effect.gen(function* () {
     reason?: string,
   ) =>
     forwarding
-      .interruptThread(scope, remote.environmentId, {
-        threadId: remote.threadId,
-        stop: true,
-        ...(reason === undefined ? {} : { reason }),
-        clientRequestId: `${key}:${remote.threadId}`,
-      })
+      .interruptThread(
+        scope,
+        remote.environmentId,
+        {
+          threadId: remote.threadId,
+          stop: true,
+          ...(reason === undefined ? {} : { reason }),
+          clientRequestId: `${key}:${remote.threadId}`,
+        },
+        remote.transport ?? "linked",
+      )
       .pipe(Effect.asVoid);
 
   /**
@@ -446,12 +470,17 @@ const make = Effect.gen(function* () {
     let error: OrchestratorMcpThreadTimelineItem | undefined;
     let afterPosition: number | undefined;
     while (true) {
-      const read = yield* forwarding.readThread(scope, remote.environmentId, {
-        threadId: remote.threadId,
-        view: failed ? "activity" : "messages",
-        limit: 100,
-        ...(afterPosition === undefined ? {} : { afterPosition }),
-      });
+      const read = yield* forwarding.readThread(
+        scope,
+        remote.environmentId,
+        {
+          threadId: remote.threadId,
+          view: failed ? "activity" : "messages",
+          limit: 100,
+          ...(afterPosition === undefined ? {} : { afterPosition }),
+        },
+        remote.transport ?? "linked",
+      );
       reply =
         read.items.findLast(
           (item) => item.type === "assistant_message" && (runId === null || item.runId === runId),
@@ -470,12 +499,17 @@ const make = Effect.gen(function* () {
     let text = reply.text ?? "";
     let textOffset = reply.textTruncated ? (reply.nextTextOffset ?? null) : null;
     while (textOffset !== null) {
-      const rest = yield* forwarding.readThread(scope, remote.environmentId, {
-        threadId: remote.threadId,
-        itemId: reply.itemId,
-        textOffset,
-        maxCharsPerItem: 50_000,
-      });
+      const rest = yield* forwarding.readThread(
+        scope,
+        remote.environmentId,
+        {
+          threadId: remote.threadId,
+          itemId: reply.itemId,
+          textOffset,
+          maxCharsPerItem: 50_000,
+        },
+        remote.transport ?? "linked",
+      );
       const part = rest.items[0];
       if (part === undefined) break;
       text += part.text ?? "";
@@ -597,15 +631,20 @@ const make = Effect.gen(function* () {
         ),
       );
     const waited = yield* forwarding
-      .waitForThread(scope, remote.environmentId, {
-        threadId: remote.threadId,
-        ...(remote.runId === undefined ? {} : { runId: remote.runId }),
-        timeoutMs: FOLLOW_WAIT_MS,
-        // A thread there whose run ended may still be waiting on its own
-        // tasks to wake it for the answer, which a task here waits for too.
-        // An older peer ignores this and reports the run alone.
-        untilDelegatedWorkSettled: true,
-      })
+      .waitForThread(
+        scope,
+        remote.environmentId,
+        {
+          threadId: remote.threadId,
+          ...(remote.runId === undefined ? {} : { runId: remote.runId }),
+          timeoutMs: FOLLOW_WAIT_MS,
+          // A thread there whose run ended may still be waiting on its own
+          // tasks to wake it for the answer, which a task here waits for too.
+          // An older peer ignores this and reports the run alone.
+          untilDelegatedWorkSettled: true,
+        },
+        remote.transport ?? "linked",
+      )
       .pipe(Effect.raceFirst(endedHere));
     // The next look reads the result and stops it there.
     if ("endedHere" in waited) return false;

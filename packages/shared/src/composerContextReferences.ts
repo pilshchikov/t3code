@@ -353,7 +353,7 @@ function formatComposerContextProviderPayload(record: KnownComposerContextRecord
       return [
         `label: ${record.label}`,
         `environmentId: ${record.environmentId}`,
-        "The user means this machine. Not linked here yet: call t3_environment_link with this environmentId. Linked: pass it as environmentId, or target.environmentId for delegate_task.",
+        "The user means this machine. Discover app-connected machines with t3_peers_list and inspect destination projects/models with t3_peer_environment_read. delegate_task can use target.environmentId through the app relay without another link. Other forwarded tools may need t3_environment_link.",
       ].join("\n");
   }
 }

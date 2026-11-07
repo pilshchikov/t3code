@@ -13,12 +13,13 @@ import {
 } from "./auth.ts";
 import { ORCHESTRATION_V2_WS_METHODS } from "./orchestrationV2.ts";
 import { WS_METHODS } from "./rpc.ts";
-import { PeerThreadOperation } from "./peers.ts";
+import { PeerOrchestrationCall, PeerThreadOperation } from "./peers.ts";
 
 /** Incremental client enforcement; the server still authorizes every request. */
 export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.shellOpenInEditor]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerThreadsRequest]: AuthOrchestrationOperateScope,
+  [WS_METHODS.peerOrchestrationCall]: AuthOrchestrationOperateScope,
   [WS_METHODS.previewClose]: AuthPreviewOperateScope,
   // Stopping a server signals its processes, as closing a terminal does.
   [WS_METHODS.previewStopLocalServer]: AuthTerminalOperateScope,
@@ -86,6 +87,7 @@ export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 
 const decodeEditorLaunch = Schema.decodeUnknownSync(LaunchEditorInput);
 const decodePrepareThread = Schema.decodeUnknownSync(GitPreparePullRequestThreadInput);
+const decodePeerOrchestrationCall = Schema.decodeUnknownSync(PeerOrchestrationCall);
 const decodePeerThreadOperation = Schema.decodeUnknownSync(PeerThreadOperation);
 const decodeStackedAction = Schema.decodeUnknownSync(GitRunStackedActionInput);
 
@@ -99,6 +101,14 @@ export function clientRpcRequiredScopes(
     decodeEditorLaunch(input).editor === "custom"
   ) {
     return [AuthOrchestrationOperateScope, AuthTerminalOperateScope];
+  }
+  if (method === WS_METHODS.peerOrchestrationCall && input !== undefined) {
+    const { tool } = decodePeerOrchestrationCall(input);
+    return [
+      tool === "t3_thread_launch" || tool === "t3_thread_interrupt"
+        ? AuthOrchestrationOperateScope
+        : AuthOrchestrationReadScope,
+    ];
   }
   if (method === WS_METHODS.peerThreadsRequest && input !== undefined) {
     const operation = decodePeerThreadOperation(input);

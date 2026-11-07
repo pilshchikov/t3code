@@ -1,6 +1,7 @@
 import {
   type EnvironmentId,
   OrchestratorMcpFailure,
+  PeerOrchestrationToolName,
   type OrchestratorMcpEnvironmentLinksResult,
   OrchestratorMcpThreadInterruptInput,
   OrchestratorMcpThreadInterruptResult,
@@ -24,6 +25,8 @@ import { readCaller, unavailable } from "../mcp/threadAccess.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import * as PeerLinks from "./PeerLinks.ts";
 import * as PeerMcpClient from "./PeerMcpClient.ts";
+import * as Peers from "../peers/Peers.ts";
+import * as Option from "effect/Option";
 
 /**
  * A peer's `/mcp` holds a wait open for its whole timeout without sending
@@ -33,8 +36,11 @@ import * as PeerMcpClient from "./PeerMcpClient.ts";
 export const FORWARDED_WAIT_CHUNK_MS = 50_000;
 const DEFAULT_WAIT_TIMEOUT_MS = 10 * 60 * 1_000;
 const MAX_WAIT_TIMEOUT_MS = 60 * 60 * 1_000;
+const isRelayTool = Schema.is(PeerOrchestrationToolName);
+const isMcpFailureCode = Schema.is(OrchestratorMcpFailure.fields.code);
 
 type Scope = McpInvocationContext.McpInvocationScope;
+export type Route = "relay" | "linked";
 
 /**
  * Runs T3 MCP tools in a linked environment for an agent here. The tool's own
@@ -54,24 +60,28 @@ export class PeerForwarding extends Context.Service<
       tool: T,
       environmentId: EnvironmentId,
       params: Tool.Parameters<T>,
+      route?: Route,
     ) => Effect.Effect<Tool.Success<T>, OrchestratorMcpFailure>;
     /** `t3_thread_read` there. */
     readonly readThread: (
       scope: Scope,
       environmentId: EnvironmentId,
       input: OrchestratorMcpThreadReadInput,
+      route?: Route,
     ) => Effect.Effect<OrchestratorMcpThreadReadResult, OrchestratorMcpFailure>;
     /** `t3_thread_interrupt` there. */
     readonly interruptThread: (
       scope: Scope,
       environmentId: EnvironmentId,
       input: OrchestratorMcpThreadInterruptInput,
+      route?: Route,
     ) => Effect.Effect<OrchestratorMcpThreadInterruptResult, OrchestratorMcpFailure>;
     /** `t3_thread_wait` there, in pieces short enough to survive any route. */
     readonly waitForThread: (
       scope: Scope,
       environmentId: EnvironmentId,
       input: OrchestratorMcpThreadWaitInput,
+      route?: Route,
     ) => Effect.Effect<OrchestratorMcpThreadWaitResult, OrchestratorMcpFailure>;
     /** The environments this one links to, as an agent sees them. */
     readonly links: (
@@ -93,6 +103,7 @@ export const remoteTarget = (scope: Scope, environmentId: EnvironmentId | undefi
 
 const make = Effect.gen(function* () {
   const peers = yield* PeerMcpClient.PeerMcpClient;
+  const relay = yield* Effect.serviceOption(Peers.Peers);
   const links = yield* PeerLinks.PeerLinks;
   const crypto = yield* Digest.Digest;
   const threads = yield* ThreadManagement.ThreadManagementService;
@@ -130,6 +141,7 @@ const make = Effect.gen(function* () {
     success: Schema.Top,
     environmentId: EnvironmentId,
     params: unknown,
+    route?: Route,
   ) {
     const limits = yield* callerLimits(scope);
     const encoded = (yield* Schema.encodeUnknownEffect(parameters as Schema.Encoder<unknown>)(
@@ -146,16 +158,84 @@ const make = Effect.gen(function* () {
     if (typeof args.clientRequestId === "string") {
       args.clientRequestId = yield* scopedRequestId(scope.requestNamespace, args.clientRequestId);
     }
-    return yield* peers.call({
-      environmentId,
-      tool: toolName,
-      arguments: args,
-      limits,
-      success: success as Schema.Decoder<A>,
-    });
+    const linked = yield* links
+      .get(environmentId)
+      .pipe(
+        Effect.mapError(
+          (error) =>
+            new OrchestratorMcpFailure({ code: "orchestration_error", message: error.message }),
+        ),
+      );
+    if (route === "linked" || (route !== "relay" && Option.isSome(linked))) {
+      return yield* peers.call({
+        environmentId,
+        tool: toolName,
+        arguments: args,
+        limits,
+        success: success as Schema.Decoder<A>,
+      });
+    }
+    if (!isRelayTool(toolName))
+      return yield* new OrchestratorMcpFailure({
+        code: "invalid_request",
+        message:
+          "This tool needs an explicit environment link. Remote delegation, model discovery and project listing can also use a connected desktop/web app.",
+      });
+    if (Option.isNone(relay))
+      return yield* new OrchestratorMcpFailure({
+        code: "invalid_request",
+        message:
+          "No app relay is available. Keep the desktop/web app connected to both environments, or link the environment explicitly.",
+      });
+    const reply = yield* relay.value
+      .request({
+        type: "orchestration-call",
+        input: {
+          environmentId,
+          sourceEnvironmentId: scope.environmentId,
+          requestNamespace: scope.requestNamespace,
+          ...limits,
+          tool: toolName,
+          arguments: args,
+        },
+      })
+      .pipe(
+        Effect.mapError(
+          (error) =>
+            new OrchestratorMcpFailure({
+              code: "orchestration_error",
+              message: error.message,
+            }),
+        ),
+      );
+    if (reply.type === "failed")
+      return yield* new OrchestratorMcpFailure({
+        code: isMcpFailureCode(reply.code) ? reply.code : "orchestration_error",
+        message: reply.message,
+      });
+    if (reply.type !== "orchestration-result")
+      return yield* new OrchestratorMcpFailure({
+        code: "orchestration_error",
+        message: "The relay returned an unexpected result.",
+      });
+    return yield* Schema.decodeUnknownEffect(success as Schema.Decoder<A>)(reply.result).pipe(
+      Effect.mapError(
+        () =>
+          new OrchestratorMcpFailure({
+            code: "orchestration_error",
+            message:
+              "Update both environments and the relaying app: the remote result did not match this version.",
+          }),
+      ),
+    );
   });
 
-  const readThread: PeerForwarding["Service"]["readThread"] = (scope, environmentId, input) =>
+  const readThread: PeerForwarding["Service"]["readThread"] = (
+    scope,
+    environmentId,
+    input,
+    route,
+  ) =>
     forward<OrchestratorMcpThreadReadResult>(
       scope,
       "t3_thread_read",
@@ -163,12 +243,14 @@ const make = Effect.gen(function* () {
       OrchestratorMcpThreadReadResult,
       environmentId,
       input,
+      route,
     );
 
   const interruptThread: PeerForwarding["Service"]["interruptThread"] = (
     scope,
     environmentId,
     input,
+    route,
   ) =>
     forward<OrchestratorMcpThreadInterruptResult>(
       scope,
@@ -177,11 +259,12 @@ const make = Effect.gen(function* () {
       OrchestratorMcpThreadInterruptResult,
       environmentId,
       input,
+      route,
     );
 
   const waitForThread: PeerForwarding["Service"]["waitForThread"] = Effect.fn(
     "PeerForwarding.waitForThread",
-  )(function* (scope, environmentId, input) {
+  )(function* (scope, environmentId, input, route) {
     let remaining = Math.min(
       MAX_WAIT_TIMEOUT_MS,
       Math.max(1, input.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS),
@@ -203,6 +286,7 @@ const make = Effect.gen(function* () {
             ? {}
             : { untilDelegatedWorkSettled: input.untilDelegatedWorkSettled }),
         },
+        route,
       );
       remaining -= chunk;
       if (!result.timedOut || remaining <= 0) return result;
@@ -217,7 +301,7 @@ const make = Effect.gen(function* () {
     Effect.flatMap((enabled) => (enabled ? Effect.void : Effect.fail(linkedEnvironmentsOff))),
   );
 
-  const call: PeerForwarding["Service"]["call"] = (scope, tool, environmentId, params) => {
+  const call: PeerForwarding["Service"]["call"] = (scope, tool, environmentId, params, route) => {
     const forwarded: Effect.Effect<
       Tool.Success<typeof tool>,
       OrchestratorMcpFailure
@@ -226,9 +310,32 @@ const make = Effect.gen(function* () {
           scope,
           environmentId,
           params as OrchestratorMcpThreadWaitInput,
+          route,
         ) as Effect.Effect<Tool.Success<typeof tool>, OrchestratorMcpFailure>)
-      : forward(scope, tool.name, tool.parametersSchema, tool.successSchema, environmentId, params);
-    return Effect.andThen(requireEnabled, forwarded);
+      : forward(
+          scope,
+          tool.name,
+          tool.parametersSchema,
+          tool.successSchema,
+          environmentId,
+          params,
+          route,
+        );
+    // A configured link retains its own beta/access rules. An existing app connection does
+    // not need a second pairing, and remains usable when the linking beta is off.
+    return links.get(environmentId).pipe(
+      Effect.mapError(
+        (error) =>
+          new OrchestratorMcpFailure({ code: "orchestration_error", message: error.message }),
+      ),
+      Effect.flatMap((link) => {
+        if (route !== "relay" && (route === "linked" || Option.isSome(link)))
+          return scope.linkedEnvironments === false
+            ? Effect.fail(linkedEnvironmentsOff)
+            : Effect.andThen(requireEnabled, forwarded);
+        return forwarded;
+      }),
+    );
   };
 
   /**
@@ -236,7 +343,7 @@ const make = Effect.gen(function* () {
    * empty list reads as a dead end and agents go looking elsewhere.
    */
   const NOT_LISTED =
-    "Not listed: not linked yet. Call t3_environment_link with a hint from the user's words.";
+    "Not listed: not linked yet. An app-connected machine may still support delegation via t3_peers_list. Otherwise call t3_environment_link with a hint from the user's words.";
 
   const listLinks: PeerForwarding["Service"]["links"] = Effect.fn("PeerForwarding.listLinks")(
     function* (scope) {

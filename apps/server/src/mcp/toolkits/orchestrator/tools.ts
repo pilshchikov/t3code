@@ -85,7 +85,7 @@ const OrchestratorCapabilitiesTool = Tool.make("orchestrator_capabilities", {
 
 const DelegateTaskTool = Tool.make("delegate_task", {
   description:
-    "Start one child agent with only `task`. No parent history. Separate checkout or PR per child: `isolation:'worktree'`. Keep `taskId` for `task_status` and `task_cancel`. No secrets in `task`.",
+    "Start one child agent with only `task`. No parent history. Another machine: set target.environmentId and its projectId/provider/model from t3_peers_list and t3_peer_environment_read. App-connected machines (including SSH) need no extra server link. Remote work uses that project's checkout; ask for absolute output paths, then download files/folders using t3_peer_copy from_peer. Separate local checkout: `isolation:'worktree'`. Keep taskId for task_status and task_cancel. No secrets in task.",
   parameters: OrchestratorMcpDelegateTaskInput,
   success: OrchestratorMcpDelegateTaskResult,
   failure: OrchestratorMcpFailure,

@@ -92,6 +92,30 @@ describe("RPC authorization scopes", () => {
       ]);
     },
   );
+  it.each([
+    "t3_thread_launch",
+    "t3_thread_interrupt",
+    "t3_thread_read",
+    "t3_thread_wait",
+    "t3_project_list",
+    "orchestrator_capabilities",
+  ] as const)("checks relay destination scope for %s", (tool) => {
+    expect(
+      clientRpcRequiredScopes(WS_METHODS.peerOrchestrationCall, {
+        environmentId: EnvironmentId.make("mini"),
+        sourceEnvironmentId: EnvironmentId.make("laptop"),
+        requestNamespace: "parent",
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        tool,
+        arguments: {},
+      }),
+    ).toEqual([
+      tool === "t3_thread_launch" || tool === "t3_thread_interrupt"
+        ? AuthOrchestrationOperateScope
+        : AuthOrchestrationReadScope,
+    ]);
+  });
   it("declares exactly one scope for every RPC in the server group", () => {
     expect(new Set(Object.keys(RPC_REQUIRED_SCOPES))).toEqual(new Set(WsRpcGroup.requests.keys()));
   });

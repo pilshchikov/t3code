@@ -880,6 +880,8 @@ const DedupedBodyMarker = Schema.optionalKey(Schema.Literal(true));
  * as there. Such a task has no `childThreadId`.
  */
 export const OrchestrationV2RemoteTaskChild = Schema.Struct({
+  /** Absent on older tasks, which always used an explicit server link. */
+  transport: Schema.optional(Schema.Literal("relay")),
   environmentId: EnvironmentId,
   threadId: ThreadId,
   label: Schema.String,

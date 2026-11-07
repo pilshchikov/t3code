@@ -5,6 +5,25 @@ machine. That machine must stay running and reachable while you work.
 
 ## Let agents coordinate across machines
 
+You can also ask an agent to delegate new work to another connected environment. For example:
+“Use a subagent on Build Mac, which has Blender, create a model there, and bring the model and
+rendered preview back to this project.” The parent discovers the remote project's paths and
+available models, starts a tracked remote task, receives its result, and copies the requested
+output files back through T3's file-transfer tools. Inputs can be sent there the same way.
+
+Both servers and the relaying app must support remote delegation. Keep the desktop/web app open
+and connected to both environments, including direct SSH connections. No additional environment
+link is required for an app-connected machine. A configured server link retains its existing
+access limits. Remote tasks run in the destination project's checkout, not the parent's local
+worktree. Completion and cancellation use the same task controls as local delegates; unfinished
+tasks resume following after reconnect or restart.
+
+Copies handle binary files and folders in verified chunks, keep file permissions, and do not
+overwrite existing files unless requested. Paths must be inside registered projects or thread
+worktrees on each machine, and copying requires a full-access agent. Have the worker save its
+outputs there and return absolute paths. A result mentioning remote paths has not downloaded them;
+the parent must complete the copy and report the local paths.
+
 Keep the desktop or web app connected to both environments. Ask your agent to find the other
 conversation, send it a message, and watch for its reply. Direct SSH connections work; T3 Connect
 is optional. Both servers and the relaying app need a version that supports peer thread messaging.

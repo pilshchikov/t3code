@@ -114,7 +114,7 @@ export const OrchestratorMcpTarget = Schema.Struct({
   environmentId: Schema.optional(
     EnvironmentId.annotate({
       description:
-        "Linked environment to run in. Provider and model default to yours; others come from `orchestrator_capabilities` with this `environmentId`.",
+        "Environment to run in, from t3_peers_list or t3_environment_links. For app-connected machines use the destination project/provider/model IDs from t3_peer_environment_read; the app must stay connected to both machines.",
     }),
   ),
   projectId: Schema.optional(
@@ -323,7 +323,7 @@ const OrchestratorMcpProjectTarget = Schema.optional(
 export const OrchestratorMcpEnvironmentTarget = Schema.optional(
   EnvironmentId.annotate({
     description:
-      "Linked environment to act in. Omit for this one. Ids are then that environment's.",
+      "Destination environment. Omit for this one. Use destination IDs. Linked servers support forwarding; an app connection also relays delegation and its discovery/read/wait/stop tools.",
   }),
 );
 

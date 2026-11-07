@@ -248,7 +248,29 @@ export const PeerThreadOperation = Schema.Union([
 ]);
 export type PeerThreadOperation = typeof PeerThreadOperation.Type;
 
+/** The small set of app tools required to start and follow work over an existing app connection. */
+export const PeerOrchestrationToolName = Schema.Literals([
+  "t3_thread_launch",
+  "t3_thread_read",
+  "t3_thread_wait",
+  "t3_thread_interrupt",
+  "t3_project_list",
+  "orchestrator_capabilities",
+]);
+export const PeerOrchestrationCall = Schema.Struct({
+  environmentId: EnvironmentId,
+  sourceEnvironmentId: EnvironmentId,
+  requestNamespace: TrimmedNonEmptyString.check(Schema.isMaxLength(4096)),
+  runtimeMode: RuntimeMode,
+  interactionMode: ProviderInteractionMode,
+  tool: PeerOrchestrationToolName,
+  // The destination decodes these with the actual tool schema and runs its checked handler.
+  arguments: Schema.Record(Schema.String, Schema.Unknown),
+});
+export type PeerOrchestrationCall = typeof PeerOrchestrationCall.Type;
+
 export const PeerRelayOperation = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("orchestration-call"), input: PeerOrchestrationCall }),
   Schema.Struct({
     type: Schema.Literal("environment-read"),
     environmentId: EnvironmentId,
@@ -286,6 +308,7 @@ export const PeerRelayRequest = Schema.Struct({
 export type PeerRelayRequest = typeof PeerRelayRequest.Type;
 
 export const PeerRelayReply = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("orchestration-result"), result: Schema.Unknown }),
   Schema.Struct({ type: Schema.Literal("environment-read"), result: PeerEnvironmentSnapshot }),
   Schema.Struct({ type: Schema.Literal("thread-queue"), result: ThreadQueueResult }),
   Schema.Struct({

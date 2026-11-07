@@ -14,6 +14,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as FiberMap from "effect/FiberMap";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
@@ -37,6 +38,7 @@ export const layer = Layer.effectDiscard(
     const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
     const relays = yield* FiberMap.make<EnvironmentId>();
     const fileSlots = yield* Semaphore.make(4);
+    const taskWaitSlots = yield* Semaphore.make(16);
 
     const describe = Effect.fn("web.peerRelay.describe")(function* (
       source: EnvironmentId,
@@ -83,6 +85,37 @@ export const layer = Layer.effectDiscard(
 
     const perform = (source: EnvironmentId, operation: PeerRelayOperation) => {
       switch (operation.type) {
+        case "orchestration-call": {
+          if (operation.input.sourceEnvironmentId !== source)
+            return Effect.succeed<PeerRelayReply>({
+              type: "failed",
+              code: "invalid_request",
+              message: "The relay source does not match its connected environment.",
+            });
+          const call = onPeer(
+            source,
+            operation.input.environmentId,
+            Effect.promise(() => import("../rpc/peerOrchestration")).pipe(
+              Effect.flatMap((rpc) => rpc.perform(operation.input.environmentId, operation.input)),
+            ),
+            (result) => ({ type: "orchestration-result", result }),
+          );
+          // Leave relay capacity for launches, cancellation and artifact transfers during waits.
+          return operation.input.tool === "t3_thread_wait"
+            ? taskWaitSlots
+                .withPermitsIfAvailable(1)(call)
+                .pipe(
+                  Effect.map(
+                    Option.getOrElse((): PeerRelayReply => ({
+                      type: "failed",
+                      code: "orchestration_error",
+                      message:
+                        "The app relay has too many active task waits. The task follower will retry; cancellation and file transfers remain available.",
+                    })),
+                  ),
+                )
+            : call;
+        }
         case "environment-read":
           return onPeer(
             source,

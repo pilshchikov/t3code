@@ -1,5 +1,29 @@
 # Fork Changes
 
+## Remote delegated work through app connections — 2026-11-07
+
+- Let `delegate_task` launch and follow work on an environment already connected through the
+  desktop/web app, including SSH, without creating an extra server link. Reuse the existing
+  delegated-task records, completion delivery, cancellation and restart recovery. Persist the
+  relay route so link changes never switch a task's transport; existing linked tasks retain
+  their access and revocation behavior.
+- Relay only launch, project/model discovery and thread read/wait/stop tools. Destination calls
+  run their normal checked MCP handlers and schemas, with caller modes and managed policy ceilings.
+  Enforce destination RPC scopes, source identity and retry namespaces. Reserve relay capacity
+  for cancellation and file transfer while tasks wait.
+- Teach all provider adapters to discover remote projects/models, pass destination IDs, send
+  inputs and retrieve binary output files/folders with `t3_peer_copy`. Keep chunked, checksum-verified
+  copies and project/worktree path guards. Do not treat a remote result path as a local download.
+- Source: contracts `peers.ts`, `rpc.ts`, `orchestrationV2.ts`; server `peer/{PeerForwarding,RemoteDelegation}.ts`,
+  `peers/PeerOrchestration.ts`, WebSocket/auth wiring; web `peerRelayHost.ts` and `rpc/peerOrchestration.ts`;
+  shared provider orchestration instructions and `docs/user/remote-access.md`.
+- Validation: changed-file checks pass (236 tests across 14 files, 36 package typechecks and React
+  Compiler checks), including app-relayed completion, cancellation, restart recovery, rejected
+  escalation and binary download. Isolated Chromium also exercised the real destination WebSocket
+  RPC, launched a free Replay turn, waited for completion and read it back without runtime errors.
+  Added two synthetic remote-artifact model eval cases; dry-run validation passes. Live
+  model evals could not start: no configured API key or `vibeproxy` model provider on this host.
+
 ## Settled conversation retention and sidebar cleanup — 2026-11-06
 
 - Remove the fork-only **Resume from CLI** sidebar section and its component. Keep provider session

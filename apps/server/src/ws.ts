@@ -216,6 +216,7 @@ import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as PeerFiles from "./peers/PeerFiles.ts";
 import * as Peers from "./peers/Peers.ts";
 import * as PeerThreads from "./peers/PeerThreads.ts";
+import * as PeerOrchestration from "./peers/PeerOrchestration.ts";
 import * as SiblingWorktreeFiles from "./workspace/SiblingWorktreeFiles.ts";
 import * as KnownWorkspaces from "./workspace/KnownWorkspaces.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
@@ -741,6 +742,7 @@ const WORKSPACE_RPC_TAGS = [
   WS_METHODS.peerRelayConnect,
   WS_METHODS.peerRelayRespond,
   WS_METHODS.peerThreadsRequest,
+  WS_METHODS.peerOrchestrationCall,
   WS_METHODS.projectMemoryList,
   WS_METHODS.projectMemoryRead,
   WS_METHODS.projectMemoryRemove,
@@ -1611,6 +1613,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
   const peerFiles = yield* PeerFiles.PeerFiles;
   const peers = yield* Peers.Peers;
   const peerThreads = yield* PeerThreads.PeerThreads;
+  const peerOrchestration = yield* PeerOrchestration.PeerOrchestration;
   const peerLinks = yield* PeerLinks.PeerLinks;
   const peerLinkRequests = yield* PeerLinkRequests.PeerLinkRequests;
   const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
@@ -3110,6 +3113,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
     [WS_METHODS.peerRelayConnect]: () => peers.connect,
     [WS_METHODS.peerRelayRespond]: (input) => peers.respond(input),
     [WS_METHODS.peerThreadsRequest]: (input) => peerThreads.perform(input),
+    [WS_METHODS.peerOrchestrationCall]: (input) => peerOrchestration.call(input),
     [WS_METHODS.shellOpenInEditor]: (input) => externalLauncher.launchEditor(input),
     [WS_METHODS.filesystemGetMetadata]: (input) => workspaceFileSystem.getMetadata(input),
     [WS_METHODS.filesystemBrowse]: (input) =>
