@@ -59,6 +59,7 @@ describe("runMigrations", () => {
         [85, "ScheduledTaskThreadMode"],
         [86, "ThreadHistoryRetention"],
         [87, "PromptReferenceLookup"],
+        [88, "CheckpointRefLookup"],
       ]);
       assert.deepStrictEqual(yield* history, [
         ...beforeHistory,
@@ -78,6 +79,7 @@ describe("runMigrations", () => {
         [85, "ScheduledTaskThreadMode"],
         [86, "ThreadHistoryRetention"],
         [87, "PromptReferenceLookup"],
+        [88, "CheckpointRefLookup"],
       ]);
       assert.deepStrictEqual(yield* sql`SELECT * FROM project_memories`, memories);
       assert.deepStrictEqual(yield* sql`SELECT * FROM usage_limit_history`, usage);

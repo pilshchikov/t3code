@@ -91,6 +91,7 @@ describe("V2 preview upgrade", () => {
         [85, "ScheduledTaskThreadMode"],
         [86, "ThreadHistoryRetention"],
         [87, "PromptReferenceLookup"],
+        [88, "CheckpointRefLookup"],
       ]);
       assert.deepStrictEqual(yield* runMigrations(), []);
       assert.deepStrictEqual(yield* sql`SELECT * FROM orchestration_v2_legacy_imports`, imports);
@@ -197,6 +198,7 @@ describe("V2 preview upgrade", () => {
         [85, "ScheduledTaskThreadMode"],
         [86, "ThreadHistoryRetention"],
         [87, "PromptReferenceLookup"],
+        [88, "CheckpointRefLookup"],
       ]);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );

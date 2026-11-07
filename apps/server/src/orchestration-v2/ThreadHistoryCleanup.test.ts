@@ -94,6 +94,7 @@ it.effect(
         (event_id, aggregate_kind, stream_id, stream_version, event_type, occurred_at, actor_kind, payload_json, metadata_json, application_event_version)
         VALUES ('live-borrower', 'thread', 'live', 3, 'subagent.updated', ${old}, 'server', ${JSON.stringify({ promptSequence: anchor })}, '{}', 2)`;
       const deletes: string[] = [];
+      const refLookups: string[] = [];
       const tracer = Tracer.make({
         span(options) {
           const span = new Tracer.NativeSpan(options);
@@ -103,6 +104,8 @@ it.effect(
             const query = span.attributes.get("db.query.text");
             if (typeof query === "string" && /DELETE FROM orchestration_events\b/.test(query))
               deletes.push(query);
+            if (typeof query === "string" && /p\.workspace_root\b/.test(query))
+              refLookups.push(query);
           };
           return span;
         },
@@ -123,6 +126,16 @@ it.effect(
       assert.isFalse(
         plan.some((row) => /SCAN other/.test(row.detail)),
         JSON.stringify(plan),
+      );
+      assert.equal(refLookups.length, 1);
+      const refPlan = yield* sql.unsafe<{ detail: string }>(`EXPLAIN QUERY PLAN ${refLookups[0]}`, [
+        "expired",
+      ]);
+      assert.isTrue(
+        refPlan.some((row) =>
+          row.detail.includes("idx_orchestration_v2_projection_checkpoints_ref"),
+        ),
+        JSON.stringify(refPlan),
       );
       assert.equal(
         (yield* sql`SELECT * FROM orchestration_v2_projection_provider_sessions WHERE provider_session_id = 'shared-driver'`)

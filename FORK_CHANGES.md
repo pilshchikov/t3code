@@ -8,9 +8,12 @@
   lookup to the two event types that can borrow prompts. Compare against `+sequence` so SQLite
   does not apply integer affinity and can seek the expression index. Keep cross-thread prompt
   anchors intact. On the owner's 1.04M-event database, one purge transaction held the writer for 255 s.
-- Source: `orchestration-v2/ThreadHistoryCleanup.ts`, migration `087_PromptReferenceLookup.ts`
-  and migration manifest/upgrade expectations.
-- Validation: regression captures the actual purge SQL and checks its SQLite query plan; it fails
+- Append migration 88 (`CheckpointRefLookup`), an expression index on checkpoint refs. The purge's
+  shared-ref check parsed every checkpoint payload for each checkpoint of the thread and took up
+  to 7.5 s per thread on the same database.
+- Source: `orchestration-v2/ThreadHistoryCleanup.ts`, migrations `087_PromptReferenceLookup.ts` and
+  `088_CheckpointRefLookup.ts`, and migration manifest/upgrade expectations.
+- Validation: regression captures the actual purge SQL (event delete and checkpoint-ref lookup) and checks their SQLite query plans; it fails
   on the previous build's full scan. Also checks that a live thread's borrowed prompt survives.
 
 ## Remote delegated work through app connections — 2026-11-07

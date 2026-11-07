@@ -111,6 +111,7 @@ import Migration0084 from "./Migrations/079_DelegatedRecoveryIndexes.ts";
 import Migration0085 from "./Migrations/080_ScheduledTaskThreadMode.ts";
 import Migration0086 from "./Migrations/086_ThreadHistoryRetention.ts";
 import Migration0087 from "./Migrations/087_PromptReferenceLookup.ts";
+import Migration0088 from "./Migrations/088_CheckpointRefLookup.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -200,6 +201,7 @@ const migrationEntries = [
   [85, "ScheduledTaskThreadMode", Migration0085],
   [86, "ThreadHistoryRetention", Migration0086],
   [87, "PromptReferenceLookup", Migration0087],
+  [88, "CheckpointRefLookup", Migration0088],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);
