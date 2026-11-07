@@ -4,6 +4,7 @@ import * as DateTime from "effect/DateTime";
 import * as FileSystem from "effect/FileSystem";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Tracer from "effect/Tracer";
 import * as SqlClient from "effect/sql/SqlClient";
 import { DEFAULT_SERVER_SETTINGS } from "@t3tools/contracts";
 
@@ -84,7 +85,45 @@ it.effect(
       const sql = yield* SqlClient.SqlClient;
       const service = yield* ThreadHistoryCleanup.ThreadHistoryCleanup;
       yield* seed;
-      const removed = yield* service.run({ before, retentionDays: 7 });
+      const anchor = (yield* sql<{
+        sequence: number;
+      }>`SELECT sequence FROM orchestration_events WHERE event_id = 'expired-event-1'`)[0]!
+        .sequence;
+      yield* sql`UPDATE orchestration_events SET payload_json = '{"prompt":"shared prompt"}' WHERE sequence = ${anchor}`;
+      yield* sql`INSERT INTO orchestration_events
+        (event_id, aggregate_kind, stream_id, stream_version, event_type, occurred_at, actor_kind, payload_json, metadata_json, application_event_version)
+        VALUES ('live-borrower', 'thread', 'live', 3, 'subagent.updated', ${old}, 'server', ${JSON.stringify({ promptSequence: anchor })}, '{}', 2)`;
+      const deletes: string[] = [];
+      const tracer = Tracer.make({
+        span(options) {
+          const span = new Tracer.NativeSpan(options);
+          const end = span.end.bind(span);
+          span.end = (endTime, exit) => {
+            end(endTime, exit);
+            const query = span.attributes.get("db.query.text");
+            if (typeof query === "string" && /DELETE FROM orchestration_events\b/.test(query))
+              deletes.push(query);
+          };
+          return span;
+        },
+      });
+      const removed = yield* service
+        .run({ before, retentionDays: 7 })
+        .pipe(Effect.withTracer(tracer));
+      assert.equal(deletes.length, 1);
+      const plan = yield* sql.unsafe<{ detail: string }>(`EXPLAIN QUERY PLAN ${deletes[0]}`, [
+        "expired",
+        100,
+        "expired",
+      ]);
+      assert.isTrue(
+        plan.some((row) => row.detail.includes("idx_orchestration_events_prompt_reference")),
+        JSON.stringify(plan),
+      );
+      assert.isFalse(
+        plan.some((row) => /SCAN other/.test(row.detail)),
+        JSON.stringify(plan),
+      );
       assert.equal(
         (yield* sql`SELECT * FROM orchestration_v2_projection_provider_sessions WHERE provider_session_id = 'shared-driver'`)
           .length,
@@ -104,12 +143,17 @@ it.effect(
       );
       assert.equal(
         (yield* sql`SELECT * FROM orchestration_events WHERE stream_id = 'expired'`).length,
-        1,
+        2,
       );
       assert.equal(
         (yield* sql`SELECT * FROM orchestration_v2_projection_threads WHERE thread_id = 'expired' AND history_purged_at IS NOT NULL`)
           .length,
         1,
+      );
+      assert.equal(
+        (yield* sql`SELECT json_extract(payload_json, '$.prompt') AS prompt FROM orchestration_events WHERE sequence = ${anchor}`)[0]
+          ?.prompt,
+        "shared prompt",
       );
       assert.deepEqual(yield* service.run({ before, retentionDays: 7 }), []);
       yield* sql`UPDATE orchestration_v2_effect_outbox SET status = 'succeeded' WHERE thread_id = 'pending'`;

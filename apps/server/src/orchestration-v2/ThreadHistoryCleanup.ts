@@ -169,7 +169,9 @@ const make = Effect.gen(function* () {
             WHERE aggregate_kind = 'thread' AND stream_id = ${threadId} AND sequence < ${sequence}
               AND NOT EXISTS (
                 SELECT 1 FROM orchestration_events AS other WHERE other.stream_id != ${threadId}
-                  AND json_extract(other.payload_json, '$.promptSequence') = orchestration_events.sequence
+                  AND other.event_type IN ('subagent.updated', 'turn-item.updated')
+                  AND json_type(other.payload_json, '$.promptSequence') = 'integer'
+                  AND json_extract(other.payload_json, '$.promptSequence') = +orchestration_events.sequence
               )`;
                     yield* sql`UPDATE orchestration_events SET payload_json = json_set(
             json_remove(payload_json, '$.guestShare', '$.titleRegeneration', '$.historyOrigin', '$.linkOrigin', '$.peerThreadWatches'),
