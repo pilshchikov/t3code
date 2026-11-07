@@ -10,7 +10,7 @@
 - Relay only launch, project/model discovery and thread read/wait/stop tools. Destination calls
   run their normal checked MCP handlers and schemas, with caller modes and managed policy ceilings.
   Enforce destination RPC scopes, source identity and retry namespaces. Reserve relay capacity
-  for cancellation and file transfer while tasks wait.
+  for cancellation and file transfer with one shared limit on task and peer-response waits.
 - Teach all provider adapters to discover remote projects/models, pass destination IDs, send
   inputs and retrieve binary output files/folders with `t3_peer_copy`. Keep chunked, checksum-verified
   copies and project/worktree path guards. Do not treat a remote result path as a local download.

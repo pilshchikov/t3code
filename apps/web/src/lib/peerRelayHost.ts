@@ -38,7 +38,22 @@ export const layer = Layer.effectDiscard(
     const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
     const relays = yield* FiberMap.make<EnvironmentId>();
     const fileSlots = yield* Semaphore.make(4);
-    const taskWaitSlots = yield* Semaphore.make(16);
+    const waitSlots = yield* Semaphore.make(16);
+
+    // Waiting for a permit inside the request worker would itself consume relay capacity.
+    const withWaitSlot = <E, R>(call: Effect.Effect<PeerRelayReply, E, R>) =>
+      waitSlots
+        .withPermitsIfAvailable(1)(call)
+        .pipe(
+          Effect.map(
+            Option.getOrElse((): PeerRelayReply => ({
+              type: "failed",
+              code: "orchestration_error",
+              message:
+                "The app relay has too many active waits. Followers retry automatically; cancellation and file transfers remain available.",
+            })),
+          ),
+        );
 
     const describe = Effect.fn("web.peerRelay.describe")(function* (
       source: EnvironmentId,
@@ -100,21 +115,7 @@ export const layer = Layer.effectDiscard(
             ),
             (result) => ({ type: "orchestration-result", result }),
           );
-          // Leave relay capacity for launches, cancellation and artifact transfers during waits.
-          return operation.input.tool === "t3_thread_wait"
-            ? taskWaitSlots
-                .withPermitsIfAvailable(1)(call)
-                .pipe(
-                  Effect.map(
-                    Option.getOrElse((): PeerRelayReply => ({
-                      type: "failed",
-                      code: "orchestration_error",
-                      message:
-                        "The app relay has too many active task waits. The task follower will retry; cancellation and file transfers remain available.",
-                    })),
-                  ),
-                )
-            : call;
+          return operation.input.tool === "t3_thread_wait" ? withWaitSlot(call) : call;
         }
         case "environment-read":
           return onPeer(
@@ -136,8 +137,8 @@ export const layer = Layer.effectDiscard(
         case "thread-read":
         case "thread-send":
         case "thread-queue":
-        case "thread-wait":
-          return Effect.promise(() => import("../rpc/peerThreads")).pipe(
+        case "thread-wait": {
+          const call = Effect.promise(() => import("../rpc/peerThreads")).pipe(
             Effect.flatMap((rpc) => rpc.perform(operation.environmentId, operation)),
             Effect.catch((error) =>
               Effect.succeed<PeerRelayReply>(
@@ -149,6 +150,8 @@ export const layer = Layer.effectDiscard(
               ),
             ),
           );
+          return operation.type === "thread-wait" ? withWaitSlot(call) : call;
+        }
         case "list":
           return fileSlots.withPermits(1)(
             onPeer(
