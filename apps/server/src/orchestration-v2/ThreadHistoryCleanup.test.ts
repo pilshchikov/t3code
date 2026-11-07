@@ -67,6 +67,11 @@ const seed = Effect.gen(function* () {
       (event_id, aggregate_kind, stream_id, stream_version, event_type, occurred_at, actor_kind, payload_json, metadata_json, application_event_version)
       VALUES (${id + "-event-" + version}, 'thread', ${id}, ${version}, ${version === 1 ? "message.updated" : "thread.deleted"}, ${old}, 'server', ${version === 1 ? '{"text":"large old prompt"}' : "{}"}, '{}', 2)`;
   }
+  yield* sql`INSERT INTO orchestration_v2_projection_provider_sessions
+    (provider_session_id, thread_id, provider, status, updated_at, payload_json)
+    VALUES ('shared-driver', 'expired', 'codex', 'ready', ${old}, '{}')`;
+  yield* sql`INSERT INTO orchestration_v2_projection_provider_session_bindings
+    (provider_session_id, thread_id) VALUES ('shared-driver', 'live')`;
   yield* sql`INSERT INTO orchestration_v2_effect_outbox
     (effect_id, command_id, thread_id, effect_type, payload_json, status, attempt_count, available_at, created_at, updated_at)
     VALUES ('pending-effect', 'delete-pending', 'pending', 'attachment.cleanup', '{}', 'pending', 0, ${old}, ${old}, ${old})`;
@@ -80,6 +85,11 @@ it.effect(
       const service = yield* ThreadHistoryCleanup.ThreadHistoryCleanup;
       yield* seed;
       const removed = yield* service.run({ before, retentionDays: 7 });
+      assert.equal(
+        (yield* sql`SELECT * FROM orchestration_v2_projection_provider_sessions WHERE provider_session_id = 'shared-driver'`)
+          .length,
+        1,
+      );
       assert.deepEqual(
         removed.map((entry) => [String(entry.threadId), entry.outcome]),
         [["expired", "removed"]],

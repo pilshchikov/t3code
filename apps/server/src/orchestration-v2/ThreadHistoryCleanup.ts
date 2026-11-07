@@ -80,7 +80,8 @@ const make = Effect.gen(function* () {
         )
         AND NOT EXISTS (
           SELECT 1 FROM orchestration_v2_projection_provider_sessions AS s
-          WHERE s.thread_id = t.thread_id AND s.status NOT IN ('stopped', 'error')
+          JOIN orchestration_v2_projection_provider_session_bindings AS b ON b.provider_session_id = s.provider_session_id
+          WHERE b.thread_id = t.thread_id AND s.status NOT IN ('stopped', 'error')
         )
         AND NOT EXISTS (
           SELECT 1 FROM orchestration_v2_projection_runs AS r WHERE r.thread_id = t.thread_id

@@ -10,11 +10,13 @@
   subagents under their thread locks. Serialize ordinary forks with cleanup and reject forks
   from deleted sources. Preserve existing explicit retention preferences.
 - After durable resource cleanup completes, purge expired conversations' stored history and
-  unshared checkpoint refs. Keep small deletion records for replay and safe worktree cleanup.
+  unshared checkpoint refs. Check live session bindings rather than shared driver ownership,
+  preserving sessions still used by other conversations. Keep small deletion records for replay
+  and safe worktree cleanup.
   Append migration 86 (`ThreadHistoryRetention`); keep earlier migration IDs unchanged.
 - Source: `Sidebar.tsx`, `settings/StorageSettings.tsx`, contracts `settings.ts`, server
   `storageCleanup.ts`, and `orchestration-v2/{ThreadActivity,ThreadHistoryCleanup,Orchestrator,ProjectionStore}.ts`.
-- Validation: all changed-file checks pass, including 664 tests across 20 files, 36 package
+- Validation: all changed-file checks pass, including 665 tests across 20 files, 36 package
   typechecks and React Compiler checks. Isolated browser checks confirm section removal, Off,
   seven-day re-enabling and custom-period persistence. Existing live state was only read for
   checking the configured override; no live settings or conversations were changed.
