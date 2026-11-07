@@ -8,7 +8,6 @@ import {
   ProviderInstanceId,
 } from "./providerInstance.ts";
 import {
-  DEFAULT_SETTLED_THREAD_RETENTION_DAYS,
   ClientSettingsSchema,
   ClientSettingsPatch,
   ClaudeSettings,
@@ -52,7 +51,7 @@ describe("storage cleanup settings", () => {
       worktreeOnDelete: false,
       worktreeUnchanged: false,
       worktreeOnSettle: true,
-      settledThreadAfterDays: DEFAULT_SETTLED_THREAD_RETENTION_DAYS,
+      settledThreadAfterDays: 7,
       worktreeKeepWhen: "any-local-files",
       browserArtifactsAfterDays: null,
       logsAfterDays: null,

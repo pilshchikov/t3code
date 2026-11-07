@@ -1,3 +1,4 @@
+import { DEFAULT_SETTLED_THREAD_RETENTION_DAYS } from "@t3tools/contracts";
 import type {
   StorageCleanupReport,
   StorageCleanupSettings,
@@ -114,11 +115,13 @@ function RetentionControl({
   value,
   onChange,
   minimum = 1,
+  defaultDays = 8,
 }: {
   label: string;
   value: number | null;
   onChange: (value: number | null) => void;
   minimum?: number;
+  defaultDays?: number;
 }) {
   const [draft, setDraft] = useState(value);
   const [savedValue, setSavedValue] = useState(value);
@@ -166,7 +169,7 @@ function RetentionControl({
       <Switch
         aria-label={label}
         checked={value !== null}
-        onCheckedChange={(enabled) => onChange(enabled ? 8 : null)}
+        onCheckedChange={(enabled) => onChange(enabled ? defaultDays : null)}
       />
     </div>
   );
@@ -206,9 +209,11 @@ function CleanupResults({
             ? ((entry.threadId === null
                 ? entry.path
                 : entry.path?.split(/[\\/]/).findLast(Boolean)) ?? "Worktrees")
-            : entry.kind === "logs"
-              ? "Rotated logs"
-              : "Browser artifacts";
+            : entry.kind === "thread"
+              ? (entry.threadTitle ?? "Thread history")
+              : entry.kind === "logs"
+                ? "Rotated logs"
+                : "Browser artifacts";
         return (
           <SettingsRow
             key={`${entry.path ?? entry.kind}:${entry.threadId ?? index}`}
@@ -625,7 +630,7 @@ export function WorktreeCleanupSection() {
                   ]
                     .filter(Boolean)
                     .join(". ")}
-                  description="Remove worktrees this many days after their thread settles. Set 0 days to remove them at the next cleanup. Turn off “Delete worktrees when threads settle” to use a delay. Branches and thread history are kept."
+                  description="Remove worktrees after this many settled days. Set 0 for the next cleanup. Turn off “Delete worktrees when threads settle” to use a delay. Branches and history are kept."
                   serverScoped={!isProjectScope}
                   control={
                     <RetentionControl
@@ -744,7 +749,7 @@ export function SettledThreadCleanupSection() {
     <SettingsSection id="storage-threads" title="Settled threads">
       <SettingsRow
         title="Delete settled threads"
-        description="Delete a settled thread and its stored history after this many days. Pinned threads are kept."
+        description="Permanently delete settled threads and their stored history after this many days without conversation activity. Pinned threads are kept. Choose Off to keep them indefinitely."
         serverScoped
         status={
           targets.some(
@@ -758,6 +763,7 @@ export function SettledThreadCleanupSection() {
         control={
           <RetentionControl
             label="Delete settled threads"
+            defaultDays={DEFAULT_SETTLED_THREAD_RETENTION_DAYS}
             value={settings.storageCleanup.settledThreadAfterDays}
             onChange={(settledThreadAfterDays) =>
               updateSettings({ storageCleanup: { settledThreadAfterDays } })

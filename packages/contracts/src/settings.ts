@@ -1151,7 +1151,7 @@ export type BackgroundActivitySettings = typeof BackgroundActivitySettings.Type;
 export const ResponseStreamingMode = Schema.Literals(["turn", "paragraph"]);
 export type ResponseStreamingMode = typeof ResponseStreamingMode.Type;
 
-export const DEFAULT_SETTLED_THREAD_RETENTION_DAYS = 14;
+export const DEFAULT_SETTLED_THREAD_RETENTION_DAYS = 7;
 const StorageRetentionDays = Schema.NullOr(
   Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3650 })),
 );
@@ -1327,7 +1327,7 @@ export function shouldRecommendDatabaseCompaction(status: DatabaseStorageStatus)
 }
 
 export const StorageCleanupReportEntry = Schema.Struct({
-  kind: Schema.Literals(["worktree", "browser-artifacts", "logs"]),
+  kind: Schema.Literals(["worktree", "thread", "browser-artifacts", "logs"]),
   outcome: Schema.Literals(["removed", "kept", "failed"]),
   reason: Schema.String,
   path: Schema.NullOr(Schema.String),
@@ -1368,8 +1368,8 @@ export const StorageCleanupSettings = Schema.Struct({
    */
   worktreeOnSettle: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   /**
-   * Delete a settled thread, and everything stored for it, this many days
-   * after it settled. Null keeps settled threads forever.
+   * Delete a settled thread, and everything stored for it, after this many inactive days
+   * while settled. Null keeps settled threads forever.
    */
   settledThreadAfterDays: StorageRetentionDays.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SETTLED_THREAD_RETENTION_DAYS)),

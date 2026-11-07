@@ -394,3 +394,20 @@ remove them, change their order, or send one now as steering to the active turn.
 sending agent to manage the recipient's queue; it can also do this across connected
 environments when both servers have this feature. Messages already delivered as steering
 cannot be recalled. Provider-native subagents use their provider's own messaging tools.
+
+## Automatic deletion of settled conversations
+
+In **Settings → Threads → Settled threads**, choose how many days to keep settled conversations
+without conversation activity. The default is **7 days**. Choose **Off** to keep them indefinitely.
+You can apply the setting to one machine or all selected connected environments. Existing custom
+retention settings are preserved.
+
+New messages and agent runs reset the inactivity period; background metadata refreshes do not.
+Pinned threads, active work, pending prompts and conversations needed by a live fork are kept.
+Side chats and native subagent conversations are deleted with an expired parent only when they are
+also inactive.
+
+Deletion is permanent. Cleanup removes stored messages, tool output, attachments, terminal history
+and unshared T3 checkpoint references. A minimal deletion record remains for reconnecting clients.
+Managed worktrees continue to follow their cleanup rules, which protect local changes and shared
+checkouts. Provider-managed CLI history and project files outside T3-managed worktrees are kept.

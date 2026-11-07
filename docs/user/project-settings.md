@@ -295,7 +295,9 @@ worktrees were removed or kept and why, plus any failures.
 Results also list folders in the worktree folder that no thread uses, with their sizes; cleanup never removes them, so remove them manually if you want.
 
 Browser captures and rotated logs have separate retention periods. Expired capture links stop
-working. Current logs, message attachments, and browser profiles are kept.
+working. Current logs and browser profiles are kept. Attachments remain until their conversation is deleted.
+Settled conversation retention is configured separately in **Settings → Threads**; see
+[automatic conversation deletion](./thread-sidebar.md#automatic-deletion-of-settled-conversations).
 
 ## Project icons
 

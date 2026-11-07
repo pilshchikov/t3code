@@ -448,6 +448,12 @@ export interface ProjectionStoreV2Shape {
   readonly searchThread: (
     input: OrchestrationV2SearchThreadInput,
   ) => Effect.Effect<OrchestrationV2SearchThreadResult, ProjectionStoreV2Error>;
+  readonly getHistoryDependentThreadIds: (
+    threadId: ThreadId,
+  ) => Effect.Effect<ReadonlyArray<ThreadId>, ProjectionStoreV2Error>;
+  readonly getRetentionChildThreadIds: (
+    threadId: ThreadId,
+  ) => Effect.Effect<ReadonlyArray<ThreadId>, ProjectionStoreV2Error>;
   readonly getThreadAttachmentIds: (
     threadId: ThreadId,
   ) => Effect.Effect<ReadonlyArray<string>, ProjectionStoreV2Error>;
@@ -5597,6 +5603,44 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         Effect.mapError(controlReadError(threadId)),
       );
 
+    const getHistoryDependentThreadIds = Effect.fn("ProjectionStore.getHistoryDependentThreadIds")(
+      function* (threadId: ThreadId) {
+        const rows = yield* sql<{
+          thread_id: string;
+        }>`SELECT other.thread_id FROM orchestration_v2_projection_threads AS other
+        WHERE other.thread_id != ${threadId} AND other.deleted_at IS NULL AND (
+          json_extract(other.payload_json, '$.lineage.parentThreadId') = ${threadId}
+          OR json_extract(other.payload_json, '$.lineage.rootThreadId') = ${threadId}
+          OR json_extract(other.payload_json, '$.forkedFrom.threadId') = ${threadId}
+          OR json_extract(other.payload_json, '$.forkedFrom.nodeId') IN (SELECT node_id FROM orchestration_v2_projection_nodes WHERE thread_id = ${threadId})
+          OR json_extract(other.payload_json, '$.forkedFrom.providerThreadId') IN (SELECT provider_thread_id FROM orchestration_v2_projection_provider_threads WHERE thread_id = ${threadId})
+        )`;
+        return rows.map((row) => ThreadId.make(row.thread_id));
+      },
+      (effect, threadId) =>
+        effect.pipe(Effect.mapError((cause) => new ProjectionStoreReadError({ threadId, cause }))),
+    );
+
+    const getRetentionChildThreadIds = Effect.fn("ProjectionStore.getRetentionChildThreadIds")(
+      function* (threadId: ThreadId) {
+        const rows = yield* sql<{
+          thread_id: string;
+        }>`WITH RECURSIVE children(thread_id, depth) AS (
+        SELECT ${threadId}, 0 UNION ALL
+        SELECT t.thread_id, children.depth + 1 FROM orchestration_v2_projection_threads AS t
+        JOIN children ON json_extract(t.payload_json, '$.lineage.parentThreadId') = children.thread_id
+        WHERE t.deleted_at IS NULL AND children.depth < 64 AND (
+          json_extract(t.payload_json, '$.lineage.relationshipToParent') = 'subagent'
+          OR json_extract(t.payload_json, '$.lineage.sideChat') = 1
+        )
+      ) SELECT thread_id FROM children WHERE depth > 0 AND thread_id != ${threadId}
+        GROUP BY thread_id ORDER BY MIN(depth) ASC, thread_id ASC`;
+        return rows.map((row) => ThreadId.make(row.thread_id));
+      },
+      (effect, threadId) =>
+        effect.pipe(Effect.mapError((cause) => new ProjectionStoreReadError({ threadId, cause }))),
+    );
+
     const getThreadAttachmentIds: ProjectionStoreV2Shape["getThreadAttachmentIds"] = (threadId) =>
       Effect.all([
         sql<{ id: string }>`
@@ -7558,6 +7602,8 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       getThreadHistoryPage: readOnReader(getThreadHistoryPage),
       searchThread: readOnReader(searchThread),
       searchThreadStream,
+      getHistoryDependentThreadIds: readOnReader(getHistoryDependentThreadIds),
+      getRetentionChildThreadIds: readOnReader(getRetentionChildThreadIds),
       getThreadAttachmentIds: readOnReader(getThreadAttachmentIds),
     } satisfies ProjectionStoreV2Shape;
   }),

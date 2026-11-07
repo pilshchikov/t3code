@@ -41,6 +41,8 @@ import * as ServerConfig from "./config.ts";
 import * as GitManager from "./git/GitManager.ts";
 import * as ProjectStore from "./orchestration-v2/ProjectStore.ts";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
+import * as ThreadHistoryCleanup from "./orchestration-v2/ThreadHistoryCleanup.ts";
+import { threadActivityAt } from "./orchestration-v2/ThreadActivity.ts";
 import * as ProjectionStore from "./orchestration-v2/ProjectionStore.ts";
 import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManager.ts";
 import { threadHasQueuedTurnStart } from "./orchestration-v2/ThreadSettlementService.ts";
@@ -213,19 +215,6 @@ function heldForLimitRecovery(
   )
     return false;
   return settings.autoResumeLimitedThreads || (settings.snoozeLimitedThreads && resetMs > now);
-}
-
-/** PR metadata refreshes must not reset the inactivity clock. */
-export function storageCleanupActivityAt(thread: OrchestrationV2ThreadShell): number {
-  return Math.max(
-    ...[
-      thread.createdAt,
-      thread.latestUserMessageAt,
-      thread.latestRunRequestedAt,
-      thread.latestRunStartedAt,
-      thread.latestRunCompletedAt,
-    ].flatMap((value) => (value == null ? [] : [DateTime.toEpochMillis(value)])),
-  );
 }
 
 /** Only a complete subagent or side chat chain within this worktree shares ownership. */
@@ -898,7 +887,7 @@ const make = Effect.gen(function* () {
       if (!worktreeCleanupEnabled(settings)) continue;
       const worktreePath = path.resolve(thread.worktreePath!);
       const group = groups.get(worktreePath) ?? [];
-      const activityAt = Math.max(...group.map(storageCleanupActivityAt));
+      const activityAt = Math.max(...group.map(threadActivityAt));
       const deleted = "workspaceRoot" in thread;
       const settlementChain = deleted
         ? []
@@ -1156,7 +1145,7 @@ const make = Effect.gen(function* () {
                 (shell.settledAt !== null && !Equal.equals(shell.updatedAt, previous.updatedAt)) ||
                 !storageCleanupThreadIdle(shell, now, serverSettings) ||
                 path.resolve(shell.worktreePath!) !== worktreePath ||
-                storageCleanupActivityAt(shell) !== storageCleanupActivityAt(previous)
+                threadActivityAt(shell) !== threadActivityAt(previous)
               );
             })
           )
@@ -1287,8 +1276,9 @@ const make = Effect.gen(function* () {
         thread.settledAt === null ||
         thread.settledOverride === "active" ||
         thread.pinnedAt != null ||
-        !storageCleanupThreadIdle(thread, now, serverSettings) ||
-        DateTime.toEpochMillis(thread.settledAt) > DateTime.toEpochMillis(cutoff)
+        !threadIdle(thread, now, serverSettings) ||
+        Math.max(DateTime.toEpochMillis(thread.settledAt), threadActivityAt(thread)) >
+          DateTime.toEpochMillis(cutoff)
       )
         continue;
       if ((yield* settingsService.getSettings).storageCleanup.settledThreadAfterDays !== days)
@@ -1435,6 +1425,21 @@ const make = Effect.gen(function* () {
     yield* expireSettledThreads(serverSettings, now).pipe(
       Effect.catch((error) => Effect.logWarning("settled thread retention failed", { error })),
     );
+    const retentionDays = serverSettings.storageCleanup.settledThreadAfterDays;
+    if (retentionDays !== null) {
+      const resources = yield* ThreadHistoryCleanup.ThreadHistoryCleanup;
+      const history = yield* resources
+        .run({
+          before: DateTime.makeUnsafe(now - retentionDays * DAY_MS),
+          retentionDays,
+        })
+        .pipe(
+          Effect.catch((cause) =>
+            Effect.logWarning("Thread history cleanup failed", { cause }).pipe(Effect.as([])),
+          ),
+        );
+      entries.push(...history);
+    }
     const counts = { removed: 0, kept: 0, failed: 0 };
     let bytesFreed = 0;
     for (const entry of entries) {

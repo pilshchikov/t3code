@@ -24,6 +24,8 @@ import {
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as ServerConfig from "./config.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
+import * as ThreadHistoryCleanup from "./orchestration-v2/ThreadHistoryCleanup.ts";
+import { threadActivityAt } from "./orchestration-v2/ThreadActivity.ts";
 import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
 import * as GitManager from "./git/GitManager.ts";
 import * as Settings from "./serverSettings.ts";
@@ -50,7 +52,6 @@ import {
 import * as Path from "effect/Path";
 import * as DateTime from "effect/DateTime";
 import {
-  storageCleanupActivityAt,
   storageCleanupThreadIdle,
   secondaryWorkspaceOwnsCheckout,
   storageCleanupPullRequestMerged,
@@ -253,9 +254,9 @@ describe("V2 storage cleanup eligibility", () => {
   it("uses V2 run activity instead of metadata refreshes for retention", () => {
     const thread = candidate();
     const runTime = at(-3 * DAY_MS);
-    expect(
-      storageCleanupActivityAt({ ...thread, latestRunCompletedAt: runTime, updatedAt: at(0) }),
-    ).toBe(DateTime.toEpochMillis(runTime));
+    expect(threadActivityAt({ ...thread, latestRunCompletedAt: runTime, updatedAt: at(0) })).toBe(
+      DateTime.toEpochMillis(runTime),
+    );
   });
 
   function candidateWithStatus(status: OrchestrationV2ThreadShell["status"]) {
@@ -375,6 +376,7 @@ const cleanupFixture = (
     let fullStatusCalls = 0;
     let snapshotReads = 0;
     let terminalListener: ((event: TerminalMetadataStreamEvent) => Effect.Effect<void>) | undefined;
+    const dispatchedCommands: import("@t3tools/contracts").OrchestrationV2Command[] = [];
     let events: Stream.Stream<OrchestrationV2DomainEvent> = Stream.empty;
     const activated = yield* Deferred.make<void>();
     const context = yield* Layer.build(StorageCleanup.layer).pipe(
@@ -448,6 +450,10 @@ const cleanupFixture = (
       } as unknown as ProviderSessionManager.ProviderSessionManagerV2["Service"]),
       Effect.provideService(Orchestrator.OrchestratorV2, {
         streamDomainEvents: Stream.suspend(() => events),
+        dispatch: (command: import("@t3tools/contracts").OrchestrationV2Command) =>
+          Effect.sync(() => {
+            dispatchedCommands.push(command);
+          }),
       } as unknown as Orchestrator.OrchestratorV2["Service"]),
       Effect.provideService(SqlClient.SqlClient, ((strings: TemplateStringsArray) =>
         Effect.sync(() =>
@@ -498,6 +504,7 @@ const cleanupFixture = (
     );
     return {
       service: Context.get(context, StorageCleanup.StorageCleanup),
+      dispatchedCommands,
       repo,
       setTerminals: (terminals: TerminalSummary[]) =>
         terminalListener?.({ type: "snapshot", terminals }) ?? Effect.void,
@@ -608,7 +615,10 @@ const pausedMeasurementFixture = (storageCleanup?: StorageCleanupSettings) =>
     measuredPath = yield* fs.realPath(fixture.worktree);
     return { ...fixture, measuring, resume };
   });
-const cleanupTestLayer = GitVcsDriver.layer.pipe(
+const cleanupTestLayer = Layer.merge(
+  Layer.succeed(ThreadHistoryCleanup.ThreadHistoryCleanup, { run: () => Effect.succeed([]) }),
+  GitVcsDriver.layer,
+).pipe(
   Layer.provideMerge(ServerConfig.layerTest(process.cwd(), { prefix: "storage-cleanup-" })),
   Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
 );
@@ -621,6 +631,7 @@ const runCleanupTest = <A, E>(
     | GitVcsDriver.GitVcsDriver
     | Path.Path
     | Scope.Scope
+    | ThreadHistoryCleanup.ThreadHistoryCleanup
   >,
 ) => effect.pipe(Effect.provide(cleanupTestLayer), Effect.scoped);
 
@@ -2961,4 +2972,58 @@ const sessionUpdated = (
     updatedAt: at(0),
     lastError: null,
   },
+});
+
+describe("settled conversation retention", () => {
+  it.effect(
+    "expires inactive conversations without requiring a worktree and keeps recent activity",
+    () =>
+      runCleanupTest(
+        Effect.gen(function* () {
+          yield* TestClock.setTime(NOW_MS);
+          const fixture = yield* cleanupFixture({
+            ...TEST_WORKTREE_CLEANUP,
+            settledThreadAfterDays: 7,
+          });
+          const expired = shell({ settledAt: at(-10 * DAY_MS) });
+          fixture.setThreads([
+            expired,
+            shell({
+              id: ThreadId.make("recent-user"),
+              settledAt: at(-10 * DAY_MS),
+              latestUserMessageAt: at(-DAY_MS),
+            }),
+            shell({
+              id: ThreadId.make("recent-run"),
+              settledAt: at(-10 * DAY_MS),
+              latestRunCompletedAt: at(-DAY_MS),
+            }),
+            shell({
+              id: ThreadId.make("pinned"),
+              settledAt: at(-10 * DAY_MS),
+              pinnedAt: at(-DAY_MS),
+            }),
+            shell({ id: ThreadId.make("running"), settledAt: at(-10 * DAY_MS), status: "running" }),
+            shell({
+              id: ThreadId.make("active"),
+              settledAt: at(-10 * DAY_MS),
+              settledOverride: "active",
+            }),
+            shell({ id: ThreadId.make("unsettled"), settledAt: null }),
+          ]);
+          yield* fixture.service.runNow;
+          expect(
+            fixture.dispatchedCommands.flatMap((command) =>
+              command.type === "thread.delete" ? [command.threadId] : [],
+            ),
+          ).toEqual([expired.id]);
+          fixture.dispatchedCommands.length = 0;
+          fixture.setSettings({
+            storageCleanup: { ...TEST_WORKTREE_CLEANUP, settledThreadAfterDays: null },
+          });
+          yield* fixture.service.runNow;
+          expect(fixture.dispatchedCommands).toEqual([]);
+        }),
+      ),
+  );
 });

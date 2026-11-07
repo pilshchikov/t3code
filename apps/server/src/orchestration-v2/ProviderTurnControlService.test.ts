@@ -232,6 +232,8 @@ it.effect(
           getRuntimeRecoveryProjection: () => Effect.die("unused getRuntimeRecoveryProjection"),
           getPlan: () => Effect.die("unused"),
           hasUnpairedRunInterruptRequest: () => Effect.die("unused interrupt read"),
+          getHistoryDependentThreadIds: () => Effect.succeed([]),
+          getRetentionChildThreadIds: () => Effect.succeed([]),
           getThreadAttachmentIds: () => Effect.die("Unused attachment lookup"),
           searchThread: () => Effect.die("unused"),
           searchThreadStream: () => Stream.empty,

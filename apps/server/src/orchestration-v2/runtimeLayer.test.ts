@@ -380,7 +380,7 @@ const layerProjectDeletionTest = Layer.mergeAll(
   Layer.provideMerge(layerResourceCleanupTest),
   Layer.provide(McpSessionRegistryTestkit.layer),
   Layer.provide(McpProviderSessions.layer),
-  Layer.provide(SqlitePersistence.layerMemory),
+  Layer.provideMerge(SqlitePersistence.layerMemory),
   Layer.provide(layerCheckpointStoreTest),
   Layer.provide(layerServerConfig),
   Layer.provide(ServerSettings.layerTest()),
@@ -615,6 +615,116 @@ it.layer(layerProjectDeletionTest)("project deletion during thread commands", (i
         ),
       );
     }),
+  );
+
+  it.effect.each(["side chat", "native subagent", "live fork", "pinned side chat"] as const)(
+    "applies settled retention to a parent with a %s",
+    (scenario) =>
+      Effect.gen(function* () {
+        const command = (suffix: string) => CommandId.make(`retention:${scenario}:${suffix}`);
+        const projects = yield* ProjectService.ProjectService;
+        const orchestrator = yield* Orchestrator.OrchestratorV2;
+        const sink = yield* EventSink.EventSinkV2;
+        const projectId = ProjectId.make(`retention:${scenario}:project`);
+        const parentId = ThreadId.make(`retention:${scenario}:parent`);
+        const childId = ThreadId.make(`retention:${scenario}:child`);
+        yield* projects.create({
+          commandId: command("project"),
+          projectId,
+          title: "Retention",
+          workspaceRoot: `/work/retention/${scenario.replaceAll(" ", "-")}`,
+        });
+        yield* orchestrator.dispatch({
+          type: "thread.create",
+          commandId: command("create"),
+          createdBy: "user",
+          creationSource: "web",
+          threadId: parentId,
+          projectId,
+          title: "Parent",
+          modelSelection,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+        });
+        if (scenario === "native subagent" || scenario === "live fork") {
+          const parent = (yield* orchestrator.getThreadProjection(parentId)).thread;
+          yield* sink.write({
+            events: [
+              {
+                id: EventId.make(`retention:${scenario}:child`),
+                type: "thread.created",
+                threadId: childId,
+                occurredAt: parent.createdAt,
+                payload: {
+                  ...parent,
+                  id: childId,
+                  title: "Child",
+                  createdBy: scenario === "native subagent" ? "agent" : "user",
+                  creationSource: scenario === "native subagent" ? "provider" : "web",
+                  lineage: {
+                    rootThreadId: parentId,
+                    parentThreadId: parentId,
+                    relationshipToParent: scenario === "native subagent" ? "subagent" : "fork",
+                  },
+                },
+              },
+            ],
+          });
+        } else {
+          yield* orchestrator.dispatch({
+            type: "thread.fork",
+            commandId: command("fork"),
+            sourceThreadId: parentId,
+            targetThreadId: childId,
+            sourcePoint: { type: "latest_stable" },
+            sideChat: true,
+            createdBy: "user",
+            creationSource: "web",
+          });
+        }
+        yield* orchestrator.dispatch({
+          type: "thread.settle",
+          commandId: command("settle"),
+          threadId: parentId,
+        });
+        const sql = yield* SqlClient.SqlClient;
+        const old = DateTime.makeUnsafe(-10 * 86_400_000);
+        const oldIso = DateTime.formatIso(old);
+        yield* sql`UPDATE orchestration_v2_projection_threads SET created_at = ${oldIso}, updated_at = ${oldIso},
+        payload_json = json_set(payload_json, '$.createdAt', ${oldIso}, '$.updatedAt', ${oldIso},
+          '$.settledAt', CASE WHEN thread_id = ${parentId} THEN ${oldIso} ELSE NULL END)
+        WHERE thread_id IN (${parentId}, ${childId})`;
+        const snapshotAt = old;
+        yield* orchestrator.dispatch({
+          type: "thread.metadata.update",
+          commandId: command("metadata"),
+          threadId: childId,
+          title: "Refreshed metadata",
+        });
+        if (scenario === "pinned side chat")
+          yield* orchestrator.dispatch({
+            type: "thread.pin",
+            commandId: command("pin"),
+            threadId: childId,
+          });
+        const attempt = orchestrator.dispatch({
+          type: "thread.delete",
+          commandId: command("delete"),
+          threadId: parentId,
+          ifSettledBefore: DateTime.makeUnsafe(-7 * 86_400_000),
+          snapshotAt,
+        });
+        if (scenario === "live fork" || scenario === "pinned side chat") {
+          assert.instanceOf(yield* Effect.flip(attempt), Orchestrator.OrchestratorDispatchError);
+          assert.isNull((yield* orchestrator.getThreadProjection(parentId)).thread.deletedAt);
+        } else {
+          yield* attempt;
+          assert.isNotNull((yield* orchestrator.getThreadProjection(parentId)).thread.deletedAt);
+          assert.isNotNull((yield* orchestrator.getThreadProjection(childId)).thread.deletedAt);
+        }
+      }),
   );
 
   it.effect(

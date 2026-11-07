@@ -242,7 +242,9 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Delete settled threads",
     to: "/settings/threads",
     scope: "environment-defaults",
-    searchTerms: ["retention cleanup history delete settled days"],
+    searchTerms: [
+      "retention cleanup history permanently delete settled inactive conversations attachments days seven 7",
+    ],
   },
   {
     id: "storage-worktrees",

@@ -1,5 +1,23 @@
 # Fork Changes
 
+## Settled conversation retention and sidebar cleanup — 2026-11-06
+
+- Remove the fork-only **Resume from CLI** sidebar section and its component. Keep provider session
+  import APIs available to existing clients.
+- Default settled conversation retention to seven inactive days, with Off/custom periods in
+  Settings → Threads. Count real messages and run activity, retain pins and active/queued work,
+  and protect live fork dependencies. Cascade automatic expiry to inactive side chats and native
+  subagents under their thread locks. Preserve existing explicit retention preferences.
+- After durable resource cleanup completes, purge expired conversations' stored history and
+  unshared checkpoint refs. Keep small deletion records for replay and safe worktree cleanup.
+  Append migration 86 (`ThreadHistoryRetention`); keep earlier migration IDs unchanged.
+- Source: `Sidebar.tsx`, `settings/StorageSettings.tsx`, contracts `settings.ts`, server
+  `storageCleanup.ts`, and `orchestration-v2/{ThreadActivity,ThreadHistoryCleanup,Orchestrator,ProjectionStore}.ts`.
+- Validation: all changed-file checks pass, including 663 tests across 20 files, 36 package
+  typechecks and React Compiler checks. Isolated browser checks confirm section removal, Off,
+  seven-day re-enabling and custom-period persistence. Existing live state was only read for
+  checking the configured override; no live settings or conversations were changed.
+
 ## Compact project rail hover — 2026-11-06
 
 - Show the resize-edge hover highlight only in the expanded project rail. Keep the compact

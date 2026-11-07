@@ -1,3 +1,4 @@
+import { threadActivityAt } from "./ThreadActivity.ts";
 import { threadPullRequestTerminalAt } from "@t3tools/shared/threadPullRequests";
 import * as IdleCompaction from "./IdleCompaction.ts";
 import type {
@@ -13635,16 +13636,32 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             );
           if (deletion.ifSettledBefore !== undefined) {
             const thread = projection.thread;
+            const shell = yield* projectionStore
+              .getThreadShell(deletion.threadId)
+              .pipe(mapDispatchError(command));
+            const dependents = yield* projectionStore
+              .getHistoryDependentThreadIds(deletion.threadId)
+              .pipe(mapDispatchError(command));
+            const inherited = deletion.threadId !== command.threadId;
+            const cutoff = DateTime.toEpochMillis(deletion.ifSettledBefore);
             if (
-              thread.settledAt === null ||
+              (!inherited &&
+                (thread.settledAt === null || DateTime.toEpochMillis(thread.settledAt) > cutoff)) ||
               thread.settledOverride === "active" ||
               thread.pinnedAt != null ||
-              DateTime.toEpochMillis(thread.settledAt) >
-                DateTime.toEpochMillis(deletion.ifSettledBefore) ||
-              (deletion.snapshotAt !== undefined &&
+              shell === null ||
+              threadActivityAt(shell) > cutoff ||
+              shell.activeRunId !== null ||
+              shell.pendingRuntimeRequest !== null ||
+              (shell.pendingBackgroundTasks?.length ?? 0) > 0 ||
+              dependents.some((id) => !sideChatIds.includes(id)) ||
+              (!inherited &&
+                deletion.snapshotAt !== undefined &&
                 DateTime.toEpochMillis(thread.updatedAt) >
                   DateTime.toEpochMillis(deletion.snapshotAt)) ||
-              projection.providerSessions.some((session) => session.status !== "stopped") ||
+              projection.providerSessions.some(
+                (session) => session.status !== "stopped" && session.status !== "error",
+              ) ||
               projection.runs.some((run) =>
                 ["queued", "preparing", "starting", "running", "waiting"].includes(run.status),
               ) ||
@@ -14292,9 +14309,17 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     if (command.type === "thread.delete")
       return yield* threadDispatch.withLock(
         command.threadId,
-        liveSideChatIds(command.threadId).pipe(
+        (command.ifSettledBefore === undefined
+          ? liveSideChatIds(command.threadId)
+          : projectionStore.getRetentionChildThreadIds(command.threadId).pipe(
+              Effect.map((ids) => Array.from(ids)),
+              Effect.mapError(
+                (cause) => new OrchestratorProjectionError({ threadId: command.threadId, cause }),
+              ),
+            )
+        ).pipe(
           Effect.flatMap((sideChatIds) =>
-            sideChatIds.reduce(
+            sideChatIds.reduceRight(
               (locked, sideChatId) => threadDispatch.withLock(sideChatId, locked),
               dispatchWithReceiptEffect(command, sideChatIds),
             ),

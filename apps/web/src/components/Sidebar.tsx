@@ -3,7 +3,6 @@ import { isSidebarEnvironmentDisconnected, belongsInSidebarWorkingShelf } from "
 import { copyThreadReference } from "../lib/copyThreadReference";
 import { useEnvironmentConnectionSummaries } from "../state/environments";
 import { type PointerEvent as ReactPointerEvent } from "react";
-import { ResumeSessionsSection } from "./sidebar/ResumeSessionsSection";
 import { PROJECT_JUMP_KEYBINDING_COMMANDS } from "@t3tools/contracts";
 import { liveShellEnvironmentIdsAtom } from "../state/shell";
 import { attachSidebarTree } from "../lib/sidebarTree";
@@ -3699,15 +3698,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               )}
             </div>
           ) : null}
-          {!isSearchingThreads &&
-            scopedProjectGroup?.memberProjects.map((project) => (
-              <ResumeSessionsSection
-                key={`${project.environmentId}:${project.id}`}
-                environmentId={project.environmentId}
-                cwd={project.workspaceRoot}
-                projectRef={scopeProjectRef(project.environmentId, project.id)}
-              />
-            ))}
         </SidebarGroup>
       </SidebarContent>
       <SidebarChromeFooter />
