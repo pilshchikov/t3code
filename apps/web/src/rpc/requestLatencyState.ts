@@ -33,6 +33,9 @@ const untrackedRpcAckMethods = new Set<string>([
   WS_METHODS.serverGetUsageSummary,
   WS_METHODS.serverReportClientActivity,
   WS_METHODS.sourceControlSignInWait,
+  // The relay forwards agents' calls to other environments; a relayed wait lasts up to 50s.
+  WS_METHODS.peerOrchestrationCall,
+  WS_METHODS.peerThreadsRequest,
 ]);
 const longRunningRpcAckMethods = new Set<string>([
   WS_METHODS.serverUpdateProvider,

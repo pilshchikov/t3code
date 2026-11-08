@@ -30,6 +30,9 @@
 - Teach all provider adapters to discover remote projects/models, pass destination IDs, send
   inputs and retrieve binary output files/folders with `t3_peer_copy`. Keep chunked, checksum-verified
   copies and project/worktree path guards. Do not treat a remote result path as a local download.
+- Keep the app's relay calls (`peerOrchestration.call`, `peerThreads.request`) out of the slow-request
+  warning. They are agent calls, and a relayed `t3_thread_wait` holds a request for up to 50 s by
+  design. Source: web `rpc/requestLatencyState.ts`.
 - Source: contracts `peers.ts`, `rpc.ts`, `orchestrationV2.ts`; server `peer/{PeerForwarding,RemoteDelegation}.ts`,
   `peers/PeerOrchestration.ts`, WebSocket/auth wiring; web `peerRelayHost.ts` and `rpc/peerOrchestration.ts`;
   shared provider orchestration instructions and `docs/user/remote-access.md`.
