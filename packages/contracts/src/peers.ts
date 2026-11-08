@@ -114,6 +114,8 @@ export type PeerThreadMessageResult = typeof PeerThreadMessageResult.Type;
 
 /** Raw bytes per transfer chunk; base64 adds a third on the wire. */
 export const PEER_FILE_CHUNK_BYTES = 512 * 1024;
+/** Accepted from senders when the receiving environment reports `peerFileLargeChunks`. */
+export const PEER_FILE_MAX_CHUNK_BYTES = 4 * 1024 * 1024;
 export const PEER_FILES_LIST_MAX_ENTRIES = 2000;
 
 const PeerPath = TrimmedNonEmptyString.check(Schema.isMaxLength(4096));
@@ -149,7 +151,7 @@ export type PeerFilesListResult = typeof PeerFilesListResult.Type;
 export const PeerFilesReadInput = Schema.Struct({
   path: PeerPath,
   offset: NonNegativeInt,
-  length: PositiveInt.check(Schema.isLessThanOrEqualTo(PEER_FILE_CHUNK_BYTES)),
+  length: PositiveInt.check(Schema.isLessThanOrEqualTo(PEER_FILE_MAX_CHUNK_BYTES)),
 });
 export type PeerFilesReadInput = typeof PeerFilesReadInput.Type;
 
@@ -166,7 +168,7 @@ export const PeerFilesWriteInput = Schema.Struct({
   path: PeerPath,
   transferId: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{8,64}$/)),
   offset: NonNegativeInt,
-  data: Schema.String.check(Schema.isMaxLength(Math.ceil(PEER_FILE_CHUNK_BYTES / 3) * 4)),
+  data: Schema.String.check(Schema.isMaxLength(Math.ceil(PEER_FILE_MAX_CHUNK_BYTES / 3) * 4)),
   last: Schema.Boolean,
   overwrite: Schema.Boolean,
   mode: Schema.optionalKey(NonNegativeInt),

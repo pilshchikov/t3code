@@ -11,6 +11,8 @@ import { describe, expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
   DEFAULT_SERVER_SETTINGS,
+  PEER_FILE_CHUNK_BYTES,
+  PEER_FILE_MAX_CHUNK_BYTES,
   type PeerFilesError,
   type PeerRelayReply,
   type PeerRelayRequest,
@@ -87,55 +89,86 @@ const makeFolders = Effect.acquireRelease(
   ({ root }) => Effect.promise(() => NodeFSP.rm(root, { recursive: true, force: true })),
 );
 
+const largeChunkSnapshot = peerEnvironmentSnapshot(
+  {
+    environment: {
+      environmentId: peer,
+      label: "Build Mac",
+      serverVersion: "0.1.7",
+      platform: { os: "darwin", arch: "arm64" },
+      capabilities: { repositoryIdentity: true, peerFileLargeChunks: true },
+    },
+    cwd: "/srv",
+    settings: DEFAULT_SERVER_SETTINGS,
+    providers: [],
+  },
+  [],
+  { environmentId: peer },
+  "2026-10-31T12:00:00.000Z",
+);
+
 /** A relaying client that runs every request against the same PeerFiles. */
-const startRelay = Effect.gen(function* () {
-  const peers = yield* Peers.Peers;
-  const files = yield* PeerFiles.PeerFiles;
-  const answer = ({ operation }: PeerRelayRequest): Effect.Effect<PeerRelayReply> => {
-    const failed = (error: PeerFilesError) =>
-      Effect.succeed<PeerRelayReply>({ type: "failed", code: error.code, message: error.message });
-    switch (operation.type) {
-      case "describe":
-        return Effect.succeed({ type: "described", peers: [] });
-      case "orchestration-call":
-      case "threads-list":
-      case "usage-limits":
-      case "environment-read":
-      case "thread-read":
-      case "thread-send":
-      case "thread-queue":
-      case "thread-wait":
-        return Effect.succeed({
+const startRelay = (options: { readonly largeChunks?: boolean; readonly chunks?: number[] } = {}) =>
+  Effect.gen(function* () {
+    const peers = yield* Peers.Peers;
+    const files = yield* PeerFiles.PeerFiles;
+    const answer = ({ operation }: PeerRelayRequest): Effect.Effect<PeerRelayReply> => {
+      const failed = (error: PeerFilesError) =>
+        Effect.succeed<PeerRelayReply>({
           type: "failed",
-          code: "peer_unreachable",
-          message: "This file-only relay does not handle threads.",
+          code: error.code,
+          message: error.message,
         });
-      case "list":
-        return files.list(operation.input).pipe(
-          Effect.map((result): PeerRelayReply => ({ type: "listed", result })),
-          Effect.catch(failed),
-        );
-      case "read":
-        return files.read(operation.input).pipe(
-          Effect.map((result): PeerRelayReply => ({ type: "read", result })),
-          Effect.catch(failed),
-        );
-      case "write":
-        return files.write(operation.input).pipe(
-          Effect.map((result): PeerRelayReply => ({ type: "written", result })),
-          Effect.catch(failed),
-        );
-    }
-  };
-  yield* peers.connect.pipe(
-    Stream.runForEach((request) =>
-      Effect.flatMap(answer(request), (reply) =>
-        peers.respond({ requestId: request.requestId, reply }),
+      switch (operation.type) {
+        case "describe":
+          return Effect.succeed({ type: "described", peers: [] });
+        case "environment-read":
+          if (options.largeChunks === true)
+            return Effect.succeed({ type: "environment-read", result: largeChunkSnapshot });
+          return Effect.succeed({
+            type: "failed",
+            code: "peer_unreachable",
+            message: "This file-only relay does not read environments.",
+          });
+        case "orchestration-call":
+        case "threads-list":
+        case "usage-limits":
+        case "thread-read":
+        case "thread-send":
+        case "thread-queue":
+        case "thread-wait":
+          return Effect.succeed({
+            type: "failed",
+            code: "peer_unreachable",
+            message: "This file-only relay does not handle threads.",
+          });
+        case "list":
+          return files.list(operation.input).pipe(
+            Effect.map((result): PeerRelayReply => ({ type: "listed", result })),
+            Effect.catch(failed),
+          );
+        case "read":
+          return files.read(operation.input).pipe(
+            Effect.map((result): PeerRelayReply => ({ type: "read", result })),
+            Effect.catch(failed),
+          );
+        case "write":
+          options.chunks?.push(Buffer.byteLength(operation.input.data, "base64"));
+          return files.write(operation.input).pipe(
+            Effect.map((result): PeerRelayReply => ({ type: "written", result })),
+            Effect.catch(failed),
+          );
+      }
+    };
+    yield* peers.connect.pipe(
+      Stream.runForEach((request) =>
+        Effect.flatMap(answer(request), (reply) =>
+          peers.respond({ requestId: request.requestId, reply }),
+        ),
       ),
-    ),
-    Effect.forkScoped({ startImmediately: true }),
-  );
-});
+      Effect.forkScoped({ startImmediately: true }),
+    );
+  });
 
 it.layer(layerTest, { excludeTestServices: true })("Peers", (it) => {
   describe("copy", () => {
@@ -143,7 +176,8 @@ it.layer(layerTest, { excludeTestServices: true })("Peers", (it) => {
       Effect.gen(function* () {
         const peers = yield* Peers.Peers;
         const { here, there } = yield* makeFolders;
-        yield* startRelay;
+        const chunks: number[] = [];
+        yield* startRelay({ chunks });
         const large = NodeCrypto.randomBytes(1_300_000);
         yield* Effect.promise(async () => {
           await NodeFSP.writeFile(NodePath.join(here, ".env"), "TOKEN=1\n", { mode: 0o600 });
@@ -162,6 +196,7 @@ it.layer(layerTest, { excludeTestServices: true })("Peers", (it) => {
         });
 
         expect(sent).toEqual({ files: 2, bytes: 8 + large.length, skipped: [] });
+        expect(Math.max(...chunks)).toBe(PEER_FILE_CHUNK_BYTES);
         const copied = yield* Effect.promise(async () => ({
           large: await NodeFSP.readFile(NodePath.join(there, "data", "large.bin")),
           envMode: (await NodeFSP.stat(NodePath.join(there, ".env"))).mode & 0o777,
@@ -204,11 +239,35 @@ it.layer(layerTest, { excludeTestServices: true })("Peers", (it) => {
       }),
     );
 
+    it.effect("sends large chunks only to a peer that takes them", () =>
+      Effect.gen(function* () {
+        const peers = yield* Peers.Peers;
+        const { here, there } = yield* makeFolders;
+        const chunks: number[] = [];
+        yield* startRelay({ largeChunks: true, chunks });
+        const large = NodeCrypto.randomBytes(PEER_FILE_MAX_CHUNK_BYTES + 1);
+        yield* Effect.promise(() => NodeFSP.writeFile(NodePath.join(here, "game.bin"), large));
+        yield* peers.copy({
+          environmentId: peer,
+          direction: "to_peer",
+          localPath: NodePath.join(here, "game.bin"),
+          peerPath: NodePath.join(there, "game.bin"),
+          overwrite: false,
+        });
+        expect(chunks).toEqual([PEER_FILE_MAX_CHUNK_BYTES, 1]);
+        expect(
+          (yield* Effect.promise(() => NodeFSP.readFile(NodePath.join(there, "game.bin")))).equals(
+            large,
+          ),
+        ).toBe(true);
+      }),
+    );
+
     it.effect("brings one file here and replaces it only with overwrite", () =>
       Effect.gen(function* () {
         const peers = yield* Peers.Peers;
         const { here, there } = yield* makeFolders;
-        yield* startRelay;
+        yield* startRelay();
         const input = {
           environmentId: peer,
           direction: "from_peer" as const,

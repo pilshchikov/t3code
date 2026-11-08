@@ -161,6 +161,8 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   projectGroups: Schema.optionalKey(Schema.Boolean),
   /** Moves a thread to another project, here or on another environment. */
   threadMove: Schema.optionalKey(Schema.Boolean),
+  /** Peer file reads and writes take chunks up to `PEER_FILE_MAX_CHUNK_BYTES`. */
+  peerFileLargeChunks: Schema.optionalKey(Schema.Boolean),
   /** Server answers projects.listIgnoredFiles. */
   ignoredFileListing: Schema.optionalKey(Schema.Boolean),
   environmentIcon: Schema.optionalKey(Schema.Boolean),

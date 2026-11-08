@@ -1,5 +1,15 @@
 # Fork Changes
 
+## Faster peer file copies — 2026-11-08
+
+- Every 512 KiB chunk of `t3_peer_copy` is one relay round trip through the app, so large files
+  moved at about 1 MB/s while the link itself carried about 14 MB/s. A peer that reports the new
+  capability `peerFileLargeChunks` now gets 4 MiB chunks (`PEER_FILE_MAX_CHUNK_BYTES`), and older
+  peers keep 512 KiB. Folder copies move 4 files at once. Skipped entries are sorted by path.
+- Source: contracts `peers.ts`, `environment.ts`; server `peers/Peers.ts`,
+  `environment/ServerEnvironment.ts`.
+- Validation: `Peers.test.ts` checks the chunk size for both kinds of peer and the folder round trip.
+
 ## Move threads between machines and projects — 2026-11-08
 
 - A thread continues in another project, on another connected machine or the same one, as a new

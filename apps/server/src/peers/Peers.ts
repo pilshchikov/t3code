@@ -8,6 +8,7 @@ import {
   type PeerEnvironmentReadInput,
   type PeerEnvironmentSnapshot,
   PEER_FILE_CHUNK_BYTES,
+  PEER_FILE_MAX_CHUNK_BYTES,
   type PeerEnvironment,
   PeerFilesFailureCode,
   OrchestratorMcpFailure,
@@ -31,6 +32,8 @@ import * as Stream from "effect/Stream";
 import * as PeerFiles from "./PeerFiles.ts";
 
 const READ_TEXT_MAX_BYTES = 256 * 1024;
+// Each chunk is a relay round trip through the app, so a folder copies several files at once.
+const COPY_FILE_CONCURRENCY = 4;
 
 export class PeersError extends Schema.TaggedError<PeersError>()("PeersError", {
   code: Schema.Union([
@@ -224,7 +227,21 @@ const make = Effect.gen(function* () {
     },
   );
 
-  const copyFile = Effect.fn("Peers.copyFile")(function* (input: PeerCopyInput) {
+  /** Older peers take 512 KiB chunks only; ask once per copy, as a relay round trip costs more. */
+  const chunkBytesFor = (environmentId: EnvironmentId) =>
+    readEnvironment({ environmentId, includeProjects: false, limit: 1 }).pipe(
+      Effect.map((snapshot) =>
+        snapshot.environment.capabilities.peerFileLargeChunks === true
+          ? PEER_FILE_MAX_CHUNK_BYTES
+          : PEER_FILE_CHUNK_BYTES,
+      ),
+      Effect.orElseSucceed(() => PEER_FILE_CHUNK_BYTES),
+    );
+
+  const copyFile = Effect.fn("Peers.copyFile")(function* (
+    input: PeerCopyInput,
+    chunkBytes: number,
+  ) {
     const transferId = NodeCrypto.randomUUID();
     const hash = NodeCrypto.createHash("sha256");
     const toPeer = input.direction === "to_peer";
@@ -232,9 +249,9 @@ const make = Effect.gen(function* () {
     for (;;) {
       const chunk = toPeer
         ? yield* files
-            .read({ path: input.localPath, offset, length: PEER_FILE_CHUNK_BYTES })
+            .read({ path: input.localPath, offset, length: chunkBytes })
             .pipe(Effect.mapError(onThisEnvironment))
-        : yield* readPeerChunk(input.environmentId, input.peerPath, offset);
+        : yield* readPeerChunk(input.environmentId, input.peerPath, offset, chunkBytes);
       const bytes = Buffer.from(chunk.data, "base64");
       hash.update(bytes);
       const write = {
@@ -276,7 +293,9 @@ const make = Effect.gen(function* () {
     const source = toPeer
       ? yield* files.list(listing).pipe(Effect.mapError(onThisEnvironment))
       : yield* list(input.environmentId, listing);
-    if (source.kind === "file") return { files: 1, bytes: yield* copyFile(input), skipped: [] };
+    const chunkBytes = yield* chunkBytesFor(input.environmentId);
+    if (source.kind === "file")
+      return { files: 1, bytes: yield* copyFile(input, chunkBytes), skipped: [] };
     if (source.truncated) {
       return yield* new PeersError({
         code: "io_failed",
@@ -286,28 +305,38 @@ const make = Effect.gen(function* () {
     const skipped: Array<{ path: string; reason: string }> = [];
     let copied = 0;
     let bytes = 0;
-    for (const entry of source.entries) {
-      if (entry.kind === "directory") continue;
-      if (entry.kind !== "file") {
-        skipped.push({ path: entry.path, reason: `${entry.kind} entries are not copied` });
-        continue;
-      }
-      const result = yield* copyFile({
-        ...input,
-        localPath: NodePath.join(input.localPath, entry.path),
-        peerPath: `${input.peerPath.replace(/[\\/]+$/, "")}/${entry.path}`,
-      }).pipe(
-        Effect.catchIf(
-          (error) => error.code === "already_exists",
-          () => Effect.succeed("already exists" as const),
-        ),
-      );
-      if (typeof result === "string") skipped.push({ path: entry.path, reason: result });
-      else {
-        copied += 1;
-        bytes += result;
-      }
-    }
+    yield* Effect.forEach(
+      source.entries,
+      (entry) => {
+        if (entry.kind === "directory") return Effect.void;
+        if (entry.kind !== "file") {
+          skipped.push({ path: entry.path, reason: `${entry.kind} entries are not copied` });
+          return Effect.void;
+        }
+        return copyFile(
+          {
+            ...input,
+            localPath: NodePath.join(input.localPath, entry.path),
+            peerPath: `${input.peerPath.replace(/[\\/]+$/, "")}/${entry.path}`,
+          },
+          chunkBytes,
+        ).pipe(
+          Effect.catchIf(
+            (error) => error.code === "already_exists",
+            () => Effect.succeed("already exists" as const),
+          ),
+          Effect.map((result) => {
+            if (typeof result === "string") skipped.push({ path: entry.path, reason: result });
+            else {
+              copied += 1;
+              bytes += result;
+            }
+          }),
+        );
+      },
+      { concurrency: COPY_FILE_CONCURRENCY, discard: true },
+    );
+    skipped.sort((left, right) => left.path.localeCompare(right.path));
     return { files: copied, bytes, skipped };
   });
 
