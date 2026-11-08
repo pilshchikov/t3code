@@ -249,6 +249,37 @@ export const PeerThreadOperation = Schema.Union([
 ]);
 export type PeerThreadOperation = typeof PeerThreadOperation.Type;
 
+export const PeerThreadMoveInput = Schema.Struct({
+  threadId: Schema.optional(ThreadId),
+  /** Where the thread goes: another environment, or this one for another project. */
+  environmentId: EnvironmentId,
+  projectId: Schema.optional(ProjectId),
+  copyPaths: Schema.optional(
+    Schema.Array(TrimmedNonEmptyString.check(Schema.isMaxLength(1024))).check(
+      Schema.isMaxLength(50),
+    ),
+  ),
+  message: Schema.optional(Schema.String.check(Schema.isMaxLength(8000))),
+  archiveSource: Schema.optional(Schema.Boolean),
+});
+export type PeerThreadMoveInput = typeof PeerThreadMoveInput.Type;
+export const PeerThreadMoveRequest = Schema.Struct({
+  ...PeerThreadMoveInput.fields,
+  threadId: ThreadId,
+});
+export type PeerThreadMoveRequest = typeof PeerThreadMoveRequest.Type;
+export const PeerThreadMoveResult = Schema.Struct({
+  threadId: ThreadId,
+  environmentId: EnvironmentId,
+  projectId: ProjectId,
+  link: Schema.optional(Schema.String),
+  copied: Schema.Array(
+    Schema.Struct({ path: Schema.String, files: Schema.Number, bytes: Schema.Number }),
+  ),
+  sourceArchived: Schema.Boolean,
+});
+export type PeerThreadMoveResult = typeof PeerThreadMoveResult.Type;
+
 /** The small set of app tools required to start and follow work over an existing app connection. */
 export const PeerOrchestrationToolName = Schema.Literals([
   "t3_thread_launch",

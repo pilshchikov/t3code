@@ -1,4 +1,5 @@
 import { PeerThreadMessaging } from "../peers/PeerThreadMessaging.ts";
+import { ThreadMove } from "../peer/ThreadMove.ts";
 import { Peers } from "../peers/Peers.ts";
 import { ThreadWorkspaces } from "../workspace/ThreadWorkspaces.ts";
 import { UsageLimitSources } from "../usage/UsageLimitSources.ts";
@@ -55,6 +56,7 @@ import budget from "./agentContextBudget.json" with { type: "json" };
 // Registration only stores tool definitions, so the handlers' services are never called.
 const toolHandlerServices = Layer.mergeAll(
   Layer.mock(PeerThreadMessaging)({}),
+  Layer.mock(ThreadMove)({}),
   Layer.mock(Peers)({}),
   Layer.mock(ThreadWorkspaces)({}),
   Layer.mock(UsageLimitSources)({}),

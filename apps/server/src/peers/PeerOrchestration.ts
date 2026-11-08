@@ -35,6 +35,12 @@ export class PeerOrchestration extends Context.Service<
   PeerOrchestration,
   {
     readonly call: (input: PeerOrchestrationCall) => Effect.Effect<unknown, OrchestratorMcpFailure>;
+    /** Runs one of these tools here for `scope`, with encoded arguments and result. */
+    readonly invoke: (
+      scope: McpInvocationContext.McpInvocationScope,
+      tool: PeerOrchestrationCall["tool"],
+      encodedArguments: Record<string, unknown>,
+    ) => Effect.Effect<unknown, OrchestratorMcpFailure>;
   }
 >()("t3/peers/PeerOrchestration") {}
 
@@ -44,6 +50,39 @@ const make = Effect.gen(function* () {
   const built = yield* toolkit;
   const dependencies =
     yield* Effect.context<Exclude<Dependencies, McpInvocationContext.McpInvocationContext>>();
+  const invoke: PeerOrchestration["Service"]["invoke"] = Effect.fn("PeerOrchestration.invoke")(
+    function* (scope, tool, encodedArguments) {
+      const output = yield* built.handle(tool, encodedArguments as never).pipe(
+        Stream.unwrap,
+        Stream.filter((part) => !part.preliminary),
+        Stream.runHead,
+        Effect.provide(dependencies),
+        Effect.provideService(McpInvocationContext.McpInvocationContext, scope),
+        Effect.mapError(
+          () =>
+            new OrchestratorMcpFailure({
+              code: "invalid_request",
+              message: "The relay call did not match the destination tool schema.",
+            }),
+        ),
+      );
+      if (Option.isNone(output))
+        return yield* new OrchestratorMcpFailure({
+          code: "orchestration_error",
+          message: "The destination tool returned no result.",
+        });
+      if (output.value.isFailure) {
+        const failure = decodeFailure(output.value.encodedResult);
+        return yield* Option.isSome(failure)
+          ? failure.value
+          : new OrchestratorMcpFailure({
+              code: "orchestration_error",
+              message: "The destination could not complete the relay call.",
+            });
+      }
+      return output.value.encodedResult;
+    },
+  );
   const call: PeerOrchestration["Service"]["call"] = Effect.fn("PeerOrchestration.call")(
     function* (input) {
       const self = yield* environment.getEnvironmentId;
@@ -80,38 +119,10 @@ const make = Effect.gen(function* () {
         },
         settings.managedPolicy?.limits?.maxRuntimeMode,
       );
-      const output = yield* built.handle(input.tool, input.arguments as never).pipe(
-        Stream.unwrap,
-        Stream.filter((part) => !part.preliminary),
-        Stream.runHead,
-        Effect.provide(dependencies),
-        Effect.provideService(McpInvocationContext.McpInvocationContext, scope),
-        Effect.mapError(
-          () =>
-            new OrchestratorMcpFailure({
-              code: "invalid_request",
-              message: "The relay call did not match the destination tool schema.",
-            }),
-        ),
-      );
-      if (Option.isNone(output))
-        return yield* new OrchestratorMcpFailure({
-          code: "orchestration_error",
-          message: "The destination tool returned no result.",
-        });
-      if (output.value.isFailure) {
-        const failure = decodeFailure(output.value.encodedResult);
-        return yield* Option.isSome(failure)
-          ? failure.value
-          : new OrchestratorMcpFailure({
-              code: "orchestration_error",
-              message: "The destination could not complete the relay call.",
-            });
-      }
-      return output.value.encodedResult;
+      return yield* invoke(scope, input.tool, input.arguments);
     },
   );
-  return PeerOrchestration.of({ call });
+  return PeerOrchestration.of({ call, invoke });
 });
 
 export const layer = Layer.effect(PeerOrchestration, make).pipe(

@@ -49,6 +49,8 @@ import { useCopyToClipboard } from "./useCopyToClipboard";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";
 import { canTurnThreadIntoProject, useThreadActions } from "./useThreadActions";
+import { buildThreadRouteParams } from "../threadRoutes";
+import { moveThreadAndOpen, threadMoveTargets } from "../threadMove";
 
 function failureToast(title: string, error: unknown) {
   toastManager.add(
@@ -135,6 +137,7 @@ export function useThreadActionMenu(input: {
       };
       const isRegeneratingTitle = thread.titleRegeneration != null;
       const snoozePresets = resolveSnoozePresets(now, timestampFormat, threadRef.environmentId);
+      const moveTargets = threadMoveTargets(threadRef);
       const items = buildThreadActionMenuItems({
         canOperate: readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope),
         canFind: onFind !== undefined,
@@ -152,6 +155,10 @@ export function useThreadActionMenu(input: {
         accentColor: readThreadAccentColor(scopedThreadKey(threadRef)),
         canShareWithGuest,
         canTurnIntoProject: canTurnThreadIntoProject(threadRef),
+        moveTargets: moveTargets.map((target, index) => ({
+          id: String(index),
+          label: target.label,
+        })),
       });
       const clicked = await settlePromise(() => api.contextMenu.show(items, position));
       if (clicked._tag === "Failure" || clicked.value === null) return;
@@ -169,6 +176,17 @@ export function useThreadActionMenu(input: {
       if (action.startsWith("color:")) {
         const choice = action.slice("color:".length);
         setThreadAccentColor(scopedThreadKey(threadRef), choice === "none" ? null : choice);
+        return;
+      }
+      if (action.startsWith("move:")) {
+        const target = moveTargets[Number(action.slice("move:".length))];
+        if (target === undefined) return;
+        await moveThreadAndOpen(threadRef, target, (ref) => {
+          void router.navigate({
+            to: "/$environmentId/$threadId",
+            params: buildThreadRouteParams(ref),
+          });
+        });
         return;
       }
       if (action.startsWith("snooze:")) {

@@ -159,6 +159,8 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   projectOrganization: Schema.optionalKey(Schema.Boolean),
   /** Server stores `groupKey` on projects. Older servers drop it. */
   projectGroups: Schema.optionalKey(Schema.Boolean),
+  /** Moves a thread to another project, here or on another environment. */
+  threadMove: Schema.optionalKey(Schema.Boolean),
   /** Server answers projects.listIgnoredFiles. */
   ignoredFileListing: Schema.optionalKey(Schema.Boolean),
   environmentIcon: Schema.optionalKey(Schema.Boolean),

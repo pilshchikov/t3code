@@ -81,6 +81,7 @@ import {
   type ReactNode,
 } from "react";
 import { type AnyRouter, useRouter } from "@tanstack/react-router";
+import { moveThreadAndOpen, threadMoveTargets } from "../threadMove";
 
 import {
   isAtomCommandInterrupted,
@@ -2620,6 +2621,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 projectRef.projectId === thread.projectId,
             ),
           ) ?? null;
+        const moveTargets = threadMoveTargets(threadRef);
         const clicked = await settlePromise(() =>
           api.contextMenu.show(
             buildThreadActionMenuItems({
@@ -2646,6 +2648,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 canShareWithGuestAtom(threadRef.environmentId),
               ),
               canTurnIntoProject: canTurnThreadIntoProject(threadRef),
+              moveTargets: moveTargets.map((target, index) => ({
+                id: String(index),
+                label: target.label,
+              })),
               supports: {
                 settlement: supportsSettlement,
                 autoSettleOptOut: supportsAutoSettleOptOut,
@@ -2664,6 +2670,12 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         if (clicked.value?.startsWith("color:")) {
           const choice = clicked.value.slice("color:".length);
           setThreadAccentColor(threadKey, choice === "none" ? null : choice);
+          return;
+        }
+        if (clicked.value.startsWith("move:")) {
+          const target = moveTargets[Number(clicked.value.slice("move:".length))];
+          if (target !== undefined)
+            await moveThreadAndOpen(threadRef, target, (ref) => void navigateToThread(ref));
           return;
         }
         if (clicked.value?.startsWith("snooze:")) {

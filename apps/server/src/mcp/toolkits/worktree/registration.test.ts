@@ -46,6 +46,7 @@ import * as McpHttpServer from "../../McpHttpServer.ts";
 import * as McpSessionRegistry from "../../McpSessionRegistry.ts";
 import * as Peers from "../../../peers/Peers.ts";
 import * as PeerThreadMessaging from "../../../peers/PeerThreadMessaging.ts";
+import * as ThreadMove from "../../../peer/ThreadMove.ts";
 import * as PreviewAutomationBroker from "../../PreviewAutomationBroker.ts";
 import * as PreviewBrowser from "../../../preview/PreviewBrowser.ts";
 import * as UsageService from "../../../usage/UsageService.ts";
@@ -62,6 +63,7 @@ const layerStubServices = Layer.mergeAll(
   Layer.mock(UsageService.UsageService)({}),
   Layer.mock(UsageLimitSources.UsageLimitSources)({}),
   Layer.mock(PeerThreadMessaging.PeerThreadMessaging)({}),
+  Layer.mock(ThreadMove.ThreadMove)({}),
   Layer.mock(ThreadWorkspaces.ThreadWorkspaces)({}),
   SqlitePersistence.layerMemory,
   Layer.mock(Orchestrator.OrchestratorV2)({}),

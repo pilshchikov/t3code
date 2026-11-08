@@ -14,6 +14,8 @@ import {
   PeerThreadMessageResult,
   PeerThreadWatchInput,
   PeerThreadWatch,
+  PeerThreadMoveInput,
+  PeerThreadMoveResult,
   TrimmedNonEmptyString,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -26,6 +28,7 @@ import * as ThreadManagementService from "../../orchestration-v2/ThreadManagemen
 import * as Peers from "../../peers/Peers.ts";
 import * as PeerThreadMessaging from "../../peers/PeerThreadMessaging.ts";
 import * as ProjectService from "../../project/ProjectService.ts";
+import * as ThreadMove from "../../peer/ThreadMove.ts";
 import { McpInvocationContext } from "../McpInvocationContext.ts";
 import * as McpToolAccess from "../McpToolAccess.ts";
 import { loadCaller, readCaller, unavailable } from "../threadAccess.ts";
@@ -120,6 +123,16 @@ const copy = Tool.make("t3_peer_copy", {
   .annotate(Tool.Readonly, false)
   .annotate(Tool.Destructive, false);
 
+const threadMove = Tool.make("t3_thread_move", {
+  ...shared,
+  description:
+    "Move a thread (omit threadId for this one) to another machine, or to another project on this one with this environmentId and projectId. It continues as a new thread there whose first message carries the conversation and a link back; the old thread is archived when idle. Elsewhere the project is the one in the same group or repository unless projectId names it. copyPaths (relative to the thread's folder) copies untracked or uncommitted files along; pushed commits travel through Git. message adds what to do next. Moving this thread: finish your turn after it, the work goes on there. Needs a full-access thread.",
+  parameters: PeerThreadMoveInput,
+  success: PeerThreadMoveResult,
+})
+  .annotate(Tool.Readonly, false)
+  .annotate(Tool.Destructive, true);
+
 const threadsList = Tool.make("t3_peer_threads_list", {
   ...shared,
   description:
@@ -192,6 +205,7 @@ export const PeersToolkit = Toolkit.make(
   filesList,
   fileRead,
   copy,
+  threadMove,
   threadsList,
   threadRead,
   threadSend,
@@ -208,7 +222,11 @@ export const PeersHandlersLive = McpToolAccess.toLayer(
     const messaging = yield* PeerThreadMessaging.PeerThreadMessaging;
     const projects = yield* ProjectService.ProjectService;
     const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
+    const mover = yield* ThreadMove.ThreadMove;
     return {
+      t3_thread_move: McpToolAccess.writesEnvironment((input) =>
+        McpInvocationContext.pipe(Effect.flatMap((scope) => mover.move(scope, input))),
+      ),
       t3_peer_environment_read: McpToolAccess.readsAsCaller((input) =>
         peers.readEnvironment(input),
       ),

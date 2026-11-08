@@ -20,6 +20,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.shellOpenInEditor]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerThreadsRequest]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerOrchestrationCall]: AuthOrchestrationOperateScope,
+  [WS_METHODS.peerThreadsMove]: AuthOrchestrationOperateScope,
   [WS_METHODS.previewClose]: AuthPreviewOperateScope,
   // Stopping a server signals its processes, as closing a terminal does.
   [WS_METHODS.previewStopLocalServer]: AuthTerminalOperateScope,

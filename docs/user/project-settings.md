@@ -228,6 +228,16 @@ the project.
 An agent can do the same: ask it to start work on another machine in this project, and it adds
 the folder there as part of the project when it is missing.
 
+### Move a thread to another machine or project
+
+Right-click a thread and choose **Move to**. The menu lists this project on your other connected
+machines, then your other projects on the thread's own machine. The thread continues as a new
+thread there: its first message carries the conversation so far and a link back, and the old
+thread is archived. Move is unavailable while the thread is running.
+
+An agent can move a thread too. Ask it to continue on another machine or in another project, and
+name any uncommitted files to bring along. Committed work travels through Git.
+
 ### Files Git does not carry
 
 Git moves tracked work between machines. For the rest, such as `.env` files, large files and

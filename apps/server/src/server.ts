@@ -91,6 +91,7 @@ import * as TerminalManager from "./terminal/Manager.ts";
 import * as McpHttpServer from "./mcp/McpHttpServer.ts";
 import * as PeerForwarding from "./peer/PeerForwarding.ts";
 import * as RemoteDelegation from "./peer/RemoteDelegation.ts";
+import * as ThreadMove from "./peer/ThreadMove.ts";
 import * as PeerLinkRequests from "./peer/PeerLinkRequests.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
 import * as PeerMcpClient from "./peer/PeerMcpClient.ts";
@@ -688,6 +689,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   .pipe(
     // Core Services
     Layer.provideMerge(PeerThreadMessaging.layer),
+    Layer.provideMerge(ThreadMove.layer),
     Layer.provideMerge(
       Layer.merge(PeerThreads.layer, PeerOrchestration.layer).pipe(
         Layer.provide(OrchestratorMcpService.layer),

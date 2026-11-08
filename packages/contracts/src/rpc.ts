@@ -464,6 +464,8 @@ import {
   PeerRelayRespondInput,
   PeerThreadOperation,
   PeerOrchestrationCall,
+  PeerThreadMoveRequest,
+  PeerThreadMoveResult,
   PeerRelayReply,
 } from "./peers.ts";
 import { OrchestratorMcpFailure } from "./orchestratorMcp.ts";
@@ -701,6 +703,7 @@ export const WS_METHODS = {
   peerRelayRespond: "peerRelay.respond",
   peerThreadsRequest: "peerThreads.request",
   peerOrchestrationCall: "peerOrchestration.call",
+  peerThreadsMove: "peerThreads.move",
 
   // Streaming subscriptions
   subscribeVcsStatus: "subscribeVcsStatus",
@@ -1422,6 +1425,12 @@ const WsPeerFilesWriteRpc = Rpc.make(WS_METHODS.peerFilesWrite, {
 const WsPeerOrchestrationCallRpc = Rpc.make(WS_METHODS.peerOrchestrationCall, {
   payload: PeerOrchestrationCall,
   success: Schema.Unknown,
+  error: Schema.Union([OrchestratorMcpFailure, EnvironmentAuthorizationError]),
+});
+
+const WsPeerThreadsMoveRpc = Rpc.make(WS_METHODS.peerThreadsMove, {
+  payload: PeerThreadMoveRequest,
+  success: PeerThreadMoveResult,
   error: Schema.Union([OrchestratorMcpFailure, EnvironmentAuthorizationError]),
 });
 
@@ -2432,6 +2441,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsPeerRelayRespondRpc,
   WsPeerThreadsRequestRpc,
   WsPeerOrchestrationCallRpc,
+  WsPeerThreadsMoveRpc,
   WsProjectsListEntriesRpc,
   WsProjectsWatchEntriesRpc,
   WsProjectsListIgnoredFilesRpc,

@@ -1,5 +1,25 @@
 # Fork Changes
 
+## Move threads between machines and projects — 2026-11-08
+
+- A thread continues in another project, on another connected machine or the same one, as a new
+  thread whose first message carries the conversation (budgeted user, assistant and plan items), a
+  link back, the old folder and branch, and file guidance. The old thread is archived when idle.
+  Another machine's project is the one in the same group or repository unless one is named.
+- Agents: `t3_thread_move` (full access) with `copyPaths` for uncommitted files, copied through
+  the peer transfer. Users: **Move to** in the thread context menu (sidebar and chat header), over
+  the new `peerThreads.move` RPC (operate scope) on the thread's own server, capability
+  `threadMove`. Mobile has no entry yet.
+- `PeerOrchestration.invoke` runs the relay toolkit for a local scope, so a same-machine move goes
+  through the same `t3_thread_launch` checks. `RemoteDelegation.resolveProject` is shared.
+- Source: contracts `peers.ts`, `rpc.ts`, `environment.ts`, `clientRpcPermissions.ts`; server
+  `peer/ThreadMove.ts`, `peer/RemoteDelegation.ts`, `peers/PeerOrchestration.ts`,
+  `mcp/toolkits/peers.ts`, `ws.ts`, `server.ts`; web `threadMove.ts`,
+  `threadActionMenu.logic.ts`, `useThreadActionMenu.ts`, `Sidebar.tsx`; provider-core
+  instructions; `docs/user/project-settings.md`.
+- Validation: `ThreadMove.test.ts` (copy paths, prompt, archive only when idle, refusals) and the
+  menu logic test. Added eval case `move-thread-to-connected-machine`; dry run builds.
+
 ## Project groups across machines without Git — 2026-11-08
 
 - Store an optional `groupKey` on projects (migration 89, `project.created`/`project.meta-updated`

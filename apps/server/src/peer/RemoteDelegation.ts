@@ -96,6 +96,14 @@ export class RemoteDelegation extends Context.Service<
      * restart, and a finished one again when a Stop here owes it a stop there.
      */
     readonly start: () => Effect.Effect<void, never, Scope.Scope>;
+    /** The project there in the group or repository of `projectId` here, unless `requested` names one. */
+    readonly resolveProject: (
+      scope: McpInvocationContext.McpInvocationScope,
+      environmentId: EnvironmentId,
+      projectId: ProjectId,
+      requested: ProjectId | undefined,
+      field: string,
+    ) => Effect.Effect<ProjectId, OrchestratorMcpFailure>;
   }
 >()("t3/peer/RemoteDelegation") {}
 
@@ -141,10 +149,11 @@ const make = Effect.gen(function* () {
 
   /** The peer's project in this project's group or with its repository, or the one named. */
   const resolveRemoteProject = Effect.fn("RemoteDelegation.resolveRemoteProject")(function* (
-    scope: ThreadScope,
+    scope: McpInvocationContext.McpInvocationScope,
     environmentId: EnvironmentId,
     parentProjectId: ProjectId,
     requested: ProjectId | undefined,
+    field = "target.projectId",
   ) {
     if (requested !== undefined) return requested;
     const here = yield* projects.getById(parentProjectId).pipe(
@@ -161,8 +170,7 @@ const make = Effect.gen(function* () {
     if (key === undefined && groupKey === undefined) {
       return yield* new OrchestratorMcpFailure({
         code: "target_required",
-        message:
-          "Pass target.projectId: this thread's project has no group key or repository to match there. To make one project across machines, set the same groupKey on both with t3_project_update (or t3_project_create there).",
+        message: `Pass ${field}: this thread's project has no group key or repository to match there. To make one project across machines, set the same groupKey on both with t3_project_update (or t3_project_create there).`,
       });
     }
     const listed: Array<
@@ -185,8 +193,8 @@ const make = Effect.gen(function* () {
       code: "invalid_request",
       message:
         matches.length === 0
-          ? `No project there is in ${wanted}. Pass target.projectId; t3_project_list with this environmentId lists them. To add the folder there, use t3_project_create with this environmentId${groupKey === undefined ? "" : ` and groupKey "${groupKey}"`} (t3_project_clone first for a repository), or set the groupKey of an existing project there with t3_project_update.`
-          : `Several projects there are in ${wanted}: ${matches.map((project) => `${project.title} (${project.id})`).join(", ")}. Pass target.projectId.`,
+          ? `No project there is in ${wanted}. Pass ${field}; t3_project_list with this environmentId lists them. To add the folder there, use t3_project_create with this environmentId${groupKey === undefined ? "" : ` and groupKey "${groupKey}"`} (t3_project_clone first for a repository), or set the groupKey of an existing project there with t3_project_update.`
+          : `Several projects there are in ${wanted}: ${matches.map((project) => `${project.title} (${project.id})`).join(", ")}. Pass ${field}.`,
     });
   });
 
@@ -828,7 +836,7 @@ const make = Effect.gen(function* () {
       }).pipe(Effect.ignoreCause({ log: true })),
     );
 
-  return RemoteDelegation.of({ delegate, cancel, start });
+  return RemoteDelegation.of({ delegate, cancel, start, resolveProject: resolveRemoteProject });
 });
 
 const isTerminal = (status: string) =>

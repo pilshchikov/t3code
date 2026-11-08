@@ -216,14 +216,19 @@ describe("buildThreadActionMenuItems", () => {
     expect(archiveItem?.disabled).toBe(true);
   });
 
-  it("disables archive and turning into a project while the thread is running", () => {
+  it("disables archive, moving and turning into a project while the thread is running", () => {
     const items = buildThreadActionMenuItems({
       ...baseState,
       isRunning: true,
       canTurnIntoProject: true,
+      moveTargets: [{ id: "0", label: "Mac Mini" }],
     });
     expect(items.find((item) => item.id === "archive")?.disabled).toBe(true);
     expect(items.find((item) => item.id === "turn-into-project")?.disabled).toBe(true);
+    expect(items.find((item) => item.id === "move")).toMatchObject({
+      disabled: true,
+      children: [{ id: "move:0", label: "Mac Mini" }],
+    });
   });
 });
 
