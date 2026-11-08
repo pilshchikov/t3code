@@ -27,6 +27,7 @@ import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as McpInvocationContext from "../mcp/McpInvocationContext.ts";
 import { ProjectToolkit } from "../mcp/toolkits/project/tools.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
+import { normalizeRelativePath } from "../peers/PeerFiles.ts";
 import * as PeerOrchestration from "../peers/PeerOrchestration.ts";
 import * as Peers from "../peers/Peers.ts";
 import * as ProjectService from "../project/ProjectService.ts";
@@ -55,15 +56,6 @@ export class ThreadMove extends Context.Service<
     ) => Effect.Effect<PeerThreadMoveResult, OrchestratorMcpFailure>;
   }
 >()("t3/peer/ThreadMove") {}
-
-/** Relative paths that stay inside the folder they are joined to. */
-const normalizeCopyPath = (path: string): string | undefined => {
-  if (NodePath.posix.isAbsolute(path) || NodePath.win32.isAbsolute(path)) return undefined;
-  const normalized = NodePath.posix.normalize(path.replaceAll("\\", "/")).replace(/\/+$/, "");
-  if (normalized === "" || normalized === "." || normalized.split("/").includes(".."))
-    return undefined;
-  return normalized;
-};
 
 const movedThreadPrompt = (input: {
   readonly from: { readonly label: string; readonly environmentId: EnvironmentId };
@@ -163,7 +155,7 @@ const make = Effect.gen(function* () {
         );
       const copyPaths: Array<string> = [];
       for (const path of input.copyPaths ?? []) {
-        const normalized = normalizeCopyPath(path);
+        const normalized = normalizeRelativePath(path);
         if (normalized === undefined)
           return yield* failure(
             "invalid_request",

@@ -89,26 +89,37 @@ const makeFolders = Effect.acquireRelease(
   ({ root }) => Effect.promise(() => NodeFSP.rm(root, { recursive: true, force: true })),
 );
 
-const largeChunkSnapshot = peerEnvironmentSnapshot(
-  {
-    environment: {
-      environmentId: peer,
-      label: "Build Mac",
-      serverVersion: "0.1.7",
-      platform: { os: "darwin", arch: "arm64" },
-      capabilities: { repositoryIdentity: true, peerFileLargeChunks: true },
+const snapshotWith = (capabilities: {
+  readonly peerFileLargeChunks: boolean;
+  readonly peerFileArchives: boolean;
+}) =>
+  peerEnvironmentSnapshot(
+    {
+      environment: {
+        environmentId: peer,
+        label: "Build Mac",
+        serverVersion: "0.1.7",
+        platform: { os: "darwin", arch: "arm64" },
+        capabilities: { repositoryIdentity: true, ...capabilities },
+      },
+      cwd: "/srv",
+      settings: DEFAULT_SERVER_SETTINGS,
+      providers: [],
     },
-    cwd: "/srv",
-    settings: DEFAULT_SERVER_SETTINGS,
-    providers: [],
-  },
-  [],
-  { environmentId: peer },
-  "2026-10-31T12:00:00.000Z",
-);
+    [],
+    { environmentId: peer },
+    "2026-10-31T12:00:00.000Z",
+  );
 
 /** A relaying client that runs every request against the same PeerFiles. */
-const startRelay = (options: { readonly largeChunks?: boolean; readonly chunks?: number[] } = {}) =>
+const startRelay = (
+  options: {
+    readonly largeChunks?: boolean;
+    readonly archives?: boolean;
+    readonly chunks?: number[];
+    readonly operations?: string[];
+  } = {},
+) =>
   Effect.gen(function* () {
     const peers = yield* Peers.Peers;
     const files = yield* PeerFiles.PeerFiles;
@@ -119,12 +130,19 @@ const startRelay = (options: { readonly largeChunks?: boolean; readonly chunks?:
           code: error.code,
           message: error.message,
         });
+      options.operations?.push(operation.type);
       switch (operation.type) {
         case "describe":
           return Effect.succeed({ type: "described", peers: [] });
         case "environment-read":
-          if (options.largeChunks === true)
-            return Effect.succeed({ type: "environment-read", result: largeChunkSnapshot });
+          if (options.largeChunks === true || options.archives === true)
+            return Effect.succeed({
+              type: "environment-read",
+              result: snapshotWith({
+                peerFileLargeChunks: options.largeChunks === true,
+                peerFileArchives: options.archives === true,
+              }),
+            });
           return Effect.succeed({
             type: "failed",
             code: "peer_unreachable",
@@ -158,6 +176,20 @@ const startRelay = (options: { readonly largeChunks?: boolean; readonly chunks?:
             Effect.map((result): PeerRelayReply => ({ type: "written", result })),
             Effect.catch(failed),
           );
+        case "pack":
+          return files.pack(operation.input).pipe(
+            Effect.map((result): PeerRelayReply => ({ type: "packed", result })),
+            Effect.catch(failed),
+          );
+        case "unpack":
+          return files.unpack(operation.input).pipe(
+            Effect.map((result): PeerRelayReply => ({ type: "unpacked", result })),
+            Effect.catch(failed),
+          );
+        case "pack-remove":
+          return files
+            .removePack(operation.input)
+            .pipe(Effect.as<PeerRelayReply>({ type: "pack-removed" }), Effect.catch(failed));
       }
     };
     yield* peers.connect.pipe(
@@ -260,6 +292,80 @@ it.layer(layerTest, { excludeTestServices: true })("Peers", (it) => {
             large,
           ),
         ).toBe(true);
+      }),
+    );
+
+    it.effect("moves chosen paths as one archive both ways, keeping what already exists", () =>
+      Effect.gen(function* () {
+        const peers = yield* Peers.Peers;
+        const { here, there } = yield* makeFolders;
+        const operations: string[] = [];
+        yield* startRelay({ archives: true, largeChunks: true, operations });
+        const binary = NodeCrypto.randomBytes(300_000);
+        yield* Effect.promise(async () => {
+          await NodeFSP.mkdir(NodePath.join(here, "target", "release"), { recursive: true });
+          await NodeFSP.writeFile(NodePath.join(here, "target", "release", "game"), binary, {
+            mode: 0o755,
+          });
+          await NodeFSP.mkdir(NodePath.join(here, "assets", "node_modules"), { recursive: true });
+          await NodeFSP.writeFile(NodePath.join(here, "assets", "a.png"), "a");
+          await NodeFSP.writeFile(NodePath.join(here, "assets", "empty"), "");
+          await NodeFSP.writeFile(NodePath.join(here, "assets", "node_modules", "x.js"), "");
+          await NodeFSP.writeFile(NodePath.join(here, "notes.md"), "left here");
+          await NodeFSP.mkdir(NodePath.join(there, "build", "assets"), { recursive: true });
+          await NodeFSP.writeFile(NodePath.join(there, "build", "assets", "a.png"), "theirs");
+        });
+        const sent = yield* peers.copy({
+          environmentId: peer,
+          direction: "to_peer",
+          localPath: here,
+          peerPath: NodePath.join(there, "build"),
+          overwrite: false,
+          include: ["target/release/game", "assets/"],
+        });
+        expect(sent).toEqual({
+          files: 2,
+          bytes: binary.length,
+          skipped: [{ path: "assets/a.png", reason: "already exists" }],
+        });
+        expect(operations.filter((type) => type !== "write")).toEqual([
+          "environment-read",
+          "unpack",
+        ]);
+        const landed = yield* Effect.promise(async () => ({
+          binary: await NodeFSP.readFile(
+            NodePath.join(there, "build", "target", "release", "game"),
+          ),
+          mode:
+            (await NodeFSP.stat(NodePath.join(there, "build", "target", "release", "game"))).mode &
+            0o777,
+          kept: await NodeFSP.readFile(NodePath.join(there, "build", "assets", "a.png"), "utf8"),
+          build: (await NodeFSP.readdir(NodePath.join(there, "build"))).sort(),
+          here: (await NodeFSP.readdir(here)).sort(),
+        }));
+        expect(landed.binary.equals(binary)).toBe(true);
+        expect(landed.mode).toBe(0o755);
+        expect(landed.kept).toBe("theirs");
+        expect(landed.build).toEqual(["assets", "target"]);
+        expect(landed.here).toEqual(["assets", "notes.md", "target"]);
+
+        const back = NodePath.join(here, "back");
+        const received = yield* peers.copy({
+          environmentId: peer,
+          direction: "from_peer",
+          localPath: back,
+          peerPath: NodePath.join(there, "build"),
+          overwrite: true,
+        });
+        expect(received).toEqual({ files: 3, bytes: binary.length + 6, skipped: [] });
+        expect(yield* Effect.promise(() => NodeFSP.readdir(NodePath.join(there, "build")))).toEqual(
+          ["assets", "target"],
+        );
+        expect(
+          yield* Effect.promise(() =>
+            NodeFSP.readFile(NodePath.join(back, "assets", "empty"), "utf8"),
+          ),
+        ).toBe("");
       }),
     );
 

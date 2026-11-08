@@ -106,13 +106,19 @@ const fileRead = Tool.make("t3_peer_file_read", {
 const copy = Tool.make("t3_peer_copy", {
   ...shared,
   description:
-    "Copy a file, or a whole folder, between this machine and another one. direction to_peer sends localPath to peerPath there; from_peer brings peerPath to localPath here. Both paths are absolute, name the destination itself (not its parent folder), and must lie inside a project folder or thread worktree on their machine. Missing parent folders are created, file permissions are kept, and every file is verified by checksum. An existing destination fails unless overwrite is true; in a folder copy, existing files are skipped and reported instead. Folder copies skip .git and node_modules. Nothing is ever deleted. Needs a full-access thread.",
+    "Copy a file, or a whole folder, between this machine and another one. direction to_peer sends localPath to peerPath there; from_peer brings peerPath to localPath here. Both paths are absolute, name the destination itself (not its parent folder), and must lie inside a project folder or thread worktree on their machine. Missing parent folders are created, file permissions are kept, and every file is verified by checksum. An existing destination fails unless overwrite is true; in a folder copy, existing files are skipped and reported instead. Folder copies skip .git and node_modules and travel as one compressed archive. To send several files and folders in one archive, give their common folder as the source path, the destination folder as the other path, and list them relative to the source in include. Nothing is ever deleted. Needs a full-access thread.",
   parameters: Schema.Struct({
     environment,
     direction: Schema.Literals(["to_peer", "from_peer"]),
     localPath: peerPath("Absolute path on this machine."),
     peerPath: peerPath("Absolute path on the other machine."),
     overwrite: Schema.optionalKey(Schema.Boolean),
+    include: Schema.optionalKey(
+      Schema.Array(Schema.String).annotate({
+        description:
+          "Only these paths, relative to the source folder; same layout at the destination.",
+      }),
+    ),
   }),
   success: Schema.Struct({
     files: Schema.Number,
@@ -347,6 +353,7 @@ export const PeersHandlersLive = McpToolAccess.toLayer(
           localPath: input.localPath,
           peerPath: input.peerPath,
           overwrite: input.overwrite ?? false,
+          include: input.include,
         }),
       ),
     };

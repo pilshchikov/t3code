@@ -179,6 +179,33 @@ export const layer = Layer.effectDiscard(
               (result) => ({ type: "written", result }),
             ),
           );
+        case "pack":
+          return fileSlots.withPermits(1)(
+            onPeer(
+              source,
+              operation.environmentId,
+              request(WS_METHODS.peerFilesPack, operation.input),
+              (result) => ({ type: "packed", result }),
+            ),
+          );
+        case "unpack":
+          return fileSlots.withPermits(1)(
+            onPeer(
+              source,
+              operation.environmentId,
+              request(WS_METHODS.peerFilesUnpack, operation.input),
+              (result) => ({ type: "unpacked", result }),
+            ),
+          );
+        case "pack-remove":
+          return fileSlots.withPermits(1)(
+            onPeer(
+              source,
+              operation.environmentId,
+              request(WS_METHODS.peerFilesRemovePack, operation.input),
+              () => ({ type: "pack-removed" }),
+            ),
+          );
       }
     };
 

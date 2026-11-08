@@ -460,6 +460,11 @@ import {
   PeerFilesReadResult,
   PeerFilesWriteInput,
   PeerFilesWriteResult,
+  PeerFilesPackInput,
+  PeerFilesPackResult,
+  PeerFilesUnpackInput,
+  PeerFilesUnpackResult,
+  PeerFilesRemovePackInput,
   PeerRelayRequest,
   PeerRelayRespondInput,
   PeerThreadOperation,
@@ -699,6 +704,9 @@ export const WS_METHODS = {
   peerFilesList: "peerFiles.list",
   peerFilesRead: "peerFiles.read",
   peerFilesWrite: "peerFiles.write",
+  peerFilesPack: "peerFiles.pack",
+  peerFilesUnpack: "peerFiles.unpack",
+  peerFilesRemovePack: "peerFiles.removePack",
   peerRelayConnect: "peerRelay.connect",
   peerRelayRespond: "peerRelay.respond",
   peerThreadsRequest: "peerThreads.request",
@@ -1419,6 +1427,24 @@ const WsPeerFilesReadRpc = Rpc.make(WS_METHODS.peerFilesRead, {
 const WsPeerFilesWriteRpc = Rpc.make(WS_METHODS.peerFilesWrite, {
   payload: PeerFilesWriteInput,
   success: PeerFilesWriteResult,
+  error: Schema.Union([PeerFilesError, EnvironmentAuthorizationError]),
+});
+
+const WsPeerFilesPackRpc = Rpc.make(WS_METHODS.peerFilesPack, {
+  payload: PeerFilesPackInput,
+  success: PeerFilesPackResult,
+  error: Schema.Union([PeerFilesError, EnvironmentAuthorizationError]),
+});
+
+const WsPeerFilesUnpackRpc = Rpc.make(WS_METHODS.peerFilesUnpack, {
+  payload: PeerFilesUnpackInput,
+  success: PeerFilesUnpackResult,
+  error: Schema.Union([PeerFilesError, EnvironmentAuthorizationError]),
+});
+
+const WsPeerFilesRemovePackRpc = Rpc.make(WS_METHODS.peerFilesRemovePack, {
+  payload: PeerFilesRemovePackInput,
+  success: Schema.Void,
   error: Schema.Union([PeerFilesError, EnvironmentAuthorizationError]),
 });
 
@@ -2437,6 +2463,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsPeerFilesListRpc,
   WsPeerFilesReadRpc,
   WsPeerFilesWriteRpc,
+  WsPeerFilesPackRpc,
+  WsPeerFilesUnpackRpc,
+  WsPeerFilesRemovePackRpc,
   WsPeerRelayConnectRpc,
   WsPeerRelayRespondRpc,
   WsPeerThreadsRequestRpc,

@@ -30,6 +30,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
 import * as PeerFiles from "./PeerFiles.ts";
+import { normalizeRelativePath } from "./PeerFiles.ts";
 
 const READ_TEXT_MAX_BYTES = 256 * 1024;
 // Each chunk is a relay round trip through the app, so a folder copies several files at once.
@@ -50,6 +51,8 @@ export interface PeerCopyInput {
   readonly localPath: string;
   readonly peerPath: string;
   readonly overwrite: boolean;
+  /** Only these paths under the source folder, relative to it, land under the destination. */
+  readonly include?: ReadonlyArray<string> | undefined;
 }
 
 export interface PeerCopyResult {
@@ -148,7 +151,13 @@ const make = Effect.gen(function* () {
     pending.set(requestId, { relayId, reply });
     yield* Queue.offer(queue, { requestId, operation });
     return yield* Deferred.await(reply).pipe(
-      Effect.timeoutOption(operation.type === "list" ? "180 seconds" : "60 seconds"),
+      Effect.timeoutOption(
+        operation.type === "pack" || operation.type === "unpack"
+          ? "600 seconds"
+          : operation.type === "list"
+            ? "180 seconds"
+            : "60 seconds",
+      ),
       Effect.map(Option.getOrUndefined),
       Effect.ensuring(Effect.sync(() => pending.delete(requestId))),
     );
@@ -227,15 +236,17 @@ const make = Effect.gen(function* () {
     },
   );
 
-  /** Older peers take 512 KiB chunks only; ask once per copy, as a relay round trip costs more. */
-  const chunkBytesFor = (environmentId: EnvironmentId) =>
+  /** Older peers take 512 KiB chunks and files one by one; ask once per copy. */
+  const transferFor = (environmentId: EnvironmentId) =>
     readEnvironment({ environmentId, includeProjects: false, limit: 1 }).pipe(
-      Effect.map((snapshot) =>
-        snapshot.environment.capabilities.peerFileLargeChunks === true
-          ? PEER_FILE_MAX_CHUNK_BYTES
-          : PEER_FILE_CHUNK_BYTES,
-      ),
-      Effect.orElseSucceed(() => PEER_FILE_CHUNK_BYTES),
+      Effect.map(({ environment: { capabilities } }) => ({
+        chunkBytes:
+          capabilities.peerFileLargeChunks === true
+            ? PEER_FILE_MAX_CHUNK_BYTES
+            : PEER_FILE_CHUNK_BYTES,
+        archives: capabilities.peerFileArchives === true,
+      })),
+      Effect.orElseSucceed(() => ({ chunkBytes: PEER_FILE_CHUNK_BYTES, archives: false })),
     );
 
   const copyFile = Effect.fn("Peers.copyFile")(function* (
@@ -286,14 +297,16 @@ const make = Effect.gen(function* () {
     }
   });
 
-  const copy: Peers["Service"]["copy"] = Effect.fn("Peers.copy")(function* (input) {
+  const copyEach = Effect.fn("Peers.copyEach")(function* (
+    input: PeerCopyInput,
+    chunkBytes: number,
+  ) {
     const toPeer = input.direction === "to_peer";
     const sourcePath = toPeer ? input.localPath : input.peerPath;
     const listing = { path: sourcePath, recursive: true, untrackedOnly: false, hash: false };
     const source = toPeer
       ? yield* files.list(listing).pipe(Effect.mapError(onThisEnvironment))
       : yield* list(input.environmentId, listing);
-    const chunkBytes = yield* chunkBytesFor(input.environmentId);
     if (source.kind === "file")
       return { files: 1, bytes: yield* copyFile(input, chunkBytes), skipped: [] };
     if (source.truncated) {
@@ -338,6 +351,108 @@ const make = Effect.gen(function* () {
     );
     skipped.sort((left, right) => left.path.localeCompare(right.path));
     return { files: copied, bytes, skipped };
+  });
+
+  const packedName = (archivePath: string) => archivePath.split(/[\\/]/).at(-1)!;
+  const joinPeer = (folder: string, name: string) => `${folder.replace(/[\\/]+$/, "")}/${name}`;
+
+  const copyPacked = Effect.fn("Peers.copyPacked")(function* (
+    input: PeerCopyInput,
+    chunkBytes: number,
+  ) {
+    const transferId = NodeCrypto.randomUUID();
+    const include = input.include === undefined ? {} : { include: [...input.include] };
+    if (input.direction === "to_peer") {
+      const packed = yield* files
+        .pack({ path: input.localPath, transferId, ...include })
+        .pipe(Effect.mapError(onThisEnvironment));
+      const archivePath = joinPeer(input.peerPath, packedName(packed.archivePath));
+      yield* copyFile(
+        { ...input, localPath: packed.archivePath, peerPath: archivePath, overwrite: true },
+        chunkBytes,
+      ).pipe(
+        Effect.ensuring(files.removePack({ archivePath: packed.archivePath }).pipe(Effect.ignore)),
+      );
+      const reply = yield* invoke({
+        type: "unpack",
+        environmentId: input.environmentId,
+        input: { archivePath, destination: input.peerPath, overwrite: input.overwrite },
+      });
+      const unpacked = reply.type === "unpacked" ? reply.result : yield* failed(reply);
+      return { ...unpacked, skipped: [...packed.skipped, ...unpacked.skipped] };
+    }
+    const reply = yield* invoke({
+      type: "pack",
+      environmentId: input.environmentId,
+      input: { path: input.peerPath, transferId, ...include },
+    });
+    const packed = reply.type === "packed" ? reply.result : yield* failed(reply);
+    const archivePath = NodePath.join(input.localPath, packedName(packed.archivePath));
+    yield* copyFile(
+      { ...input, peerPath: packed.archivePath, localPath: archivePath, overwrite: true },
+      chunkBytes,
+    ).pipe(
+      Effect.ensuring(
+        invoke({
+          type: "pack-remove",
+          environmentId: input.environmentId,
+          input: { archivePath: packed.archivePath },
+        }).pipe(Effect.ignore),
+      ),
+    );
+    const unpacked = yield* files
+      .unpack({ archivePath, destination: input.localPath, overwrite: input.overwrite })
+      .pipe(Effect.mapError(onThisEnvironment));
+    return { ...unpacked, skipped: [...packed.skipped, ...unpacked.skipped] };
+  });
+
+  const copy: Peers["Service"]["copy"] = Effect.fn("Peers.copy")(function* (input) {
+    const include: Array<string> = [];
+    for (const path of input.include ?? []) {
+      const relative = normalizeRelativePath(path);
+      if (relative === undefined)
+        return yield* new PeersError({
+          code: "outside_projects",
+          message: `include paths must be relative to the source folder, without "..": ${path}`,
+        });
+      include.push(relative);
+    }
+    const transfer = yield* transferFor(input.environmentId);
+    const sourcePath = input.direction === "to_peer" ? input.localPath : input.peerPath;
+    const listing = { path: sourcePath, recursive: false, untrackedOnly: false, hash: false };
+    const source =
+      input.direction === "to_peer"
+        ? yield* files.list(listing).pipe(Effect.mapError(onThisEnvironment))
+        : yield* list(input.environmentId, listing);
+    if (source.kind === "file") {
+      if (include.length > 0)
+        return yield* new PeersError({
+          code: "not_a_directory",
+          message: `include needs a folder; ${sourcePath} is a file.`,
+        });
+      return { files: 1, bytes: yield* copyFile(input, transfer.chunkBytes), skipped: [] };
+    }
+    if (transfer.archives)
+      return yield* copyPacked(
+        { ...input, include: include.length > 0 ? include : undefined },
+        transfer.chunkBytes,
+      );
+    if (include.length === 0) return yield* copyEach(input, transfer.chunkBytes);
+    const results = yield* Effect.forEach(include, (relative) =>
+      copy({
+        ...input,
+        include: undefined,
+        localPath: NodePath.join(input.localPath, ...relative.split("/")),
+        peerPath: joinPeer(input.peerPath, relative),
+      }),
+    );
+    return {
+      files: results.reduce((sum, result) => sum + result.files, 0),
+      bytes: results.reduce((sum, result) => sum + result.bytes, 0),
+      skipped: results.flatMap((result, index) =>
+        result.skipped.map((entry) => ({ ...entry, path: `${include[index]}/${entry.path}` })),
+      ),
+    };
   });
 
   return Peers.of({

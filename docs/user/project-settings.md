@@ -246,6 +246,10 @@ ignored data, ask an agent in one of the project's threads: "copy `.env` to the 
 the project's folder on each, lists and compares files there, and copies files or folders either
 way.
 
+A folder, or a set of files and folders you name together, such as a release binary and its assets,
+travels as one compressed archive and is unpacked on the other machine. Files that already exist
+there are kept unless you ask to replace them.
+
 Agents reach only project folders and thread worktrees, never delete, and need a **Full access**
 thread to copy. The app carries the files, so the desktop or web app has to be open and connected
 to both machines. Mobile does not carry files.

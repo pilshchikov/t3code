@@ -164,9 +164,11 @@ export const PeerFilesReadResult = Schema.Struct({
 });
 export type PeerFilesReadResult = typeof PeerFilesReadResult.Type;
 
+const PeerTransferId = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{8,64}$/));
+
 export const PeerFilesWriteInput = Schema.Struct({
   path: PeerPath,
-  transferId: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{8,64}$/)),
+  transferId: PeerTransferId,
   offset: NonNegativeInt,
   data: Schema.String.check(Schema.isMaxLength(Math.ceil(PEER_FILE_MAX_CHUNK_BYTES / 3) * 4)),
   last: Schema.Boolean,
@@ -181,6 +183,42 @@ export const PeerFilesWriteResult = Schema.Struct({
   sha256: Schema.optionalKey(Schema.String),
 });
 export type PeerFilesWriteResult = typeof PeerFilesWriteResult.Type;
+
+const PeerCopySkipped = Schema.Array(Schema.Struct({ path: Schema.String, reason: Schema.String }));
+
+/** Packs regular files under `path` (or only `include`, relative to it) into one archive there. */
+export const PeerFilesPackInput = Schema.Struct({
+  path: PeerPath,
+  transferId: PeerTransferId,
+  include: Schema.optionalKey(
+    Schema.Array(TrimmedNonEmptyString.check(Schema.isMaxLength(1024))).check(
+      Schema.isMaxLength(200),
+    ),
+  ),
+});
+export type PeerFilesPackInput = typeof PeerFilesPackInput.Type;
+export const PeerFilesPackResult = Schema.Struct({
+  archivePath: Schema.String,
+  files: NonNegativeInt,
+  bytes: NonNegativeInt,
+  skipped: PeerCopySkipped,
+});
+export type PeerFilesPackResult = typeof PeerFilesPackResult.Type;
+/** Unpacks a received archive into `destination`, then removes it. */
+export const PeerFilesUnpackInput = Schema.Struct({
+  archivePath: PeerPath,
+  destination: PeerPath,
+  overwrite: Schema.Boolean,
+});
+export type PeerFilesUnpackInput = typeof PeerFilesUnpackInput.Type;
+export const PeerFilesUnpackResult = Schema.Struct({
+  files: NonNegativeInt,
+  bytes: NonNegativeInt,
+  skipped: PeerCopySkipped,
+});
+export type PeerFilesUnpackResult = typeof PeerFilesUnpackResult.Type;
+export const PeerFilesRemovePackInput = Schema.Struct({ archivePath: PeerPath });
+export type PeerFilesRemovePackInput = typeof PeerFilesRemovePackInput.Type;
 
 export const PeerFilesFailureCode = Schema.Literals([
   "outside_projects",
@@ -335,6 +373,21 @@ export const PeerRelayOperation = Schema.Union([
     environmentId: EnvironmentId,
     input: PeerFilesWriteInput,
   }),
+  Schema.Struct({
+    type: Schema.Literal("pack"),
+    environmentId: EnvironmentId,
+    input: PeerFilesPackInput,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("unpack"),
+    environmentId: EnvironmentId,
+    input: PeerFilesUnpackInput,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("pack-remove"),
+    environmentId: EnvironmentId,
+    input: PeerFilesRemovePackInput,
+  }),
 ]);
 export type PeerRelayOperation = typeof PeerRelayOperation.Type;
 
@@ -361,6 +414,9 @@ export const PeerRelayReply = Schema.Union([
   Schema.Struct({ type: Schema.Literal("listed"), result: PeerFilesListResult }),
   Schema.Struct({ type: Schema.Literal("read"), result: PeerFilesReadResult }),
   Schema.Struct({ type: Schema.Literal("written"), result: PeerFilesWriteResult }),
+  Schema.Struct({ type: Schema.Literal("packed"), result: PeerFilesPackResult }),
+  Schema.Struct({ type: Schema.Literal("unpacked"), result: PeerFilesUnpackResult }),
+  Schema.Struct({ type: Schema.Literal("pack-removed") }),
   Schema.Struct({
     type: Schema.Literal("failed"),
     code: Schema.Union([

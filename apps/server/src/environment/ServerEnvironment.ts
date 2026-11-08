@@ -278,6 +278,7 @@ export const make = Effect.gen(function* () {
       projectGroups: true,
       threadMove: true,
       peerFileLargeChunks: true,
+      peerFileArchives: true,
       ignoredFileListing: true,
       triage: true,
       oneTimeSchedules: true,

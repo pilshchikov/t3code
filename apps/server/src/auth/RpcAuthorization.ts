@@ -153,6 +153,9 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.peerThreadsMove]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerFilesRead]: AuthFilesystemReadScope,
   [WS_METHODS.peerFilesWrite]: AuthFilesystemWriteScope,
+  [WS_METHODS.peerFilesPack]: AuthFilesystemWriteScope,
+  [WS_METHODS.peerFilesUnpack]: AuthFilesystemWriteScope,
+  [WS_METHODS.peerFilesRemovePack]: AuthFilesystemWriteScope,
   // A relay answers agents' requests and receives the files they send out.
   [WS_METHODS.peerRelayConnect]: AuthFilesystemWriteScope,
   [WS_METHODS.peerRelayRespond]: AuthFilesystemWriteScope,

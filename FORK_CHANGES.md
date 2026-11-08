@@ -5,10 +5,19 @@
 - Every 512 KiB chunk of `t3_peer_copy` is one relay round trip through the app, so large files
   moved at about 1 MB/s while the link itself carried about 14 MB/s. A peer that reports the new
   capability `peerFileLargeChunks` now gets 4 MiB chunks (`PEER_FILE_MAX_CHUNK_BYTES`), and older
-  peers keep 512 KiB. Folder copies move 4 files at once. Skipped entries are sorted by path.
-- Source: contracts `peers.ts`, `environment.ts`; server `peers/Peers.ts`,
-  `environment/ServerEnvironment.ts`.
-- Validation: `Peers.test.ts` checks the chunk size for both kinds of peer and the folder round trip.
+  peers keep 512 KiB.
+- A folder copy to a peer with `peerFileArchives` travels as one gzip archive: the source packs
+  regular files (skipping `.git`, `node_modules`) into `.t3-pack-<id>.t3pack` inside the source
+  folder, the archive moves through the chunked, checksummed write, and the destination unpacks it
+  file by file (temporary file and rename, existing files kept unless `overwrite`) and removes it.
+  New relay operations and RPCs `peerFiles.pack`, `peerFiles.unpack`, `peerFiles.removePack`
+  (filesystem write scope). `t3_peer_copy` takes `include`, relative paths under the source folder
+  sent in one archive. Older peers fall back to copying files four at a time.
+- Source: contracts `peers.ts`, `rpc.ts`, `environment.ts`; server `peers/Peers.ts`,
+  `peers/PeerFiles.ts`, `mcp/toolkits/peers.ts`, `ws.ts`, `auth/RpcAuthorization.ts`,
+  `environment/ServerEnvironment.ts`; web `lib/peerRelayHost.ts`; `docs/user/project-settings.md`.
+- Validation: `Peers.test.ts` checks chunk sizes for both kinds of peer, the archive round trip
+  both ways with `include`, kept files, modes and empty files, and the per-file fallback.
 
 ## Move threads between machines and projects — 2026-11-08
 

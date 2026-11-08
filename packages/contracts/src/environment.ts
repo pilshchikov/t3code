@@ -163,6 +163,8 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   threadMove: Schema.optionalKey(Schema.Boolean),
   /** Peer file reads and writes take chunks up to `PEER_FILE_MAX_CHUNK_BYTES`. */
   peerFileLargeChunks: Schema.optionalKey(Schema.Boolean),
+  /** Folder copies travel as one archive through `peerFiles.pack` and `peerFiles.unpack`. */
+  peerFileArchives: Schema.optionalKey(Schema.Boolean),
   /** Server answers projects.listIgnoredFiles. */
   ignoredFileListing: Schema.optionalKey(Schema.Boolean),
   environmentIcon: Schema.optionalKey(Schema.Boolean),
