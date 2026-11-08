@@ -19,6 +19,9 @@ import * as ServerSettings from "../serverSettings.ts";
 const toolkit = Toolkit.make(
   ProjectToolkit.tools.t3_thread_launch,
   ProjectToolkit.tools.t3_project_list,
+  ProjectToolkit.tools.t3_project_read,
+  ProjectToolkit.tools.t3_project_create,
+  ProjectToolkit.tools.t3_project_update,
   OrchestratorToolkit.tools.orchestrator_capabilities,
   OrchestratorToolkit.tools.t3_thread_read,
   OrchestratorToolkit.tools.t3_thread_wait,

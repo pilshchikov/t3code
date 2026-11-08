@@ -423,6 +423,30 @@ describe("hand-made project links", () => {
   });
 });
 
+describe("server-stored project groups", () => {
+  it("joins different folders on every device and outranks remotes and links", () => {
+    const laptop = makeProject("laptop", "/Users/a/fun/games", {
+      repositoryIdentity: null,
+      groupKey: "games",
+    });
+    const mini = makeProject("mini", "/Users/b/workspace/fun/games", {
+      environmentId: EnvironmentId.make("mini"),
+      groupKey: "games",
+    });
+    const stray = makeProject("stray", "/work/elsewhere", { repositoryIdentity: null });
+    const linked = {
+      ...settings("separate"),
+      sidebarProjectLinks: { [derivePhysicalProjectKey(mini)]: "somewhere-else" },
+    };
+    const groups = buildProjectGroups({ projects: [laptop, mini, stray], settings: linked });
+    expect(groups.map((group) => group.members.map((member) => member.project.id))).toEqual([
+      ["laptop", "mini"],
+      ["stray"],
+    ]);
+    expect(deriveLogicalProjectKeyFromSettings(mini, linked)).toBe(groups[0]?.key);
+  });
+});
+
 describe("project pins and archives", () => {
   const at = "2026-07-02T00:00:00.000Z";
   const remote = EnvironmentId.make("remote");

@@ -92,6 +92,7 @@ describe("V2 preview upgrade", () => {
         [86, "ThreadHistoryRetention"],
         [87, "PromptReferenceLookup"],
         [88, "CheckpointRefLookup"],
+        [89, "ProjectGroupKey"],
       ]);
       assert.deepStrictEqual(yield* runMigrations(), []);
       assert.deepStrictEqual(yield* sql`SELECT * FROM orchestration_v2_legacy_imports`, imports);
@@ -199,6 +200,7 @@ describe("V2 preview upgrade", () => {
         [86, "ThreadHistoryRetention"],
         [87, "PromptReferenceLookup"],
         [88, "CheckpointRefLookup"],
+        [89, "ProjectGroupKey"],
       ]);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );

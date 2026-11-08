@@ -1,6 +1,7 @@
 export {
   deriveLogicalProjectKeyFromSettings,
   getProjectOrderKey,
+  projectGroupLogicalKey,
   selectProjectGroupingSettings,
   withProjectLink,
   type ProjectGroupingMode,

@@ -25,6 +25,7 @@ export interface ProjectCreateCommand {
   readonly workspaceRoot: string;
   readonly workspaceRoots?: ReadonlyArray<ProjectWorkspace>;
   readonly scripts?: ReadonlyArray<ProjectScript>;
+  readonly groupKey?: string;
 }
 
 export interface ProjectMetaUpdateCommand {
@@ -42,6 +43,7 @@ export interface ProjectMetaUpdateCommand {
   readonly scripts?: ReadonlyArray<ProjectScript>;
   readonly pinned?: boolean;
   readonly archived?: boolean;
+  readonly groupKey?: string | null;
 }
 
 export interface ProjectDeleteCommand {
@@ -171,6 +173,7 @@ export function planProjectCommand(input: {
           faviconPath: null,
           projectIcon: null,
           scripts: command.scripts ?? [],
+          ...(command.groupKey === undefined ? {} : { groupKey: command.groupKey }),
           createdAt: occurredAt,
           updatedAt: occurredAt,
         },
@@ -228,6 +231,7 @@ export function planProjectCommand(input: {
           ...(command.archived === undefined
             ? {}
             : { archivedAt: command.archived ? (project.archivedAt ?? occurredAt) : null }),
+          ...(command.groupKey === undefined ? {} : { groupKey: command.groupKey }),
           updatedAt: occurredAt,
         },
       });

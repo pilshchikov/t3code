@@ -139,7 +139,7 @@ const make = Effect.gen(function* () {
       .getThreadRecords(parentThreadId, ["subagents"], { subagentIds: [taskId] })
       .pipe(Effect.map(({ thread, subagents }) => ({ thread, task: subagents[0] })));
 
-  /** The peer's project with this thread's repository, or the one the caller named. */
+  /** The peer's project in this project's group or with its repository, or the one named. */
   const resolveRemoteProject = Effect.fn("RemoteDelegation.resolveRemoteProject")(function* (
     scope: ThreadScope,
     environmentId: EnvironmentId,
@@ -151,38 +151,42 @@ const make = Effect.gen(function* () {
       Effect.map(Option.getOrUndefined),
       Effect.orElseSucceed(() => undefined),
     );
+    const groupKey = here?.groupKey ?? undefined;
     // The project's own identity is a one-minute cache that reads blank when
     // cold, so resolve it here, as the other side's t3_project_list does.
     const key =
       here === undefined
         ? undefined
         : (yield* repositoryIdentities.resolve(here.workspaceRoot))?.canonicalKey;
-    if (key === undefined) {
+    if (key === undefined && groupKey === undefined) {
       return yield* new OrchestratorMcpFailure({
         code: "target_required",
-        message: "Pass target.projectId: this thread's project has no repository to match there.",
+        message:
+          "Pass target.projectId: this thread's project has no group key or repository to match there. To make one project across machines, set the same groupKey on both with t3_project_update (or t3_project_create there).",
       });
     }
-    const matches: Array<{ readonly id: ProjectId; readonly title: string }> = [];
+    const listed: Array<
+      Tool.Success<typeof ProjectToolkit.tools.t3_project_list>["projects"][number]
+    > = [];
     let cursor: number | null = 0;
     while (cursor !== null) {
-      const listed: Tool.Success<typeof ProjectToolkit.tools.t3_project_list> =
+      const page: Tool.Success<typeof ProjectToolkit.tools.t3_project_list> =
         yield* forwarding.call(scope, ProjectToolkit.tools.t3_project_list, environmentId, {
           cursor,
           limit: 100,
         });
-      matches.push(
-        ...listed.projects.filter((project) => project.repositoryIdentity?.canonicalKey === key),
-      );
-      cursor = listed.nextCursor;
+      listed.push(...page.projects);
+      cursor = page.nextCursor;
     }
+    const matches = matchingRemoteProjects(listed, { groupKey, repositoryKey: key });
     if (matches.length === 1) return matches[0]!.id;
+    const wanted = groupKey === undefined ? `this repository (${key})` : `group "${groupKey}"`;
     return yield* new OrchestratorMcpFailure({
       code: "invalid_request",
       message:
         matches.length === 0
-          ? `No project there has this repository (${key}). Pass target.projectId; t3_project_list with this environmentId lists them. To bring the repository there, use t3_project_clone and then t3_project_create with this environmentId.`
-          : `Several projects there have this repository: ${matches.map((project) => `${project.title} (${project.id})`).join(", ")}. Pass target.projectId.`,
+          ? `No project there is in ${wanted}. Pass target.projectId; t3_project_list with this environmentId lists them. To add the folder there, use t3_project_create with this environmentId${groupKey === undefined ? "" : ` and groupKey "${groupKey}"`} (t3_project_clone first for a repository), or set the groupKey of an existing project there with t3_project_update.`
+          : `Several projects there are in ${wanted}: ${matches.map((project) => `${project.title} (${project.id})`).join(", ")}. Pass target.projectId.`,
     });
   });
 
@@ -836,5 +840,25 @@ const isTerminal = (status: string) =>
 
 const terminalStatus = (status: string): "completed" | "failed" | "cancelled" | "interrupted" =>
   status === "completed" || status === "failed" || status === "interrupted" ? status : "cancelled";
+
+/** Projects there in this project's group, else with its repository: a group wins over a remote. */
+export function matchingRemoteProjects<
+  P extends {
+    readonly groupKey?: string | null | undefined;
+    readonly repositoryIdentity?: { readonly canonicalKey: string } | null | undefined;
+  },
+>(
+  projects: ReadonlyArray<P>,
+  here: { readonly groupKey: string | undefined; readonly repositoryKey: string | undefined },
+): ReadonlyArray<P> {
+  const grouped =
+    here.groupKey === undefined
+      ? []
+      : projects.filter((project) => project.groupKey === here.groupKey);
+  if (grouped.length > 0 || here.repositoryKey === undefined) return grouped;
+  return projects.filter(
+    (project) => project.repositoryIdentity?.canonicalKey === here.repositoryKey,
+  );
+}
 
 export const layer = Layer.effect(RemoteDelegation, make);

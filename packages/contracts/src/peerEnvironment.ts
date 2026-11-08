@@ -52,6 +52,7 @@ export const PeerEnvironmentSnapshot = Schema.Struct({
       defaultThreadEnvMode: Schema.NullOr(ThreadEnvMode),
       enabledProviderInstanceIds: Schema.Array(ProviderInstanceId),
       archived: Schema.Boolean,
+      groupKey: Schema.optional(Schema.NullOr(Schema.String)),
     }),
   ),
   nextProjectCursor: Schema.NullOr(NonNegativeInt),

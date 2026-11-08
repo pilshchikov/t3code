@@ -202,6 +202,7 @@ export const PeerProject = Schema.Struct({
   title: Schema.String,
   workspaceRoot: Schema.String,
   workspaceRoots: Schema.optional(Schema.Array(PeerWorkspace)),
+  groupKey: Schema.optional(Schema.NullOr(Schema.String)),
   /** Whether the user's client groups it with the project the request came from. */
   sameProject: Schema.Boolean,
 });
@@ -255,6 +256,9 @@ export const PeerOrchestrationToolName = Schema.Literals([
   "t3_thread_wait",
   "t3_thread_interrupt",
   "t3_project_list",
+  "t3_project_read",
+  "t3_project_create",
+  "t3_project_update",
   "orchestrator_capabilities",
 ]);
 export const PeerOrchestrationCall = Schema.Struct({

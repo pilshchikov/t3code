@@ -1,5 +1,28 @@
 # Fork Changes
 
+## Project groups across machines without Git — 2026-11-08
+
+- Store an optional `groupKey` on projects (migration 89, `project.created`/`project.meta-updated`
+  payloads, `project.create`/`project.update`, capability `projectGroups`). Projects with the same
+  key are one logical project on every client, mobile included, whatever their folders or Git
+  remotes. A group outranks repository matching and per-device hand links.
+- **Show under another project**, **Part of an existing project** and **Detach** write the group
+  to every involved server when they all support it, and fall back to the per-device link.
+- Agents: `t3_project_read`/`create`/`update` now run on app-connected machines through the relay
+  (create/update need operate scope there). `delegate_task` without `projectId` picks the remote
+  project in the same group before repository matching. Peer environment reads report `groupKey`.
+  Instructions tell agents to give the project a group and add the folder there instead of syncing
+  by SSH.
+- Source: contracts `project.ts`, `orchestrationProject.ts`, `applicationEvent.ts`, `peers.ts`,
+  `peerEnvironment.ts`, `clientRpcPermissions.ts`; server `ProjectStore`/`ProjectCommands`/
+  `ProjectService`/`ProjectMutation`, `089_ProjectGroupKey.ts`, `peers/PeerOrchestration.ts`,
+  `peer/RemoteDelegation.ts`, project MCP tool text; client-runtime `projectGrouping.ts` and
+  `updateProject`; web `projectLinks.ts`, `ProjectSettingsPanel.tsx`, `peerProjects.ts`;
+  provider-core orchestration instructions; `docs/user/project-settings.md`.
+- Validation: store round-trip, grouping (group beats remote and link), remote project matching
+  and relay scope tests. Added eval case `join-project-on-connected-machine`; dry run builds, live
+  runs need an API key this host lacks.
+
 ## Keep retention cleanup responsive on large databases — 2026-11-07
 
 - Fix the settled-history purge's correlated prompt-reference lookup, which scanned the complete

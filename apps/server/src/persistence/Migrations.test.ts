@@ -60,6 +60,7 @@ describe("runMigrations", () => {
         [86, "ThreadHistoryRetention"],
         [87, "PromptReferenceLookup"],
         [88, "CheckpointRefLookup"],
+        [89, "ProjectGroupKey"],
       ]);
       assert.deepStrictEqual(yield* history, [
         ...beforeHistory,
@@ -80,6 +81,7 @@ describe("runMigrations", () => {
         [86, "ThreadHistoryRetention"],
         [87, "PromptReferenceLookup"],
         [88, "CheckpointRefLookup"],
+        [89, "ProjectGroupKey"],
       ]);
       assert.deepStrictEqual(yield* sql`SELECT * FROM project_memories`, memories);
       assert.deepStrictEqual(yield* sql`SELECT * FROM usage_limit_history`, usage);

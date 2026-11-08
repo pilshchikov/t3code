@@ -297,13 +297,15 @@ function ProjectDetail({
     (candidate) => !candidate.isScratch && candidate.projectKey !== group.projectKey,
   );
   const linkedMembers = group.memberProjects.filter(
-    (member) => projectLinks[member.physicalProjectKey] !== undefined,
+    (member) =>
+      projectLinks[member.physicalProjectKey] !== undefined ||
+      (member.groupKey != null && group.memberProjects.length > 1),
   );
   const attachGroupTo = (projectKey: string) => {
-    void linkProjects(group.memberProjects, projectKey).then(() =>
+    void linkProjects(group.memberProjects, projectKey).then((joined) =>
       navigate({
         to: "/settings/projects",
-        search: { project: projectKey, machine: undefined },
+        search: { project: joined ?? projectKey, machine: undefined },
         hashScrollIntoView: false,
       }),
     );
@@ -876,7 +878,7 @@ function ProjectDetail({
           <SettingsSection title="Grouping">
             <SettingsRow
               title="Show under another project"
-              description="Makes these checkouts part of another project on this device. Use it for folders that have no Git remote to match by. Files and threads stay where they are."
+              description="Makes these checkouts part of another project, whatever their folders or Git remotes. Machines that support it keep the group, so every device shows it. Files and threads stay where they are."
               control={
                 attachChoices.length === 0 ? (
                   <span className="text-sm text-secondary-label">No other projects</span>
@@ -904,7 +906,7 @@ function ProjectDetail({
             {linkedMembers.map((member) => (
               <SettingsRow
                 key={member.physicalProjectKey}
-                title={`Attached by hand on ${member.environmentLabel ?? "Environment"}`}
+                title={`${member.groupKey == null ? "Attached by hand" : "Grouped"} on ${member.environmentLabel ?? "Environment"}`}
                 description={member.workspaceRoot}
                 control={
                   <Button

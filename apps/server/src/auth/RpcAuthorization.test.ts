@@ -98,6 +98,9 @@ describe("RPC authorization scopes", () => {
     "t3_thread_read",
     "t3_thread_wait",
     "t3_project_list",
+    "t3_project_read",
+    "t3_project_create",
+    "t3_project_update",
     "orchestrator_capabilities",
   ] as const)("checks relay destination scope for %s", (tool) => {
     expect(
@@ -111,9 +114,12 @@ describe("RPC authorization scopes", () => {
         arguments: {},
       }),
     ).toEqual([
-      tool === "t3_thread_launch" || tool === "t3_thread_interrupt"
-        ? AuthOrchestrationOperateScope
-        : AuthOrchestrationReadScope,
+      tool.endsWith("_list") ||
+      tool.endsWith("_read") ||
+      tool === "t3_thread_wait" ||
+      tool === "orchestrator_capabilities"
+        ? AuthOrchestrationReadScope
+        : AuthOrchestrationOperateScope,
     ]);
   });
   it("declares exactly one scope for every RPC in the server group", () => {

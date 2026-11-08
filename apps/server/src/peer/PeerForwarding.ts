@@ -179,7 +179,7 @@ const make = Effect.gen(function* () {
       return yield* new OrchestratorMcpFailure({
         code: "invalid_request",
         message:
-          "This tool needs an explicit environment link. Remote delegation, model discovery and project listing can also use a connected desktop/web app.",
+          "This tool needs an explicit environment link. Remote delegation, model discovery and project list/read/create/update can also use a connected desktop/web app.",
       });
     if (Option.isNone(relay))
       return yield* new OrchestratorMcpFailure({

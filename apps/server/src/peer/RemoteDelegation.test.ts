@@ -2055,3 +2055,16 @@ it.effect("a local task runs in this thread's project", () =>
     }),
   ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );
+
+it("finds the project there by group before repository, folders and remotes aside", () => {
+  const repo = { canonicalKey: "github.com/acme/app" };
+  const there = [
+    { id: "clone", groupKey: null, repositoryIdentity: repo },
+    { id: "games", groupKey: "games", repositoryIdentity: null },
+  ];
+  const ids = (here: { groupKey: string | undefined; repositoryKey: string | undefined }) =>
+    RemoteDelegation.matchingRemoteProjects(there, here).map((project) => project.id);
+  expect(ids({ groupKey: "games", repositoryKey: repo.canonicalKey })).toEqual(["games"]);
+  expect(ids({ groupKey: "other", repositoryKey: repo.canonicalKey })).toEqual(["clone"]);
+  expect(ids({ groupKey: "other", repositoryKey: undefined })).toEqual([]);
+});

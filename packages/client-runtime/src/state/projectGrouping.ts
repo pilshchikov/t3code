@@ -129,10 +129,15 @@ function deriveRepositoryScopedKey(
     : `${canonicalKey}::${relativeProjectPath}`;
 }
 
+export function projectGroupLogicalKey(groupKey: string): string {
+  // The NUL keeps group keys apart from repository keys, which never contain one.
+  return `\0group:${groupKey}`;
+}
+
 function deriveLogicalProjectKey(
   project: Pick<
     EnvironmentProject,
-    "environmentId" | "id" | "workspaceRoot" | "repositoryIdentity" | "isScratch"
+    "environmentId" | "id" | "workspaceRoot" | "repositoryIdentity" | "isScratch" | "groupKey"
   >,
   options?: {
     readonly groupingMode?: SidebarProjectGroupingMode;
@@ -140,6 +145,8 @@ function deriveLogicalProjectKey(
   },
 ): string {
   if (options?.groupScratchProjects && project.isScratch) return SCRATCH_PROJECT_SCOPE_KEY;
+  const groupKey = project.isScratch ? undefined : project.groupKey?.trim();
+  if (groupKey) return projectGroupLogicalKey(groupKey);
   const groupingMode = options?.groupingMode ?? "repository";
   if (groupingMode === "separate") {
     return derivePhysicalProjectKey(project);
@@ -152,12 +159,15 @@ function deriveLogicalProjectKey(
   );
 }
 
-/** A hand-made link outranks repository matching. The "No project" folders are never linked. */
+/**
+ * A hand-made link outranks repository matching but not a server-stored group, which every
+ * device shares. The "No project" folders are never linked.
+ */
 function linkedLogicalProjectKey(
-  project: Pick<EnvironmentProject, "environmentId" | "workspaceRoot" | "isScratch">,
+  project: Pick<EnvironmentProject, "environmentId" | "workspaceRoot" | "isScratch" | "groupKey">,
   settings: ProjectGroupingSettings,
 ): string | undefined {
-  return project.isScratch
+  return project.isScratch || project.groupKey?.trim()
     ? undefined
     : settings.sidebarProjectLinks?.[derivePhysicalProjectKey(project)];
 }
@@ -165,7 +175,7 @@ function linkedLogicalProjectKey(
 export function deriveLogicalProjectKeyFromSettings(
   project: Pick<
     EnvironmentProject,
-    "environmentId" | "id" | "workspaceRoot" | "repositoryIdentity" | "isScratch"
+    "environmentId" | "id" | "workspaceRoot" | "repositoryIdentity" | "isScratch" | "groupKey"
   >,
   settings: ProjectGroupingSettings,
   options?: { readonly groupScratchProjects?: boolean },
@@ -186,7 +196,7 @@ export function deriveLogicalProjectKeyFromSettings(
 export function withProjectLink(
   project: Pick<
     EnvironmentProject,
-    "environmentId" | "id" | "workspaceRoot" | "repositoryIdentity" | "isScratch"
+    "environmentId" | "id" | "workspaceRoot" | "repositoryIdentity" | "isScratch" | "groupKey"
   >,
   logicalProjectKey: string | null,
   settings: ProjectGroupingSettings,
@@ -208,7 +218,7 @@ export function resolveScratchProjectScopeKey(
   projects: ReadonlyArray<
     Pick<
       EnvironmentProject,
-      "environmentId" | "id" | "workspaceRoot" | "repositoryIdentity" | "isScratch"
+      "environmentId" | "id" | "workspaceRoot" | "repositoryIdentity" | "isScratch" | "groupKey"
     >
   >,
   settings: ProjectGroupingSettings = {
@@ -361,10 +371,13 @@ export function buildProjectGroups<TProject extends EnvironmentProject>(input: {
     const identitySource = selectProjectIdentitySource(physicalProjects, winner);
     const logicalKey =
       linkedLogicalProjectKey(winner, input.settings) ??
-      deriveLogicalProjectKey(identitySource, {
-        groupingMode: resolveProjectGroupingMode(winner, input.settings),
-        groupScratchProjects: input.groupScratchProjects ?? false,
-      });
+      deriveLogicalProjectKey(
+        { ...identitySource, groupKey: winner.groupKey ?? identitySource.groupKey },
+        {
+          groupingMode: resolveProjectGroupingMode(winner, input.settings),
+          groupScratchProjects: input.groupScratchProjects ?? false,
+        },
+      );
     logicalKeyByPhysicalKey.set(physicalProjectKey, logicalKey);
     const member = { physicalProjectKey, project: winner };
     const existing = groupedMembers.get(logicalKey);

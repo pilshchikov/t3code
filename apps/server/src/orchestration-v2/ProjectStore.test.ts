@@ -75,7 +75,7 @@ it.layer(ProjectStore.layer.pipe(Layer.provideMerge(SqlitePersistence.layerMemor
       }),
     );
 
-    it.effect("keeps pin and archive times across later updates", () =>
+    it.effect("keeps pin, archive and group across later updates", () =>
       Effect.gen(function* () {
         const projects = yield* ProjectStore.ProjectStoreV2;
         const projectId = ProjectId.make("project-organized");
@@ -94,6 +94,7 @@ it.layer(ProjectStore.layer.pipe(Layer.provideMerge(SqlitePersistence.layerMemor
             workspaceRoot: "/tmp/project-organized",
             defaultModelSelection: null,
             scripts: [],
+            groupKey: "games",
             createdAt: at,
             updatedAt: at,
           },
@@ -117,6 +118,7 @@ it.layer(ProjectStore.layer.pipe(Layer.provideMerge(SqlitePersistence.layerMemor
         const project = Option.getOrNull(yield* projects.get(projectId));
         assert.strictEqual(project?.pinnedAt, at);
         assert.strictEqual(project?.archivedAt, at);
+        assert.strictEqual(project?.groupKey, "games");
       }),
     );
   },

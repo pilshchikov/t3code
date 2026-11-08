@@ -217,6 +217,12 @@ export const ReceivedProjectIcon = ForwardCompatibleUnion(projectIconMembers, "k
   ),
 );
 
+export const ProjectGroupKey = TrimmedNonEmptyString.check(Schema.isMaxLength(120)).annotate({
+  description:
+    "Projects with the same group key are one project across environments, whatever their folders or Git remotes.",
+});
+export type ProjectGroupKey = typeof ProjectGroupKey.Type;
+
 export const Project = Schema.Struct({
   id: ProjectId,
   title: TrimmedNonEmptyString,
@@ -232,6 +238,7 @@ export const Project = Schema.Struct({
   scripts: Schema.Array(ProjectScript),
   pinnedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   archivedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  groupKey: Schema.optional(Schema.NullOr(ProjectGroupKey)),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   deletedAt: Schema.NullOr(IsoDateTime),
@@ -251,6 +258,7 @@ export const ProjectCreatePayload = Schema.Struct({
   createWorkspaceRootIfMissing: Schema.optional(Schema.Boolean),
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
   scripts: Schema.optional(Schema.Array(ProjectScript)),
+  groupKey: Schema.optional(ProjectGroupKey),
 });
 export type ProjectCreatePayload = typeof ProjectCreatePayload.Type;
 
@@ -270,6 +278,7 @@ export const ProjectUpdatePayload = Schema.Struct({
       description: "Threads and files are kept.",
     }),
   ),
+  groupKey: Schema.optional(Schema.NullOr(ProjectGroupKey)),
 });
 export type ProjectUpdatePayload = typeof ProjectUpdatePayload.Type;
 

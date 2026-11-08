@@ -105,7 +105,10 @@ export function clientRpcRequiredScopes(
   if (method === WS_METHODS.peerOrchestrationCall && input !== undefined) {
     const { tool } = decodePeerOrchestrationCall(input);
     return [
-      tool === "t3_thread_launch" || tool === "t3_thread_interrupt"
+      tool === "t3_thread_launch" ||
+      tool === "t3_thread_interrupt" ||
+      tool === "t3_project_create" ||
+      tool === "t3_project_update"
         ? AuthOrchestrationOperateScope
         : AuthOrchestrationReadScope,
     ];

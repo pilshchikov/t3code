@@ -35,6 +35,7 @@ export function peerProjects(
         ...(label === undefined ? {} : { label }),
         ...(defaultThreadEnvMode === undefined ? {} : { defaultThreadEnvMode }),
       })),
+      groupKey: project.groupKey ?? null,
       sameProject: deriveLogicalProjectKeyFromSettings(project, settings) === ownKey,
     }));
 }

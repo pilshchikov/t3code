@@ -75,6 +75,7 @@ export function peerEnvironmentSnapshot(
           .filter((provider) => projectEnabled(provider.instanceId, project.id, provider.enabled))
           .map((provider) => provider.instanceId),
         archived: project.archivedAt != null,
+        groupKey: project.groupKey ?? null,
       };
     }),
     nextProjectCursor: cursor + limit < selected.length ? cursor + limit : null,
