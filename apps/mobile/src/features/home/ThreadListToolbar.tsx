@@ -10,8 +10,8 @@ import {
 } from "react-native";
 import type { MenuAction } from "@react-native-menu/menu";
 
-import { AndroidHeaderIconButton } from "../../components/ui/AndroidScreenHeader";
-import { AndroidAnchoredMenu } from "../../components/ui/AndroidAnchoredMenu";
+import { AndroidHeaderIconButton } from "../../components/ui/AndroidScreenHeader.android";
+import { AndroidAnchoredMenu } from "../../components/ui/AndroidAnchoredMenu.android";
 import { Menu } from "../../components/ui/Menu";
 import { SearchField } from "../../components/ui/SearchField";
 import { useHardwareKeyboardCommand } from "../keyboard/hardwareKeyboardCommands";

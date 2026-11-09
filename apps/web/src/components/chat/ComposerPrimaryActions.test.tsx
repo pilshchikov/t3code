@@ -39,8 +39,6 @@ function renderPendingActions(isRunning: boolean) {
       },
       isRunning,
       canInterrupt: isRunning,
-      showPlanFollowUpPrompt: false,
-      promptHasText: false,
       isSendBusy: false,
       sendDisabledReason: null,
       isEnvironmentUnavailable: false,
@@ -48,7 +46,6 @@ function renderPendingActions(isRunning: boolean) {
       hasSendableContent: false,
       onPreviousPendingQuestion: () => {},
       onInterrupt: () => {},
-      onImplementPlanInNewThread: () => {},
     }),
   );
 }
@@ -61,8 +58,6 @@ function renderSendButton(sendDisabledReason: string | null = null) {
       pendingAction: null,
       isRunning: false,
       canInterrupt: false,
-      showPlanFollowUpPrompt: false,
-      promptHasText: true,
       isSendBusy: false,
       sendDisabledReason,
       isEnvironmentUnavailable: false,
@@ -70,7 +65,6 @@ function renderSendButton(sendDisabledReason: string | null = null) {
       hasSendableContent: true,
       onPreviousPendingQuestion: () => {},
       onInterrupt: () => {},
-      onImplementPlanInNewThread: () => {},
     }),
   );
 }

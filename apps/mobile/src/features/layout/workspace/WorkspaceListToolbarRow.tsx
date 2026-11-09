@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { View } from "react-native";
-import { AndroidHeaderIconButton } from "../../../components/ui/AndroidScreenHeader";
+import { AndroidHeaderIconButton } from "../../../components/ui/AndroidScreenHeader.android";
 import { CompactBrandTitle } from "../../../components/CompactBrandTitle";
 import { useToolbarLayout } from "../../../components/ui/useToolbarLayout";
 import { WorkspaceConnectionTitle } from "../../home/WorkspaceConnectionTitle";

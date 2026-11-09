@@ -598,7 +598,6 @@ export const make = Effect.gen(function* () {
     readonly hostId?: string;
     readonly status?: UsageSource["status"];
     readonly message?: string;
-    readonly action?: UsageSource["action"];
     readonly files:
       | readonly {
           readonly path: string;
@@ -866,7 +865,6 @@ export const make = Effect.gen(function* () {
         files,
         status,
         message,
-        action,
         refreshing,
         hostId: sourceHostId,
       },
@@ -936,7 +934,6 @@ export const make = Effect.gen(function* () {
                 .filter(Boolean)
                 .join(" ")
             : sourceMessage,
-        ...(action ? { action } : {}),
         ...(refreshing ? { refreshing } : {}),
       });
     }

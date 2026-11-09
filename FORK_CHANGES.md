@@ -1,5 +1,30 @@
 # Fork Changes
 
+## Upstream integration and Claude Mythos 5.2 — 2026-11-09 (206a8e6937)
+
+- Merge 209 upstream commits through `206a8e69371d3d79cbeadeafb944815c294ae6e5`. Adopt the one-page
+  Welcome flow, Cursor Origin source control, the MCP "use in another app" palette action,
+  persisted sidebar open state, Cursor SDK-only usage, Android-only UI primitives and upstream's
+  removal of plan mode, the context window meter and the legacy sidebar setting.
+- Keep the fork's telemetry notice on the new `WelcomePage.tsx`, the project rail inside the
+  sidebar (hidden with it on the Welcome page), the dashboard palette action, relay-routed remote
+  delegation (now with upstream's task title, run lookup and model note), worktree-on-settle cleanup
+  with upstream's cheaper not-due checks, `never` as the default auto-settle mode, editor tabs,
+  limit trends, the orb send button, mobile project navigation and the mobile inspector toggle.
+  Keep ordinary sends free of compact-first dispatch, so upstream's compact-before-send toggle
+  stays out of the composer.
+- Add Claude Mythos 5.2 (`claude-mythos-5-2`, Claude Code 2.1.290 or later) as the current
+  Mythos model next to upstream's Claude Fable 5.2, move the `mythos` alias to it and mark
+  Mythos 5.1 legacy. Both lead the Claude defaults in `apps/server/src/provider/model-manifest.json`.
+- Keep the upstream Legend List 3.7.2 timeline with upstream's initial positioning. Drop the fork's
+  nested-commit guard test, which upstream had already deleted and the new list no longer meets.
+  Fork timelines fold a live turn only after an opening reply, so upstream's follow-after-expand
+  test now starts with one. The beta-off MCP test expects the fork's relay attempt.
+- Validation: all 41 package typechecks, format, lint (errors), knip and React Compiler checks pass.
+  396 changed-area test files pass, except
+  `AntigravityInstallation.test.ts`'s Windows `.CMD` case, which fails on case-insensitive macOS
+  filesystems only.
+
 ## Faster peer file copies — 2026-11-08
 
 - Every 512 KiB chunk of `t3_peer_copy` is one relay round trip through the app, so large files

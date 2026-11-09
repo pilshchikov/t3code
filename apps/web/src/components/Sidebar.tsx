@@ -102,8 +102,10 @@ import {
 } from "../keybindings";
 import { useShortcutModifierState } from "../shortcutModifierState";
 import { isTerminalFocused } from "../lib/terminalFocus";
+import { isPreviewFocused } from "../lib/previewFocus";
 import { isModelPickerOpen } from "../modelPickerVisibility";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
+import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
 import { isMacPlatform } from "~/lib/utils";
 import { readLocalApi } from "../localApi";
 import { configuredHostedAppUrl } from "../hostedPairing";
@@ -973,7 +975,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       );
     },
   });
-  const legacySidebarEnabled = useClientSettings((settings) => settings.legacySidebarEnabled);
   const newThreadContext = useHandleNewThread();
   // Row callbacks capture only the handler; the rest of the context changes with the route.
   const { handleNewThread } = newThreadContext;
@@ -1025,6 +1026,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const [renamingTitle, setRenamingTitle] = useState("");
   const settlingThreadKeysRef = useRef(new Set<string>());
   const threadListRef = useRef<HTMLUListElement | null>(null);
+  const searchResultsListRef = useRef<HTMLUListElement | null>(null);
   const sidebarContentRef = useRef<HTMLDivElement | null>(null);
   const dragLabelOffsetRef = useRef(0);
   const listMotionRef = useRef<ReturnType<typeof createSidebarListMotion> | null>(null);
@@ -1726,7 +1728,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     });
   };
   const pointerOutsideThreadList = (point: { x: number; y: number }) => {
-    const bounds = threadListRef.current?.getBoundingClientRect();
+    // Search results replace the thread list, so only one of them is mounted.
+    const bounds = (threadListRef.current ?? searchResultsListRef.current)?.getBoundingClientRect();
     return bounds !== undefined && (point.x < bounds.left || point.x > bounds.right);
   };
   // The path out of the list often crosses dnd-kit's edge zone, which autoscrolls the sidebar.
@@ -2246,26 +2249,28 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     }
     return { status: "success" } as const;
   };
-  const attemptSnooze = (
-    threadRef: ScopedThreadRef,
-    preset: Pick<SnoozePreset, "snoozedUntil">,
-    opts: { coSnoozingKeys?: ReadonlySet<string> } = {},
-  ) => {
-    void (async () => {
-      const outcome = await performSnooze(threadRef, preset, opts);
-      if (outcome.status === "failure") {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Failed to snooze thread",
-            description:
-              outcome.error instanceof Error ? outcome.error.message : "An error occurred.",
-          }),
-        );
-        return;
-      }
-    })();
-  };
+  const attemptSnooze = useStableCallback(
+    (
+      threadRef: ScopedThreadRef,
+      preset: Pick<SnoozePreset, "snoozedUntil">,
+      opts: { coSnoozingKeys?: ReadonlySet<string> } = {},
+    ) => {
+      void (async () => {
+        const outcome = await performSnooze(threadRef, preset, opts);
+        if (outcome.status === "failure") {
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Failed to snooze thread",
+              description:
+                outcome.error instanceof Error ? outcome.error.message : "An error occurred.",
+            }),
+          );
+          return;
+        }
+      })();
+    },
+  );
 
   const handleMultiSelectContextMenu = useStableCallback(
     async (position: { x: number; y: number }) => {
@@ -2897,6 +2902,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       ? selectThreadTerminalUiState(state.terminalUiStateByThreadKey, routeThreadRef).terminalOpen
       : false,
   );
+  const routePreviewOpen = useRightPanelStore(
+    (state) => selectActiveRightPanel(state.byThreadKey, routeThreadRef) === "preview",
+  );
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Install window shortcuts that navigate and operate the visible thread list.
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
@@ -2908,6 +2916,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         context: {
           terminalFocus: isTerminalFocused(),
           terminalOpen: routeTerminalOpen,
+          previewFocus: isPreviewFocused(),
+          previewOpen: routePreviewOpen,
           modelPickerOpen: isModelPickerOpen(),
           isWeb: !isElectron,
           isDesktop: isElectron,
@@ -2977,6 +2987,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     setProjectScopeKey,
     navigateToThread,
     orderedThreadKeys,
+    routePreviewOpen,
     routeRowThreadKey,
     routeTerminalOpen,
     threadByKey,
@@ -2990,6 +3001,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       context: {
         terminalFocus: terminalFocused,
         terminalOpen: routeTerminalOpen,
+        previewFocus: isPreviewFocused(),
+        previewOpen: routePreviewOpen,
         modelPickerOpen: isModelPickerOpen(),
         isWeb: !isElectron,
         isDesktop: isElectron,
@@ -3000,7 +3013,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
 
   const handleNewThreadClick = (event?: ReactMouseEvent) => {
     if (
-      legacySidebarEnabled ||
       shouldCreateNewThreadInCurrentProject(
         event?.shiftKey ?? false,
         pickableProjectGroups(projectGroups).length,
@@ -3285,7 +3297,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               newThreadShortcutLabel={newThreadShortcutLabel}
               newThreadInProjectShortcutLabel={newThreadInProjectShortcutLabel}
               showNewThreadInProjectHint={
-                !legacySidebarEnabled &&
                 !shouldCreateNewThreadInCurrentProject(
                   false,
                   scopedProjectGroups.length,
@@ -3316,57 +3327,66 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 closeDelay={0}
                 timeout={400}
               >
-                <ul
-                  id="sidebar-thread-search-results"
-                  role="listbox"
-                  aria-label="Thread search results"
-                  className="flex flex-col gap-px"
+                <DndContext
+                  sensors={dndSensors}
+                  autoScroll={false}
+                  onDragStart={(event) => {
+                    contextDragKeyRef.current = String(event.active.id);
+                  }}
                 >
-                  {threadSearchResults.map((thread, index) => {
-                    const threadKey = scopedThreadKey(
-                      scopeThreadRef(thread.environmentId, thread.id),
-                    );
-                    return (
-                      <SidebarSearchResultRow
-                        isSettled={settledThreadKeys.has(threadKey)}
-                        key={threadKey}
-                        thread={thread}
-                        project={
-                          projectByKey.get(`${thread.environmentId}:${thread.projectId}`) ?? null
-                        }
-                        projectDisplayName={
-                          projectDisplayNameByKey.get(
-                            `${thread.environmentId}:${thread.projectId}`,
-                          ) ?? null
-                        }
-                        environmentLabel={environmentLabelById.get(thread.environmentId) ?? null}
-                        environmentMachine={
-                          environmentMachineById.get(thread.environmentId) ?? "server"
-                        }
-                        providerEntryByInstanceId={
-                          providerEntriesByEnvironment.get(thread.environmentId) ??
-                          EMPTY_PROVIDER_ENTRIES
-                        }
-                        isHighlighted={activeSearchResultIndex === index}
-                        isRouteActive={routeRowThreadKey === threadKey}
-                        resultId={threadSearchResultId(index)}
-                        searchMatch={
-                          threadSearchMatchByKey.get(
-                            threadSearchMatchKey({
-                              environmentId: thread.environmentId,
-                              threadId: thread.id,
-                            }),
-                          ) ?? null
-                        }
-                        searchQuery={threadSearchQuery}
-                        searchMatchQuery={threadSearch.query}
-                        onHighlight={() => setActiveSearchResultIndex(index)}
-                        onSelect={() => selectThreadSearchResult(thread)}
-                        onFileDropThreads={handleThreadFileDrop}
-                      />
-                    );
-                  })}
-                </ul>
+                  <ul
+                    ref={searchResultsListRef}
+                    id="sidebar-thread-search-results"
+                    role="listbox"
+                    aria-label="Thread search results"
+                    className="flex flex-col gap-px"
+                  >
+                    {threadSearchResults.map((thread, index) => {
+                      const threadKey = scopedThreadKey(
+                        scopeThreadRef(thread.environmentId, thread.id),
+                      );
+                      return (
+                        <SidebarSearchResultRow
+                          isSettled={settledThreadKeys.has(threadKey)}
+                          key={threadKey}
+                          thread={thread}
+                          project={
+                            projectByKey.get(`${thread.environmentId}:${thread.projectId}`) ?? null
+                          }
+                          projectDisplayName={
+                            projectDisplayNameByKey.get(
+                              `${thread.environmentId}:${thread.projectId}`,
+                            ) ?? null
+                          }
+                          environmentLabel={environmentLabelById.get(thread.environmentId) ?? null}
+                          environmentMachine={
+                            environmentMachineById.get(thread.environmentId) ?? "server"
+                          }
+                          providerEntryByInstanceId={
+                            providerEntriesByEnvironment.get(thread.environmentId) ??
+                            EMPTY_PROVIDER_ENTRIES
+                          }
+                          isHighlighted={activeSearchResultIndex === index}
+                          isRouteActive={routeRowThreadKey === threadKey}
+                          resultId={threadSearchResultId(index)}
+                          searchMatch={
+                            threadSearchMatchByKey.get(
+                              threadSearchMatchKey({
+                                environmentId: thread.environmentId,
+                                threadId: thread.id,
+                              }),
+                            ) ?? null
+                          }
+                          searchQuery={threadSearchQuery}
+                          searchMatchQuery={threadSearch.query}
+                          onHighlight={() => setActiveSearchResultIndex(index)}
+                          onSelect={() => selectThreadSearchResult(thread)}
+                          onFileDropThreads={handleThreadFileDrop}
+                        />
+                      );
+                    })}
+                  </ul>
+                </DndContext>
               </TooltipProvider>
             ) : (
               <p
