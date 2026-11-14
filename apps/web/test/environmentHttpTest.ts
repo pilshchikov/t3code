@@ -118,7 +118,9 @@ export async function installEnvironmentHttpTest(scenario: EnvironmentHttpTestSc
             .handle("clients", () => unexpectedEndpoint("auth.clients"))
             .handle("updateClientScopes", () => unexpectedEndpoint("auth.updateClientScopes"))
             .handle("revokeClient", () => unexpectedEndpoint("auth.revokeClient"))
-            .handle("revokeOtherClients", () => unexpectedEndpoint("auth.revokeOtherClients")),
+            .handle("revokeOtherClients", () => unexpectedEndpoint("auth.revokeOtherClients"))
+            .handle("approveConnectDevice", () => unexpectedEndpoint("auth.approveConnectDevice"))
+            .handle("revokeConnectDevice", () => unexpectedEndpoint("auth.revokeConnectDevice")),
         ),
       ]),
       Effect.provideService(EnvironmentAuthenticatedAuth, authenticatedAuth),

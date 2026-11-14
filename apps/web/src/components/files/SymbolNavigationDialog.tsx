@@ -77,14 +77,17 @@ export function SymbolNavigationDialog(props: SymbolNavigationDialogProps) {
 
   const modeLabel = props.mode === "usages" ? "usages" : "definitions";
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- The parent opens the dialog, so reset the filter and focus the input a frame after it mounts.
   useEffect(() => {
     if (!props.open) return;
+    // oxlint-disable-next-line react/set-state-in-effect -- Opening comes from a parent prop, so no local handler sees it.
     setQuery("");
     setSelectedIndex(0);
     const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);
   }, [props.open]);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Scrolls the highlighted row into view in the DOM list.
   useEffect(() => {
     const row = listRef.current?.querySelector<HTMLElement>(`[data-row-index="${selectedIndex}"]`);
     row?.scrollIntoView({ block: "nearest" });
@@ -152,9 +155,9 @@ export function SymbolNavigationDialog(props: SymbolNavigationDialogProps) {
                   onClick={() => select(match)}
                 >
                   {match.isDefinition ? (
-                    <Braces className="size-4 shrink-0 text-violet-500" />
+                    <Braces className="size-4 shrink-0 text-(--context-chip-review-comment)" />
                   ) : (
-                    <FileCode2 className="size-4 shrink-0 text-sky-500" />
+                    <FileCode2 className="size-4 shrink-0 text-(--context-chip-file)" />
                   )}
                   <Tooltip>
                     <TooltipTrigger

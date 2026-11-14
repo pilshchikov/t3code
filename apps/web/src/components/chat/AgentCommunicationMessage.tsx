@@ -91,6 +91,7 @@ export const AgentCommunicationMessage = memo(function AgentCommunicationMessage
   const compactText =
     (message.summary ? `${message.summary} · ` : "") +
     plainText(message.text.slice(0, 400)).slice(0, 250);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Measures the rendered body against the DOM font size to decide whether to offer expansion.
   useLayoutEffect(() => {
     const element = body.current;
     if (!element) return;

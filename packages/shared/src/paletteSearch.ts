@@ -922,10 +922,18 @@ export interface SearchMatchHint {
   readonly ranges: ReadonlyArray<SearchRange>;
 }
 
-// Ignore the owner namespace and released worktree prefixes when ranking branch text.
+// Ignore the owner namespace and released worktree prefixes when ranking branch text
+// ("<owner>/", "t3/", "t3code/", and "<owner>-<hex>" when a branch blocks nested refs).
 // Only before more text, so typing "t3/" does not empty the list for a keystroke.
 const WORKTREE_BRANCH_PREFIX_PATTERN = new RegExp(
-  `^(?:${WORKTREE_BRANCH_PREFIX}|t3|t3code)/(?=\\S)`,
+  `^(?:(?:${WORKTREE_BRANCH_PREFIX}|t3|t3code)/(?=\\S)|(?:${WORKTREE_BRANCH_PREFIX}|t3)-(?=[0-9a-f]{8}$))`,
+);
+
+// The flat prefix anywhere in a query, while its hex is still being typed, so
+// "t3-abcd" and "connect t3-abcd1234" still reach the stripped branch field.
+const FLAT_BRANCH_QUERY_PREFIX_PATTERN = new RegExp(
+  `(^| )(?:${WORKTREE_BRANCH_PREFIX}|t3)-(?=[0-9a-f]{1,8}(?: |$))`,
+  "g",
 );
 
 function searchableBranch(branch: string | null | undefined): string | null {
@@ -1006,7 +1014,8 @@ function threadFieldQuery(normalizedQuery: string): string {
       fieldQuery: normalizedQuery
         .replace(/^(?:pr|pull request|pull)\s*(?=#?\d)/, "")
         .replace(/^#\s*/, "")
-        .replace(WORKTREE_BRANCH_PREFIX_PATTERN, ""),
+        .replace(WORKTREE_BRANCH_PREFIX_PATTERN, "")
+        .replace(FLAT_BRANCH_QUERY_PREFIX_PATTERN, "$1"),
     };
   }
   return lastFieldQuery.fieldQuery;

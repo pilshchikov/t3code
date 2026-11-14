@@ -108,13 +108,9 @@ export const ConnectionRegistration = Schema.Union([
 export type ConnectionRegistration = typeof ConnectionRegistration.Type;
 
 /**
- * Platform-managed registrations are reconciled from the host (the desktop
- * bootstrap IPC) rather than persisted by the user. They cover the primary
- * local environment plus any additional desktop-local backends running
- * alongside it (e.g. a parallel WSL backend). The primary stays on same-origin
- * cookie auth (`PrimaryConnectionRegistration`), also used by same-origin host gateways; secondary local backends live
- * on a separate loopback origin and authenticate with a bearer token minted
- * from their bootstrap credential (`BearerConnectionRegistration`).
+ * Reconciled from the host's desktop bootstrap IPC, not persisted by the user. The primary uses
+ * same-origin cookie auth; secondary local backends (e.g. WSL) sit on another loopback origin and
+ * use a bearer token minted from their bootstrap credential.
  */
 export const PlatformConnectionRegistration = Schema.Union([
   PrimaryConnectionRegistration,

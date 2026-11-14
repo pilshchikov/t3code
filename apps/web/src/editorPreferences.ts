@@ -60,9 +60,18 @@ function chooseEditor(
   return EDITORS.find((editor) => available.has(editor.id))?.id ?? null;
 }
 
-export function editorLaunchInput(cwd: string, editor: EditorId): LaunchEditorInput {
+export function editorLaunchInput(
+  cwd: string,
+  editor: EditorId,
+  projectRoot?: string,
+): LaunchEditorInput {
   const customCommand = getClientSettings().customEditorCommand;
-  return { cwd, editor, ...(editor === "custom" && customCommand ? { customCommand } : {}) };
+  return {
+    cwd,
+    editor,
+    ...(projectRoot ? { projectRoot } : {}),
+    ...(editor === "custom" && customCommand ? { customCommand } : {}),
+  };
 }
 
 export function usePreferredEditor(availableEditors: ReadonlyArray<EditorId>) {
@@ -85,7 +94,12 @@ export function usePreferredEditor(availableEditors: ReadonlyArray<EditorId>) {
 
 function resolvePreferredEditor(availableEditors: readonly EditorId[]): EditorId | null {
   const settings = getClientSettings();
-  const stored = getLocalStorageItem(LAST_EDITOR_KEY, EditorId);
+  let stored: EditorId | null = null;
+  try {
+    stored = getLocalStorageItem(LAST_EDITOR_KEY, EditorId);
+  } catch (error) {
+    console.warn("Could not read the preferred editor.", error);
+  }
   const editor = chooseEditor(
     availableEditors,
     settings.preferredEditor,
@@ -98,6 +112,7 @@ function resolvePreferredEditor(availableEditors: readonly EditorId[]): EditorId
 export function useOpenInPreferredEditor(
   environmentId: EnvironmentId | null,
   availableEditors: readonly EditorId[],
+  projectRoot?: string,
 ) {
   const openInEditor = useAtomCommand(shellEnvironment.openInEditor, {
     reportFailure: false,
@@ -156,10 +171,14 @@ export function useOpenInPreferredEditor(
         ),
       );
     }
-    setLocalStorageItem(LAST_EDITOR_KEY, editor, EditorId);
+    try {
+      setLocalStorageItem(LAST_EDITOR_KEY, editor, EditorId);
+    } catch (error) {
+      console.warn("Could not save the preferred editor.", error);
+    }
     const result = await openInEditor({
       environmentId,
-      input: editorLaunchInput(targetPath, editor),
+      input: editorLaunchInput(targetPath, editor, projectRoot),
     });
     return mapAtomCommandResult(result, () => editor);
   };

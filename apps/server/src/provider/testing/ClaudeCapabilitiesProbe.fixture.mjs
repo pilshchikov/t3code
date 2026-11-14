@@ -35,6 +35,21 @@ lines.on("line", (line) => {
         response: { subtype: "success", request_id: message.request_id, response },
       }) + "\n",
     );
+  const subtype = message.request?.subtype;
+  if (subtype !== "initialize" && subtype !== "get_usage") {
+    // Like an older CLI, reject requests it does not know so the SDK call settles.
+    process.stdout.write(
+      JSON.stringify({
+        type: "control_response",
+        response: {
+          subtype: "error",
+          request_id: message.request_id,
+          error: `Unsupported control request: ${subtype}`,
+        },
+      }) + "\n",
+    );
+    return;
+  }
   if (message.request?.subtype === "initialize") {
     reply({
       commands: [{ name: "review", description: "Review changes", argumentHint: "[path]" }],

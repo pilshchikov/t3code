@@ -52,8 +52,10 @@ export function FileWorktreeToolbar(props: {
       },
     }),
   );
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Accumulates paginated ref pages as each query response arrives.
   useEffect(() => {
     if (!refsQuery.data) return;
+    // oxlint-disable-next-line react/set-state-in-effect -- Merges with earlier pages, which the query result alone does not hold.
     setLoadedRefs((previous) => [
       ...new Map(
         [...(cursor === undefined ? [] : previous), ...refsQuery.data!.refs].map((ref) => [

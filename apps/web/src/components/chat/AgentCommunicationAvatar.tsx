@@ -2,15 +2,15 @@ import { GitBranchIcon } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 const hues = [
-  "bg-sky-500/15 text-sky-700 ring-sky-500/30 dark:bg-sky-500/20 dark:text-sky-300",
-  "bg-violet-500/15 text-violet-700 ring-violet-500/30 dark:bg-violet-500/20 dark:text-violet-300",
-  "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-300",
-  "bg-amber-500/15 text-amber-700 ring-amber-500/30 dark:bg-amber-500/20 dark:text-amber-300",
-  "bg-rose-500/15 text-rose-700 ring-rose-500/30 dark:bg-rose-500/20 dark:text-rose-300",
-  "bg-teal-500/15 text-teal-700 ring-teal-500/30 dark:bg-teal-500/20 dark:text-teal-300",
-  "bg-fuchsia-500/15 text-fuchsia-700 ring-fuchsia-500/30 dark:bg-fuchsia-500/20 dark:text-fuchsia-300",
-  "bg-orange-500/15 text-orange-700 ring-orange-500/30 dark:bg-orange-500/20 dark:text-orange-300",
-  "bg-lime-500/15 text-lime-700 ring-lime-500/30 dark:bg-lime-500/20 dark:text-lime-300",
+  "bg-(--context-chip-image)/15 text-(--context-chip-image) ring-(--context-chip-image)/30",
+  "bg-(--context-chip-review-comment)/15 text-(--context-chip-review-comment) ring-(--context-chip-review-comment)/30",
+  "bg-(--context-chip-terminal)/15 text-(--context-chip-terminal) ring-(--context-chip-terminal)/30",
+  "bg-(--context-chip-element)/15 text-(--context-chip-element) ring-(--context-chip-element)/30",
+  "bg-(--context-chip-pr-closed)/15 text-(--context-chip-pr-closed) ring-(--context-chip-pr-closed)/30",
+  "bg-(--context-chip-thread)/15 text-(--context-chip-thread) ring-(--context-chip-thread)/30",
+  "bg-(--context-chip-skill)/15 text-(--context-chip-skill) ring-(--context-chip-skill)/30",
+  "bg-(--context-chip-video)/15 text-(--context-chip-video) ring-(--context-chip-video)/30",
+  "bg-(--context-chip-model)/15 text-(--context-chip-model) ring-(--context-chip-model)/30",
 ];
 
 function agentHue(id: string) {
@@ -32,8 +32,9 @@ export function AgentCommunicationAvatar(props: {
   return (
     <span
       aria-hidden
+      data-agent-avatar=""
       className={cn(
-        agentHue(props.id),
+        !props.coordinator && agentHue(props.id),
         "inline-flex shrink-0 select-none items-center justify-center rounded-full font-semibold leading-none",
         "ring-1 ring-inset",
         props.coordinator &&

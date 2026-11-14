@@ -38,7 +38,9 @@ const make = Effect.gen(function* () {
   return ThreadQueue.of({
     manage: Effect.fn("ThreadQueue.manage")(function* (scope, input) {
       return yield* Effect.gen(function* () {
-        const context = yield* readQueueThread(input.threadId, ["runs"]);
+        const context = yield* readQueueThread(input.threadId, ["runs"], {
+          runStatuses: ["queued", ...ThreadManagementService.ACTIVE_RUN_STATUSES],
+        });
         const { projection } = context;
         const required = <A>(value: A | undefined, field: string) =>
           value === undefined

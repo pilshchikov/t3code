@@ -11,7 +11,12 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
-import type { ReviewBranchCommitsResult, ScopedThreadRef, RunId } from "@t3tools/contracts";
+import {
+  CHECKPOINT_DIFF_TRUNCATED_MARKER,
+  type ReviewBranchCommitsResult,
+  type ScopedThreadRef,
+  type RunId,
+} from "@t3tools/contracts";
 import {
   ArrowRightIcon,
   CheckIcon,
@@ -23,8 +28,10 @@ import {
   PilcrowIcon,
   Rows3Icon,
   TextWrapIcon,
+  ChevronRightIcon,
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
 } from "lucide-react";
-import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide";
 import {
   type MouseEvent,
   useCallback,
@@ -77,8 +84,8 @@ import { DiffStatLabel } from "./chat/DiffStatLabel";
 import { AnnotatableCodeView, type AnnotatableCodeViewHandle } from "./diffs/AnnotatableCodeView";
 import { DiffFilesTreeNavigator } from "./diffs/DiffFilesTreeNavigator";
 import { ResizableColumns } from "./ui/resizable-columns";
+import { getDiffHeaderClickAction } from "./diffs/diffHeaderClick";
 import { Button } from "./ui/button";
-import { MorphIcon } from "~/components/MorphIcon";
 import { ToggleGroup, Toggle } from "./ui/toggle-group";
 import { Switch } from "./ui/switch";
 import {
@@ -159,6 +166,7 @@ function DiffFileCollapseToggle({
             className="-ms-0.5"
             aria-label={collapsed ? `Expand ${filePath}` : `Collapse ${filePath}`}
             aria-expanded={!collapsed}
+            data-diff-file-key={fileKey}
             onClick={(event) => {
               event.stopPropagation();
               onToggle(fileKey);
@@ -166,7 +174,11 @@ function DiffFileCollapseToggle({
           />
         }
       >
-        <MorphIcon className="size-4" icon={collapsed ? ChevronRight : ChevronDown} />
+        {collapsed ? (
+          <ChevronRightIcon className="size-4" />
+        ) : (
+          <ChevronDownIcon className="size-4" />
+        )}
       </TooltipTrigger>
       <TooltipPopup side="top">{collapsed ? "Expand diff" : "Collapse diff"}</TooltipPopup>
     </Tooltip>
@@ -214,8 +226,10 @@ export default function DiffPanel({
   const resolvedTheme = useRenderedAppearance();
   const settings = useClientSettings();
   const diffLayout = settings.diffLayout;
-  const [wordWrap, setWordWrap] = useState(settings.wordWrap);
-  const [diffIgnoreWhitespace, setDiffIgnoreWhitespace] = useState(settings.diffIgnoreWhitespace);
+  const [wordWrapOverride, setWordWrapOverride] = useState<boolean | null>(null);
+  const wordWrap = wordWrapOverride ?? settings.wordWrap;
+  const diffIgnoreWhitespace =
+    useDiffPanelSessionStore((state) => state.ignoreWhitespace) ?? settings.diffIgnoreWhitespace;
   const [baseRefQuery, setBaseRefQuery] = useState("");
   // The open commit menu keeps the list it opened with, so rows do not move under the pointer.
   const [openCommitMenu, setOpenCommitMenu] = useState<ReviewBranchCommitsResult | null>(null);
@@ -341,7 +355,9 @@ export default function DiffPanel({
       : selectedGitScope === "commit"
         ? "commit"
         : "branch-range";
-  const selectedFilePath = diffSelection.kind === "turn" ? diffSelection.filePath : null;
+  // @pierre/diffs trims trailing whitespace from parsed file names; leading whitespace survives.
+  const selectedFilePath =
+    diffSelection.kind === "turn" ? diffSelection.filePath?.trimEnd() || null : null;
   const selectedFileRevealRequestId =
     diffSelection.kind === "turn" ? diffSelection.revealRequestId : 0;
   const selectedTurn =
@@ -675,7 +691,10 @@ export default function DiffPanel({
       : activeGitPatchSource?.diff;
   const isSelectedPatchTruncated =
     toolCallPreview?.truncated === true ||
-    (!isRecordedSelection && activeGitPatchSource?.truncated === true);
+    (!isRecordedSelection && activeGitPatchSource?.truncated === true) ||
+    (!toolCallSelection &&
+      selectedTurn !== undefined &&
+      selectedPatch?.endsWith(CHECKPOINT_DIFF_TRUNCATED_MARKER) === true);
   const selectedPatchQuery = toolCallSelection
     ? toolCallDetail
     : selectedTurn
@@ -1583,10 +1602,11 @@ export default function DiffPanel({
                 />
               }
             >
-              <MorphIcon
-                className="size-3.5"
-                icon={allDiffFilesCollapsed ? ChevronsUpDown : ChevronsDownUp}
-              />
+              {allDiffFilesCollapsed ? (
+                <ChevronsUpDownIcon className="size-3.5" />
+              ) : (
+                <ChevronsDownUpIcon className="size-3.5" />
+              )}
             </TooltipTrigger>
             <TooltipPopup side="top">
               {allDiffFilesCollapsed ? "Expand all files" : "Collapse all files"}
@@ -1621,7 +1641,7 @@ export default function DiffPanel({
                 size="sm"
                 pressed={wordWrap}
                 onPressedChange={(pressed) => {
-                  setWordWrap(Boolean(pressed));
+                  setWordWrapOverride(Boolean(pressed));
                 }}
               />
             }
@@ -1643,7 +1663,7 @@ export default function DiffPanel({
                 size="sm"
                 pressed={diffIgnoreWhitespace}
                 onPressedChange={(pressed) => {
-                  setDiffIgnoreWhitespace(Boolean(pressed));
+                  useDiffPanelSessionStore.getState().setIgnoreWhitespace(Boolean(pressed));
                 }}
               />
             }
@@ -1717,34 +1737,9 @@ export default function DiffPanel({
             <div
               className="flex min-h-0 flex-1"
               onClickCapture={(event) => {
-                const composedPath = event.nativeEvent.composedPath?.() ?? [];
-                for (const node of composedPath) {
-                  if (!(node instanceof HTMLElement)) continue;
-                  // Header buttons own their clicks; bubbling a chevron click would toggle twice.
-                  if (node instanceof HTMLButtonElement || node instanceof HTMLAnchorElement) {
-                    return;
-                  }
-                }
-                const title = composedPath.find(
-                  (node): node is HTMLElement =>
-                    node instanceof HTMLElement && node.hasAttribute("data-title"),
-                );
-                const filePath = title?.textContent?.trim();
-                // The filename remains the explicit "open in editor" affordance.
-                if (filePath) {
-                  openDiffFile(filePath);
-                  return;
-                }
-                const header = composedPath.find(
-                  (node): node is HTMLElement =>
-                    node instanceof HTMLElement && node.hasAttribute("data-diffs-header"),
-                );
-                const headerFilePath = header?.querySelector("[data-title]")?.textContent?.trim();
-                if (!headerFilePath) return;
-                const file = codeViewFiles.find(
-                  (candidate) => candidate.filePath === headerFilePath,
-                );
-                if (file) toggleDiffFileCollapsed(file.fileKey);
+                const action = getDiffHeaderClickAction(event.nativeEvent);
+                if (action?.type === "open") openDiffFile(action.filePath);
+                else if (action?.type === "toggle") toggleDiffFileCollapsed(action.fileKey);
               }}
               onContextMenuCapture={(event) => {
                 const composedPath = event.nativeEvent.composedPath?.() ?? [];

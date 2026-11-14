@@ -103,7 +103,9 @@ function ConnectedCommunication({
     });
   }, [root.environmentId, root.threadId, rootThread, selected, labels]);
   const [retained, setRetained] = useState<ThreadCommunication | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Accumulates discovered communication while only the selected detail streams stay subscribed.
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- Accumulates across models; render-time setState would loop on every new model.
     setRetained((previous) => retainThreadCommunication(previous, currentModel));
   }, [currentModel]);
   const model = useMemo(

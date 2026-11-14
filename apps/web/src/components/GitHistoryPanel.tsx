@@ -12,7 +12,7 @@ import {
   Rows3Icon,
   TextWrapIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { useTheme } from "~/hooks/useTheme";
 import { workspaceDisplayName } from "~/lib/projectWorkspacePresentation";
@@ -80,9 +80,9 @@ function CommitRow(props: { commit: GitHistoryCommit; selected: boolean; onSelec
         <span className="absolute inset-y-[-9px] left-1/2 w-px -translate-x-1/2 bg-border" />
         <span className="relative z-10 flex size-4 items-center justify-center rounded-full bg-background ring-1 ring-border group-hover:ring-foreground/30">
           {isMerge ? (
-            <PullRequestGlyph.merged className="size-2.5 text-violet-500" />
+            <PullRequestGlyph.merged className="size-2.5 text-(--context-chip-pr-merged)" />
           ) : (
-            <CircleDotIcon className="size-2.5 text-blue-500" />
+            <CircleDotIcon className="size-2.5 text-info" />
           )}
         </span>
       </span>
@@ -103,7 +103,7 @@ function CommitRow(props: { commit: GitHistoryCommit; selected: boolean; onSelec
             {props.commit.decorations.slice(0, 3).map((decoration) => (
               <span
                 key={decoration}
-                className="max-w-28 truncate rounded border border-blue-500/20 bg-blue-500/10 px-1 py-px text-[9px] font-medium text-blue-700 dark:text-blue-300"
+                className="max-w-28 truncate rounded border border-info/20 bg-info/10 px-1 py-px text-[9px] font-medium text-info-foreground"
               >
                 {decorationLabel(decoration)}
               </span>
@@ -147,12 +147,14 @@ export default function GitHistoryPanel(props: {
     }),
   );
   const commits = history.data?.commits ?? [];
-  const [selectedSha, setSelectedSha] = useState<string | null>(null);
+  const [shaSelection, setShaSelection] = useState<{ cwd: string; sha: string } | null>(null);
+  const selectedSha = shaSelection?.cwd === activeCwd ? shaSelection.sha : null;
   const resolvedSelectedSha = commits.some((commit) => commit.sha === selectedSha)
     ? selectedSha
     : (commits[0]?.sha ?? null);
-  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
-  useEffect(() => setSelectedSha(null), [activeCwd]);
+  const fileSelectionKey = `${activeCwd}\0${resolvedSelectedSha ?? ""}`;
+  const [fileSelection, setFileSelection] = useState<{ key: string; path: string } | null>(null);
+  const selectedFilePath = fileSelection?.key === fileSelectionKey ? fileSelection.path : null;
   const details = useEnvironmentQuery(
     resolvedSelectedSha
       ? gitEnvironment.commitDetails({
@@ -177,7 +179,6 @@ export default function GitHistoryPanel(props: {
   const setDiffRenderMode = (diffLayout: "stacked" | "split") =>
     updateClientSettings({ diffLayout });
   const [wordWrap, setWordWrap] = useState(false);
-  useEffect(() => setSelectedFilePath(null), [activeCwd, resolvedSelectedSha]);
   const renderablePatch = useMemo(
     () =>
       getRenderablePatch(
@@ -216,7 +217,7 @@ export default function GitHistoryPanel(props: {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="flex h-full min-h-0 flex-col bg-background" data-git-history-panel="">
       <div
         className="surface-subheader flex shrink-0 items-center gap-2 px-2"
         data-surface-subheader
@@ -310,7 +311,7 @@ export default function GitHistoryPanel(props: {
                   key={commit.sha}
                   commit={commit}
                   selected={commit.sha === resolvedSelectedSha}
-                  onSelect={() => setSelectedSha(commit.sha)}
+                  onSelect={() => setShaSelection({ cwd: activeCwd, sha: commit.sha })}
                 />
               ))}
             </div>
@@ -399,7 +400,9 @@ export default function GitHistoryPanel(props: {
                             }))}
                             resolvedTheme={resolvedTheme}
                             selectedPath={resolvedFilePath}
-                            onSelectFile={setSelectedFilePath}
+                            onSelectFile={(path) =>
+                              setFileSelection({ key: fileSelectionKey, path })
+                            }
                           />
                         }
                         second={

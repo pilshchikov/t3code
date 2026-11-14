@@ -1,5 +1,51 @@
 # Fork Changes
 
+## Upstream integration and fork theming — 2026-11-14 (85e009fbc9)
+
+- Merge 1,615 upstream commits through `85e009fbc9`. Adopt upstream's agent-driven themes with
+  custom CSS (`t3 theme`, the `t3_theme_*` MCP tools, `THEME_CSS_HOOKS`), the Settings language
+  switcher, MorphIcon removal, the Stop button phases, Node 26.13.1 and upstream migrations
+  081–091, which run as fork slots 90–100 after the released fork slots 1–89.
+- Fork surfaces follow the theme system. Status and diff colors in the Git commit panel, Git
+  history, the file tree, the diff file tree and account limits use theme tokens (`--info`,
+  `--warning`, `--error`, `--diff-addition`, `--diff-deletion`, `--primary`) instead of fixed
+  hex values. Symbol kinds, search result icons and agent avatars use the contrast-solved
+  `--context-chip-*` accents, so every theme recolors them. The orb send and stop buttons read
+  `--composer-orb-base` and `--composer-orb-foreground`.
+- Fork surfaces expose stable hooks for custom CSS and agents: `[data-project-rail]`,
+  `[data-rail-group-color]` (`--g`, `--gt`), `[data-thread-dashboard]`, `[data-dashboard-card]`,
+  `[data-usage-trends]`, `[data-agent-communication-view]`, `[data-agent-avatar]`,
+  `[data-git-changes-panel]`, `[data-git-history-panel]`, `[data-file-structure-panel]`,
+  `[data-symbol-kind]` and `[data-slot="composer-orb"]`. They are listed in
+  `packages/shared/src/themeCss.ts`, so `t3_theme_read` gives them to agents and
+  `themeCssHooks.test.ts` fails if one disappears.
+- Keep the fork's flat sidebar and project rail, no compact-before-send, relay delegation, peer
+  moves and copies, bundled SSH fork updates, the in-app context menu, multi-root file links,
+  the native file tree, OpenIDEA and custom editor commands, idle compaction and the Claude
+  history worker. Settled turns still keep their first assistant text outside the fold, except
+  turns a steer split, which now fold like upstream.
+- Upstream's flat `t3-<hex>` worktree branches are stripped in palette search like the fork's own
+  prefix. Fork-only code now passes upstream's new lint rules.
+- Runtime recovery picks candidate nodes as live nodes through
+  `orchestration_v2_projection_nodes_live_idx` plus the nodes of pending runtime requests, so
+  the fork's wider filter keeps upstream's index. Upstream's plain `INDEXED BY` hint failed on
+  that filter with "no query solution" and broke startup recovery.
+- `t3_queue` reads only queued and active runs, like upstream's narrowed read
+  (`apps/server/src/mcp/ThreadQueue.ts`). `agentContextBudget.json` holds the fork's measured
+  sizes (claude 12755, codex 14143, mcp 71457).
+- Upstream tests follow fork semantics: fork migration ids, the `spilshchikov` branch prefix,
+  the Claude `configDir` setting, settle-by-default worktree cleanup, `workspaceChangeMode:
+  "handoff"` for worktree handoffs, cancelled questions when a delegated worker finishes, fork
+  PR `urls` and usage `sourceId` fields, gated provider version checks, the 5 minute scoped fetch
+  timeout and the gitignored entries the fork file tree lists. Muse replay transcripts carry the
+  fork's pull request linking line.
+- Validation: all 41 packages typecheck, `vp check` reports 0 errors and knip passes. The web,
+  contracts, shared, client-runtime and provider-core suites pass. Every server test file that
+  failed in the full run passes on its own after the fixes. Left failing on macOS only, with code
+  identical to upstream: the shell DEBUG-trap and SSH gzip tests, the Playwright preview tests
+  (browser not installed), PortScanner (`ps -E` prints no environment), the symlinked-tmp tests,
+  the bash 3.2 syntax-error exit code and Apple git's batch fsync for checkpoint packs.
+
 ## Upstream integration and Claude Mythos 5.2 — 2026-11-09 (206a8e6937)
 
 - Merge 209 upstream commits through `206a8e69371d3d79cbeadeafb944815c294ae6e5`. Adopt the one-page

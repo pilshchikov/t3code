@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { MAX_CHAT_CUSTOM_WIDTH_PX, MIN_CHAT_CUSTOM_WIDTH_PX } from "@t3tools/contracts/settings";
 import {
   NumberField,
@@ -15,8 +15,12 @@ export function ChatCustomWidthControl({
   value: number;
   onChange: (width: number) => void;
 }) {
-  const [draft, setDraft] = useState<number | null>(value);
-  useEffect(() => setDraft(value), [value]);
+  const [edit, setEdit] = useState<{ base: number; draft: number | null }>({
+    base: value,
+    draft: value,
+  });
+  const draft = edit.base === value ? edit.draft : value;
+  const setDraft = (next: number | null) => setEdit({ base: value, draft: next });
 
   return (
     <NumberField

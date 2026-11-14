@@ -13,7 +13,7 @@ import {
   selectCommunicationMessages,
   type CommunicationSelection,
 } from "@t3tools/client-runtime/state/thread-communication";
-import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
+import { StackActions, useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { Atom } from "effect/reactivity";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
@@ -105,7 +105,9 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
     [root.environmentId, root.threadId, sources, labels],
   );
   const [retained, setRetained] = useState<ThreadCommunication | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Accumulates discovered communication while only the selected detail streams stay subscribed.
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- Accumulates across models; render-time setState would loop on every new model.
     setRetained((previous) => retainThreadCommunication(previous, currentModel));
   }, [currentModel]);
   const model = useMemo(
@@ -317,10 +319,12 @@ export function ThreadCommunicationSheet({ route }: StaticScreenProps<ScopedThre
             label="Open thread"
             tone="secondary"
             onPress={() =>
-              navigation.navigate("Thread", {
-                environmentId: selected.environmentId,
-                threadId: selected.threadId!,
-              })
+              navigation.dispatch(
+                StackActions.push("Thread", {
+                  environmentId: selected.environmentId,
+                  threadId: selected.threadId!,
+                }),
+              )
             }
           />
         ) : null}

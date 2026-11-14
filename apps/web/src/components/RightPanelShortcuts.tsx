@@ -9,16 +9,8 @@ import { useRightPanelStore } from "../rightPanelStore";
 import { resolveThreadRouteRef } from "../threadRoutes";
 
 /**
- * The right panel's own shortcuts, owned once for the whole app.
- *
- * They used to live in the chat view, which meant they answered only while a chat view was mounted
- * and only when its listener happened to be ahead of the ones mounted after it. Bound to a bare
- * printable key — `§` on a Mac ISO layout is the usual choice — that was the difference between a
- * toggle and a stray character in whatever field had focus. Here it is one listener, registered
- * before anything else in the app, that answers wherever you are.
- *
- * Settings is the exception: it is where the binding is being read and edited, so a keypress there
- * belongs to the page.
+ * One app-wide listener, registered before any other, so a bare printable binding like `§` toggles
+ * the panel instead of typing into the focused field. Settings is exempt: the binding is edited there.
  */
 export function RightPanelShortcuts() {
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
@@ -35,6 +27,7 @@ export function RightPanelShortcuts() {
   const stateRef = useRef({ keybindings, threadRef, pathname });
   stateRef.current = { keybindings, threadRef, pathname };
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Owns the app-wide capture-phase keyboard listener for the right panel.
   useEffect(() => {
     const claim = (event: Event) => {
       event.preventDefault();

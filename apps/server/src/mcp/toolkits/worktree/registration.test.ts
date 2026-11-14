@@ -51,6 +51,8 @@ import * as PreviewAutomationBroker from "../../PreviewAutomationBroker.ts";
 import * as PreviewBrowser from "../../../preview/PreviewBrowser.ts";
 import * as UsageService from "../../../usage/UsageService.ts";
 import * as UsageLimitSources from "../../../usage/UsageLimitSources.ts";
+import * as EnvironmentTheme from "../../../environmentTheme.ts";
+import * as PullRequestService from "../../../pullRequest/PullRequestService.ts";
 
 const layerStubServices = Layer.mergeAll(
   Layer.mock(AssetSigner.AssetSigner)({}),
@@ -87,6 +89,8 @@ const layerStubServices = Layer.mergeAll(
   Layer.mock(SourceControlRepositoryService.SourceControlRepositoryService)({}),
   Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
   Layer.mock(ThreadSearch.ThreadSearch)({}),
+  Layer.mock(EnvironmentTheme.EnvironmentThemeService)({}),
+  Layer.mock(PullRequestService.PullRequestService)({}),
   McpProviderSessions.layer,
 );
 

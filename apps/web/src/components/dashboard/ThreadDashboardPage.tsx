@@ -248,7 +248,11 @@ export function ThreadDashboardPage() {
         </WorkspacePageHeader>
         <ScrollArea className="min-h-0 flex-1">
           <WorkspacePageContainer width="expanded">
-            <div className={styles["thread-dashboard"]} data-layout={layout}>
+            <div
+              className={styles["thread-dashboard"]}
+              data-thread-dashboard=""
+              data-layout={layout}
+            >
               <header className={styles["dashboard-heading"]}>
                 <div>
                   <h1>On deck</h1>

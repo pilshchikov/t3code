@@ -13,6 +13,7 @@ import { SqlClient } from "effect/sql";
 
 const SAMPLE_MS = 30_000;
 const RETENTION_MS = 90 * 24 * 60 * 60_000;
+const decodeHistory = Schema.decodeUnknownEffect(History);
 
 export class UsageLimitHistory extends Context.Service<
   UsageLimitHistory,
@@ -80,7 +81,7 @@ export const layer = Layer.effect(
           ORDER BY measured_at DESC
         ) AS position FROM usage_limit_history WHERE bucket >= ${sinceMs}
       ) WHERE position = 1 ORDER BY measured_at DESC LIMIT 20001`;
-      return yield* Schema.decodeUnknownEffect(History)({
+      return yield* decodeHistory({
         readAt: DateTime.formatIso(now),
         since: DateTime.formatIso(DateTime.makeUnsafe(sinceMs)),
         resolutionMinutes,

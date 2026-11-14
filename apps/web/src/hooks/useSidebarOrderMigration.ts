@@ -27,6 +27,7 @@ export function useSidebarOrderMigration(
   const ready = useAllEnvironmentShellsBootstrapped();
   const liveSnapshotsReady = useAllEnvironmentProjectSnapshotsReady();
   const attempted = useRef(false);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Runs the one-time legacy order migration against the server once every environment's snapshot is ready.
   useEffect(() => {
     if (!ready || !liveSnapshotsReady || attempted.current) return;
     const store = useSidebarThreadOrderStore.getState();

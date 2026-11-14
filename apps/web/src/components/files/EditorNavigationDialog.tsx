@@ -109,13 +109,15 @@ function symbolTitle(match: ProjectCodeSearchMatch): string {
 }
 
 function resultIcon(item: SearchResultItem) {
-  if (item.kind === "file") return <FileCode2 className="size-4 text-sky-500" />;
-  if (item.kind === "action") return <SquareTerminal className="size-4 text-amber-500" />;
+  if (item.kind === "file") return <FileCode2 className="size-4 text-(--context-chip-file)" />;
+  if (item.kind === "action")
+    return <SquareTerminal className="size-4 text-(--context-chip-element)" />;
   if (item.match.kind === "class" || item.match.kind === "interface") {
-    return <Box className="size-4 text-blue-500" />;
+    return <Box className="size-4 text-(--context-chip-pull-request)" />;
   }
-  if (item.match.kind === "text") return <FileText className="size-4 text-emerald-500" />;
-  return <Braces className="size-4 text-violet-500" />;
+  if (item.match.kind === "text")
+    return <FileText className="size-4 text-(--context-chip-terminal)" />;
+  return <Braces className="size-4 text-(--context-chip-review-comment)" />;
 }
 
 /** Emphasize the matched portion of a result label, like IntelliJ's Search Everywhere. */
@@ -151,11 +153,8 @@ function recentFileItems(
 }
 
 /**
- * Files to list before the user types: recent files first, then the rest of the project (deduped,
- * capped). A freshly opened workspace has no recent files, so without this the Double-Shift dialog
- * would open empty in the All/Files scopes and there'd be nothing to select until you typed — the
- * tree, by contrast, shows everything. This makes Double Shift immediately useful like VS Code's
- * quick-open. Typing then narrows via the server-side `searchEntries` query (remoteResults).
+ * Lists recent files, then the rest of the project, before the user types, so Double Shift is not
+ * empty in a fresh workspace. Typing narrows via the server-side `searchEntries` query.
  */
 function emptyQueryFileItems(
   recentFiles: ReadonlyArray<RecentEditorFile>,
@@ -219,6 +218,7 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
     setOpen(true);
   }, []);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Owns the window Double-Shift and Cmd+E listeners that open the dialog.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
@@ -256,6 +256,7 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
     };
   }, [openRecent, openSearch]);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Focuses the input a frame after the dialog opens or switches mode.
   useEffect(() => {
     if (!open) return;
     const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
@@ -332,8 +333,10 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
     [actions, query],
   );
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Debounces the server-side search and drops results from superseded queries.
   useEffect(() => {
     if (!open || mode === "recent") {
+      // oxlint-disable-next-line react/set-state-in-effect -- Clears results of a cancelled search in the same pass that cancels it.
       setRemoteResults([]);
       setLoading(false);
       return;
@@ -453,7 +456,9 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
       : remoteResults;
   }, [filteredActions, mode, props.entries, query, recentFiles, remoteResults, scope]);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Resets the highlight when the list changes, including when async search results land.
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- Results arrive asynchronously, so no single handler sees every list change.
     setSelectedIndex(0);
   }, [query, scope, mode, results.length]);
 

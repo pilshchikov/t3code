@@ -23,6 +23,7 @@ function EnvironmentTrends({
   );
   const result = useAtomValue(query);
   const history = Option.getOrNull(AsyncResult.value(result));
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Polls the history query every 30s while the page is visible.
   useEffect(() => {
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") appAtomRegistry.refresh(query);
@@ -73,7 +74,7 @@ export function UsageLimitTrends({
 }) {
   const [days, setDays] = useState<UsageLimitHistoryInput["days"]>(1);
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5" data-usage-trends="">
       <div className="flex flex-wrap items-center gap-2" aria-label="History period">
         {([1, 7, 30, 90] as const).map((value) => (
           <Button

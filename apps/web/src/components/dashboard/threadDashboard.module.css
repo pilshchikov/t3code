@@ -59,7 +59,7 @@
   color: var(--info-foreground);
 }
 .dashboard-status-monitoring {
-  color: var(--color-violet-400);
+  color: var(--context-chip-review-comment);
 }
 .dashboard-status-ready {
   color: var(--success-foreground);

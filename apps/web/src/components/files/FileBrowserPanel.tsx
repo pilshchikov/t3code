@@ -4,9 +4,11 @@ import type { EnvironmentId, ProjectEntry } from "@t3tools/contracts";
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
 import { ChevronsDownUpIcon, ChevronsUpDownIcon, Trash2Icon, XIcon } from "lucide-react";
 import {
+  type Ref,
   useCallback,
   useDeferredValue,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -27,8 +29,9 @@ import { useFileContextMenu } from "~/fileContextMenu";
 import { projectEnvironment } from "~/state/projects";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useProjectPathSearch } from "~/state/queries";
-import { resolvePathLinkTarget } from "~/terminal-links";
+import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
 
+import { type PreviewAction, subscribePreviewAction } from "../preview/previewActionBus";
 import { NativeProjectFileTree } from "./NativeProjectFileTree";
 import { useProjectDirectoryListings, useProjectEntriesQuery } from "./projectFilesQueryState";
 import { mergeDirectoryListings } from "./directoryListings";
@@ -69,6 +72,7 @@ interface FileBrowserPanelProps {
   hostFolder?: boolean;
   onRefreshSelectedFile?: () => void;
   workspaceMutationId?: string | null;
+  answersPanelFind?: boolean;
 }
 
 function RefreshFilesButton(props: { isPending: boolean; onRefresh: () => void }) {
@@ -113,15 +117,20 @@ function CollapseDirectoriesButton(props: { onCollapse: () => void }) {
   );
 }
 
-function FileSearchField(props: {
+function FileSearchField({
+  ref,
+  ...props
+}: {
   ariaLabel: string;
   name: string;
   onValueChange: (value: string) => void;
+  ref: Ref<HTMLInputElement>;
   value: string;
 }) {
   return (
     <InputGroup variant="ghost" className="h-7 min-w-0 flex-1">
       <InputGroupInput
+        ref={ref}
         type="search"
         name={props.name}
         size="sm"
@@ -167,6 +176,7 @@ export default function FileBrowserPanel({
   onRefreshSelectedFile,
   workspaceMutationId = null,
   hostFolder = false,
+  answersPanelFind = false,
 }: FileBrowserPanelProps) {
   const panelPath = (relativePath: string) =>
     hostFolder ? joinHostPath(cwd, relativePath) : relativePath;
@@ -179,6 +189,20 @@ export default function FileBrowserPanel({
   const [refreshId, setRefreshId] = useState(0);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const focusSearch = useCallback(() => {
+    searchInputRef.current?.focus();
+    searchInputRef.current?.select();
+  }, []);
+  const onPanelAction = useEffectEvent((action: PreviewAction) => {
+    // Hidden panel tabs stay mounted; only the visible Files tab answers.
+    if (action === "find" && searchInputRef.current?.getClientRects().length) focusSearch();
+  });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscribes to the panel find command, which fires while focus is anywhere in the right panel
+  useEffect(() => {
+    if (!answersPanelFind) return;
+    return subscribePreviewAction(onPanelAction);
+  }, [answersPanelFind]);
   const search = useProjectPathSearch(
     { environmentId, cwd: hostFolder ? null : cwd, query: deferredQuery, kind: "file" },
     200,
@@ -247,14 +271,14 @@ export default function FileBrowserPanel({
         fileChanges.map((file) => [
           file.path,
           file.untracked || file.unstaged
-            ? "#f5a3a3"
+            ? "var(--diff-deletion-foreground)"
             : file.indexStatus === "added" || file.indexStatus === "copied"
-              ? "#3fb950"
+              ? "var(--diff-addition-foreground)"
               : file.indexStatus === "deleted"
-                ? "#f85149"
+                ? "var(--error-foreground)"
                 : file.indexStatus === "renamed"
-                  ? "#d29922"
-                  : "#4c9ffe",
+                  ? "var(--warning-foreground)"
+                  : "var(--info-foreground)",
         ]),
       ),
     [fileChanges],
@@ -454,7 +478,6 @@ export default function FileBrowserPanel({
       if (clicked === "copy-mention") {
         try {
           await writeTextToClipboard(mention);
-          toastManager.add({ type: "success", title: "Mention copied", description: relativePath });
         } catch (error) {
           toastManager.add({
             type: "error",
@@ -467,11 +490,6 @@ export default function FileBrowserPanel({
       if (clicked === "copy-absolute-path") {
         try {
           await writeTextToClipboard(absolutePath);
-          toastManager.add({
-            type: "success",
-            title: "Absolute path copied",
-            description: absolutePath,
-          });
         } catch (error) {
           toastManager.add({
             type: "error",
@@ -521,6 +539,12 @@ export default function FileBrowserPanel({
   const onPanelKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
       if (event.defaultPrevented) return;
+      const isModPressed = isMacPlatform(navigator.platform) ? event.metaKey : event.ctrlKey;
+      if (isModPressed && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        focusSearch();
+        return;
+      }
       const target = event.target;
       if (target instanceof HTMLElement && target.closest("input, textarea, [contenteditable]")) {
         return;
@@ -550,7 +574,14 @@ export default function FileBrowserPanel({
         void restoreSnapshot(undoableDelete);
       }
     },
-    [deleteSelectedFiles, isRestoring, restoreSnapshot, selectedFiles.length, undoableDelete],
+    [
+      deleteSelectedFiles,
+      focusSearch,
+      isRestoring,
+      restoreSnapshot,
+      selectedFiles.length,
+      undoableDelete,
+    ],
   );
 
   return (
@@ -596,6 +627,7 @@ export default function FileBrowserPanel({
         </Tooltip>
         <CollapseDirectoriesButton onCollapse={() => setCollapseRequestId((value) => value + 1)} />
         <FileSearchField
+          ref={searchInputRef}
           name="project-files-search"
           ariaLabel={`Search ${projectName} files`}
           value={query}

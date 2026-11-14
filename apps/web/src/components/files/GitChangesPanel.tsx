@@ -14,15 +14,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { createModelSelection } from "@t3tools/shared/model";
-import {
-  Check,
-  PanelLeft,
-  PanelRight,
-  RefreshCw,
-  RotateCcw,
-  Sparkles,
-  WandSparkles,
-} from "lucide-react";
+import { Bot, Check, PanelLeft, PanelRight, PenLine, RefreshCw, RotateCcw } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { ProviderModelPicker } from "~/components/chat/ProviderModelPicker";
@@ -65,7 +57,7 @@ interface StatusBadge {
 }
 
 // Pale red used to mark unversioned (untracked) files in both the Commit panel and the file tree.
-const UNVERSIONED_COLOR = "#e0828c";
+const UNVERSIONED_COLOR = "var(--diff-deletion-foreground)";
 const CONFLICT_MODEL_STORAGE_KEY = "t3code.gitConflictModelSelection";
 const REMEMBER_CONFLICT_MODEL_STORAGE_KEY = "t3code.rememberGitConflictModel";
 
@@ -106,13 +98,13 @@ function writeRememberedConflictModel(selection: ModelSelection | null): void {
 }
 
 const STATUS_BADGE_BY_KIND: Readonly<Record<GitChangeKind, StatusBadge>> = {
-  modified: { letter: "M", color: "#4c9ffe", label: "Modified" },
-  added: { letter: "A", color: "#3fb950", label: "Added" },
-  deleted: { letter: "D", color: "#f85149", label: "Deleted" },
-  renamed: { letter: "R", color: "#d29922", label: "Renamed" },
-  copied: { letter: "C", color: "#d29922", label: "Copied" },
-  typechange: { letter: "T", color: "#d29922", label: "Type changed" },
-  unmerged: { letter: "U", color: "#f85149", label: "Unmerged" },
+  modified: { letter: "M", color: "var(--info-foreground)", label: "Modified" },
+  added: { letter: "A", color: "var(--diff-addition-foreground)", label: "Added" },
+  deleted: { letter: "D", color: "var(--diff-deletion-foreground)", label: "Deleted" },
+  renamed: { letter: "R", color: "var(--warning-foreground)", label: "Renamed" },
+  copied: { letter: "C", color: "var(--warning-foreground)", label: "Copied" },
+  typechange: { letter: "T", color: "var(--warning-foreground)", label: "Type changed" },
+  unmerged: { letter: "U", color: "var(--error-foreground)", label: "Unmerged" },
   untracked: { letter: "?", color: UNVERSIONED_COLOR, label: "Unversioned" },
 };
 
@@ -162,7 +154,7 @@ function GitChangeRow({
     >
       <input
         type="checkbox"
-        className="size-3.5 shrink-0 cursor-pointer accent-[#4c9ffe]"
+        className="size-3.5 shrink-0 cursor-pointer accent-primary"
         checked={fullyStaged}
         ref={(element) => {
           if (element) element.indeterminate = partiallyStaged;
@@ -312,7 +304,7 @@ function GitChangeGroup({
       <div className="flex items-center gap-2 px-2 py-1">
         <input
           type="checkbox"
-          className="size-3.5 shrink-0 cursor-pointer accent-[#4c9ffe]"
+          className="size-3.5 shrink-0 cursor-pointer accent-primary"
           checked={allStaged}
           disabled={busy}
           aria-label={allStaged ? `Unstage all ${title}` : `Stage all ${title}`}
@@ -603,7 +595,7 @@ export default function GitChangesPanel({
     (status.data?.isRepo ?? false);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-background">
+    <div className="flex min-h-0 flex-1 flex-col bg-background" data-git-changes-panel="">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border/60 px-3">
         <div className="min-w-0 flex-1">
           <div className="truncate text-xs font-medium text-foreground">Commit</div>
@@ -655,7 +647,7 @@ export default function GitChangesPanel({
                   {startingConflictResolution ? (
                     <RefreshCw className="size-3 animate-spin" />
                   ) : (
-                    <WandSparkles className="size-3" />
+                    <Bot className="size-3" />
                   )}
                   Resolve with AI
                 </TooltipTrigger>
@@ -682,7 +674,7 @@ export default function GitChangesPanel({
                 <label className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
                   <input
                     type="checkbox"
-                    className="size-3 accent-[#4c9ffe]"
+                    className="size-3 accent-primary"
                     checked={rememberConflictModel}
                     onChange={(event) => toggleRememberConflictModel(event.target.checked)}
                   />
@@ -750,7 +742,7 @@ export default function GitChangesPanel({
             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-foreground">
               <input
                 type="checkbox"
-                className="size-3.5 cursor-pointer accent-[#4c9ffe]"
+                className="size-3.5 cursor-pointer accent-primary"
                 checked={amend}
                 disabled={busy || generating}
                 onChange={(event) => setAmend(event.target.checked)}
@@ -779,7 +771,7 @@ export default function GitChangesPanel({
                   {generating ? (
                     <RefreshCw className="size-3.5 animate-spin" />
                   ) : (
-                    <Sparkles className="size-3.5" />
+                    <PenLine className="size-3.5" />
                   )}
                 </TooltipTrigger>
                 <TooltipPopup>{"Generate commit message"}</TooltipPopup>
@@ -789,7 +781,7 @@ export default function GitChangesPanel({
                 className={cn(
                   "rounded px-3 py-1 text-xs font-medium",
                   canCommit
-                    ? "bg-[#4c9ffe] text-white hover:bg-[#3a8ae8]"
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
                     : "cursor-not-allowed bg-accent text-muted-foreground",
                 )}
                 disabled={!canCommit}

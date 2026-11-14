@@ -28,6 +28,7 @@ export class ProviderLatestVersions extends Context.Service<
       options?: { readonly fresh?: boolean },
     ) => Effect.Effect<string | null, E, R>;
     readonly invalidate: (key: string) => Effect.Effect<void>;
+    readonly invalidateAll: Effect.Effect<void>;
   }
 >()("@t3tools/provider-core/server/ProviderLatestVersions") {}
 
@@ -86,6 +87,7 @@ export const make = Effect.fn("ProviderLatestVersions.make")(function* (
         return next;
       });
     }),
+    invalidateAll: Ref.set(entries, new Map()),
   });
 });
 
@@ -104,6 +106,7 @@ export const layer = Layer.effect(
       : ProviderLatestVersions.of({
           cached: Effect.fn("ProviderLatestVersions.cached")(() => Effect.succeed(null)),
           invalidate: versions.invalidate,
+          invalidateAll: versions.invalidateAll,
         });
   }),
 );

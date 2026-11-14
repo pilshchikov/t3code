@@ -21,6 +21,7 @@ export const ComposerActionOrb = memo(function ComposerActionOrb({
   const handleRef = useRef<OrbHandle | null>(null);
   const [supported, setSupported] = useState(true);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Owns the WebGL context and the parent button's pointer listeners; falls back when WebGL is unavailable.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -45,6 +46,7 @@ export const ComposerActionOrb = memo(function ComposerActionOrb({
     // The colour is pushed through the handle rather than remounting the context.
   }, []);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Pushes the colour into the live WebGL handle without remounting the context.
   useEffect(() => {
     handleRef.current?.setColor(color);
   }, [color]);
@@ -52,6 +54,7 @@ export const ComposerActionOrb = memo(function ComposerActionOrb({
   return (
     <span
       className={cn("pointer-events-none absolute inset-0 -z-10 rounded-full", className)}
+      data-slot="composer-orb"
       aria-hidden="true"
     >
       {supported ? (
@@ -59,7 +62,9 @@ export const ComposerActionOrb = memo(function ComposerActionOrb({
       ) : (
         <span
           className="block size-full rounded-full"
-          style={{ background: `radial-gradient(circle at 34% 30%, ${color}, #0c0913 96%)` }}
+          style={{
+            background: `radial-gradient(circle at 34% 30%, ${color}, var(--composer-orb-base) 96%)`,
+          }}
         />
       )}
     </span>

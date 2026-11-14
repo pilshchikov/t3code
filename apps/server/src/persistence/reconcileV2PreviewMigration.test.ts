@@ -93,6 +93,17 @@ describe("V2 preview upgrade", () => {
         [87, "PromptReferenceLookup"],
         [88, "CheckpointRefLookup"],
         [89, "ProjectGroupKey"],
+        [90, "ProjectionMessageSearchText"],
+        [91, "TurnItemConversationIndex"],
+        [92, "CommandReadIndexes"],
+        [93, "LastExecutedRunIndex"],
+        [94, "TurnItemCounts"],
+        [95, "QueuedTurnInputIndex"],
+        [96, "ProjectionProjectsCustomTitle"],
+        [97, "TurnItemTypeStatusIndex"],
+        [98, "ShellThreadReadIndexes"],
+        [99, "AuthConnectDevices"],
+        [100, "AuthConnectDeniedRequests"],
       ]);
       assert.deepStrictEqual(yield* runMigrations(), []);
       assert.deepStrictEqual(yield* sql`SELECT * FROM orchestration_v2_legacy_imports`, imports);
@@ -201,6 +212,17 @@ describe("V2 preview upgrade", () => {
         [87, "PromptReferenceLookup"],
         [88, "CheckpointRefLookup"],
         [89, "ProjectGroupKey"],
+        [90, "ProjectionMessageSearchText"],
+        [91, "TurnItemConversationIndex"],
+        [92, "CommandReadIndexes"],
+        [93, "LastExecutedRunIndex"],
+        [94, "TurnItemCounts"],
+        [95, "QueuedTurnInputIndex"],
+        [96, "ProjectionProjectsCustomTitle"],
+        [97, "TurnItemTypeStatusIndex"],
+        [98, "ShellThreadReadIndexes"],
+        [99, "AuthConnectDevices"],
+        [100, "AuthConnectDeniedRequests"],
       ]);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );

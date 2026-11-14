@@ -42,47 +42,9 @@ describe("runMigrations", () => {
       const memories = yield* sql`SELECT * FROM project_memories`;
       const usage = yield* sql`SELECT * FROM usage_limit_history`;
 
-      assert.deepStrictEqual(yield* runMigrations(), [
-        [72, "WebhookDedupe"],
-        [73, "ShellStopRequestIndex"],
-        [74, "ThreadMessageSearch"],
-        [75, "PeerLinks"],
-        [76, "PeerLinkFence"],
-        [77, "WaitingLinkRequestIndex"],
-        [78, "ActiveTurnItemIndexes"],
-        [79, "ExcludeAttachmentPlaceholdersFromSearch"],
-        [80, "SubagentDeliveryState"],
-        [81, "ProjectionProjectsPinArchive"],
-        [82, "RepairBooleanSettledOverride"],
-        [83, "DropOrchestrationEventCorrelationIndex"],
-        [84, "DelegatedRecoveryIndexes"],
-        [85, "ScheduledTaskThreadMode"],
-        [86, "ThreadHistoryRetention"],
-        [87, "PromptReferenceLookup"],
-        [88, "CheckpointRefLookup"],
-        [89, "ProjectGroupKey"],
-      ]);
-      assert.deepStrictEqual(yield* history, [
-        ...beforeHistory,
-        [72, "WebhookDedupe"],
-        [73, "ShellStopRequestIndex"],
-        [74, "ThreadMessageSearch"],
-        [75, "PeerLinks"],
-        [76, "PeerLinkFence"],
-        [77, "WaitingLinkRequestIndex"],
-        [78, "ActiveTurnItemIndexes"],
-        [79, "ExcludeAttachmentPlaceholdersFromSearch"],
-        [80, "SubagentDeliveryState"],
-        [81, "ProjectionProjectsPinArchive"],
-        [82, "RepairBooleanSettledOverride"],
-        [83, "DropOrchestrationEventCorrelationIndex"],
-        [84, "DelegatedRecoveryIndexes"],
-        [85, "ScheduledTaskThreadMode"],
-        [86, "ThreadHistoryRetention"],
-        [87, "PromptReferenceLookup"],
-        [88, "CheckpointRefLookup"],
-        [89, "ProjectGroupKey"],
-      ]);
+      const pending = migrationManifest.filter(([id]) => id >= 72);
+      assert.deepStrictEqual(yield* runMigrations(), pending);
+      assert.deepStrictEqual(yield* history, [...beforeHistory, ...pending]);
       assert.deepStrictEqual(yield* sql`SELECT * FROM project_memories`, memories);
       assert.deepStrictEqual(yield* sql`SELECT * FROM usage_limit_history`, usage);
       assert.deepStrictEqual(yield* runMigrations(), []);
@@ -216,6 +178,36 @@ describe("runMigrations", () => {
       );
       assert.notInclude(String(exit), "62_ScheduledTaskWebhooks");
       assert.deepStrictEqual(yield* history, before);
+    }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+  );
+
+  it.effect("keeps the migrations that finished before a later one failed", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* runMigrations({ toMigrationInclusive: 89 });
+      yield* sql`CREATE TABLE orchestration_v2_projection_turn_item_counts (thread_id TEXT)`;
+
+      const exit = yield* Effect.exit(runMigrations());
+
+      assert.isTrue(Exit.isFailure(exit));
+      assert.deepStrictEqual(
+        yield* history,
+        migrationManifest.filter(([id]) => id <= 93),
+      );
+    }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+  );
+
+  it.effect("reapplies peer link migrations whose ledger rows are missing", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* runMigrations({ toMigrationInclusive: 77 });
+      yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 75 AND 77`;
+
+      assert.deepStrictEqual(
+        yield* runMigrations(),
+        migrationManifest.filter(([id]) => id >= 75),
+      );
+      assert.deepStrictEqual(yield* history, migrationManifest);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );
 

@@ -87,8 +87,8 @@ export function DiffFilesTreeNavigator(props: {
               </span>
               {node.stat ? (
                 <span className="shrink-0 font-mono text-[9px] tabular-nums">
-                  <span className="text-green-600 dark:text-green-400">+{node.stat.additions}</span>{" "}
-                  <span className="text-red-600 dark:text-red-400">-{node.stat.deletions}</span>
+                  <span className="text-diff-addition-foreground">+{node.stat.additions}</span>{" "}
+                  <span className="text-diff-deletion-foreground">-{node.stat.deletions}</span>
                 </span>
               ) : null}
             </button>
