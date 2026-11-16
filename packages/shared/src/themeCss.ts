@@ -86,6 +86,10 @@ export const THEME_CSS_HOOKS = [
     selector: '[data-slot="composer-orb"]',
     styles: "orb send and stop buttons; set --composer-orb-base and --composer-orb-foreground",
   },
+  {
+    selector: "[data-sketch-canvas]",
+    styles: "floating sketch window; set --sketch-canvas-background for the drawing and its PNG",
+  },
 ] as const;
 
 /** What an agent needs to restyle the app. `t3_theme_read` returns it. */

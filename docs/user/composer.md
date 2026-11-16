@@ -204,6 +204,16 @@ Use the composer's microphone or `mod+shift+d` to dictate into your draft. Audio
 is transcribed on an environment you choose in **Settings → Voice**; nothing is
 sent until you choose one. See [Voice input](./voice-input.md).
 
+## Sketch on a canvas
+
+Click the pencil-and-ruler button beside the microphone to open a floating canvas. Draw with the
+pen, lines, arrows, boxes, ellipses, diamonds and text, then click **Add** (`mod+enter`) to attach
+the drawing as a PNG cropped to what you drew. The canvas stays open while you scroll or switch
+threads, and the image goes to the thread you opened it from.
+
+Scroll to pan and use `mod` + scroll to zoom. Press a tool's letter to switch to it (V, H, P, L,
+A, R, O, D, T) and 1–0 to pick a color. `mod+z` undoes and `mod+shift+z` redoes.
+
 ## Voice input on mobile
 
 Use the composer's microphone to record, then confirm to transcribe. Text is

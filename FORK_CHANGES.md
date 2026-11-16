@@ -1,5 +1,19 @@
 # Fork Changes
 
+## Sketch canvas in the composer — 2026-11-15
+
+- A pencil-and-ruler button beside the microphone opens a floating, non-modal canvas. It has pen
+  strokes with tapered ends, lines and arrows (Shift snaps to 15°), boxes, ellipses, diamonds,
+  text, select and move with a selection box, copy, paste and duplicate, 200-step undo, preset
+  colors plus a color picker, and three stroke widths. The canvas is infinite: scroll pans and
+  `mod` + scroll zooms. The window drags, resizes and expands.
+- **Add** crops to the drawing, renders a PNG and puts it in the composer draft of the thread the
+  canvas was opened from, even after switching threads.
+- `[data-sketch-canvas]` and `--sketch-canvas-background` are theme hooks.
+- Sources: `apps/web/src/components/sketch/`, the button in
+  `apps/web/src/components/chat/ChatComposer.tsx`, the overlay in `apps/web/src/routes/_chat.tsx`.
+- Validation: typecheck, lint and `themeCssHooks.test.ts`, plus a manual pass in a dev build.
+
 ## Upstream integration and fork theming — 2026-11-14 (85e009fbc9)
 
 - Merge 1,615 upstream commits through `85e009fbc9`. Adopt upstream's agent-driven themes with
