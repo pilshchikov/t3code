@@ -14,10 +14,12 @@ import {
 } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
+import * as TestClock from "effect/testing/TestClock";
 import { McpSchema, McpServer } from "effect/ai";
 
 import * as ServerConfig from "../config.ts";
@@ -480,7 +482,7 @@ it.effect("keeps a forwarded wait short and its retries scoped to the caller", (
         status: "completed",
         timedOut: false,
       });
-      // Three pieces of at most 50 s each, the later ones pinned to the run
+      // Three pieces of at most 45 s each, the later ones pinned to the run
       // the first one found.
       expect(
         (yield* Ref.get(seen)).waits.map(({ timeoutMs, runId }) => [timeoutMs, runId]),
@@ -717,6 +719,39 @@ it.effect("refuses what a linked environment cannot take before anything leaves"
         expect(failureOf(relayed), name).toMatchObject({ code: "capability_denied" });
       }
       expect(yield* Ref.get(b.bearers)).toEqual([]);
+    }),
+  ).pipe(Effect.provide(NodeHttpServer.layerTest)),
+);
+
+it.effect("refuses a launch there above the link's access, naming the link", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const seen = yield* Ref.make<Seen>(nothingSeen);
+      const linkSession = yield* Ref.make("");
+      const b = yield* serveBox(seen, linkSession);
+      const a = yield* makeLaptop;
+      yield* linkTo(a.links, b, "auto");
+      yield* Ref.set(linkSession, (yield* b.linkedSessions)[0]!.sessionId);
+
+      // A full-access agent here asks for more than the link allows there.
+      const launchAboveLink = a.call("thread:laptop-full", "t3_thread_launch", {
+        environmentId: box.environmentId,
+        projectId: boxProject,
+        title: "Run the suite there",
+        modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
+        message: "Run the suite.",
+        runtimeMode: "full-access",
+      });
+      const { message } = failureOf(yield* launchAboveLink);
+      expect(message).toContain('"Box"');
+      expect(message).toContain("auto");
+      expect(message).toContain("full-access");
+      expect(message).not.toContain("parent mode");
+      expect((yield* Ref.get(seen)).launches).toEqual([]);
+
+      // Once the link has expired, that is what the agent needs to hear.
+      yield* TestClock.adjust(Duration.days(31));
+      expect(failureOf(yield* launchAboveLink).message).toContain("expired");
     }),
   ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );

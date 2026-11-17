@@ -53,6 +53,8 @@ import * as UsageService from "../../../usage/UsageService.ts";
 import * as UsageLimitSources from "../../../usage/UsageLimitSources.ts";
 import * as EnvironmentTheme from "../../../environmentTheme.ts";
 import * as PullRequestService from "../../../pullRequest/PullRequestService.ts";
+import * as IssueService from "../../../issue/IssueService.ts";
+import * as ThreadIssueService from "../../../orchestration-v2/ThreadIssueService.ts";
 
 const layerStubServices = Layer.mergeAll(
   Layer.mock(AssetSigner.AssetSigner)({}),
@@ -91,6 +93,8 @@ const layerStubServices = Layer.mergeAll(
   Layer.mock(ThreadSearch.ThreadSearch)({}),
   Layer.mock(EnvironmentTheme.EnvironmentThemeService)({}),
   Layer.mock(PullRequestService.PullRequestService)({}),
+  Layer.mock(IssueService.IssueService)({}),
+  Layer.mock(ThreadIssueService.ThreadIssueService)({}),
   McpProviderSessions.layer,
 );
 

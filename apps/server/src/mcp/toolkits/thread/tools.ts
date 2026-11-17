@@ -20,6 +20,7 @@ import {
   ThreadId,
   NonNegativeInt,
   ProjectId,
+  clampedPositiveInt,
 } from "@t3tools/contracts";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Schema from "effect/Schema";
@@ -86,6 +87,7 @@ const QueueTool = Tool.make("t3_queue", {
   ],
   parameters: Schema.Struct({
     ...ThreadQueueInput.fields,
+    limit: Schema.optional(clampedPositiveInt(100)),
     environmentId: OrchestratorMcpEnvironmentTarget,
   }),
   success: ThreadQueueResult,
@@ -214,6 +216,7 @@ const ScheduledTaskRunTool = Tool.make("run_scheduled_task_now", {
     threadId: ScheduledTask.fields.threadId,
     link: Schema.optional(Schema.String),
     lastRunStatus: ScheduledTask.fields.lastRunStatus,
+    lastRunError: ScheduledTask.fields.lastRunError,
     runCount: NonNegativeInt,
     nextRunAt: ScheduledTask.fields.nextRunAt,
   }),

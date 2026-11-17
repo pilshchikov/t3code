@@ -1,5 +1,30 @@
 # Fork Changes
 
+## Upstream integration and GPT-6.2 models, 2026-11-17 (e5d757f51b)
+
+- Merges 711 upstream commits up to `e5d757f51b` with both histories intact. Fork behavior stays:
+  the `spilshchikov` worktree branch prefix, the scoped diff collapse store, the reworked sidebar
+  (upstream `SidebarProjectFolderHeader.tsx` stays deleted), disabled relay telemetry, chunked peer
+  waits, fork MCP toolkits and the Claude adapter's history worker, fork options and subagent
+  effort hooks.
+- Upstream issue RPCs run in their own `IssueWsRpcGroup` in `apps/server/src/ws.ts`. One combined
+  handler group exceeded the TypeScript instantiation limit and degraded requirements to `any`.
+- Upstream migrations 092 to 098 are appended as fork migrations 101 to 107 in
+  `apps/server/src/persistence/Migrations.ts`. Preview migrations open a transaction only when
+  migrations are pending.
+- Upstream's MCP check now rejects tools that act as the calling thread unless they are hidden
+  from outside clients. The fork's memory, thread workspace and peer tools carry that annotation
+  (`apps/server/src/mcp/toolkits/{memory,workspace,peers}.ts`). `t3_queue` clamps `limit` to 100.
+- Forwarded peer waits keep the fork's chunked loop, with 45 s chunks to match upstream's new
+  `t3_thread_wait` cap on the receiving server (`apps/server/src/peer/PeerForwarding.ts`).
+- GPT-6.2 Astra (`gpt-6.2-astra`) and GPT-6.2 Sol (`gpt-6.2-sol`) are current Codex models with a
+  minimum Codex CLI of 0.169.0 (`apps/server/src/provider/model-manifest.json`).
+- `agentContextBudget.json` measures 73810 MCP tool list bytes after upstream's issue tools.
+- Validation: `vp check` reports 0 errors and `vp run typecheck` passes. 38 test files beside the
+  conflicted sources, all 36 MCP and peer test files and the peer forwarding tests pass, except 4 upstream SSH launch-script
+  cases in `packages/ssh/src/tunnel.test.ts`. They expect `node` on `/usr/bin:/bin` and GNU tar,
+  which this macOS host lacks. The app was not rebuilt.
+
 ## Sketch canvas in the composer — 2026-11-15
 
 - A pencil-and-ruler button beside the microphone opens a floating, non-modal canvas. It has pen

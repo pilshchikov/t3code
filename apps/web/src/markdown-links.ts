@@ -85,10 +85,6 @@ export function shouldOpenMarkdownFileLinkInEditor(
   return isTerminalLinkActivation(event, platform);
 }
 
-export function shouldOpenMarkdownFileLinkInBrowserByDefault(path: string): boolean {
-  return /\.pdf$/i.test(path.split(/[?#]/, 1)[0] ?? "");
-}
-
 function safeDecode(value: string): string {
   try {
     return decodeURIComponent(value);
@@ -147,7 +143,6 @@ function parseFileUrlHref(
     return null;
   }
 }
-
 export function rewriteMarkdownFileUriHref(href: string | undefined): string | null {
   if (!href) return null;
   const normalizedHref = normalizeMarkdownLinkDestination(href);

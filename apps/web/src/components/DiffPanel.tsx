@@ -187,12 +187,14 @@ function DiffFileCollapseToggle({
 
 function DiffFileHeaderSuffix({
   filePath,
+  workspaceRoot,
   hasStat,
   error,
   truncated,
   onRetry,
 }: {
   filePath: string;
+  workspaceRoot: string | undefined;
   hasStat: boolean;
   error: boolean;
   truncated: boolean;
@@ -201,7 +203,7 @@ function DiffFileHeaderSuffix({
   return (
     <>
       <span data-diff-copy-path className="inline-flex">
-        <DiffFilePathCopyButton filePath={filePath} />
+        <DiffFilePathCopyButton filePath={filePath} workspaceRoot={workspaceRoot} />
       </span>
       {hasStat ? (
         <DiffFileStatus error={error} truncated={truncated} retry={() => onRetry(filePath)} />
@@ -253,9 +255,6 @@ export default function DiffPanel({
       : null,
   );
   const primaryCwd = activeThread?.worktreePath ?? activeProject?.workspaceRoot;
-  const activeRepositoryRoot = activeThread?.worktreePath
-    ? undefined
-    : activeProject?.repositoryIdentity?.rootPath;
   const diffRoots = useMemo(() => {
     if (!primaryCwd) return [];
     const configuredRoots = activeProject?.workspaceRoots?.length
@@ -312,6 +311,12 @@ export default function DiffPanel({
         })
       : null,
   );
+  const activeRepositoryRoot =
+    gitStatusQuery.data?.workingTree.rootPath ??
+    (activeThread?.worktreePath ? undefined : activeProject?.repositoryIdentity?.rootPath);
+  // Turn and git diffs name files from the repository root; a tool call's diff names them as
+  // its provider recorded them, absolute or relative to the workspace.
+  const diffPathRepositoryRoot = toolCallSelection ? undefined : activeRepositoryRoot;
   const rememberedBaseRef = useDiffPanelStore((state) =>
     selectThreadBranchBaseRef(state, routeThreadRef),
   );
@@ -355,9 +360,7 @@ export default function DiffPanel({
       : selectedGitScope === "commit"
         ? "commit"
         : "branch-range";
-  // @pierre/diffs trims trailing whitespace from parsed file names; leading whitespace survives.
-  const selectedFilePath =
-    diffSelection.kind === "turn" ? diffSelection.filePath?.trimEnd() || null : null;
+  const selectedFilePath = diffSelection.kind === "turn" ? (diffSelection.filePath ?? null) : null;
   const selectedFileRevealRequestId =
     diffSelection.kind === "turn" ? diffSelection.revealRequestId : 0;
   const selectedTurn =
@@ -957,7 +960,7 @@ export default function DiffPanel({
         threadRef: routeThreadRef,
         filePath,
         activeCwd,
-        repositoryRoot: activeRepositoryRoot,
+        repositoryRoot: diffPathRepositoryRoot,
         openInEditor: (targetPath) => {
           void (async () => {
             const result = await openInPreferredEditor(targetPath);
@@ -977,7 +980,7 @@ export default function DiffPanel({
         },
       });
     },
-    [activeCwd, activeRepositoryRoot, openInPreferredEditor, routeThreadRef],
+    [activeCwd, diffPathRepositoryRoot, openInPreferredEditor, routeThreadRef],
   );
   const collapseDefaultsRef = useRef({
     collapseScopeKey,
@@ -1012,16 +1015,16 @@ export default function DiffPanel({
     },
     [diffTreeFiles, revealDiffFile],
   );
-  // Find can ask again before the unfolded file reaches the viewer, so this must never fold.
-  const unfoldDiffFile = useCallback((fileKey: string) => {
+  const setDiffFileCollapsed = useCallback((fileKey: string, collapsed: boolean) => {
     const { collapseScopeKey, defaultCollapsedDiffFileKeys, setCollapsedDiffFiles } =
       collapseDefaultsRef.current;
     setCollapsedDiffFiles((current) => {
       const fileKeys =
         current.scopeKey === collapseScopeKey ? current.fileKeys : defaultCollapsedDiffFileKeys;
-      if (!fileKeys.has(fileKey)) return current;
+      if (fileKeys.has(fileKey) === collapsed) return current;
       const next = new Set(fileKeys);
-      next.delete(fileKey);
+      if (collapsed) next.add(fileKey);
+      else next.delete(fileKey);
       return { scopeKey: collapseScopeKey, fileKeys: next };
     });
   }, []);
@@ -1083,7 +1086,7 @@ export default function DiffPanel({
       viewerRef={attachCodeView}
       codeViewKey={`${codeViewMountKey}:${lazySource ? filePatchScope : (resolvedTreeFilePath ?? "all")}`}
       className="h-full min-h-0 overflow-auto"
-      onRevealSearchMatch={unfoldDiffFile}
+      onFileCollapsedChange={setDiffFileCollapsed}
       files={visibleCodeViewFiles}
       pendingFiles={renderableFiles.filter(
         (file) => file.cacheKey?.endsWith(":pending") && isFileShown(resolveFileDiffPath(file)),
@@ -1098,6 +1101,7 @@ export default function DiffPanel({
         return (
           <DiffFileHeaderSuffix
             filePath={path}
+            workspaceRoot={activeCwd}
             hasStat={fileStats.has(path)}
             error={state?.error ?? false}
             truncated={state?.truncated ?? false}
@@ -1755,7 +1759,7 @@ export default function DiffPanel({
                     environmentId: activeThread?.environmentId ?? null,
                     filePath,
                     workspaceRoot: activeCwd,
-                    repositoryRoot: activeRepositoryRoot,
+                    repositoryRoot: diffPathRepositoryRoot,
                   },
                   event,
                 );

@@ -7,6 +7,7 @@ import * as CommandReceipts from "./CommandReceiptStore.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { assert, it } from "@effect/vitest";
+import * as TestClock from "effect/testing/TestClock";
 import {
   ChatAttachmentId,
   CommandId,
@@ -1327,6 +1328,10 @@ it.effect("restarts the turn for an image when native steering takes text only",
       const orchestrator = yield* Orchestrator.OrchestratorV2;
       const worker = yield* EffectWorker.OrchestrationEffectWorkerV2;
       const threadId = yield* startFirstTurn;
+      const before = yield* orchestrator.getThreadProjection(threadId);
+      const originalStart = before.runs[0]!.startedAt;
+      assert.isNotNull(originalStart);
+      yield* TestClock.adjust("10 seconds");
       yield* orchestrator.dispatch({
         type: "message.dispatch",
         commandId: CommandId.make("steer-image"),
@@ -1348,6 +1353,16 @@ it.effect("restarts the turn for an image when native steering takes text only",
         creationSource: "web",
       });
       yield* worker.drain();
+      const after = yield* orchestrator.getThreadProjection(threadId);
+      assert.equal(after.runs[0]?.id, before.runs[0]?.id);
+      assert.deepEqual(after.runs[0]?.startedAt, originalStart);
+      assert.equal(after.attempts[0]?.status, "superseded");
+      const restartedAt = yield* DateTime.now;
+      assert.deepEqual(after.attempts[1]?.startedAt, restartedAt);
+      assert.deepEqual(
+        after.nodes.find((node) => node.id === after.runs[0]?.rootNodeId)?.startedAt,
+        restartedAt,
+      );
       assert.deepEqual(steered, []);
       assert.deepEqual(
         started.map((turn) => [turn.message.text, turn.message.attachments.length]),

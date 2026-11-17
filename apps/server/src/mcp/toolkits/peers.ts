@@ -21,7 +21,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { Tool, Toolkit } from "effect/ai";
+import { McpSchema, Tool, Toolkit } from "effect/ai";
 
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import * as ThreadManagementService from "../../orchestration-v2/ThreadManagementService.ts";
@@ -29,7 +29,7 @@ import * as Peers from "../../peers/Peers.ts";
 import * as PeerThreadMessaging from "../../peers/PeerThreadMessaging.ts";
 import * as ProjectService from "../../project/ProjectService.ts";
 import * as ThreadMove from "../../peer/ThreadMove.ts";
-import { McpInvocationContext } from "../McpInvocationContext.ts";
+import { hiddenFromOutsideClients, McpInvocationContext } from "../McpInvocationContext.ts";
 import * as McpToolAccess from "../McpToolAccess.ts";
 import { loadCaller, readCaller, unavailable } from "../threadAccess.ts";
 
@@ -58,7 +58,8 @@ const list = Tool.make("t3_peers_list", {
   }),
 })
   .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false);
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, hiddenFromOutsideClients);
 
 const environmentRead = Tool.make("t3_peer_environment_read", {
   ...shared,
@@ -68,7 +69,8 @@ const environmentRead = Tool.make("t3_peer_environment_read", {
   success: PeerEnvironmentSnapshot,
 })
   .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false);
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, hiddenFromOutsideClients);
 
 const filesList = Tool.make("t3_peer_files_list", {
   ...shared,
@@ -84,7 +86,8 @@ const filesList = Tool.make("t3_peer_files_list", {
   success: PeerFilesListResult,
 })
   .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false);
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, hiddenFromOutsideClients);
 
 const fileRead = Tool.make("t3_peer_file_read", {
   ...shared,
@@ -101,7 +104,8 @@ const fileRead = Tool.make("t3_peer_file_read", {
   }),
 })
   .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false);
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, hiddenFromOutsideClients);
 
 const copy = Tool.make("t3_peer_copy", {
   ...shared,
@@ -147,7 +151,8 @@ const threadsList = Tool.make("t3_peer_threads_list", {
   success: PeerThreadsListResult,
 })
   .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false);
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, hiddenFromOutsideClients);
 const threadRead = Tool.make("t3_peer_thread_read", {
   ...shared,
   description:
@@ -156,7 +161,8 @@ const threadRead = Tool.make("t3_peer_thread_read", {
   success: PeerThreadReadResult,
 })
   .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false);
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, hiddenFromOutsideClients);
 const threadSend = Tool.make("t3_peer_thread_send", {
   ...shared,
   description:
@@ -165,7 +171,8 @@ const threadSend = Tool.make("t3_peer_thread_send", {
   success: PeerThreadMessageResult,
 })
   .annotate(Tool.Readonly, false)
-  .annotate(Tool.Destructive, false);
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, hiddenFromOutsideClients);
 const threadQueue = Tool.make("t3_peer_thread_queue", {
   ...shared,
   description:
@@ -174,7 +181,8 @@ const threadQueue = Tool.make("t3_peer_thread_queue", {
   success: ThreadQueueResult,
 })
   .annotate(Tool.Readonly, false)
-  .annotate(Tool.Destructive, true);
+  .annotate(Tool.Destructive, true)
+  .annotate(McpSchema.EnabledWhen, hiddenFromOutsideClients);
 const threadWatch = Tool.make("t3_peer_thread_watch", {
   ...shared,
   description:
@@ -183,7 +191,8 @@ const threadWatch = Tool.make("t3_peer_thread_watch", {
   success: PeerThreadWatch,
 })
   .annotate(Tool.Readonly, false)
-  .annotate(Tool.Destructive, false);
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, hiddenFromOutsideClients);
 const threadUnwatch = Tool.make("t3_peer_thread_unwatch", {
   ...shared,
   description:
@@ -195,7 +204,8 @@ const threadUnwatch = Tool.make("t3_peer_thread_unwatch", {
   success: Schema.Struct({ stopped: Schema.Boolean }),
 })
   .annotate(Tool.Readonly, false)
-  .annotate(Tool.Destructive, false);
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, hiddenFromOutsideClients);
 const watches = Tool.make("t3_peer_thread_watches", {
   ...shared,
   description:
@@ -203,7 +213,8 @@ const watches = Tool.make("t3_peer_thread_watches", {
   success: Schema.Struct({ watches: Schema.Array(PeerThreadWatch) }),
 })
   .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false);
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, hiddenFromOutsideClients);
 
 export const PeersToolkit = Toolkit.make(
   list,

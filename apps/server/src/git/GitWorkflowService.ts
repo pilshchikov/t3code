@@ -74,6 +74,7 @@ export class GitWorkflowService extends Context.Service<
     ) => Effect.Effect<VcsStatusResult, GitManagerServiceError>;
     readonly localStatus: (
       input: VcsStatusInput,
+      options?: GitManager.GitLocalStatusOptions,
     ) => Effect.Effect<VcsStatusLocalResult, GitManagerServiceError>;
     readonly currentBranch: (cwd: string) => Effect.Effect<string | null, GitManagerServiceError>;
     readonly upstreamDivergence: (cwd: string) => Effect.Effect<
@@ -152,6 +153,10 @@ export class GitWorkflowService extends Context.Service<
       { readonly commitSha: string; readonly remoteRefName: string } | null,
       GitCommandError
     >;
+    readonly resolveDefaultBranchName: (
+      cwd: string,
+      remoteName: string,
+    ) => Effect.Effect<string | null, GitCommandError>;
     readonly removeWorktree: (
       input: VcsRemoveWorktreeInput,
     ) => Effect.Effect<void, GitCommandError>;
@@ -398,11 +403,11 @@ export const make = Effect.gen(function* () {
         ),
       );
     }),
-    localStatus: Effect.fn("GitWorkflowService.localStatus")(function (input) {
+    localStatus: Effect.fn("GitWorkflowService.localStatus")(function (input, options) {
       return detectGitRepositoryForStatus("GitWorkflowService.localStatus", input.cwd).pipe(
         Effect.flatMap((isGitRepository) =>
           isGitRepository
-            ? gitManager.localStatus(input)
+            ? gitManager.localStatus(input, options)
             : Effect.succeed(nonRepositoryLocalStatus()),
         ),
       );
@@ -562,6 +567,13 @@ export const make = Effect.gen(function* () {
       function (input) {
         return ensureGitCommand("GitWorkflowService.fetchWorktreeBaseCommit", input.cwd).pipe(
           Effect.andThen(git.fetchWorktreeBaseCommit(input)),
+        );
+      },
+    ),
+    resolveDefaultBranchName: Effect.fn("GitWorkflowService.resolveDefaultBranchName")(
+      function (cwd, remoteName) {
+        return ensureGitCommand("GitWorkflowService.resolveDefaultBranchName", cwd).pipe(
+          Effect.andThen(git.resolveDefaultBranchName(cwd, remoteName)),
         );
       },
     ),

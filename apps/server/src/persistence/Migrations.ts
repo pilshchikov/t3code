@@ -129,6 +129,13 @@ import Migration0097 from "./Migrations/088_TurnItemTypeStatusIndex.ts";
 import Migration0098 from "./Migrations/089_ShellThreadReadIndexes.ts";
 import Migration0099 from "./Migrations/090_AuthConnectDevices.ts";
 import Migration0100 from "./Migrations/091_AuthConnectDeniedRequests.ts";
+import Migration0101 from "./Migrations/092_QueuedTurnInputIndexJsonValid.ts";
+import Migration0102 from "./Migrations/093_ProviderTurnAttemptIndex.ts";
+import Migration0103 from "./Migrations/094_TurnItemMessageOrdinalIndex.ts";
+import Migration0104 from "./Migrations/095_TurnItemInlineWorkOutput.ts";
+import Migration0105 from "./Migrations/096_RepairStaleTitleRegeneration.ts";
+import Migration0106 from "./Migrations/097_IssueTrackerBindings.ts";
+import Migration0107 from "./Migrations/098_ActiveShellIndexIndexes.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -231,6 +238,13 @@ const migrationEntries = [
   [98, "ShellThreadReadIndexes", Migration0098],
   [99, "AuthConnectDevices", Migration0099],
   [100, "AuthConnectDeniedRequests", Migration0100],
+  [101, "QueuedTurnInputIndexJsonValid", Migration0101],
+  [102, "ProviderTurnAttemptIndex", Migration0102],
+  [103, "TurnItemMessageOrdinalIndex", Migration0103],
+  [104, "TurnItemInlineWorkOutput", Migration0104],
+  [105, "RepairStaleTitleRegeneration", Migration0105],
+  [106, "IssueTrackerBindings", Migration0106],
+  [107, "ActiveShellIndexIndexes", Migration0107],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);
@@ -319,49 +333,53 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
   toMigrationInclusive,
 }: RunMigrationsOptions = {}) {
   // The desktop waits past its readiness budget until the finished line follows this one.
-  if (yield* hasPendingMigrations()) yield* Effect.log(DATABASE_MIGRATIONS_STARTED_MESSAGE);
+  const hasPending = yield* hasPendingMigrations();
+  if (hasPending) yield* Effect.log(DATABASE_MIGRATIONS_STARTED_MESSAGE);
   const sql = yield* SqlClient.SqlClient;
   const includesV2 =
     toMigrationInclusive === undefined || toMigrationInclusive >= FIRST_V2_MIGRATION_ID;
-  const previewMigrations = yield* sql.withTransaction(
-    Effect.gen(function* () {
-      const reconciled = includesV2 ? yield* reconcileV2PreviewMigration() : [];
-      if (reconciled.length === 0) return reconciled;
-      // Genuine upstream previews used the upstream ledger. Translate only that
-      // detected history; released fork ids must never be renumbered.
-      const history = yield* sql<{ migration_id: number; name: string }>`
+  // The reconcile takes the write lock; CLI startup must not contend with the server for a no-op.
+  const previewMigrations = !(includesV2 && hasPending)
+    ? []
+    : yield* sql.withTransaction(
+        Effect.gen(function* () {
+          const reconciled = yield* reconcileV2PreviewMigration();
+          if (reconciled.length === 0) return reconciled;
+          // Genuine upstream previews used the upstream ledger. Translate only that
+          // detected history; released fork ids must never be renumbered.
+          const history = yield* sql<{ migration_id: number; name: string }>`
         SELECT migration_id, name FROM effect_sql_migrations WHERE migration_id >= 43
       `;
-      yield* sql`UPDATE effect_sql_migrations SET migration_id = migration_id + 1000 WHERE migration_id >= 43`;
-      for (const row of history) {
-        const entry = migrationEntries.find(
-          ([, name]) =>
-            name === row.name ||
-            (name === "OrchestrationV2RedundantIndexes" &&
-              row.name === "RemoveRedundantProjectionIndexes"),
-        );
-        if (entry === undefined)
-          return yield* new Migrator.MigrationError({
-            kind: "BadState",
-            message: `Cannot map preview migration ${row.migration_id}:${row.name} into fork history.`,
-          });
-        yield* sql`UPDATE effect_sql_migrations SET migration_id = ${entry[0]}, name = ${entry[1]}
+          yield* sql`UPDATE effect_sql_migrations SET migration_id = migration_id + 1000 WHERE migration_id >= 43`;
+          for (const row of history) {
+            const entry = migrationEntries.find(
+              ([, name]) =>
+                name === row.name ||
+                (name === "OrchestrationV2RedundantIndexes" &&
+                  row.name === "RemoveRedundantProjectionIndexes"),
+            );
+            if (entry === undefined)
+              return yield* new Migrator.MigrationError({
+                kind: "BadState",
+                message: `Cannot map preview migration ${row.migration_id}:${row.name} into fork history.`,
+              });
+            yield* sql`UPDATE effect_sql_migrations SET migration_id = ${entry[0]}, name = ${entry[1]}
           WHERE migration_id = ${row.migration_id + 1000}`;
-      }
-      yield* Migration0043;
-      yield* Migration0044;
-      yield* sql`INSERT OR IGNORE INTO effect_sql_migrations (migration_id, name) VALUES
+          }
+          yield* Migration0043;
+          yield* Migration0044;
+          yield* sql`INSERT OR IGNORE INTO effect_sql_migrations (migration_id, name) VALUES
         (43, 'AuthSessionClientConnectionCompat'), (44, 'ProjectionProjectWorkspaceRootsCompat')`;
-      // These fork additions predate V2 in the fork, but are absent in upstream previews.
-      if (!history.some((row) => row.name === "ProjectMemories")) yield* Migration0052;
-      if (!history.some((row) => row.name === "UsageLimitHistory")) yield* Migration0054;
-      yield* sql`INSERT OR IGNORE INTO effect_sql_migrations (migration_id, name) VALUES (52, 'ProjectMemories'), (54, 'UsageLimitHistory')`;
-      return reconciled.map(([, name]) => {
-        const entry = migrationEntries.find(([, expected]) => expected === name)!;
-        return [entry[0], entry[1]] as const;
-      });
-    }),
-  );
+          // These fork additions predate V2 in the fork, but are absent in upstream previews.
+          if (!history.some((row) => row.name === "ProjectMemories")) yield* Migration0052;
+          if (!history.some((row) => row.name === "UsageLimitHistory")) yield* Migration0054;
+          yield* sql`INSERT OR IGNORE INTO effect_sql_migrations (migration_id, name) VALUES (52, 'ProjectMemories'), (54, 'UsageLimitHistory')`;
+          return reconciled.map(([, name]) => {
+            const entry = migrationEntries.find(([, expected]) => expected === name)!;
+            return [entry[0], entry[1]] as const;
+          });
+        }),
+      );
   if (includesV2) {
     yield* assertV2MigrationsCanRun(toMigrationInclusive);
   }

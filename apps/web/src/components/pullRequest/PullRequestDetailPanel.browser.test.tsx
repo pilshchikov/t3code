@@ -611,6 +611,7 @@ it("restores the selected PR tab when switching threads and remounting the right
           onBack: undefined,
         }}
         gitHistory={null}
+        issuesSupported={false}
         sideChatParentPanel={{ openToolDiff: () => {}, runShellCommand: () => {} }}
       />
     );

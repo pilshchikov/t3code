@@ -12,8 +12,9 @@ import {
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 import * as Effect from "effect/Effect";
-import { Tool, Toolkit } from "effect/ai";
+import { McpSchema, Tool, Toolkit } from "effect/ai";
 import {
+  hiddenFromOutsideClients,
   McpInvocationContext,
   requireMcpCapability,
   requireThreadScope,
@@ -31,7 +32,8 @@ const inspect = Tool.make("thread_workspace_inspect", {
   dependencies,
 })
   .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false);
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, hiddenFromOutsideClients);
 const create = Tool.make("thread_workspace_create", {
   description:
     "Create and SELECT a new worktree for an additional repository in this thread. Set workspaceRoot explicitly for that repository. Call BEFORE editing so T3's Files selectors follow your work. The primary checkout can only change when the thread has no active or background work; attempting to move your own running session is rejected without creating a worktree. From the project root use t3_worktree_handoff with continuationPrompt for an explicit primary handoff, or t3_thread_launch with workspaceStrategy for a separate thread. Uncommitted files are not transferred; run setup yourself. Use the returned cwd explicitly in running tools.",
@@ -42,7 +44,8 @@ const create = Tool.make("thread_workspace_create", {
   dependencies,
 })
   .annotate(Tool.Readonly, false)
-  .annotate(Tool.Destructive, false);
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, hiddenFromOutsideClients);
 const select = Tool.make("thread_workspace_select", {
   description:
     "SELECT an existing checkout for one repository in this thread and update its Files selector. Set workspaceRoot for an additional repository, omit it for the primary. Additional repositories can change while you work; the primary checkout is pinned while any turn, question or background work is active, so do not use this tool to move your own running session. Selecting its current checkout is harmless. Provide path from inspect or a branch name (creates a safe linked worktree if necessary). Select each additional repository BEFORE editing. For other primary work, use its absolute cwd or t3_thread_launch with an existing_worktree workspaceStrategy. No forced checkout, deletion or moving uncommitted files. Use returned cwd explicitly.",
@@ -53,7 +56,8 @@ const select = Tool.make("thread_workspace_select", {
   dependencies,
 })
   .annotate(Tool.Readonly, false)
-  .annotate(Tool.Destructive, false);
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, hiddenFromOutsideClients);
 export const WorkspaceToolkit = Toolkit.make(inspect, create, select);
 
 export const WorkspaceHandlersLive = McpToolAccess.toLayer(
