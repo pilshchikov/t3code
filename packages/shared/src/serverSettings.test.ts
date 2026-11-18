@@ -91,6 +91,31 @@ describe("fallbackTextGenerationModelSelection", () => {
 });
 
 describe("serverSettings helpers", () => {
+  it("replaces a desktop project layout so removed links and overrides stay removed", () => {
+    const layout = {
+      order: ["home:/repo"],
+      groups: [],
+      sidebarProjectGroupingMode: "repository",
+      sidebarProjectGroupingOverrides: { "home:/repo": "separate" },
+      sidebarProjectLinks: { "home:/repo": "repo:other" },
+    } as const;
+    const saved = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      desktopProjectLayout: layout,
+    });
+    const next = {
+      ...layout,
+      order: [],
+      sidebarProjectGroupingOverrides: {},
+      sidebarProjectLinks: {},
+    };
+    expect(
+      applyServerSettingsPatch(saved, { desktopProjectLayout: next }).desktopProjectLayout,
+    ).toEqual(next);
+    expect(
+      applyServerSettingsPatch(saved, { desktopProjectLayout: null }).desktopProjectLayout,
+    ).toBeNull();
+  });
+
   it("translates a shipped client's idle compaction switch into a mode", () => {
     const off = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, { idleCompaction: "off" });
     expect([off.idleCompaction, off.compactIdleThreads]).toEqual(["off", false]);

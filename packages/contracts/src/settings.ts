@@ -88,6 +88,35 @@ export const SidebarProjectGroupingMode = Schema.Literals([
 ]);
 export type SidebarProjectGroupingMode = typeof SidebarProjectGroupingMode.Type;
 const DEFAULT_SIDEBAR_PROJECT_GROUPING_MODE: SidebarProjectGroupingMode = "repository";
+
+export const PROJECT_RAIL_GROUP_COLORS = [
+  "gray",
+  "red",
+  "orange",
+  "amber",
+  "green",
+  "teal",
+  "sky",
+  "blue",
+  "violet",
+  "pink",
+] as const;
+const ProjectRailGroup = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  name: Schema.String.check(Schema.isMaxLength(80)),
+  color: Schema.Literals(PROJECT_RAIL_GROUP_COLORS),
+  collapsed: Schema.Boolean,
+  members: Schema.Array(TrimmedNonEmptyString),
+});
+export const DesktopProjectLayout = Schema.Struct({
+  order: Schema.Array(TrimmedNonEmptyString),
+  groups: Schema.Array(ProjectRailGroup),
+  sidebarProjectGroupingMode: SidebarProjectGroupingMode,
+  sidebarProjectGroupingOverrides: Schema.Record(TrimmedNonEmptyString, SidebarProjectGroupingMode),
+  sidebarProjectLinks: Schema.Record(TrimmedNonEmptyString, TrimmedNonEmptyString),
+});
+export type DesktopProjectLayout = typeof DesktopProjectLayout.Type;
+
 export const MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS = 1;
 export const MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS = 90;
 export const SidebarAutoSettleAfterDays = Schema.Number.check(
@@ -1519,6 +1548,9 @@ export const CloudSpeechCredentials = Schema.Struct({
 });
 
 export const ServerSettings = Schema.Struct({
+  desktopProjectLayout: Schema.NullOr(DesktopProjectLayout).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   idleCompactionEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   idleCompactionAllowBackgroundWork: Schema.Boolean.pipe(
     Schema.withDecodingDefault(Effect.succeed(true)),
@@ -1975,6 +2007,7 @@ const ModelSelectionPatch = Schema.Struct({
 });
 
 export const ServerSettingsPatch = Schema.Struct({
+  desktopProjectLayout: Schema.optionalKey(Schema.NullOr(DesktopProjectLayout)),
   idleCompactionEnabled: Schema.optionalKey(Schema.Boolean),
   idleCompactionAllowBackgroundWork: Schema.optionalKey(Schema.Boolean),
   idleCompactionMinutes: Schema.optionalKey(IdleCompactionMinutes),

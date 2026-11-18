@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { Platform, ScrollView } from "react-native";
 import type { MenuProps } from "../../components/ui/Menu.types";
 import { ListFilterMenu } from "../layout/workspace/ListFilterMenu";
+import { desktopProjectLayoutAtom } from "../../state/desktop-project-layout";
 import { environmentProjects } from "../../state/projects";
 import { environmentThreadShells } from "../../state/threads";
 import { useMobileProjectGroupingSettings } from "../../state/project-grouping";
@@ -72,15 +73,18 @@ const sidebarProjectOrderFamily = Atom.family((mode: SidebarProjectGroupingMode)
         projects: get(environmentProjects.projectsAtom),
         environmentId: null,
         projectGroupingMode: mode,
+        desktopLayout: get(desktopProjectLayoutAtom),
       }),
       threads: get(environmentThreadShells.threadShellsAtom),
       pendingTasks: [],
       projectSortOrder: "updated_at",
-    }).map((scope) => ({
-      memberProjectRefs: scope.projectRefs,
-      pinned: scope.pinned,
-      archived: scope.archived,
-    })),
+    })
+      .filter((scope) => scope.railGroup !== "header")
+      .map((scope) => ({
+        memberProjectRefs: scope.projectRefs,
+        pinned: scope.pinned,
+        archived: scope.archived,
+      })),
   ).pipe(Atom.withEquality(sameProjectOrder)),
 );
 

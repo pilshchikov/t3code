@@ -1,3 +1,4 @@
+import { desktopProjectLayoutAtom } from "../../state/desktop-project-layout";
 import {
   WorkspaceColumnsRendererContext,
   WorkspacePresentationHostContext,
@@ -617,7 +618,12 @@ function AdaptiveWorkspaceLayoutContent(
         ? listFilters.environmentId
         : null;
     const filteredScope = resolveHomeProjectFilterScope(
-      buildHomeProjectScopes({ projects, environmentId: listEnvironmentId, projectGroupingMode }),
+      buildHomeProjectScopes({
+        projects,
+        environmentId: listEnvironmentId,
+        projectGroupingMode,
+        desktopLayout: appAtomRegistry.get(desktopProjectLayoutAtom),
+      }),
       projects,
       { selectedProjectKey: listFilters?.projectKey ?? null, projectGroupingMode },
     );

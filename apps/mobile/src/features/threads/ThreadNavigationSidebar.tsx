@@ -1,3 +1,4 @@
+import { desktopProjectLayoutAtom } from "../../state/desktop-project-layout";
 import { getConnectionAwareBrandHeaderOptions } from "../layout/workspace/brand-header-options";
 import {
   ProjectNavigationPanel,
@@ -7,7 +8,6 @@ import {
 import { useActiveNewTask } from "../../state/active-new-task";
 import { ThreadUndoNotice } from "../home/ThreadUndoNotice";
 import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
-import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
 import {
   useAppearancePreferences,
   useAndroidFloatingTabs,
@@ -62,6 +62,7 @@ import { useHomeListOptions } from "../home/home-list-options";
 import { homeListFilterEnvironments } from "../home/home-list-filter-menu";
 import {
   buildHomeProjectScopes,
+  pickableHomeProjectScopes,
   resolveHomeProjectFilterScope,
   sortHomeProjectScopes,
 } from "../home/homeThreadList";
@@ -214,16 +215,18 @@ function ThreadNavigationSidebarPane(
           )
         ? [options.selectedEnvironmentId]
         : [];
+  const desktopLayout = useAtomValue(desktopProjectLayoutAtom);
   const projectScopes = useMemo(
     () =>
       buildHomeProjectScopes({
         projects,
         environmentId: options.selectedEnvironmentId,
         projectGroupingMode: options.projectGroupingMode,
+        desktopLayout,
       }),
-    [projects, options.selectedEnvironmentId, options.projectGroupingMode],
+    [desktopLayout, projects, options.selectedEnvironmentId, options.projectGroupingMode],
   );
-  const projectFilterOptions = pickableProjectGroups(
+  const projectFilterOptions = pickableHomeProjectScopes(
     sortHomeProjectScopes({
       scopes: projectScopes,
       threads,
@@ -684,7 +687,14 @@ function ThreadNavigationSidebarPane(
       <ProjectNavigationPanel
         mode={projectNavigationMode}
         environments={environments}
-        projects={projectScopes}
+        projects={pickableHomeProjectScopes(
+          sortHomeProjectScopes({
+            scopes: projectScopes,
+            threads,
+            pendingTasks: [],
+            projectSortOrder: options.projectSortOrder,
+          }),
+        )}
         selectedEnvironmentId={options.selectedEnvironmentId}
         selectedProjectKey={selectedProjectKey}
         onEnvironmentChange={setSelectedEnvironmentId}

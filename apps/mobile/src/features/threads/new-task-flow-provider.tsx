@@ -83,6 +83,7 @@ import {
   sortHomeProjectScopes,
   type HomeProjectScope,
 } from "../home/homeThreadList";
+import { desktopProjectLayoutAtom } from "../../state/desktop-project-layout";
 import { useMobileProjectGroupingSettings } from "../../state/project-grouping";
 import {
   resolveNewTaskDraftWorkspace,
@@ -229,17 +230,19 @@ export function NewTaskFlowProvider(
   const threads = useThreadShells();
   const { savedConnectionsById } = useSavedRemoteConnections();
   const groupingSettings = useMobileProjectGroupingSettings();
+  const desktopLayout = useAtomValue(desktopProjectLayoutAtom);
 
   const projectScopes = sortHomeProjectScopes({
     scopes: buildHomeProjectScopes({
       projects,
       environmentId: null,
       projectGroupingMode: groupingSettings.sidebarProjectGroupingMode,
+      desktopLayout,
     }),
     threads,
     pendingTasks: [],
     projectSortOrder: "updated_at",
-  });
+  }).filter((scope) => scope.railGroup !== "header");
 
   const flowKey = props.flowKey ?? INACTIVE_FLOW_KEY;
   const storedFlowState = useAtomValue(newTaskFlowStateAtom(flowKey));

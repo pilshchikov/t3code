@@ -1,46 +1,21 @@
-export const RAIL_GROUP_COLORS = [
-  "gray",
-  "red",
-  "orange",
-  "amber",
-  "green",
-  "teal",
-  "sky",
-  "blue",
-  "violet",
-  "pink",
-] as const;
+import { PROJECT_RAIL_GROUP_COLORS as RAIL_GROUP_COLORS } from "@t3tools/contracts/settings";
+import type { RailEntry, RailGroup } from "@t3tools/client-runtime/state/project-grouping";
+
+export { RAIL_GROUP_COLORS };
+export {
+  buildRailLayout,
+  railGroupIdFromScopeKey,
+  railGroupName,
+  railGroupScopeKey,
+  type RailEntry,
+  type RailGroup,
+} from "@t3tools/client-runtime/state/project-grouping";
 export type RailGroupColor = (typeof RAIL_GROUP_COLORS)[number];
-
-export interface RailGroup {
-  readonly id: string;
-  readonly name: string;
-  readonly color: RailGroupColor;
-  readonly collapsed: boolean;
-  /** Logical project keys, in rail order. */
-  readonly members: ReadonlyArray<string>;
-}
-
-export type RailEntry =
-  | { readonly kind: "project"; readonly key: string }
-  | { readonly kind: "group"; readonly group: RailGroup; readonly members: ReadonlyArray<string> };
 
 /** Top-level rail tokens: `p:<projectKey>` or `g:<groupId>`. */
 export interface RailModel {
   readonly order: ReadonlyArray<string>;
   readonly groups: ReadonlyArray<RailGroup>;
-}
-
-const RAIL_GROUP_SCOPE_PREFIX = "rail-group:";
-
-export function railGroupScopeKey(groupId: string): string {
-  return `${RAIL_GROUP_SCOPE_PREFIX}${groupId}`;
-}
-
-export function railGroupIdFromScopeKey(key: string | null): string | null {
-  return key?.startsWith(RAIL_GROUP_SCOPE_PREFIX)
-    ? key.slice(RAIL_GROUP_SCOPE_PREFIX.length)
-    : null;
 }
 
 function isRailGroupColor(value: unknown): value is RailGroupColor {
@@ -78,10 +53,6 @@ export function sanitizeRailGroups(value: unknown): RailGroup[] {
   return groups;
 }
 
-export function railGroupName(group: Pick<RailGroup, "name">): string {
-  return group.name.trim() || "Unnamed group";
-}
-
 /** The label that fits a 46px chip in the short rail. */
 export function railGroupShortLabel(name: string): string {
   const trimmed = name.trim();
@@ -101,41 +72,6 @@ export function railGroupShortLabel(name: string): string {
 export function nextRailGroupColor(groups: ReadonlyArray<RailGroup>): RailGroupColor {
   const used = new Set(groups.map((group) => group.color));
   return RAIL_GROUP_COLORS.find((color) => color !== "gray" && !used.has(color)) ?? "gray";
-}
-
-/**
- * Lays the rail out from the manual project order. A group sits where its
- * first member does, and members a project list no longer has stay stored but
- * are not shown, so a disconnected environment does not empty a group.
- */
-export function buildRailLayout(
-  projectKeys: ReadonlyArray<string>,
-  groups: ReadonlyArray<RailGroup>,
-  settledProjectKeys: ReadonlySet<string> = new Set(),
-): RailEntry[] {
-  const known = new Set(projectKeys.filter((key) => !settledProjectKeys.has(key)));
-  const owner = new Map<string, RailGroup>();
-  for (const group of groups) {
-    for (const member of group.members) if (!owner.has(member)) owner.set(member, group);
-  }
-  const emitted = new Set<string>();
-  const entries: RailEntry[] = [];
-  for (const key of projectKeys) {
-    if (!known.has(key)) continue;
-    const group = owner.get(key);
-    if (!group) {
-      entries.push({ kind: "project", key });
-      continue;
-    }
-    if (emitted.has(group.id)) continue;
-    emitted.add(group.id);
-    entries.push({
-      kind: "group",
-      group,
-      members: group.members.filter((member) => known.has(member) && owner.get(member) === group),
-    });
-  }
-  return entries;
 }
 
 export function railModelFromLayout(

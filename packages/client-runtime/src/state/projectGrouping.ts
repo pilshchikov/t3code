@@ -6,7 +6,7 @@ import {
   type ScopedProjectRef,
   type SidebarProjectGroupingMode,
 } from "@t3tools/contracts";
-import type { ClientSettings } from "@t3tools/contracts/settings";
+import type { ClientSettings, DesktopProjectLayout } from "@t3tools/contracts/settings";
 
 import type { EnvironmentProject } from "./models.ts";
 import { normalizeProjectPathForComparison } from "./projects.ts";
@@ -472,4 +472,104 @@ export function sortProjectsByGroupOrder<
   const rankOf = (project: TProject) =>
     rankByProject.get(`${project.environmentId}\0${project.id}`) ?? groups.length;
   return [...projects].sort((left, right) => rankOf(left) - rankOf(right));
+}
+
+export function legacyProjectCwdPreferenceKey(cwd: string): string {
+  return `legacy-project-cwd:${normalizeProjectPathForComparison(cwd)}`;
+}
+
+export function orderItemsByPreferredIds<TItem, TId>(input: {
+  items: readonly TItem[];
+  preferredIds: readonly TId[];
+  getId: (item: TItem) => TId;
+  getPreferenceIds?: (item: TItem) => readonly TId[];
+}): TItem[] {
+  const { getId, getPreferenceIds, items, preferredIds } = input;
+  if (preferredIds.length === 0) {
+    return [...items];
+  }
+
+  const indexesByPreferenceId = new Map<TId, number[]>();
+  for (const [index, item] of items.entries()) {
+    const preferenceIds = getPreferenceIds?.(item) ?? [getId(item)];
+    for (const preferenceId of new Set(preferenceIds)) {
+      const indexes = indexesByPreferenceId.get(preferenceId);
+      if (indexes) {
+        indexes.push(index);
+      } else {
+        indexesByPreferenceId.set(preferenceId, [index]);
+      }
+    }
+  }
+
+  const emittedIndexes = new Set<number>();
+  const ordered = preferredIds.flatMap((id) => {
+    const index = indexesByPreferenceId
+      .get(id)
+      ?.find((candidate) => !emittedIndexes.has(candidate));
+    if (index === undefined) {
+      return [];
+    }
+    emittedIndexes.add(index);
+    return [items[index]!];
+  });
+  const remaining = items.filter((_, index) => !emittedIndexes.has(index));
+  return [...ordered, ...remaining];
+}
+
+export type RailGroup = DesktopProjectLayout["groups"][number];
+
+export type RailEntry =
+  | { readonly kind: "project"; readonly key: string }
+  | { readonly kind: "group"; readonly group: RailGroup; readonly members: ReadonlyArray<string> };
+
+const RAIL_GROUP_SCOPE_PREFIX = "rail-group:";
+
+export function railGroupScopeKey(groupId: string): string {
+  return `${RAIL_GROUP_SCOPE_PREFIX}${groupId}`;
+}
+
+export function railGroupIdFromScopeKey(key: string | null): string | null {
+  return key?.startsWith(RAIL_GROUP_SCOPE_PREFIX)
+    ? key.slice(RAIL_GROUP_SCOPE_PREFIX.length)
+    : null;
+}
+
+export function railGroupName(group: Pick<RailGroup, "name">): string {
+  return group.name.trim() || "Unnamed group";
+}
+
+/**
+ * Lays the rail out from the manual project order. A group sits where its
+ * first member does, and members a project list no longer has stay stored but
+ * are not shown, so a disconnected environment does not empty a group.
+ */
+export function buildRailLayout(
+  projectKeys: ReadonlyArray<string>,
+  groups: ReadonlyArray<RailGroup>,
+  settledProjectKeys: ReadonlySet<string> = new Set(),
+): RailEntry[] {
+  const known = new Set(projectKeys.filter((key) => !settledProjectKeys.has(key)));
+  const owner = new Map<string, RailGroup>();
+  for (const group of groups) {
+    for (const member of group.members) if (!owner.has(member)) owner.set(member, group);
+  }
+  const emitted = new Set<string>();
+  const entries: RailEntry[] = [];
+  for (const key of projectKeys) {
+    if (!known.has(key)) continue;
+    const group = owner.get(key);
+    if (!group) {
+      entries.push({ kind: "project", key });
+      continue;
+    }
+    if (emitted.has(group.id)) continue;
+    emitted.add(group.id);
+    entries.push({
+      kind: "group",
+      group,
+      members: group.members.filter((member) => known.has(member) && owner.get(member) === group),
+    });
+  }
+  return entries;
 }

@@ -17,19 +17,10 @@ import {
   type EnvironmentProject,
   type EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
-import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
-import { type EnvironmentId, type SidebarProjectGroupingMode } from "@t3tools/contracts";
+import type { EnvironmentId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
-import {
-  use,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentProps,
-} from "react";
+import { use, useEffect, useLayoutEffect, useRef, useState, type ComponentProps } from "react";
 import {
   Platform,
   ScrollView,
@@ -95,7 +86,8 @@ import {
 import { useThreadListV2ShelfPreferences } from "../threads/use-thread-list-v2-shelf-preferences";
 import type { HomeListFilterMenuEnvironment } from "./home-list-filter-menu";
 import {
-  buildHomeProjectScopes,
+  pickableHomeProjectScopes,
+  type HomeProjectScope,
   findHomeProjectScope,
   type HomeProjectSortOrder,
   sortHomeProjectScopes,
@@ -123,7 +115,7 @@ interface HomeScreenProps {
   readonly selectedEnvironmentId: EnvironmentId | null;
   readonly selectedProjectKey: string | null;
   readonly projectSortOrder: HomeProjectSortOrder;
-  readonly projectGroupingMode: SidebarProjectGroupingMode;
+  readonly projectScopes: ReadonlyArray<HomeProjectScope>;
   readonly onSearchQueryChange: (query: string) => void;
   readonly onEnvironmentChange: (environmentId: EnvironmentId | null) => void;
   readonly onProjectChange: (projectKey: string | null) => void;
@@ -325,16 +317,7 @@ export function HomeScreen(props: HomeScreenProps) {
     onScrollBeginDrag: handleScrollBeginDrag,
   });
 
-  const { projects, selectedEnvironmentId, projectGroupingMode } = props;
-  const projectScopes = useMemo(
-    () =>
-      buildHomeProjectScopes({
-        projects,
-        environmentId: selectedEnvironmentId,
-        projectGroupingMode,
-      }),
-    [projects, selectedEnvironmentId, projectGroupingMode],
-  );
+  const { projectScopes } = props;
   const hasSearchQuery = props.searchQuery.trim().length > 0;
   const projectByKey = (() => {
     const map = new Map<string, EnvironmentProject>();
@@ -347,7 +330,7 @@ export function HomeScreen(props: HomeScreenProps) {
   const v2ProjectScopeKey = props.selectedProjectKey;
   // An archived project's filter reads as all projects, matching the filter menu.
   const v2ScopedProjectGroup = findHomeProjectScope(
-    pickableProjectGroups(projectScopes),
+    pickableHomeProjectScopes(projectScopes),
     v2ProjectScopeKey,
   );
   const threadSearch = useThreadSearch(
@@ -688,7 +671,7 @@ export function HomeScreen(props: HomeScreenProps) {
         <ThreadListFilters
           gutter={sidebarSurface ? 8 : 0}
           environments={props.environments}
-          projects={pickableProjectGroups(
+          projects={pickableHomeProjectScopes(
             sortHomeProjectScopes({
               scopes: projectScopes,
               threads: props.threads,
@@ -842,7 +825,14 @@ export function HomeScreen(props: HomeScreenProps) {
         <ProjectNavigationPanel
           mode={projectNavigationMode}
           environments={props.environments}
-          projects={projectScopes}
+          projects={pickableHomeProjectScopes(
+            sortHomeProjectScopes({
+              scopes: projectScopes,
+              threads: props.threads,
+              pendingTasks: props.pendingTasks,
+              projectSortOrder: props.projectSortOrder,
+            }),
+          )}
           selectedEnvironmentId={props.selectedEnvironmentId}
           selectedProjectKey={props.selectedProjectKey}
           onEnvironmentChange={props.onEnvironmentChange}

@@ -111,6 +111,17 @@ const networkPathChanges = Stream.callback<"network-changed">((queue) =>
 );
 
 const layerWakeups = Wakeups.layer({
+  flushCaches: Stream.callback<void>((queue) =>
+    Effect.acquireRelease(
+      Effect.sync(() =>
+        AppState.addEventListener("change", (state) => {
+          // On iOS, inactive arrives before the app can be suspended in the background.
+          if (state === "inactive" || state === "background") Queue.offerUnsafe(queue, undefined);
+        }),
+      ),
+      (subscription) => Effect.sync(() => subscription.remove()),
+    ).pipe(Effect.asVoid),
+  ),
   changes: Stream.mergeAll(
     [
       Stream.callback<"application-active-probe" | "application-active-long">((queue) =>

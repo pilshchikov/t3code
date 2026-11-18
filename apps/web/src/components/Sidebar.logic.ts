@@ -837,44 +837,7 @@ export function shouldCreateNewThreadInCurrentProject(
   return shiftKey || openProjectGroupCount === 1 || projectGroupCount === 0;
 }
 
-export function orderItemsByPreferredIds<TItem, TId>(input: {
-  items: readonly TItem[];
-  preferredIds: readonly TId[];
-  getId: (item: TItem) => TId;
-  getPreferenceIds?: (item: TItem) => readonly TId[];
-}): TItem[] {
-  const { getId, getPreferenceIds, items, preferredIds } = input;
-  if (preferredIds.length === 0) {
-    return [...items];
-  }
-
-  const indexesByPreferenceId = new Map<TId, number[]>();
-  for (const [index, item] of items.entries()) {
-    const preferenceIds = getPreferenceIds?.(item) ?? [getId(item)];
-    for (const preferenceId of new Set(preferenceIds)) {
-      const indexes = indexesByPreferenceId.get(preferenceId);
-      if (indexes) {
-        indexes.push(index);
-      } else {
-        indexesByPreferenceId.set(preferenceId, [index]);
-      }
-    }
-  }
-
-  const emittedIndexes = new Set<number>();
-  const ordered = preferredIds.flatMap((id) => {
-    const index = indexesByPreferenceId
-      .get(id)
-      ?.find((candidate) => !emittedIndexes.has(candidate));
-    if (index === undefined) {
-      return [];
-    }
-    emittedIndexes.add(index);
-    return [items[index]!];
-  });
-  const remaining = items.filter((_, index) => !emittedIndexes.has(index));
-  return [...ordered, ...remaining];
-}
+export { orderItemsByPreferredIds } from "@t3tools/client-runtime/state/project-grouping";
 
 export function resolveAdjacentThreadId<T>(input: {
   threadIds: readonly T[];

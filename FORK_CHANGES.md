@@ -1,5 +1,17 @@
 # Fork Changes
 
+## Mobile thread cache and desktop project layout, 2026-11-18
+
+- Mobile flushes the current thread-list snapshot when the app goes inactive or into the
+  background, so short sessions persist deletions, settlement, and other changes before iOS
+  suspends the app. Startup uses that snapshot while the connection catches up.
+- Desktop publishes its saved project rail order, named groups, and grouping rules to its own
+  environment. The mobile picker uses the first enabled directly paired desktop with a published
+  layout and retains each project's environment identity. Group rows filter to the visible
+  member projects. Old hosts keep the existing mobile layout until upgraded.
+- Validation covers cache writes during the foreground throttle window, replacing the saved layout,
+  and matching the desktop order and group membership with multiple environments.
+
 ## Upstream integration and GPT-6.2 models, 2026-11-17 (e5d757f51b)
 
 - Merges 711 upstream commits up to `e5d757f51b` with both histories intact. Fork behavior stays:

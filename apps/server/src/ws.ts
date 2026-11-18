@@ -40,6 +40,7 @@ import {
   AuthAccessStreamError,
   type AuthAccessStreamEvent,
   AuthOrchestrationOperateScope,
+  AuthOrchestrationReadScope,
   type AuthEnvironmentScope,
   type ScheduledTaskListResult,
   AuthSessionId,
@@ -1558,6 +1559,15 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
   settingsClient: { readonly secretReferences: boolean },
 ) {
   const currentSessionId = currentSession.sessionId;
+  const settingsForClient = (
+    settings: Parameters<typeof ServerSettings.redactServerSettingsForClient>[0],
+  ) =>
+    ServerSettings.redactServerSettingsForClient(
+      currentSession.scopes.includes(AuthOrchestrationReadScope)
+        ? settings
+        : { ...settings, desktopProjectLayout: null },
+      settingsClient,
+    );
   const sql = yield* SqlClient.SqlClient;
   const threadManagement = yield* ThreadManagementService.ThreadManagementService;
   const intakeContext = yield* Effect.context<
@@ -1956,10 +1966,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
     const providers = options.workspaceSnapshotsOnDemand
       ? withoutWorkspaceSnapshots(commandProviders, options.catalogsPerCwd, options.catalogDigests)
       : commandProviders;
-    const settings = ServerSettings.redactServerSettingsForClient(
-      yield* serverSettings.getSettings,
-      settingsClient,
-    );
+    const settings = settingsForClient(yield* serverSettings.getSettings);
     const environment = yield* serverEnvironment.getDescriptor;
     const auth = yield* serverAuth.getDescriptor();
     const scratchWorkspaceRoot = yield* managedFolders.scratchRoot;
@@ -2812,9 +2819,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
         Effect.andThen(peerLinkRequests.answer(input)),
       ),
     [WS_METHODS.serverGetSettings]: (_input) =>
-      Effect.map(serverSettings.getSettings, (settings) =>
-        ServerSettings.redactServerSettingsForClient(settings, settingsClient),
-      ),
+      Effect.map(serverSettings.getSettings, settingsForClient),
     [WS_METHODS.serverUpdateSettings]:
       /* Request instrumentation already owns the span; keep this helper in that context. */
       Effect.fnUntraced(function* ({ patch, providerInstanceMutation }) {
@@ -2825,7 +2830,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
         const settings = yield* providerInstanceMutation === undefined
           ? serverSettings.updateSettings(nextPatch)
           : serverSettings.updateProviderInstance(providerInstanceMutation, nextPatch);
-        return ServerSettings.redactServerSettingsForClient(settings, settingsClient);
+        return settingsForClient(settings);
       }),
     [WS_METHODS.serverDiscoverSourceControl]: (_input) => sourceControlDiscovery.discover,
     [WS_METHODS.serverCheckSecretSource]: (input) => secretCheck.check(input.source),
@@ -3637,9 +3642,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
                 )
               : Stream.empty;
           const settingsUpdates = settingsChanges.pipe(
-            Stream.map((settings) =>
-              ServerSettings.redactServerSettingsForClient(settings, settingsClient),
-            ),
+            Stream.map(settingsForClient),
             Stream.map((settings) => ({
               version: 1 as const,
               type: "settingsUpdated" as const,

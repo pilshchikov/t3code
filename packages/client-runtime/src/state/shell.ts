@@ -256,6 +256,12 @@ export const makeEnvironmentShellState = Effect.fn("EnvironmentShellState.make")
   yield* Effect.addFinalizer(() => flushLiveShellSnapshot);
 
   yield* runCachePersistence(persistence, persist).pipe(Effect.forkScoped);
+  if (Option.isSome(wakeups) && wakeups.value.flushCaches !== undefined) {
+    yield* wakeups.value.flushCaches.pipe(
+      Stream.runForEach(() => flushLiveShellSnapshot),
+      Effect.forkScoped,
+    );
+  }
 
   const setDisconnected = Ref.set(awaitingCompletion, false).pipe(
     Effect.andThen(

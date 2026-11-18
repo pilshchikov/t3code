@@ -5,7 +5,11 @@ import type {
 import { EnvironmentId, ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { buildHomeProjectScopes, findHomeProjectScope } from "./homeThreadList";
+import {
+  buildHomeProjectScopes,
+  findHomeProjectScope,
+  sortHomeProjectScopes,
+} from "./homeThreadList";
 import { makeThreadShellFixture } from "../../test-fixtures";
 import { buildThreadListV2Items } from "../threads/threadListV2";
 
@@ -45,6 +49,56 @@ function makeThread(
 }
 
 describe("home project scopes", () => {
+  it("keeps the desktop rail order and named groups across environment filters", () => {
+    const home = EnvironmentId.make("home");
+    const remote = EnvironmentId.make("remote");
+    const [alpha, bravo, charlie] = ["Alpha", "Bravo", "Charlie"].map((title, index) =>
+      makeProject({ environmentId: index === 1 ? remote : home, id: ProjectId.make(title), title }),
+    ) as [EnvironmentProject, EnvironmentProject, EnvironmentProject];
+    const desktopLayout = {
+      order: ["home:/workspaces/Charlie", "remote:/workspaces/Bravo", "home:/workspaces/Alpha"],
+      groups: [
+        {
+          id: "work",
+          name: "Work",
+          color: "blue",
+          collapsed: true,
+          members: [
+            "remote:/workspaces/Bravo",
+            "missing:/workspaces/Removed",
+            "home:/workspaces/Alpha",
+          ],
+        },
+      ],
+      sidebarProjectGroupingMode: "separate",
+      sidebarProjectGroupingOverrides: {},
+      sidebarProjectLinks: {},
+    } as const;
+    const input = {
+      projects: [alpha, bravo, charlie],
+      projectGroupingMode: "repository",
+      desktopLayout,
+    } as const;
+    const scopes = buildHomeProjectScopes({ ...input, environmentId: null });
+    expect(
+      sortHomeProjectScopes({
+        scopes,
+        threads: [],
+        pendingTasks: [],
+        projectSortOrder: "updated_at",
+      }).map((scope) => scope.title),
+    ).toEqual(["Charlie", "Work", "Bravo", "Alpha"]);
+    expect(findHomeProjectScope(scopes, "rail-group:work")?.projectRefs).toEqual([
+      { environmentId: remote, projectId: bravo.id },
+      { environmentId: home, projectId: alpha.id },
+    ]);
+    const filtered = buildHomeProjectScopes({ ...input, environmentId: remote });
+    expect(filtered.map((scope) => scope.title)).toEqual(["Work", "Bravo"]);
+    expect(findHomeProjectScope(filtered, "rail-group:work")?.projectRefs).toEqual([
+      { environmentId: remote, projectId: bravo.id },
+    ]);
+  });
+
   it("retains each host's project icon and scoped identity when filtering", () => {
     const local = EnvironmentId.make("local");
     const remote = EnvironmentId.make("remote");

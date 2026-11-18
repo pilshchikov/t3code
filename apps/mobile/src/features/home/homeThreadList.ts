@@ -1,6 +1,12 @@
 import {
   buildProjectGroups,
+  buildRailLayout,
+  getProjectOrderKey,
+  legacyProjectCwdPreferenceKey,
+  orderItemsByPreferredIds,
   pickableProjectGroups,
+  railGroupName,
+  railGroupScopeKey,
   resolveScratchProjectScopeKey,
 } from "@t3tools/client-runtime/state/project-grouping";
 import type {
@@ -17,6 +23,7 @@ import type {
   SidebarProjectGroupingMode,
   SidebarProjectSortOrder,
 } from "@t3tools/contracts";
+import type { DesktopProjectLayout } from "@t3tools/contracts/settings";
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
 
@@ -33,6 +40,8 @@ export interface HomeProjectScope {
   readonly projectRefs: ReadonlyArray<ScopedProjectRef>;
   readonly pinned: boolean;
   readonly archived: boolean;
+  readonly desktopOrdered?: true;
+  readonly railGroup?: "header" | "member";
 }
 
 function getProjectSortTimestamp(
@@ -50,18 +59,30 @@ export function buildHomeProjectScopes(input: {
   readonly projects: ReadonlyArray<EnvironmentProject>;
   readonly environmentId: EnvironmentId | null;
   readonly projectGroupingMode: SidebarProjectGroupingMode;
+  readonly desktopLayout?: DesktopProjectLayout | null;
 }): ReadonlyArray<HomeProjectScope> {
   const projects = input.projects.filter(
     (project) => input.environmentId === null || project.environmentId === input.environmentId,
   );
-  return buildProjectGroups({
-    projects,
+  const layout = input.desktopLayout;
+  const scopes = buildProjectGroups({
+    projects: layout
+      ? orderItemsByPreferredIds({
+          items: projects,
+          preferredIds: layout.order,
+          getId: getProjectOrderKey,
+          getPreferenceIds: (project) => [
+            getProjectOrderKey(project),
+            legacyProjectCwdPreferenceKey(project.workspaceRoot),
+          ],
+        })
+      : projects,
     groupScratchProjects: true,
-    settings: {
+    settings: layout ?? {
       sidebarProjectGroupingMode: input.projectGroupingMode,
       sidebarProjectGroupingOverrides: {},
     },
-  }).map((group) => {
+  }).map((group): HomeProjectScope => {
     return {
       key: group.key,
       title: group.label,
@@ -72,6 +93,39 @@ export function buildHomeProjectScopes(input: {
       archived: group.archived,
     };
   });
+  if (!layout) return scopes;
+
+  const openScopes = scopes.filter((scope) => !scope.archived);
+  const byKey = new Map(openScopes.map((scope) => [scope.key, scope]));
+  const ordered: HomeProjectScope[] = [];
+  for (const entry of buildRailLayout([...byKey.keys()], layout.groups)) {
+    if (entry.kind === "project") {
+      ordered.push({ ...byKey.get(entry.key)!, desktopOrdered: true });
+      continue;
+    }
+    const members = entry.members.map((key) => byKey.get(key)!);
+    ordered.push({
+      key: railGroupScopeKey(entry.group.id),
+      title: railGroupName(entry.group),
+      representative: members[0]!.representative,
+      projects: members.flatMap((member) => member.projects),
+      projectRefs: members.flatMap((member) => member.projectRefs),
+      pinned: false,
+      archived: false,
+      desktopOrdered: true,
+      railGroup: "header",
+    });
+    for (const member of members) {
+      ordered.push({ ...member, desktopOrdered: true, railGroup: "member" });
+    }
+  }
+  return ordered;
+}
+
+export function pickableHomeProjectScopes(
+  scopes: ReadonlyArray<HomeProjectScope>,
+): ReadonlyArray<HomeProjectScope> {
+  return scopes[0]?.desktopOrdered === undefined ? pickableProjectGroups(scopes) : scopes;
 }
 
 /** The scope the thread list's project filter shows; an archived or unknown key shows all projects. */
@@ -89,7 +143,7 @@ export function resolveHomeProjectFilterScope(
     sidebarProjectGroupingMode: options.projectGroupingMode,
     sidebarProjectGroupingOverrides: {},
   });
-  return pickableProjectGroups(scopes).find((scope) => scope.key === key) ?? null;
+  return pickableHomeProjectScopes(scopes).find((scope) => scope.key === key) ?? null;
 }
 
 export function findHomeProjectScope(
@@ -116,6 +170,7 @@ export function sortHomeProjectScopes(input: {
   readonly pendingTasks: ReadonlyArray<PendingNewTask>;
   readonly projectSortOrder: HomeProjectSortOrder;
 }): ReadonlyArray<HomeProjectScope> {
+  if (input.scopes[0]?.desktopOrdered === true) return input.scopes;
   const scopeKeyByProjectRef = new Map(
     input.scopes.flatMap((scope) =>
       scope.projectRefs.map(

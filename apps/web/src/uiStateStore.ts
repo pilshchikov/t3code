@@ -2,7 +2,8 @@ import { Debouncer } from "@tanstack/react-pacer";
 import { PullRequestMergeMethod } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { create } from "zustand";
-import { normalizeProjectPathForComparison } from "@t3tools/client-runtime/state/projects";
+import { legacyProjectCwdPreferenceKey } from "@t3tools/client-runtime/state/project-grouping";
+export { legacyProjectCwdPreferenceKey } from "@t3tools/client-runtime/state/project-grouping";
 
 export const PERSISTED_STATE_KEY = "t3code:ui-state:v1";
 const THREAD_CHANGED_FILES_EXPANSION_VERSION = 2;
@@ -66,13 +67,8 @@ const initialState: UiState = {
   pullRequestMergeMethod: "merge",
 };
 
-const LEGACY_PROJECT_CWD_PREFERENCE_PREFIX = "legacy-project-cwd:";
 const LEGACY_PROJECT_EXPANSION_DEFAULT_KEY = "legacy-project-expansion-default";
 let legacyKeysCleanedUp = false;
-
-export function legacyProjectCwdPreferenceKey(cwd: string): string {
-  return `${LEGACY_PROJECT_CWD_PREFERENCE_PREFIX}${normalizeProjectPathForComparison(cwd)}`;
-}
 
 function sanitizeStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {

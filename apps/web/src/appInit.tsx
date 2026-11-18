@@ -40,6 +40,7 @@ import { startEnvironmentThemeRepaint } from "./hooks/useEnvironmentTheme";
 import { startThemeBackground } from "./themeBackground";
 import { readLocalStorageValue, subscribeLocalStorageKey } from "./hooks/useLocalStorage";
 import { startHostEnvironmentLookup } from "./state/primaryEnvironment";
+import { startDesktopProjectLayoutPublication } from "./lib/desktopProjectLayout";
 import {
   getClientSettings,
   startModelPreferencesMigration,
@@ -283,6 +284,7 @@ export function startAppServices(): AppRouter {
   startI18n();
   startDocumentTitle(router);
   startHostEnvironmentLookup();
+  startDesktopProjectLayoutPublication();
   startEnvironmentThemeRepaint();
   startThemeBackground();
   startBrowserChromeThemeSync(router);

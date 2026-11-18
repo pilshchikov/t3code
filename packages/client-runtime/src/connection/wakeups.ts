@@ -44,6 +44,7 @@ export class ConnectionWakeups extends Context.Service<
   ConnectionWakeups,
   {
     readonly changes: Stream.Stream<ConnectionWakeup>;
+    readonly flushCaches?: Stream.Stream<void>;
   }
 >()("@t3tools/client-runtime/connection/wakeups/ConnectionWakeups") {}
 

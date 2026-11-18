@@ -27,6 +27,7 @@ import {
   type PreparedConnection,
 } from "../connection/model.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import * as ConnectionWakeups from "../connection/wakeups.ts";
 import * as Persistence from "../platform/persistence.ts";
 import * as RpcSession from "../rpc/session.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
@@ -74,6 +75,7 @@ const makePersistenceHarness = Effect.fn("test.makeShellPersistenceHarness")(fun
   saveShell: Persistence.EnvironmentCacheStore["Service"]["saveShell"],
 ) {
   const events = yield* Queue.unbounded<OrchestrationV2ShellStreamItem>();
+  const appBackground = yield* Queue.unbounded<void>();
   const client = {
     [ORCHESTRATION_V2_WS_METHODS.subscribeShell]: () => Stream.fromQueue(events),
   } as unknown as WsRpcProtocolClient;
@@ -106,6 +108,10 @@ const makePersistenceHarness = Effect.fn("test.makeShellPersistenceHarness")(fun
     Effect.provideService(ShellSnapshotLoader.ShellSnapshotLoader, {
       load: () => Effect.succeedNone,
     }),
+    Effect.provideService(ConnectionWakeups.ConnectionWakeups, {
+      changes: Stream.never,
+      flushCaches: Stream.fromQueue(appBackground),
+    }),
   );
   const send = Effect.fn("test.sendShellItem")(function* (
     item: OrchestrationV2ShellStreamItem,
@@ -124,7 +130,7 @@ const makePersistenceHarness = Effect.fn("test.makeShellPersistenceHarness")(fun
     );
   });
   yield* send({ kind: "snapshot", snapshot: LIVE_SHELL_SNAPSHOT }, () => true);
-  return { state, send };
+  return { state, send, appBackground };
 });
 
 describe("environment shell synchronization", () => {
@@ -406,6 +412,30 @@ describe("environment shell synchronization", () => {
         }),
       );
       expect(yield* Ref.get(attempts)).toEqual([1, 2]);
+    }),
+  );
+
+  it.effect("saves the thread list that was shown before the app backgrounds", () =>
+    Effect.gen(function* () {
+      const writes = yield* Queue.unbounded<OrchestrationV2ShellSnapshot>();
+      const h = yield* makePersistenceHarness((_id, snapshot) => Queue.offer(writes, snapshot));
+      yield* TestClock.adjust("500 millis");
+      expect(yield* Queue.take(writes)).toEqual(LIVE_SHELL_SNAPSHOT);
+
+      const settledAt = v2ThreadShell.updatedAt;
+      const settledThread = { ...v2ThreadShell, id: ThreadId.make("settled"), settledAt };
+      yield* h.send(
+        { kind: "thread.updated", sequence: 2, location: "active", thread: settledThread },
+        (snapshot) => snapshot.snapshotSequence === 2,
+      );
+      const shown = yield* h.send(
+        { kind: "thread.removed", sequence: 3, location: "active", threadId: v2ThreadShell.id },
+        (snapshot) => snapshot.snapshotSequence === 3,
+      );
+      yield* Queue.offer(h.appBackground, undefined);
+      const saved = yield* Queue.take(writes);
+      expect(saved).toEqual(shown);
+      expect(saved.threads).toEqual([settledThread]);
     }),
   );
 

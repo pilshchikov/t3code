@@ -390,6 +390,7 @@ export function applyServerSettingsPatch(
   const patch = translateLegacyProjectOverridePatch(current, rawPatch);
   const selectionPatch = patch.textGenerationModelSelection;
   const {
+    desktopProjectLayout,
     migrateModelPreferences,
     setModelFavorites,
     setModelsHidden,
@@ -504,6 +505,7 @@ export function applyServerSettingsPatch(
   const next = deepMerge(current, patchForMerge);
   const nextWithReplacementsBase = {
     ...next,
+    ...(desktopProjectLayout === undefined ? {} : { desktopProjectLayout }),
     favorites,
     providerModelPreferences: nextModelPreferences,
     ...(worktreeCleanupPatch === undefined

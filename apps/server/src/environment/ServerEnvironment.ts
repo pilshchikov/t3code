@@ -283,6 +283,7 @@ export const make = Effect.gen(function* () {
       projectCloneTracking: true,
       projectOrganization: true,
       projectGroups: true,
+      desktopProjectLayout: true,
       threadMove: true,
       peerFileLargeChunks: true,
       peerFileArchives: true,

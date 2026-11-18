@@ -1,3 +1,5 @@
+import { desktopProjectLayoutAtom } from "../../state/desktop-project-layout";
+import { useAtomValue } from "@effect/atom-react";
 import { uuidv4 } from "../../lib/uuid";
 import { ThreadUndoNotice } from "./ThreadUndoNotice";
 import { use } from "react";
@@ -7,7 +9,6 @@ import { useMemo, useState } from "react";
 import { Platform } from "react-native";
 
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
 
 import { useProjects } from "../../state/entities";
 import { steadyNavigationThreadShellsAtom } from "../../state/threads";
@@ -28,6 +29,7 @@ import {
 } from "./home-route-visibility";
 import {
   buildHomeProjectScopes,
+  pickableHomeProjectScopes,
   resolveHomeProjectFilterScope,
   sortHomeProjectScopes,
 } from "./homeThreadList";
@@ -117,18 +119,20 @@ export function HomeRouteScreen() {
     setSelectedProjectKey,
   } = useHomeListOptions(availableEnvironmentIds);
   const selectedEnvironmentId = listOptions.selectedEnvironmentId;
+  const desktopLayout = useAtomValue(desktopProjectLayoutAtom);
   const projectScopes = useMemo(
     () =>
       buildHomeProjectScopes({
         projects,
         environmentId: selectedEnvironmentId,
         projectGroupingMode: listOptions.projectGroupingMode,
+        desktopLayout,
       }),
-    [listOptions.projectGroupingMode, projects, selectedEnvironmentId],
+    [desktopLayout, listOptions.projectGroupingMode, projects, selectedEnvironmentId],
   );
   const projectFilterOptions = useMemo(
     () =>
-      pickableProjectGroups(
+      pickableHomeProjectScopes(
         sortHomeProjectScopes({
           scopes: projectScopes,
           threads,
@@ -215,7 +219,7 @@ export function HomeRouteScreen() {
           }}
           onStartNewTask={startNewTask}
           pendingTasks={pendingTasks}
-          projectGroupingMode={listOptions.projectGroupingMode}
+          projectScopes={projectScopes}
           projects={projects}
           projectSortOrder={listOptions.projectSortOrder}
           savedConnectionsById={savedConnectionsById}

@@ -195,16 +195,26 @@ export function ProjectNavigationPanel(props: {
                         props.onProjectChange(scope.key);
                         props.onClose();
                       }}
-                      className={`min-h-16 flex-row items-center gap-3 rounded-xl px-3 py-3 ${selected ? "bg-thread-selected" : ""}`}
+                      className={`min-h-16 flex-row items-center gap-3 rounded-xl px-3 py-3 ${scope.railGroup === "member" ? "pl-8" : ""} ${selected ? "bg-thread-selected" : ""}`}
                     >
-                      <ProjectFavicon
-                        environmentId={project.environmentId}
-                        projectTitle={scope.title}
-                        workspaceRoot={project.workspaceRoot}
-                        faviconPath={project.faviconPath}
-                        projectIcon={project.projectIcon}
-                        size={30}
-                      />
+                      {scope.railGroup === "header" ? (
+                        <View className="size-[30px] items-center justify-center">
+                          <SymbolView
+                            name="folder"
+                            size={22}
+                            tintColorClassName="accent-foreground"
+                          />
+                        </View>
+                      ) : (
+                        <ProjectFavicon
+                          environmentId={project.environmentId}
+                          projectTitle={scope.title}
+                          workspaceRoot={project.workspaceRoot}
+                          faviconPath={project.faviconPath}
+                          projectIcon={project.projectIcon}
+                          size={30}
+                        />
+                      )}
                       <View className="min-w-0 flex-1">
                         <AppText numberOfLines={1} className="font-t3-medium">
                           {scope.title}
