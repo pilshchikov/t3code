@@ -1,6 +1,7 @@
 import { isHostPrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
 import { sshServerUpdateTarget } from "~/state/bundledServerUpdate.logic";
 import { useBundledServerRuntime } from "~/state/desktopUpdate";
+import { msg, useMessages } from "gt-react";
 import { useAtomValue } from "@effect/atom-react";
 import { PROVIDER_DISPLAY_NAMES } from "@t3tools/contracts";
 
@@ -60,6 +61,7 @@ export function useUpdateEverything(
   const targetVersion = localUpdateVersion ?? APP_VERSION;
   const bundledRuntime = useBundledServerRuntime();
   const { environments } = useEnvironments();
+  const resolve = useMessages();
   const environmentIds = environmentIdsKey(environments.map(({ environmentId }) => environmentId));
   const sessionStates = useAtomValue(environmentSessionStatesAtom(environmentIds));
   const updateStates = useAtomValue(environmentUpdateStatesAtom(environmentIds));
@@ -78,14 +80,16 @@ export function useUpdateEverything(
     skipped,
     waitForNpm,
   } = channelSwitch
-    ? { ...collectChannelSwitchTargets(machines, channelSwitch), waitForNpm: [] }
+    ? { ...collectChannelSwitchTargets(machines, channelSwitch, resolve), waitForNpm: [] }
     : collectServerUpdateTargets(
         machines,
         targetVersion,
         bundledRuntime,
         localUpdateVersion !== null,
+        resolve,
       );
   const needsNpm = waitForNpm.length > 0;
+  // Track-only hosts save a setting and restart nothing, so they are neither listed nor counted.
   const moving = servers.filter((server) => server.trackOnly !== true);
   const restarts = collectRestartingMachines(machines, moving, localUpdateVersion !== null);
   const providerUpdates = useProviderUpdates();
@@ -95,19 +99,22 @@ export function useUpdateEverything(
     reportFailure: false,
   });
 
-  const view = describeUpdateEverything({
-    localVersion: localUpdateVersion,
-    localMachines: machines.filter((machine) => machine.hostedByThisApp),
-    servers: moving,
-    skipped,
-    providerMachines: providers.machines.map((machine) => ({
-      environmentId: machine.environmentId,
-      label: machine.label,
-      providers: machine.candidates.map(
-        (candidate) => PROVIDER_DISPLAY_NAMES[candidate.driver] ?? candidate.driver,
-      ),
-    })),
-  });
+  const view = describeUpdateEverything(
+    {
+      localVersion: localUpdateVersion,
+      localMachines: machines.filter((machine) => machine.hostedByThisApp),
+      servers: moving,
+      skipped,
+      providerMachines: providers.machines.map((machine) => ({
+        environmentId: machine.environmentId,
+        label: machine.label,
+        providers: machine.candidates.map(
+          (candidate) => PROVIDER_DISPLAY_NAMES[candidate.driver] ?? candidate.driver,
+        ),
+      })),
+    },
+    resolve,
+  );
 
   return {
     hasUpdates: servers.length > 0 || providers.machines.length > 0,
@@ -122,7 +129,11 @@ export function useUpdateEverything(
     }) => {
       if (needsNpm && !(await isNpmReleasePublished(targetVersion))) {
         throw new Error(
-          `t3@${targetVersion} is not published on npm yet. Try again after publication.`,
+          resolve(
+            msg("t3@{version} is not published on npm yet. Try again after publication.", {
+              version: targetVersion,
+            }),
+          ),
         );
       }
       const localFailures: Array<string> = [];
@@ -178,7 +189,9 @@ export function useUpdateEverything(
               if (runOutcome.status !== "updated") {
                 providerFailures.set(
                   run.environmentId,
-                  runOutcome.status === "failed" ? runOutcome.line : "Provider update interrupted",
+                  runOutcome.status === "failed"
+                    ? runOutcome.line
+                    : resolve(msg("Provider update interrupted")),
                 );
               }
               return runOutcome;

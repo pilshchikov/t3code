@@ -384,6 +384,9 @@ describe("sanitizeFeatureBranchName", () => {
       "spilshchikov/grosse-der-strasse-korrigieren",
     );
     expect(sanitizeFeatureBranchName("fix/Đặt tên")).toBe("spilshchikov/fix/dat-ten");
+    expect(sanitizeFeatureBranchName("Napraw błąd w żółtym przycisku")).toBe(
+      "spilshchikov/napraw-blad-w-zoltym-przycisku",
+    );
   });
 });
 

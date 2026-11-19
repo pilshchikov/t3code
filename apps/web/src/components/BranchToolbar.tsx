@@ -1,7 +1,13 @@
 import { measureRestingComposerControls } from "./chat/restingComposerControlsMeasurement";
 import { resolveRestingComposerControlsNaturalWidth } from "./composerFooterLayout";
 import { cn } from "~/lib/utils";
-import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import {
+  ClipboardApiUnavailableError,
+  ClipboardWriteError,
+  writeTextToClipboard,
+} from "../hooks/useCopyToClipboard";
+import * as Schema from "effect/Schema";
 import { formatFilePathForClipboard } from "@t3tools/client-runtime/media-actions";
 import { readLocalApi } from "../localApi";
 import { stackedThreadToast, toastManager } from "./ui/toast";
@@ -29,6 +35,8 @@ import {
   PlusIcon,
   ScaleIcon,
 } from "lucide-react";
+import { msg, T, useGT, useMessages } from "gt-react";
+import { m as resolveMessage } from "../i18n/messages";
 import {
   type Ref,
   type MouseEvent as ReactMouseEvent,
@@ -113,6 +121,9 @@ import { MiddleTruncate } from "./ui/middle-truncate";
 import { useComposerMenuProps } from "./chat/composerEventScope";
 import { observeResize } from "~/lib/observeResize";
 
+const isClipboardApiUnavailableError = Schema.is(ClipboardApiUnavailableError);
+const isClipboardWriteError = Schema.is(ClipboardWriteError);
+
 export interface BranchToolbarHandle {
   openBranchPicker: () => void;
   usePreviousWorktree: () => void;
@@ -158,6 +169,7 @@ function WorkspaceBadge(props: {
   compact?: boolean;
   onColorChange: (color: ProjectWorkspaceColor) => void;
 }) {
+  const gt = useGT();
   const color = resolveWorkspaceColor(props.workspace, props.index);
   return (
     <Menu>
@@ -166,13 +178,15 @@ function WorkspaceBadge(props: {
           color,
           `truncate rounded px-1.5 py-0.5 text-[10px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${props.compact ? "max-w-20" : "max-w-32"}`,
         )}
-        title={`${props.workspace.path} · Change directory color`}
+        title={gt("{path} · Change directory color", { path: props.workspace.path })}
       >
         {workspaceDisplayName(props.workspace, props.index)}
       </MenuTrigger>
       <MenuPopup align="start" side="top" className="w-36">
         <MenuGroup>
-          <MenuGroupLabel>Directory color</MenuGroupLabel>
+          <MenuGroupLabel>
+            <T>Directory color</T>
+          </MenuGroupLabel>
           {PROJECT_WORKSPACE_COLORS.map((option) => (
             <MenuItem key={option.color} onClick={() => props.onColorChange(option.color)}>
               <span className={`size-2.5 rounded-full ${option.dotClassName}`} />
@@ -187,6 +201,7 @@ function WorkspaceBadge(props: {
 }
 
 function AgentGuidanceButton(props: { workspace: ProjectWorkspace; onClick: () => void }) {
+  const gt = useGT();
   const hasGuidance = Boolean(props.workspace.agentGuidance?.trim());
   return (
     <Tooltip>
@@ -197,7 +212,9 @@ function AgentGuidanceButton(props: { workspace: ProjectWorkspace; onClick: () =
             variant="ghost"
             size="icon-xs"
             className={hasGuidance ? "text-primary" : "text-muted-foreground"}
-            aria-label={`Edit agent guidance for ${props.workspace.label ?? props.workspace.path}`}
+            aria-label={gt("Edit agent guidance for {directory}", {
+              directory: props.workspace.label ?? props.workspace.path,
+            })}
             onClick={props.onClick}
           />
         }
@@ -205,7 +222,7 @@ function AgentGuidanceButton(props: { workspace: ProjectWorkspace; onClick: () =
         <NotebookPenIcon className="size-3.5" />
       </TooltipTrigger>
       <TooltipPopup side="top">
-        {hasGuidance ? "Edit agent guidance" : "Add agent guidance"}
+        {hasGuidance ? gt("Edit agent guidance") : gt("Add agent guidance")}
       </TooltipPopup>
     </Tooltip>
   );
@@ -217,25 +234,31 @@ function showWorkspaceContextMenu(event: ReactMouseEvent, workspacePath: string)
   event.preventDefault();
   event.stopPropagation();
   void api.contextMenu
-    .show([{ id: "copy-path", label: "Copy full path", icon: "copy" }], {
+    .show([{ id: "copy-path", label: resolveMessage(msg("Copy full path")), icon: "copy" }], {
       x: event.clientX,
       y: event.clientY,
     })
     .then((action) => {
       if (action !== "copy-path") return;
       const clipboardPath = formatFilePathForClipboard(workspacePath);
-      void writeTextToClipboard(clipboardPath, "workspace path").then(
-        undefined,
-        (error: unknown) => {
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Failed to copy path",
-              description: error instanceof Error ? error.message : "An error occurred.",
-            }),
-          );
-        },
-      );
+      void writeTextToClipboard(clipboardPath, {
+        target: "workspace path",
+        unavailableMessage: msg("Clipboard API is unavailable while copying workspace path."),
+        failureMessage: msg("Failed to copy workspace path to the clipboard."),
+      }).then(undefined, (error: unknown) => {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: resolveMessage(msg("Failed to copy path")),
+            description: isClipboardApiUnavailableError(error)
+              ? resolveMessage(msg("Clipboard API is unavailable while copying workspace path."))
+              : isClipboardWriteError(error)
+                ? resolveMessage(msg("Failed to copy workspace path to the clipboard."))
+                : (thrownErrorMessage(error, resolveMessage) ??
+                  resolveMessage(msg("An error occurred."))),
+          }),
+        );
+      });
     });
 }
 
@@ -284,6 +307,8 @@ const RunContextSelector = memo(function RunContextSelector({
   addTargets,
   onAddToMachine,
 }: RunContextSelectorProps) {
+  const gt = useGT();
+  const m = useMessages();
   const composerFloatingLayerProps = useComposerMenuProps();
   const activeEnvironment =
     availableEnvironments?.find((env) => env.environmentId === environmentId) ?? null;
@@ -294,12 +319,12 @@ const RunContextSelector = memo(function RunContextSelector({
         ? FolderGitIcon
         : FolderIcon;
   const workspaceLabel = forceNewWorktree
-    ? resolveEnvModeLabel("worktree")
+    ? resolveEnvModeLabel("worktree", m)
     : envModeLocked
-      ? resolveLockedWorkspaceLabel(activeWorktreePath, effectiveEnvMode)
+      ? resolveLockedWorkspaceLabel(activeWorktreePath, effectiveEnvMode, m)
       : effectiveEnvMode === "worktree"
-        ? resolveEnvModeLabel("worktree")
-        : resolveCurrentWorkspaceLabel(activeWorktreePath);
+        ? resolveEnvModeLabel("worktree", m)
+        : resolveCurrentWorkspaceLabel(activeWorktreePath, m);
   const isPanel = displayMode === "panel";
   const isLocked = envLocked || (envModeLocked && (!isPanel || !showEnvironmentPicker));
   const workspacePath =
@@ -319,7 +344,7 @@ const RunContextSelector = memo(function RunContextSelector({
       <TooltipPopup>
         {isPanel
           ? forceNewWorktree
-            ? "Each model starts in its own worktree."
+            ? gt("Each model starts in its own worktree.")
             : (workspacePath ?? workspaceLabel)
           : workspaceLabel}
       </TooltipPopup>
@@ -343,7 +368,9 @@ const RunContextSelector = memo(function RunContextSelector({
           />
         )}
       </TooltipTrigger>
-      <TooltipPopup>{autoEnvironmentLabel ?? activeEnvironment?.label ?? "Run on"}</TooltipPopup>
+      <TooltipPopup>
+        {autoEnvironmentLabel ?? activeEnvironment?.label ?? gt("Run on")}
+      </TooltipPopup>
     </Tooltip>
   );
   const icon = !showEnvironmentIndicator ? (
@@ -362,7 +389,7 @@ const RunContextSelector = memo(function RunContextSelector({
       {icon}
       <ComposerContextLabel displayMode={displayMode}>
         {autoEnvironmentLabel ??
-          (showEnvironmentIndicator ? (activeEnvironment?.label ?? "Run on") : workspaceLabel)}
+          (showEnvironmentIndicator ? (activeEnvironment?.label ?? gt("Run on")) : workspaceLabel)}
       </ComposerContextLabel>
       {/* Trailing in the panel, so every row label starts on the same edge. */}
       {isPanel && showEnvironmentIndicator ? workspaceIcon : null}
@@ -378,7 +405,15 @@ const RunContextSelector = memo(function RunContextSelector({
           isPanel && THREAD_DETAILS_PANEL_LOCKED_ROW_CLASS,
         )}
         onContextMenu={handleContextMenu}
-        aria-label={isPanel ? "Run context" : undefined}
+        aria-label={
+          isPanel
+            ? gt("Run context: {context}", {
+                context: [autoEnvironmentLabel ?? activeEnvironment?.label, workspaceLabel]
+                  .filter(Boolean)
+                  .join(", "),
+              })
+            : undefined
+        }
         data-composer-context-control
       >
         {triggerContent}
@@ -399,7 +434,15 @@ const RunContextSelector = memo(function RunContextSelector({
               }
             : undefined
         }
-        aria-label={isPanel ? "Run context" : undefined}
+        aria-label={
+          isPanel
+            ? gt("Run context: {context}", {
+                context: [autoEnvironmentLabel ?? activeEnvironment?.label, workspaceLabel]
+                  .filter(Boolean)
+                  .join(", "),
+              })
+            : undefined
+        }
         data-composer-context-control
         data-composer-shortcut={[
           showEnvironmentPicker && !envLocked ? "composer.host" : "",
@@ -425,7 +468,9 @@ const RunContextSelector = memo(function RunContextSelector({
         ((showEnvironmentPicker && onEnvironmentChange) || addTargets.length > 0) ? (
           <>
             <MenuGroup>
-              <MenuGroupLabel>Run on</MenuGroupLabel>
+              <MenuGroupLabel>
+                <T>Run on</T>
+              </MenuGroupLabel>
               <MenuRadioGroup
                 value={autoEnvironmentLabel ? "auto" : environmentId}
                 onValueChange={(value) =>
@@ -446,7 +491,7 @@ const RunContextSelector = memo(function RunContextSelector({
                     <span className="flex min-w-0 items-center gap-1.5">
                       <ScaleIcon className="size-3" aria-hidden="true" />
                       <span className="min-w-0 truncate">
-                        {autoEnvironmentLabel ?? "Auto balance"}
+                        {autoEnvironmentLabel ?? gt("Auto balance")}
                       </span>
                     </span>
                   </MenuRadioItem>
@@ -472,7 +517,9 @@ const RunContextSelector = memo(function RunContextSelector({
                   <MenuSubTrigger>
                     <span className={ADD_TO_MACHINE_LABEL_CLASS}>
                       <PlusIcon className="size-3" />
-                      <span className="min-w-0 truncate">Add to another machine</span>
+                      <span className="min-w-0 truncate">
+                        <T>Add to another machine</T>
+                      </span>
                     </span>
                   </MenuSubTrigger>
                   <MenuSubPopup {...(!isPanel ? composerFloatingLayerProps : {})}>
@@ -495,7 +542,9 @@ const RunContextSelector = memo(function RunContextSelector({
           </>
         ) : null}
         <MenuGroup>
-          <MenuGroupLabel>Workspace</MenuGroupLabel>
+          <MenuGroupLabel>
+            <T>Workspace</T>
+          </MenuGroupLabel>
           <MenuRadioGroup
             value={effectiveEnvMode}
             onValueChange={(value, eventDetails) => {
@@ -514,13 +563,13 @@ const RunContextSelector = memo(function RunContextSelector({
                 ) : (
                   <FolderIcon className="size-3" />
                 )}
-                <MiddleTruncate value={resolveCurrentWorkspaceLabel(activeWorktreePath)} />
+                <MiddleTruncate value={resolveCurrentWorkspaceLabel(activeWorktreePath, m)} />
               </span>
             </MenuRadioItem>
             <MenuRadioItem disabled={envModeLocked} value="worktree" closeOnClick>
               <span className="flex min-w-0 items-center gap-1.5">
                 <FolderGit2Icon className="size-3" />
-                <span className="min-w-0 truncate">{resolveEnvModeLabel("worktree")}</span>
+                <span className="min-w-0 truncate">{resolveEnvModeLabel("worktree", m)}</span>
               </span>
             </MenuRadioItem>
             {previousWorktreeLabel ? (
@@ -736,6 +785,8 @@ export const BranchToolbar = memo(function BranchToolbar({
   onContextStripCollapsedChange = () => {},
   composerControlsHostRef,
 }: BranchToolbarProps) {
+  const gt = useGT();
+  const m = useMessages();
   const branchSelectorRef = useRef<BranchToolbarBranchSelectorHandle>(null);
   const composerFloatingLayerProps = useComposerMenuProps();
   const threadRef = scopeThreadRef(environmentId, threadId);
@@ -760,7 +811,7 @@ export const BranchToolbar = memo(function BranchToolbar({
       })
     : null;
   const previousWorktreeLabel = previousWorktreeSeed
-    ? resolvePreviousWorktreeLabel(previousWorktreeSeed)
+    ? resolvePreviousWorktreeLabel(previousWorktreeSeed, m)
     : null;
   const onUsePreviousWorktree = () => {
     if (!previousWorktreeSeed) return;
@@ -809,7 +860,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   const workspaceRoots: ReadonlyArray<ProjectWorkspace> = activeProject?.workspaceRoots?.length
     ? activeProject.workspaceRoots
     : activeProject
-      ? [{ path: activeProject.workspaceRoot, label: "Primary directory" }]
+      ? [{ path: activeProject.workspaceRoot, label: gt("Primary directory") }]
       : [];
   const canCollapseContextStrip = !isMobile && showGitControls && workspaceRoots.length > 1;
   const isContextStripCollapsed =
@@ -822,8 +873,8 @@ export const BranchToolbar = memo(function BranchToolbar({
     toastManager.add(
       stackedThreadToast({
         type: "error",
-        title: "Failed to update project directories",
-        description: error instanceof Error ? error.message : "An error occurred.",
+        title: gt("Failed to update project directories"),
+        description: thrownErrorMessage(error, resolveMessage) ?? gt("An error occurred."),
       }),
     );
   };
@@ -843,7 +894,10 @@ export const BranchToolbar = memo(function BranchToolbar({
       onSelect: async (selectedPath) => {
         const normalizedPath = selectedPath.replace(/[\\/]+$/, "") || selectedPath;
         if (workspaceRoots.some((root) => root.path === normalizedPath)) {
-          toastManager.add({ type: "warning", title: "Directory is already in this project" });
+          toastManager.add({
+            type: "warning",
+            title: gt("Directory is already in this project"),
+          });
           return;
         }
         await persistWorkspaceRoots([...workspaceRoots, { path: normalizedPath }]);
@@ -894,14 +948,16 @@ export const BranchToolbar = memo(function BranchToolbar({
             type="button"
             variant="ghost"
             size="icon-xs"
-            aria-label="Add directory to project"
+            aria-label={gt("Add directory to project")}
             onClick={addWorkspaceRoot}
           />
         }
       >
         <PlusIcon className="size-3" />
       </TooltipTrigger>
-      <TooltipPopup side="top">Add directory to project</TooltipPopup>
+      <TooltipPopup side="top">
+        <T>Add directory to project</T>
+      </TooltipPopup>
     </Tooltip>
   );
 
@@ -999,7 +1055,9 @@ export const BranchToolbar = memo(function BranchToolbar({
                 resolveWorkspaceColor(root, rootIndex),
                 "flex h-7 max-w-44 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
               )}
-              aria-label={`Directory controls for ${workspaceDisplayName(root, rootIndex)}`}
+              aria-label={gt("Directory controls for {directory}", {
+                directory: workspaceDisplayName(root, rootIndex),
+              })}
               title={root.path}
             >
               <FolderIcon className="size-3 shrink-0 opacity-70" />
@@ -1016,7 +1074,9 @@ export const BranchToolbar = memo(function BranchToolbar({
                 <PopoverTitle className="text-xs">
                   {workspaceDisplayName(root, rootIndex)}
                   {isPrimary ? (
-                    <span className="ms-2 font-normal text-muted-foreground">Primary</span>
+                    <span className="ms-2 font-normal text-muted-foreground">
+                      <T context="primary project directory">Primary</T>
+                    </span>
                   ) : null}
                 </PopoverTitle>
                 <p className="break-all font-mono text-[10px] text-muted-foreground">{root.path}</p>
@@ -1039,14 +1099,16 @@ export const BranchToolbar = memo(function BranchToolbar({
                 variant="ghost"
                 size="icon-xs"
                 className="ms-auto shrink-0 max-md:hidden"
-                aria-label="Expand project context"
+                aria-label={gt("Expand project context")}
                 onClick={expandContextStrip}
               />
             }
           >
             <ChevronDownIcon className="size-3" />
           </TooltipTrigger>
-          <TooltipPopup side="top">Expand project context</TooltipPopup>
+          <TooltipPopup side="top">
+            <T>Expand project context</T>
+          </TooltipPopup>
         </Tooltip>
       ) : null}
     </div>
@@ -1062,14 +1124,16 @@ export const BranchToolbar = memo(function BranchToolbar({
               variant="ghost"
               size="icon-xs"
               className="pointer-events-auto bg-background/45 text-muted-foreground/70 shadow-xs hover:bg-background/75 hover:text-foreground"
-              aria-label="Collapse project context"
+              aria-label={gt("Collapse project context")}
               onClick={() => onContextStripCollapsedChange(true)}
             />
           }
         >
           <ChevronUpIcon className="size-3" />
         </TooltipTrigger>
-        <TooltipPopup side="top">Collapse project context</TooltipPopup>
+        <TooltipPopup side="top">
+          <T>Collapse project context</T>
+        </TooltipPopup>
       </Tooltip>
     </div>
   ) : null;
@@ -1287,10 +1351,14 @@ export const BranchToolbar = memo(function BranchToolbar({
       >
         <DialogPopup className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>Agent guidance</DialogTitle>
+            <DialogTitle>
+              <T>Agent guidance</T>
+            </DialogTitle>
             <DialogDescription>
-              Private instructions sent with every agent turn for this directory. They are not shown
-              in the chat transcript.
+              <T>
+                Private instructions sent with every agent turn for this directory. They are not
+                shown in the chat transcript.
+              </T>
             </DialogDescription>
           </DialogHeader>
           <DialogPanel>
@@ -1301,20 +1369,24 @@ export const BranchToolbar = memo(function BranchToolbar({
               <Textarea
                 value={guidanceDraft}
                 maxLength={8000}
-                placeholder="Example: Commit directly to main after each completed change. Do not create a branch."
+                placeholder={gt(
+                  "Example: Commit directly to main after each completed change. Do not create a branch.",
+                )}
                 onChange={(event) => setGuidanceDraft(event.target.value)}
               />
               <p className="text-[11px] text-muted-foreground">
-                {guidanceDraft.length.toLocaleString()} / 8,000 characters
+                {gt("{count} / 8,000 characters", {
+                  count: guidanceDraft.length.toLocaleString(),
+                })}
               </p>
             </div>
           </DialogPanel>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setGuidanceWorkspacePath(null)}>
-              Cancel
+              <T>Cancel</T>
             </Button>
             <Button type="button" onClick={() => void saveAgentGuidance()}>
-              Save guidance
+              <T>Save guidance</T>
             </Button>
           </DialogFooter>
         </DialogPopup>

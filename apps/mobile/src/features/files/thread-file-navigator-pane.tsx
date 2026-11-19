@@ -3,6 +3,7 @@ import { environmentSession } from "../../state/session";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { ScreenContent } from "../../components/ui/ScreenContent";
+import { useGT, useMessages } from "gt-react-native";
 import { useState, type ComponentProps, type ReactNode } from "react";
 import { Platform, Pressable, View, type NativeSyntheticEvent } from "react-native";
 import {
@@ -40,6 +41,7 @@ export function ThreadFileNavigatorPane(props: {
   readonly selectedPath: string | null;
   readonly onSelectFile: (path: string) => void;
 }) {
+  const gt = useGT();
   const workspaceKey = JSON.stringify([props.environmentId, props.cwd]);
   // The pane stays mounted across thread switches; a query only filters the workspace it was typed in.
   const [search, setSearch] = useState({ workspaceKey, query: "" });
@@ -51,16 +53,20 @@ export function ThreadFileNavigatorPane(props: {
   const foregroundColor = theme["--color-foreground"];
   const sheetColor = theme["--color-sheet"];
   const headerScrollEdgeEffects = nativeHeaderScrollEdgeEffects(Platform.OS, Platform.Version);
+  const messages = useMessages();
   const fileAccessSession = useEnvironmentQuery(
     environmentSession.sessionStateAtom(props.environmentId),
   );
   const fileEnvironment = useEnvironmentPresentation(props.environmentId);
-  const fileAccess = resolveFilesystemReadAccess({
-    isCatalogReady: fileEnvironment.isReady,
-    connection: fileEnvironment.presentation?.connection ?? null,
-    session: fileAccessSession.data,
-    sessionError: fileAccessSession.error,
-  });
+  const fileAccess = resolveFilesystemReadAccess(
+    {
+      isCatalogReady: fileEnvironment.isReady,
+      connection: fileEnvironment.presentation?.connection ?? null,
+      session: fileAccessSession.data,
+      sessionError: fileAccessSession.error,
+    },
+    messages,
+  );
   const { canReadFiles } = fileAccess;
   const entriesQuery = useFileTreeEntries({
     environmentId: props.environmentId,
@@ -77,7 +83,7 @@ export function ThreadFileNavigatorPane(props: {
   };
   const nativeHeaderRightBarButtonItems = [
     {
-      accessibilityLabel: "Close files",
+      accessibilityLabel: gt("Close files"),
       icon: { name: "xmark", type: "sfSymbol" as const },
       identifier: "thread-file-navigator-close",
       onPress: toggleAuxiliaryPane,
@@ -101,7 +107,7 @@ export function ThreadFileNavigatorPane(props: {
           ? entriesQuery.error
           : fileAccess.isPending
             ? null
-            : (fileAccess.error ?? "This connection cannot read host files.")
+            : (fileAccess.error ?? gt("This connection cannot read host files."))
       }
       isPending={fileAccess.isPending || entriesQuery.isPending}
       isRefreshing={entriesQuery.isRefreshing}
@@ -153,7 +159,7 @@ export function ThreadFileNavigatorPane(props: {
               hideShadow={false}
               navigationItemStyle="editor"
               subtitle={props.projectName}
-              title="Files"
+              title={gt("Files", { $context: "screen title, workspace files" })}
               titleColor={foregroundColor}
               titleFontSize={17}
               titleFontWeight="700"
@@ -174,7 +180,7 @@ export function ThreadFileNavigatorPane(props: {
                     setSearchQuery(event.nativeEvent.text ?? "");
                   }}
                   placement="integratedButton"
-                  placeholder="Search files"
+                  placeholder={gt("Search files")}
                   textColor={foregroundColor}
                   tintColor={foregroundColor}
                 />
@@ -206,14 +212,16 @@ export function ThreadFileNavigatorPane(props: {
         ) : (
           <View className="h-12 flex-row items-center gap-2 px-3">
             <View className="min-w-0 flex-1">
-              <Text className="text-sm font-t3-bold text-foreground">Files</Text>
+              <Text className="text-sm font-t3-bold text-foreground">
+                {gt("Files", { $context: "screen title, workspace files" })}
+              </Text>
               <Text className="text-xs text-foreground-muted" numberOfLines={1}>
                 {props.projectName}
               </Text>
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Refresh files"
+              accessibilityLabel={gt("Refresh files")}
               hitSlop={8}
               className="h-8 w-8 items-center justify-center rounded-full active:bg-subtle"
               onPress={entriesQuery.refresh}
@@ -236,12 +244,12 @@ export function ThreadFileNavigatorPane(props: {
               type="monochrome"
             />
             <TextInput
-              accessibilityLabel="Search files"
+              accessibilityLabel={gt("Search files")}
               autoCapitalize="none"
               autoCorrect={false}
               clearButtonMode="while-editing"
               className="min-h-10 flex-1 rounded-xl py-2 text-sm"
-              placeholder="Search files"
+              placeholder={gt("Search files")}
               value={searchQuery}
               onChangeText={setSearchQuery}
             />

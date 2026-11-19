@@ -1,7 +1,10 @@
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { m } from "~/i18n/messages";
 import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { joinHostPath } from "./filePath";
 import type { EnvironmentId, ProjectEntry } from "@t3tools/contracts";
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
+import { T, useGT, useMessages } from "gt-react";
 import { ChevronsDownUpIcon, ChevronsUpDownIcon, Trash2Icon, XIcon } from "lucide-react";
 import {
   type Ref,
@@ -76,6 +79,7 @@ interface FileBrowserPanelProps {
 }
 
 function RefreshFilesButton(props: { isPending: boolean; onRefresh: () => void }) {
+  const gt = useGT();
   return (
     <Tooltip>
       <TooltipTrigger
@@ -84,19 +88,20 @@ function RefreshFilesButton(props: { isPending: boolean; onRefresh: () => void }
             type="button"
             variant="ghost"
             size="icon-xs"
-            aria-label="Refresh workspace files"
+            aria-label={gt("Refresh workspace files")}
             onClick={props.onRefresh}
           />
         }
       >
         <RefreshIcon refreshing={props.isPending} />
       </TooltipTrigger>
-      <TooltipPopup>{props.isPending ? "Refreshing…" : "Refresh files"}</TooltipPopup>
+      <TooltipPopup>{props.isPending ? gt("Refreshing…") : gt("Refresh files")}</TooltipPopup>
     </Tooltip>
   );
 }
 
 function CollapseDirectoriesButton(props: { onCollapse: () => void }) {
+  const gt = useGT();
   return (
     <Tooltip>
       <TooltipTrigger
@@ -105,14 +110,16 @@ function CollapseDirectoriesButton(props: { onCollapse: () => void }) {
             type="button"
             variant="ghost"
             size="icon-xs"
-            aria-label="Collapse all directories except the open file"
+            aria-label={gt("Collapse all directories except the open file")}
             onClick={props.onCollapse}
           />
         }
       >
         <ChevronsDownUpIcon />
       </TooltipTrigger>
-      <TooltipPopup>Collapse all, keeping the open file</TooltipPopup>
+      <TooltipPopup>
+        <T>Collapse all, keeping the open file</T>
+      </TooltipPopup>
     </Tooltip>
   );
 }
@@ -127,6 +134,7 @@ function FileSearchField({
   ref: Ref<HTMLInputElement>;
   value: string;
 }) {
+  const gt = useGT();
   return (
     <InputGroup variant="ghost" className="h-7 min-w-0 flex-1">
       <InputGroupInput
@@ -136,7 +144,8 @@ function FileSearchField({
         size="sm"
         value={props.value}
         aria-label={props.ariaLabel}
-        placeholder="Search files"
+        placeholder={gt("Search files")}
+        data-workspace-focus-default
         spellCheck={false}
         onChange={(event) => props.onValueChange(event.target.value)}
         onKeyDown={(event) => {
@@ -180,6 +189,8 @@ export default function FileBrowserPanel({
 }: FileBrowserPanelProps) {
   const panelPath = (relativePath: string) =>
     hostFolder ? joinHostPath(cwd, relativePath) : relativePath;
+  const gt = useGT();
+  const messages = useMessages();
   const { resolvedTheme } = useTheme();
   const composerRef = useComposerHandleContext();
   const fileContextMenu = useFileContextMenu(environmentId);
@@ -206,6 +217,8 @@ export default function FileBrowserPanel({
   const search = useProjectPathSearch(
     { environmentId, cwd: hostFolder ? null : cwd, query: deferredQuery, kind: "file" },
     200,
+    undefined,
+    messages,
   );
   const onExpandedDirectoriesChange = useCallback((paths: readonly string[]) => {
     setExpandedDirectories((current) =>
@@ -353,19 +366,22 @@ export default function FileBrowserPanel({
         failed.length > 0
           ? {
               type: "error",
-              title: `Could not restore ${failed.length} of ${snapshot.length}`,
-              description: "The rest were written back.",
+              title: gt("Could not restore {failed} of {total}", {
+                failed: failed.length,
+                total: snapshot.length,
+              }),
+              description: gt("The rest were written back."),
             }
           : {
               type: "success",
               title:
                 snapshot.length === 1
-                  ? `Restored ${snapshot[0]?.relativePath}`
-                  : `Restored ${snapshot.length} files`,
+                  ? gt("Restored {path}", { path: snapshot[0]?.relativePath ?? "" })
+                  : gt("Restored {count} files", { count: snapshot.length }),
             },
       );
     },
-    [cwd, entriesQuery, environmentId, writeFile],
+    [cwd, entriesQuery, environmentId, gt, writeFile],
   );
 
   /**
@@ -410,19 +426,25 @@ export default function FileBrowserPanel({
       if (failed.length > 0) {
         toastManager.add({
           type: "error",
-          title: `Could not delete ${failed.length} of ${paths.length}`,
-          description: "Refresh the file list and try again.",
+          title: gt("Could not delete {failed} of {total}", {
+            failed: failed.length,
+            total: paths.length,
+          }),
+          description: gt("Refresh the file list and try again."),
         });
         return;
       }
       toastManager.add({
         type: "success",
-        title: paths.length === 1 ? `Deleted ${paths[0]}` : `Deleted ${paths.length} entries`,
+        title:
+          paths.length === 1
+            ? gt("Deleted {path}", { path: paths[0] ?? "" })
+            : gt("Deleted {count} entries", { count: paths.length }),
         ...(snapshot === null
           ? {}
           : {
               actionProps: {
-                children: "Undo",
+                children: gt("Undo"),
                 onClick: () => void restoreSnapshot(snapshot),
               },
             }),
@@ -434,6 +456,7 @@ export default function FileBrowserPanel({
       entriesQuery,
       environmentId,
       filePaths,
+      gt,
       isDeleting,
       restoreSnapshot,
       snapshotPaths,
@@ -455,12 +478,12 @@ export default function FileBrowserPanel({
       const clicked = await api.contextMenu.show(
         [
           ...fileMenuItems,
-          ...(isFile ? [{ id: "copy-mention", label: "Copy mention" }] : []),
-          { id: "copy-absolute-path", label: "Copy absolute path" },
-          ...(isFile ? [{ id: "add-to-chat", label: "Add to chat" }] : []),
+          ...(isFile ? [{ id: "copy-mention", label: gt("Copy mention") }] : []),
+          { id: "copy-absolute-path", label: gt("Copy absolute path") },
+          ...(isFile ? [{ id: "add-to-chat", label: gt("Add to chat") }] : []),
           {
             id: "delete",
-            label: isFile ? "Delete file" : "Delete folder",
+            label: isFile ? gt("Delete file") : gt("Delete folder"),
             destructive: true,
             icon: "trash",
           },
@@ -481,8 +504,8 @@ export default function FileBrowserPanel({
         } catch (error) {
           toastManager.add({
             type: "error",
-            title: "Failed to copy mention",
-            description: error instanceof Error ? error.message : "An error occurred.",
+            title: gt("Failed to copy mention"),
+            description: thrownErrorMessage(error, m) ?? gt("An error occurred."),
           });
         }
         return;
@@ -493,8 +516,8 @@ export default function FileBrowserPanel({
         } catch (error) {
           toastManager.add({
             type: "error",
-            title: "Failed to copy absolute path",
-            description: error instanceof Error ? error.message : "An error occurred.",
+            title: gt("Failed to copy absolute path"),
+            description: thrownErrorMessage(error, m) ?? gt("An error occurred."),
           });
         }
         return;
@@ -510,12 +533,12 @@ export default function FileBrowserPanel({
       if (!inserted) {
         toastManager.add({
           type: "error",
-          title: "Unable to add to chat",
-          description: "The chat isn't ready to accept input right now.",
+          title: gt("Unable to add to chat"),
+          description: gt("The chat isn't ready to accept input right now."),
         });
       }
     },
-    [composerRef, cwd, deletePaths, environmentId, fileContextMenu, filePaths, hostFolder],
+    [composerRef, cwd, deletePaths, environmentId, fileContextMenu, filePaths, gt, hostFolder],
   );
   const handleRefresh = useCallback(() => {
     setRefreshId((value) => value + 1);
@@ -615,7 +638,7 @@ export default function FileBrowserPanel({
                 type="button"
                 variant="ghost"
                 size="icon-xs"
-                aria-label="Expand all folders"
+                aria-label={gt("Expand all folders")}
                 disabled={hostFolder}
                 onClick={() => setExpandAllRequestId((id) => id + 1)}
               />
@@ -623,20 +646,20 @@ export default function FileBrowserPanel({
           >
             <ChevronsUpDownIcon />
           </TooltipTrigger>
-          <TooltipPopup>Expand all folders</TooltipPopup>
+          <TooltipPopup>{gt("Expand all folders")}</TooltipPopup>
         </Tooltip>
         <CollapseDirectoriesButton onCollapse={() => setCollapseRequestId((value) => value + 1)} />
         <FileSearchField
           ref={searchInputRef}
           name="project-files-search"
-          ariaLabel={`Search ${projectName} files`}
+          ariaLabel={gt("Search {projectName} files", { projectName })}
           value={query}
           onValueChange={setQuery}
         />
         {selectedFiles.length > 0 ? (
           <>
             <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-              {selectedFiles.length} selected
+              {gt("{count} selected", { count: selectedFiles.length })}
             </span>
             <Tooltip>
               <TooltipTrigger
@@ -645,14 +668,14 @@ export default function FileBrowserPanel({
                     type="button"
                     variant="ghost"
                     size="icon-xs"
-                    aria-label="Clear file selection"
+                    aria-label={gt("Clear file selection")}
                     onClick={clearSelection}
                   />
                 }
               >
                 <XIcon />
               </TooltipTrigger>
-              <TooltipPopup>Clear selection</TooltipPopup>
+              <TooltipPopup>{gt("Clear selection")}</TooltipPopup>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger
@@ -662,7 +685,9 @@ export default function FileBrowserPanel({
                     variant="ghost"
                     size="icon-xs"
                     className="text-destructive hover:text-destructive"
-                    aria-label={`Delete ${selectedFiles.length} selected files`}
+                    aria-label={gt("Delete {count} selected files", {
+                      count: selectedFiles.length,
+                    })}
                     disabled={isDeleting}
                     onClick={() => void deleteSelectedFiles()}
                   />
@@ -671,7 +696,9 @@ export default function FileBrowserPanel({
                 <Trash2Icon className={cn(isDeleting && "animate-pulse")} />
               </TooltipTrigger>
               <TooltipPopup>
-                Delete {selectedFiles.length} selected file{selectedFiles.length === 1 ? "" : "s"}
+                {selectedFiles.length === 1
+                  ? gt("Delete 1 selected file")
+                  : gt("Delete {count} selected files", { count: selectedFiles.length })}
               </TooltipPopup>
             </Tooltip>
           </>
@@ -680,13 +707,19 @@ export default function FileBrowserPanel({
       {entriesQuery.error && entriesQuery.data === null ? (
         <div className="p-4 text-xs leading-relaxed text-destructive">{entriesQuery.error}</div>
       ) : entriesQuery.data === null ? (
-        <div className="p-4 text-xs text-muted-foreground">Loading files…</div>
+        <div className="p-4 text-xs text-muted-foreground">
+          <T>Loading files…</T>
+        </div>
       ) : deferredQuery.trim() && !hostFolder && search.isPending ? (
-        <div className="p-4 text-xs text-muted-foreground">Searching files…</div>
+        <div className="p-4 text-xs text-muted-foreground">
+          <T>Searching files…</T>
+        </div>
       ) : deferredQuery.trim() && !hostFolder && search.error ? (
         <div className="p-4 text-xs text-destructive">{search.error}</div>
       ) : entries.length === 0 ? (
-        <div className="p-4 text-xs text-muted-foreground">No files found in this directory.</div>
+        <div className="p-4 text-xs text-muted-foreground">
+          <T>No files found in this directory.</T>
+        </div>
       ) : (
         <NativeProjectFileTree
           active={active}

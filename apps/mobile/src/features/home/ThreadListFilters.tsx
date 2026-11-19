@@ -1,3 +1,4 @@
+import { useGT } from "gt-react-native";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { Pressable, ScrollView } from "react-native";
 import { ProjectFavicon } from "../../components/ProjectFavicon";
@@ -16,6 +17,7 @@ export function ThreadListFilters(props: {
   readonly onReset: () => void;
   readonly gutter: number;
 }) {
+  const gt = useGT();
   const environment = props.environments.find(
     (item) => item.environmentId === props.selectedEnvironmentId,
   );
@@ -30,20 +32,20 @@ export function ThreadListFilters(props: {
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Choose environment"
+        accessibilityLabel={gt("Choose environment")}
         onPress={() => props.onOpen("environments")}
         className="min-h-11 flex-row items-center gap-2 rounded-xl border border-border bg-input px-3"
       >
         <SymbolView name="desktopcomputer" size={15} tintColorClassName="accent-foreground-muted" />
         <AppText className="text-sm" numberOfLines={1}>
-          {environment?.label ?? "All environments"}
+          {environment?.label ?? gt("All environments")}
         </AppText>
         <SymbolView name="chevron.down" size={10} tintColorClassName="accent-foreground-muted" />
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Choose project"
-        accessibilityHint="You can also swipe right from the left edge"
+        accessibilityLabel={gt("Choose project")}
+        accessibilityHint={gt("You can also swipe right from the left edge")}
         onPress={() => props.onOpen("projects")}
         className="min-h-11 flex-row items-center gap-2 rounded-xl border border-border bg-input px-3"
       >
@@ -60,13 +62,13 @@ export function ThreadListFilters(props: {
           <SymbolView name="sidebar.left" size={16} tintColorClassName="accent-foreground-muted" />
         )}
         <AppText className="text-sm" numberOfLines={1}>
-          {scope?.title ?? "All projects"}
+          {scope?.title ?? gt("All projects")}
         </AppText>
       </Pressable>
       {props.selectedEnvironmentId !== null || props.selectedProjectKey !== null ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Reset thread filters"
+          accessibilityLabel={gt("Reset thread filters")}
           onPress={props.onReset}
           className="min-h-11 min-w-11 items-center justify-center"
         >

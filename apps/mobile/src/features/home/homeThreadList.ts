@@ -27,6 +27,7 @@ import type { DesktopProjectLayout } from "@t3tools/contracts/settings";
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
 
+import { m, type MessageResolver } from "../../i18n/messages";
 import { scopedProjectKey } from "../../lib/scopedEntities";
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
 
@@ -55,34 +56,40 @@ function getProjectSortTimestamp(
         Number.NEGATIVE_INFINITY);
 }
 
-export function buildHomeProjectScopes(input: {
-  readonly projects: ReadonlyArray<EnvironmentProject>;
-  readonly environmentId: EnvironmentId | null;
-  readonly projectGroupingMode: SidebarProjectGroupingMode;
-  readonly desktopLayout?: DesktopProjectLayout | null;
-}): ReadonlyArray<HomeProjectScope> {
+export function buildHomeProjectScopes(
+  input: {
+    readonly projects: ReadonlyArray<EnvironmentProject>;
+    readonly environmentId: EnvironmentId | null;
+    readonly projectGroupingMode: SidebarProjectGroupingMode;
+    readonly desktopLayout?: DesktopProjectLayout | null;
+  },
+  resolve: MessageResolver = m,
+): ReadonlyArray<HomeProjectScope> {
   const projects = input.projects.filter(
     (project) => input.environmentId === null || project.environmentId === input.environmentId,
   );
   const layout = input.desktopLayout;
-  const scopes = buildProjectGroups({
-    projects: layout
-      ? orderItemsByPreferredIds({
-          items: projects,
-          preferredIds: layout.order,
-          getId: getProjectOrderKey,
-          getPreferenceIds: (project) => [
-            getProjectOrderKey(project),
-            legacyProjectCwdPreferenceKey(project.workspaceRoot),
-          ],
-        })
-      : projects,
-    groupScratchProjects: true,
-    settings: layout ?? {
-      sidebarProjectGroupingMode: input.projectGroupingMode,
-      sidebarProjectGroupingOverrides: {},
+  const scopes = buildProjectGroups(
+    {
+      projects: layout
+        ? orderItemsByPreferredIds({
+            items: projects,
+            preferredIds: layout.order,
+            getId: getProjectOrderKey,
+            getPreferenceIds: (project) => [
+              getProjectOrderKey(project),
+              legacyProjectCwdPreferenceKey(project.workspaceRoot),
+            ],
+          })
+        : projects,
+      groupScratchProjects: true,
+      settings: layout ?? {
+        sidebarProjectGroupingMode: input.projectGroupingMode,
+        sidebarProjectGroupingOverrides: {},
+      },
     },
-  }).map((group): HomeProjectScope => {
+    resolve,
+  ).map((group): HomeProjectScope => {
     return {
       key: group.key,
       title: group.label,

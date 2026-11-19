@@ -18,14 +18,14 @@ import {
   subscribeClientSettingsHydration,
 } from "../hooks/useSettings";
 import { appAtomRegistry } from "../rpc/atomRegistry";
-import { themeEnvironmentIdAtom } from "../state/primaryEnvironment";
+import { localEnvironmentIdAtom } from "../state/primaryEnvironment";
 import { serverEnvironment } from "../state/server";
 import { environmentSession } from "../state/session";
 import { useUiStateStore } from "../uiStateStore";
 
 const sameLayout = Schema.toEquivalence(DesktopProjectLayout);
 const targetAtom = Atom.make((get) => {
-  const environmentId = get(themeEnvironmentIdAtom);
+  const environmentId = get(localEnvironmentIdAtom);
   if (environmentId === null) return null;
   const connection = AsyncResult.getOrElse(
     get(environmentCatalog.stateAtom(environmentId)),

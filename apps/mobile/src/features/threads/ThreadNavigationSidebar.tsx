@@ -1,3 +1,4 @@
+import { useGT, useMessages } from "gt-react-native";
 import { desktopProjectLayoutAtom } from "../../state/desktop-project-layout";
 import { getConnectionAwareBrandHeaderOptions } from "../layout/workspace/brand-header-options";
 import {
@@ -157,6 +158,8 @@ function NativeSidebarContainer(props: ThreadNavigationSidebarProps) {
 function ThreadNavigationSidebarPane(
   props: ThreadNavigationSidebarProps & { readonly nativeChrome: boolean },
 ) {
+  const gt = useGT();
+  const messages = useMessages();
   const floatingTabsEnabled = useAndroidFloatingTabs();
   const { themeVariables: materialTheme } = useAppearancePreferences();
   const drawerColor = materialTheme["--color-drawer"];
@@ -218,13 +221,16 @@ function ThreadNavigationSidebarPane(
   const desktopLayout = useAtomValue(desktopProjectLayoutAtom);
   const projectScopes = useMemo(
     () =>
-      buildHomeProjectScopes({
-        projects,
-        environmentId: options.selectedEnvironmentId,
-        projectGroupingMode: options.projectGroupingMode,
-        desktopLayout,
-      }),
-    [desktopLayout, projects, options.selectedEnvironmentId, options.projectGroupingMode],
+      buildHomeProjectScopes(
+        {
+          projects,
+          environmentId: options.selectedEnvironmentId,
+          projectGroupingMode: options.projectGroupingMode,
+          desktopLayout,
+        },
+        messages,
+      ),
+    [desktopLayout, projects, options.selectedEnvironmentId, options.projectGroupingMode, messages],
   );
   const projectFilterOptions = pickableHomeProjectScopes(
     sortHomeProjectScopes({
@@ -355,12 +361,12 @@ function ThreadNavigationSidebarPane(
   const listMenuActions = [
     {
       id: "environment",
-      title: "Environment",
+      title: gt("Environment"),
       subactions: [
         {
           id: "environment:all",
-          title: "All environments",
-          subtitle: "Show threads from every environment",
+          title: gt("All environments"),
+          subtitle: gt("Show threads from every environment"),
           state: options.selectedEnvironmentId === null ? "on" : "off",
         },
         ...environments.map((environment) => ({
@@ -378,12 +384,12 @@ function ThreadNavigationSidebarPane(
       : ([
           {
             id: "project",
-            title: "Project",
+            title: gt("Project"),
             subactions: [
               {
                 id: "project:all",
-                title: "All projects",
-                subtitle: "Show threads from every project",
+                title: gt("All projects"),
+                subtitle: gt("Show threads from every project"),
                 state: selectedProjectKey === null ? "on" : "off",
               },
               ...projectFilterOptions.map((project) => ({
@@ -716,18 +722,18 @@ function ThreadNavigationSidebarPane(
         }
       >
         {catalogState.isLoadingConnections
-          ? "Loading threads…"
+          ? gt("Loading threads…")
           : showAddEnvironment
-            ? "No environments connected"
+            ? gt("No environments connected")
             : props.searchQuery.trim().length > 0
               ? threadSearch.isPending
-                ? "Searching thread messages…"
+                ? gt("Searching thread messages…")
                 : threadSearch.failed
-                  ? "Couldn't search thread messages"
-                  : "No matching threads"
+                  ? gt("Couldn't search thread messages")
+                  : gt("No matching threads")
               : selectedProjectScope !== null
-                ? `No threads in ${selectedProjectScope.title}`
-                : "No threads yet"}
+                ? gt("No threads in {project}", { project: selectedProjectScope.title })
+                : gt("No threads yet")}
       </Text>
       {showAddEnvironment ? (
         <View className={Platform.OS === "android" ? "self-center" : "px-2"}>
@@ -735,7 +741,7 @@ function ThreadNavigationSidebarPane(
             tone="primary"
             size="compact"
             icon="plus"
-            label="Add environment"
+            label={gt("Add environment")}
             onPress={props.onOpenEnvironmentSettings}
           />
         </View>
@@ -761,7 +767,7 @@ function ThreadNavigationSidebarPane(
               hideNavigationBar: false,
               hideWhenScrolling: false,
               obscureBackground: false,
-              placeholder: "Search",
+              placeholder: gt("Search", { $context: "search field placeholder" }),
               placement: "stacked",
               onCancelButtonPress: () => {
                 props.onSearchQueryChange("");
@@ -919,7 +925,7 @@ function ThreadNavigationSidebarPane(
             />
             <View className="flex-row items-center gap-2.5">
               <SidebarFilterButton
-                accessibilityLabel="Choose project"
+                accessibilityLabel={gt("Choose project")}
                 icon={filterIcon}
                 onPress={() => setProjectNavigationMode("projects")}
               />
@@ -936,12 +942,12 @@ function ThreadNavigationSidebarPane(
             />
             <TextInput
               ref={searchInputRef}
-              accessibilityLabel="Search threads"
+              accessibilityLabel={gt("Search threads")}
               autoCapitalize="none"
               autoCorrect={false}
               clearButtonMode="while-editing"
               onChangeText={props.onSearchQueryChange}
-              placeholder="Search"
+              placeholder={gt("Search", { $context: "search field placeholder" })}
               placeholderTextColorClassName="accent-placeholder"
               selectionColorClassName={undefined}
               cursorColorClassName={undefined}

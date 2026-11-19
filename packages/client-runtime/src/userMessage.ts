@@ -16,19 +16,20 @@ import {
 import { filePreviewKind } from "@t3tools/shared/filePreview";
 import { imageMimeType } from "@t3tools/shared/image";
 import { videoMimeType } from "@t3tools/shared/video";
+import { msg } from "gt-i18n";
 
 /** The working row while T3 Code's own compaction runs. */
 export const IDLE_COMPACTING_LABELS = {
-  beforeCacheExpires: "Compacting before the cache expires…",
-  onReturn: "Compacting after being idle…",
-  idleTimeout: "Compacting after the idle timeout…",
+  beforeCacheExpires: msg("Compacting before the cache expires…"),
+  onReturn: msg("Compacting after being idle…"),
+  idleTimeout: msg("Compacting after the idle timeout…"),
 } satisfies Record<OrchestrationV2IdleCompaction, string>;
 
 /** Leads the finished compaction's token counts, in place of "Context compacted". */
 export const IDLE_COMPACTION_TITLES = {
-  beforeCacheExpires: "Auto-compacted before cache expiry",
-  onReturn: "Context compacted after being idle",
-  idleTimeout: "Context automatically compacted after the idle timeout",
+  beforeCacheExpires: msg("Auto-compacted before cache expiry"),
+  onReturn: msg("Context compacted after being idle"),
+  idleTimeout: msg("Context automatically compacted after the idle timeout"),
 } satisfies Record<OrchestrationV2IdleCompaction, string>;
 
 const LEGACY_AUTOMATION_PREFIX = /^\[Triggered by schedule task: [^\r\n]+\]\r?\n\r?\n/;

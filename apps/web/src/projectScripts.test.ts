@@ -1,4 +1,4 @@
-import { projectScriptMenuLabel } from "@t3tools/shared/projectScripts";
+import { projectScriptMenuLabel } from "@t3tools/shared/projectScriptsCopy";
 import { projectScriptIdFromCommand } from "./projectScripts";
 import { buildProjectScript } from "./projectScripts";
 import { shortcutLabelForCommand } from "./keybindings";

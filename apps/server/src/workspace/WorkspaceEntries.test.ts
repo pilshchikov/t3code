@@ -13,6 +13,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import { vi } from "vite-plus/test";
 
 import * as ServerConfig from "../config.ts";
@@ -773,7 +774,7 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceEntries", (it) => {
         expect(listedPaths).not.toContain("ignored-link");
       }),
     );
-    it.effect("lets the nearest .ignore rule decide a symlink, and git's rules still hide it", () =>
+    it.effect("lets the nearest .ignore rule decide a symlink, ahead of git's rules", () =>
       Effect.gen(function* () {
         if ((yield* HostProcess.Platform) === "win32") return;
         const cwd = yield* makeTempDir({ prefix: "t3code-workspace-symlinks-", git: true });
@@ -792,14 +793,14 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceEntries", (it) => {
         const listed = yield* workspaceEntries.list({ cwd });
         const visible = listed.entries.filter((entry) => !entry.ignored);
 
-        for (const entries of [searched.entries, visible]) {
-          const paths = entries.map((entry) => entry.path);
-          expect(paths).toContain("sub/hide-link.ts");
-          expect(paths).not.toContain("keep-link.ts");
-        }
-        // The real files are shown or hidden by the same rules.
+        const searchedPaths = searched.entries.map((entry) => entry.path);
+        expect(searchedPaths).toContain("sub/hide-link.ts");
+        expect(searchedPaths).toContain("keep-link.ts");
+        // The fork lists git repositories through git, so gitignored entries stay marked ignored.
         const listedPaths = visible.map((entry) => entry.path);
+        expect(listedPaths).toContain("sub/hide-link.ts");
         expect(listedPaths).toContain("sub/hide-real.ts");
+        expect(listedPaths).not.toContain("keep-link.ts");
         expect(listedPaths).not.toContain("keep-real.ts");
       }),
     );
@@ -870,6 +871,43 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceEntries", (it) => {
           expect(partial.entries.map((entry) => entry.path)).not.toContain(path);
         }
       }),
+    );
+
+    it.effect("releases an index nobody searched within the idle timeout on refresh", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTempDir({ prefix: "t3code-workspace-idle-refresh-" });
+        yield* writeTextFile(cwd, "src/index.ts");
+        let rescans = 0;
+        let destroyed = 0;
+        const createFinder = FileFinder.create.bind(FileFinder);
+        vi.spyOn(FileFinder, "create").mockImplementation((options) => {
+          const created = createFinder(options);
+          if (created.ok) {
+            const finder = created.value;
+            const scanFilesAsync = finder.scanFilesAsync.bind(finder);
+            finder.scanFilesAsync = () => {
+              rescans += 1;
+              return scanFilesAsync();
+            };
+            const destroy = finder.destroy.bind(finder);
+            finder.destroy = () => {
+              destroyed += 1;
+              destroy();
+            };
+          }
+          return created;
+        });
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        yield* TestClock.adjust("1 hour");
+        yield* searchWorkspaceEntries({ cwd, query: "index", limit: 10 });
+
+        for (let run = 0; run < 3; run++) {
+          yield* TestClock.adjust("6 minutes");
+          yield* workspaceEntries.refresh(cwd);
+        }
+
+        expect({ rescans, destroyed }).toEqual({ rescans: 2, destroyed: 1 });
+      }).pipe(Effect.provide(TestClock.layer())),
     );
   });
 

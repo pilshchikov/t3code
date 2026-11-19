@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import { CheckIcon, CopyIcon, Maximize2Icon, Minimize2Icon } from "lucide-react";
 import { useRef, useState, type ComponentProps } from "react";
 
@@ -41,6 +42,7 @@ function tableHasClippedCells(container: HTMLElement, table: HTMLTableElement): 
 }
 
 export function MarkdownTable({ children, ...props }: ComponentProps<"table">) {
+  const gt = useGT();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [expanded, setExpanded] = useState(() => getClientSettings().wordWrap);
   const [hasClippedCells, setHasClippedCells] = useState(false);
@@ -49,8 +51,8 @@ export function MarkdownTable({ children, ...props }: ComponentProps<"table">) {
     onError: (cause, format) =>
       reportMarkdownActionFailure({ operation: "copy-table", format }, cause),
   });
-  const expandLabel = expanded ? "Collapse table cells" : "Expand table cells";
-  const copyLabel = copied ? "Copied" : "Copy table";
+  const expandLabel = expanded ? gt("Collapse table cells") : gt("Expand table cells");
+  const copyLabel = copied ? gt("Copied") : gt("Copy table");
 
   // React calls this with null when a previous attach returned no cleanup.
   const attachContainer = (container: HTMLDivElement | null) => {
@@ -141,9 +143,15 @@ export function MarkdownTable({ children, ...props }: ComponentProps<"table">) {
             <TooltipPopup side="top">{copyLabel}</TooltipPopup>
           </Tooltip>
           <MenuPopup align="end">
-            <MenuItem onClick={() => handleCopy("slack")}>Copy for Slack</MenuItem>
-            <MenuItem onClick={() => handleCopy("markdown")}>Copy as Markdown</MenuItem>
-            <MenuItem onClick={() => handleCopy("csv")}>Copy as CSV</MenuItem>
+            <MenuItem onClick={() => handleCopy("slack")}>
+              <T>Copy for Slack</T>
+            </MenuItem>
+            <MenuItem onClick={() => handleCopy("markdown")}>
+              <T>Copy as Markdown</T>
+            </MenuItem>
+            <MenuItem onClick={() => handleCopy("csv")}>
+              <T>Copy as CSV</T>
+            </MenuItem>
           </MenuPopup>
         </Menu>
       </div>

@@ -22,7 +22,7 @@ import { ChevronDownIcon, LayersIcon, LayoutDashboardIcon, EllipsisIcon } from "
 import type { ContextMenuItem } from "@t3tools/contracts";
 
 import { openCommandPalette } from "../../commandPaletteBus";
-import { writeTextToClipboard } from "../../hooks/useCopyToClipboard";
+import { namedClipboardTarget, writeTextToClipboard } from "../../hooks/useCopyToClipboard";
 import { useIsMobile } from "../../hooks/useMediaQuery";
 import { useClientSettings } from "../../hooks/useSettings";
 import { useSidebarProjectScope } from "../../hooks/useSidebarProjectScope";
@@ -705,7 +705,7 @@ export const ProjectRail = memo(function ProjectRail() {
         return;
       case "copy-path":
         try {
-          await writeTextToClipboard(project.workspaceRoot, "path");
+          await writeTextToClipboard(project.workspaceRoot, namedClipboardTarget("path"));
           toastManager.add({ type: "success", title: "Path copied" });
         } catch {
           toastManager.add({ type: "error", title: "Could not copy the path" });

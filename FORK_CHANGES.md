@@ -1,5 +1,32 @@
 # Fork Changes
 
+## Upstream integration and app translations, 2026-11-19 (f03ce68691)
+
+- Merges 284 upstream commits up to `f03ce68691` with both histories intact. Fork behavior stays:
+  the reworked sidebar (upstream `SidebarProjectFolderHeader.tsx` and mobile
+  `WorkspaceSidebarColumn.tsx` stay deleted), the in-app context menu instead of upstream's native
+  desktop menu, the fork's idle compaction instead of upstream's compact-before-send and
+  compact-idle-threads setting, disabled telemetry export, the three-way auto-settle select,
+  continuous pooled usage bars, multi-root Files/Diff panels, directory chips with agent guidance,
+  and the Claude adapter's history worker.
+- Upstream migrations 099 and 100 are appended as fork migrations 108 and 109
+  (`apps/server/src/persistence/Migrations.ts`). Upstream's `issues.linkedThreads` RPC joins the
+  fork's separate `IssueWsRpcGroup` in `apps/server/src/ws.ts`. Shared-host connections accept
+  only bearer credentials now that upstream added device-key credentials
+  (`packages/client-runtime/src/connection/resolver.ts`).
+- Upstream translated the apps and made `t3code/no-untranslated-copy` a lint error. Fork copy in
+  upstream-owned files is wrapped in `gt()`/`msg()` and the catalogs are regenerated, with English
+  as the value for new keys. Fork-only files are listed in `vite.config.ts` with the rule off, so
+  those screens stay English.
+- `WorkspaceEntries.test.ts` keeps upstream's `.ignore` symlink case adapted to the fork's
+  git-backed listing: search shows the file and the listing marks it ignored.
+- `agentContextBudget.json` measures 13070 Claude, 14458 Codex and 78986 MCP bytes.
+- Validation: `vp check` reports 0 errors, typecheck passes for web, mobile, desktop, server,
+  client-runtime, shared, contracts and provider-core, and `vp run i18n:check` passes. Focused
+  tests for migrations, Muse fixtures, sessions, workspace entries, turn control, the context
+  budget and the merged web logic pass. A linked-PR browser test could not start because the
+  Playwright browser is not installed on this machine.
+
 ## Mobile thread cache and desktop project layout, 2026-11-18
 
 - Mobile flushes the current thread-list snapshot when the app goes inactive or into the

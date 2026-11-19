@@ -3,6 +3,7 @@ import {
   scopeProjectRef,
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
+import { msg } from "gt-react";
 import { DEFAULT_SERVER_SETTINGS, type ScopedProjectRef, type ThreadId } from "@t3tools/contracts";
 import { type AnyRouter, useRouter } from "@tanstack/react-router";
 import {
@@ -45,6 +46,7 @@ import { resolveThreadRouteTarget } from "../threadRoutes";
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
 import { getClientSettings } from "./useSettings";
 import { toastManager } from "../components/ui/toast";
+import { m } from "../i18n/messages";
 import { getLocalStorageItem, useLocalStorage } from "./useLocalStorage";
 import * as Schema from "effect/Schema";
 import { useAtomValue } from "@effect/atom-react";
@@ -179,8 +181,13 @@ export function createNewThreadHandler(router: AnyRouter) {
         if (remainingCount > 0) {
           toastManager.add({
             type: "warning",
-            title: `${remainingCount} attachment${remainingCount === 1 ? " stayed" : "s stayed"} in the original draft`,
-            description: "Return to the original draft or attach the files again.",
+            title: m(
+              msg(
+                "{count, plural, =1 {{count} attachment stayed in the original draft} other {{count} attachments stayed in the original draft}}",
+                { count: remainingCount },
+              ),
+            ),
+            description: m(msg("Return to the original draft or attach the files again.")),
           });
         }
       }
@@ -266,6 +273,21 @@ export function createNewThreadHandler(router: AnyRouter) {
           selectProjectGroupingSettings(getClientSettings()),
         )
       : scopedProjectKey(projectRef);
+    // Another opener (home's own first-project draft) may have reached this project's draft first.
+    // Matches lag the location during a navigation, so compare against the location.
+    const resultIfAbandoned = () => {
+      const draft = getDraftSessionByLogicalProjectKey(logicalProjectKey);
+      if (draft === null || draft.promotedTo != null || readProject(projectRef) === null) {
+        return null;
+      }
+      const draftHref = router.buildLocation({
+        to: "/draft/$draftId",
+        params: { draftId: draft.draftId },
+      }).href;
+      return router.state.location.href === draftHref
+        ? { draftId: draft.draftId, threadId: draft.threadId }
+        : null;
+    };
     const hasBranchOption = options?.branch !== undefined;
     const hasWorktreePathOption = options?.worktreePath !== undefined;
     const hasEnvModeOption = options?.envMode !== undefined;
@@ -307,7 +329,7 @@ export function createNewThreadHandler(router: AnyRouter) {
         } else if (!isDraftAlreadyOpen) {
           const defaultEnvMode = await resolveDefaultEnvMode();
           if (abandonedSinceRequest()) {
-            return null;
+            return resultIfAbandoned();
           }
           // Concurrent calls may change the draft; stale resets, remaps, or navigation could clobber it.
           const routeTargetNow = getCurrentRouteTarget();
@@ -425,7 +447,7 @@ export function createNewThreadHandler(router: AnyRouter) {
     return (async () => {
       const initialEnvMode = options?.envMode ?? (await resolveDefaultEnvMode());
       if (abandonedSinceRequest()) {
-        return null;
+        return resultIfAbandoned();
       }
       // Reuse drafts registered while awaiting so their pending navigation cannot lose them.
       const racedDraft = getDraftSessionByLogicalProjectKey(logicalProjectKey);
