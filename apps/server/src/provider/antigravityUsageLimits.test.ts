@@ -66,6 +66,9 @@ const fixture = Effect.fn("AntigravityUsageTest.fixture")(function* (
     userInfoAt?: number;
     missingToken?: boolean;
     authMethod?: "oauth-personal" | "oauth-business" | "gemini-api-key";
+    /** Writes the agy CLI's token file, which expires at this time, instead of acp_token.json. */
+    cliTokenExpiry?: string;
+    renewCliToken?: (writeCliToken: (expiry: string) => Effect.Effect<void>) => Effect.Effect<void>;
   } = {},
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -83,7 +86,18 @@ const fixture = Effect.fn("AntigravityUsageTest.fixture")(function* (
         project_id: "project-id",
       }),
     );
-  if (!options.missingToken) yield* writeToken(options.refreshToken ?? "refresh-a");
+  const writeCliToken = (expiry: string) =>
+    fs
+      .writeFileString(
+        path.join(profileDirectory, "antigravity-acp", "antigravity-oauth-token"),
+        JSON.stringify({
+          auth_method: "consumer",
+          token: { access_token: "access-token", refresh_token: "refresh-a", expiry },
+        }),
+      )
+      .pipe(Effect.orDie);
+  if (options.cliTokenExpiry !== undefined) yield* writeCliToken(options.cliTokenExpiry);
+  else if (!options.missingToken) yield* writeToken(options.refreshToken ?? "refresh-a");
   const requests: Array<{ url: string; body: string }> = [];
   const http = HttpClient.make((request, url, _signal, fiber) =>
     Effect.sync(() => {
@@ -111,7 +125,9 @@ const fixture = Effect.fn("AntigravityUsageTest.fixture")(function* (
             : Response.json({}, { status: 403 }),
         );
       }
-      expect(JSON.parse(body)).toEqual({ project: "project-id" });
+      expect(JSON.parse(body)).toEqual(
+        options.cliTokenExpiry === undefined ? { project: "project-id" } : {},
+      );
       expect(request.headers["user-agent"]).toMatch(/^antigravity\/hub\/2\.24\.0 /);
       return HttpClientResponse.fromWeb(
         request,
@@ -132,6 +148,7 @@ const fixture = Effect.fn("AntigravityUsageTest.fixture")(function* (
   const usage = yield* makeAntigravityUsageProbe({
     profileDirectory,
     authMethod: options.authMethod ?? "oauth-personal",
+    ...(options.renewCliToken ? { renewCliToken: options.renewCliToken(writeCliToken) } : {}),
   }).pipe(Effect.provideService(HttpClient.HttpClient, http));
   return { ...usage, requests, writeToken, tokenPath };
 });
@@ -641,6 +658,33 @@ describe("Antigravity subscription limits", () => {
           windowDurationMins: 300,
         },
       ]);
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+  );
+
+  it.effect("reads the agy CLI token and lets agy renew it once when it expires", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-19T20:00:00Z")));
+      let renewals = 0;
+      const { probe, requests } = yield* fixture({
+        cliTokenExpiry: "2026-11-19T12:59:00.123456-07:00",
+        userId: "google-user-1",
+        renewCliToken: (writeCliToken) =>
+          Effect.suspend(() => {
+            renewals++;
+            return renewals === 1 ? writeCliToken("2026-11-19T13:59:00.123456-07:00") : Effect.void;
+          }),
+      });
+      const limits = yield* probe;
+      expect(renewals).toBe(1);
+      expect(limits.windows).toHaveLength(4);
+      expect(requests.some((request) => request.url.endsWith("/token"))).toBe(false);
+
+      yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-19T21:00:00Z")));
+      expect((yield* probe).unavailable?.reason).toBe("probeFailed");
+      expect(renewals).toBe(2);
+      yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-19T21:05:00Z")));
+      yield* probe;
+      expect(renewals).toBe(2);
     }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 

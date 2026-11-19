@@ -1,5 +1,16 @@
 # Fork Changes
 
+## Antigravity limits for agy CLI sign-ins, 2026-11-19
+
+- The Antigravity usage probe also reads the agy 1.5 CLI's `antigravity-oauth-token` from the
+  instance profile, so Gemini and Claude/GPT five-hour and weekly limits show for agy sign-ins.
+  Upstream reads only the older harness's `acp_token.json`. The CLI token carries no OAuth client,
+  so when it expires the probe starts agy briefly to renew it, at most once every ten minutes.
+  Sources: `apps/server/src/provider/antigravityUsageLimits.ts`,
+  `apps/server/src/provider/Drivers/AntigravityDriver.ts`.
+- Validation: `antigravityUsageLimits.test.ts` covers reading the CLI token, one renewal on expiry
+  and the renewal backoff. The quota endpoint accepted a real agy 1.5.12 token on the Mac mini.
+
 ## Upstream integration and app translations, 2026-11-19 (f03ce68691)
 
 - Merges 284 upstream commits up to `f03ce68691` with both histories intact. Fork behavior stays:
