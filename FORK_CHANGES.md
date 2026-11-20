@@ -1,5 +1,13 @@
 # Fork Changes
 
+## Agents pull the latest default branch, 2026-11-20
+
+- Every agent turn in a project with repositories now carries a `<git-sync>` note: at the start
+  of a task, fetch, fast-forward the default branch (main or master) when it has no local changes,
+  and base new task branches on the fetched origin default branch. Agents never stash, reset or
+  rebase uncommitted work for it. Sources: `apps/server/src/project/ThreadWorkspaceInstructions.ts`,
+  `apps/server/src/orchestration-v2/ProviderSessionManager.ts`.
+
 ## Antigravity limits for agy CLI sign-ins, 2026-11-19
 
 - The Antigravity usage probe also reads the agy 1.5 CLI's `antigravity-oauth-token` from the
@@ -2953,11 +2961,9 @@ fork-specific behavior so future upstream syncs are easier to review.
   lint has no errors, with existing style/React warnings. No tests or app UI verification run
   during this merge. No app rebuild, reinstall, or restart. Recovery branch:
   `backup/pre-upstream-20261003`.
-- Owner requested daily source merges at 09:00 America/Vancouver. The local macOS launch agent
-  `com.pilshchikov.t3code-upstream-sync` prepares each merge in an isolated worktree, reads this
-  record, and advances local main only if it is clean and unchanged. Pending work stays on its
-  automation branch. Configuration and reports live in `~/.local/share/t3code-upstream-sync`.
-  Scheduled runs never push, rebuild, reinstall, or restart; app updates require an explicit ask.
+- Owner requested daily source merges at 09:00 America/Vancouver through a local launch agent.
+  The owner removed that automation on 2026-11-20, along with its worktrees and branches. Upstream
+  merges now run only on request.
 
 ## Automatic context compaction, October 3
 

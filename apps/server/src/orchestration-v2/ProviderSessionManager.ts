@@ -3,7 +3,10 @@ import {
   threadWorkspaceInstructions,
 } from "@t3tools/shared/threadWorkspaces";
 import * as ProjectMemory from "../project/ProjectMemory.ts";
-import { workspaceInstructions } from "../project/ThreadWorkspaceInstructions.ts";
+import {
+  gitSyncInstructions,
+  workspaceInstructions,
+} from "../project/ThreadWorkspaceInstructions.ts";
 import * as SqlClient from "effect/sql/SqlClient";
 import { AgentScope } from "@t3tools/shared/AgentScope";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
@@ -2528,7 +2531,8 @@ export const layerWithOptions = (
                         : [];
                       const workspaceContext =
                         threadWorkspaceInstructions(roots, options.configureMcp !== false) +
-                        (options.configureMcp !== false ? workspaceInstructions : "");
+                        (options.configureMcp !== false ? workspaceInstructions : "") +
+                        (roots.length > 0 ? gitSyncInstructions : "");
                       const guidance = roots
                         .flatMap((root) =>
                           root.agentGuidance?.trim()
