@@ -1,5 +1,15 @@
 # Fork Changes
 
+## Compact strip layout for Usage limits, 2026-11-23
+
+- Usage → Limits shows each provider as a strip instead of a card per window: a provider line
+  with a pill per account naming its tightest limit (with banked reset credits), and under it one
+  thin row per limit with % left, the reset countdown and an even-pace tick. Providers start
+  expanded and fold on click. Hovering a row opens the same limit popover, so reset credits can
+  still be redeemed. Sources: `apps/web/src/components/usage/UsageLimitsPooled.tsx`.
+- Validation: `UsageLimitsPooled.browser.test.tsx` covers the countdown, banked credits, folding
+  and the shared popover.
+
 ## Upstream integration, 2026-11-23 (a369642c1c)
 
 - Merged 798 upstream commits. Recovery branch: `backup/pre-upstream-20261123`.

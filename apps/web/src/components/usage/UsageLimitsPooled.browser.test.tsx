@@ -146,36 +146,41 @@ it.each([
   expect(status?.textContent).toBe(`Alpha ${text}`);
 });
 
-it("omits an empty reset plate but keeps countdowns and banked credits visible", async () => {
+it("shows a limit's countdown and the account's banked credits in the strip", async () => {
   setup();
   await using screen = await render(initial());
 
   await page.viewport(1440, 900);
   const now = Date.parse("2026-09-03T11:00:00Z");
-  const segment = page.getByRole("button", { name: /^Alpha:/ });
-  // The empty plate has no accessible text; select its painted background inside the real bar.
-  const plate = () =>
-    segment.element().querySelector<HTMLSpanElement>('[class~="bg-background/85"]');
+  const line = page.getByRole("button", { name: /^Alpha:/ });
+  const header = page.getByRole("button", { expanded: true });
 
   await act(() =>
     screen.rerender(<UsageLimitsPooled presentations={presentations(undefined, 0)} now={now} />),
   );
-  await expect.element(segment).toHaveAccessibleName("Alpha: 100% left");
-  expect(plate()).toBeNull();
+  await expect.element(line).toHaveAccessibleName("Alpha: 100% left, Session");
+  expect(header.element().textContent).not.toContain("reset credit");
 
   await act(() =>
     screen.rerender(
       <UsageLimitsPooled presentations={presentations("2026-09-03T14:00:00Z", 0)} now={now} />,
     ),
   );
-  await expect.element(plate()).toBeVisible();
-  expect(plate()?.textContent).toBe("↻ 3h 0m");
+  // Duration formatting may isolate its parts with invisible marks.
+  await expect
+    .poll(() => line.element().textContent?.replace(/[^\w%]/g, ""))
+    .toBe("Session60%in3h0m");
 
   await act(() =>
     screen.rerender(<UsageLimitsPooled presentations={presentations(undefined, 1)} now={now} />),
   );
-  await expect.element(plate()).toBeVisible();
-  expect(plate()?.textContent).toBe("1");
+  await expect
+    .poll(() => header.element().textContent?.replace(/[^\w ]/g, ""))
+    .toContain("1 reset credit banked");
+
+  await userEvent.click(header);
+  await expect.element(page.getByRole("button", { expanded: false })).toBeVisible();
+  expect(document.querySelector('[aria-label^="Alpha:"]')).toBeNull();
 });
 
 it("moves the one limit popover between windows on hover", async () => {
