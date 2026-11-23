@@ -9,6 +9,11 @@
   still be redeemed. Sources: `apps/web/src/components/usage/UsageLimitsPooled.tsx`.
 - Validation: `UsageLimitsPooled.browser.test.tsx` covers the countdown, banked credits, folding
   and the shared popover.
+- The Usage button's hover card reads the same limit data as the Limits tab. It lists only
+  providers that report limits, so unconfigured ones no longer show "No limit data yet" and
+  Antigravity appears. Each limit is one thin row with % left, pace tick and reset time, with
+  banked reset credits per account. The old `state/accountLimits.ts` view is removed. Sources:
+  `apps/web/src/components/usage/AccountLimits.tsx`, validated by `AccountLimits.browser.test.tsx`.
 
 ## Upstream integration, 2026-11-23 (a369642c1c)
 

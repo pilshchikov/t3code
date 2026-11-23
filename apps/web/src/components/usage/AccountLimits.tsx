@@ -1,33 +1,30 @@
-import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
-import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
-/**
- * Renders whatever windows the server reports, so a window a provider adds or brings back appears
- * without a client change. Rows are captioned only when a provider has several, so two accounts'
- * numbers are never mistaken for one.
- */
-import type { AccountLimitsSnapshot, AccountLimitsWindow } from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
+import { normalizeProviderAccentColor } from "@t3tools/client-runtime/state/provider-instance-display";
+import type { ServerProviderUsageWindow } from "@t3tools/contracts";
+import { formatResetAt } from "@t3tools/shared/limitsFormat";
+import {
+  collectLimitAccounts,
+  collectLimitPools,
+  displayLimitWindows,
+  type LimitAccount,
+  type LimitPool,
+  paceRemainingPercent,
+  remainingPercent,
+} from "@t3tools/shared/usageLimits";
+import { T, useGT } from "gt-react";
+import { TicketIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { resolveEnvironmentOptionLabel } from "../BranchToolbar.logic";
 import { cn } from "../../lib/utils";
-import {
-  type AccountLimitsRow,
-  legacyInstanceIdFor,
-  useAccountLimits,
-} from "../../state/accountLimits";
-import { formatAgo, formatResetAt } from "@t3tools/shared/limitsFormat";
-import { PROVIDER_ORDER, PROVIDER_PRESENTATION } from "./usageProviders";
+import { environmentPresentations } from "../../state/presentation";
+import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
+import { providerClients } from "../settings/providerDriverMeta";
+import { barColor } from "./UsageLimits";
 
-/** Age past which a snapshot stops being "current" and earns a caption. */
-const STALE_AFTER_MS = 15 * 60_000;
-
-/**
- * Reset countdowns and snapshot ages drift as time passes, not as data
- * changes; a coarse tick keeps them honest without re-fetching.
- */
+/** Reset times drift as time passes, not as data changes; a coarse tick keeps them honest. */
 function useNowMs(intervalMs = 30_000): number {
   const [nowMs, setNowMs] = useState(() => Date.now());
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Interval clock that advances reset countdowns and snapshot ages.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Interval clock that advances reset times.
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), intervalMs);
     return () => window.clearInterval(timer);
@@ -35,194 +32,138 @@ function useNowMs(intervalMs = 30_000): number {
   return nowMs;
 }
 
-function usageTone(usedPercent: number): string | undefined {
-  if (usedPercent >= 95) return "text-destructive-foreground";
-  if (usedPercent >= 80) return "text-warning-foreground";
-  return undefined;
+function shortWindowLabel(label: string): string {
+  return label
+    .replace(/\b5-hour\b/g, "5h")
+    .replace(/\bWeekly\b/g, "Week")
+    .replace(/^Gemini 4 /, "")
+    .replace(/^Claude and GPT\b/, "Claude/GPT")
+    .replace(" · ", " ");
 }
 
-function LimitMeter({ window, color }: { window: AccountLimitsWindow; color: string }) {
-  return (
-    <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
-      <div
-        className="h-full rounded-full"
-        style={{
-          width: `${Math.min(100, Math.max(0, window.usedPercent))}%`,
-          backgroundColor: color,
-        }}
-      />
-    </div>
-  );
+function limitTone(remaining: number): string {
+  if (remaining === 0) return "text-destructive-foreground";
+  return remaining <= 20 ? "text-warning-foreground" : "text-foreground";
 }
 
-/** `6h ago`, and only once the snapshot is old enough to matter. */
-function SnapshotAge({ snapshot, nowMs }: { snapshot: AccountLimitsSnapshot; nowMs: number }) {
-  const ageMs = nowMs - Date.parse(snapshot.asOf);
-  if (!Number.isFinite(ageMs) || ageMs < STALE_AFTER_MS) return null;
-  return (
-    <span className="text-[10px] text-muted-foreground">{formatAgo(snapshot.asOf, nowMs)}</span>
-  );
-}
-
-/** Stable key for one (environment, instance) row group. */
-function rowKey(row: AccountLimitsRow): string {
-  // The merge folds unkeyed snapshots onto the driver's default instance
-  // id, so the key must share the merge's own mapping.
-  const instanceId = row.snapshot.instanceId ?? legacyInstanceIdFor(row.snapshot.provider);
-  return `${row.environmentId}:${instanceId}`;
-}
-
-/**
- * "Work · laptop" - who a row group belongs to, shown only when a provider
- * has more than one group and the numbers could otherwise be conflated.
- */
-function RowCaption({
-  row,
-  nameEnvironment,
-  nowMs,
-  className,
-}: {
-  row: AccountLimitsRow;
-  nameEnvironment: boolean;
-  nowMs: number;
-  className: string;
-}) {
-  return (
-    <div className={cn("flex items-baseline gap-1.5", className)}>
-      {row.instanceColor === null ? null : (
-        <span
-          aria-hidden
-          className="size-2 shrink-0 self-center rounded-full"
-          style={{ backgroundColor: row.instanceColor }}
-        />
-      )}
-      <span className="truncate">
-        {row.instanceLabel}
-        {/* The shared option-label contract: blank labels normalize, and
-            the primary environment reads "This device" here exactly as it
-            does in the pickers. */}
-        {nameEnvironment
-          ? ` · ${resolveEnvironmentOptionLabel({
-              isPrimary: row.environmentIsPrimary,
-              environmentId: row.environmentId,
-              runtimeLabel: row.environmentLabel,
-            })}`
-          : ""}
-      </span>
-      <span className="ml-auto shrink-0">
-        <SnapshotAge snapshot={row.snapshot} nowMs={nowMs} />
-      </span>
-    </div>
-  );
-}
-
-function HoverWindowRow({
+function HoverLimitRow({
+  label,
   window,
   color,
   nowMs,
 }: {
-  window: AccountLimitsWindow;
-  color: string;
-  nowMs: number;
+  readonly label: string;
+  readonly window: ServerProviderUsageWindow;
+  readonly color: string;
+  readonly nowMs: number;
 }) {
+  const remaining = remainingPercent(window);
+  const timeLeft = paceRemainingPercent(window, nowMs);
   return (
-    <div className="flex items-center gap-2">
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <span className="w-9 shrink-0 truncate whitespace-nowrap text-[10px] text-muted-foreground">
-              {window.label}
-            </span>
-          }
+    <div className="grid grid-cols-[5.5rem_minmax(0,1fr)_2.25rem_3.25rem] items-center gap-1.5 text-[11px]">
+      <span className="truncate text-muted-foreground">{shortWindowLabel(label)}</span>
+      <span aria-hidden className="relative h-1 min-w-0 rounded-full bg-foreground/10">
+        <span
+          className="absolute inset-y-0 left-0 rounded-full"
+          style={{ width: `${remaining}%`, backgroundColor: color }}
         />
-        <TooltipPopup>{window.label}</TooltipPopup>
-      </Tooltip>
-      <LimitMeter window={window} color={color} />
-      <span
-        className={cn(
-          "shrink-0 whitespace-nowrap text-right text-[11px] tabular-nums text-foreground",
-          usageTone(window.usedPercent),
-        )}
-      >
-        {Math.round(window.usedPercent)}% used
+        {timeLeft !== null ? (
+          <span
+            className="absolute -inset-y-px w-0.5 -translate-x-1/2 rounded-full bg-foreground/60"
+            style={{ left: `${timeLeft}%` }}
+          />
+        ) : null}
       </span>
-      <span className="shrink-0 whitespace-nowrap text-right text-[10px] tabular-nums text-muted-foreground">
-        {formatResetAt(window.resetsAt, nowMs) ?? ""}
+      <span className={cn("text-right font-semibold tabular-nums", limitTone(remaining))}>
+        {remaining}%
+      </span>
+      <span className="truncate text-right text-[10px] text-muted-foreground tabular-nums">
+        {formatResetAt(window.resetsAt ?? null, nowMs) ?? ""}
       </span>
     </div>
   );
 }
 
-/** Compact per-provider availability, shown on hovering the Usage button. */
-export function AccountLimitsHoverCard() {
-  const { byProvider, reportingEnvironments, isPending, isSettling } = useAccountLimits();
-  const nowMs = useNowMs();
+function accountLabel(account: LimitAccount): string {
+  return account.displayName ?? account.email ?? providerClients.get(account.driver)?.label ?? "";
+}
 
-  if (isPending && byProvider.size === 0) {
-    return <p className="px-1 py-2 text-xs text-muted-foreground">Loading limits…</p>;
-  }
-
+function HoverPool({ pool, nowMs }: { readonly pool: LimitPool; readonly nowMs: number }) {
+  const label = providerClients.get(pool.driver)?.label ?? String(pool.driver);
+  const providerColor = barColor(pool.driver);
+  const windows = displayLimitWindows(pool);
+  const named = pool.accounts.length > 1;
+  const gt = useGT();
   return (
-    <div className="flex w-64 flex-col gap-2.5 p-1.5">
-      {PROVIDER_ORDER.map((provider) => {
-        const rows = byProvider.get(provider) ?? [];
-        const only = rows.length === 1 ? rows[0] : undefined;
-        const presentation = PROVIDER_PRESENTATION[provider];
-
+    <div className="flex flex-col gap-0.5 border-border not-first:border-t not-first:pt-2">
+      <div className="flex items-center gap-1.5 pb-0.5">
+        <ProviderInstanceIcon
+          driverKind={pool.driver}
+          displayName={label}
+          iconClassName="size-3 shrink-0"
+        />
+        <span className="text-xs font-medium text-foreground">{label}</span>
+      </div>
+      {pool.accounts.map((account) => {
+        const color = normalizeProviderAccentColor(account.accentColor) ?? providerColor;
+        const credits = account.limits.resetCredits?.availableCount ?? 0;
         return (
-          <div key={provider} className="flex flex-col gap-1">
-            <div className="flex items-baseline gap-1.5">
-              <ProviderInstanceIcon
-                driverKind={presentation.driverKind}
-                displayName={presentation.label}
-                iconClassName="size-3 shrink-0 self-center"
-              />
-              <span className="text-xs font-medium text-foreground">{presentation.label}</span>
-              <span className="ml-auto">
-                {only !== undefined ? <SnapshotAge snapshot={only.snapshot} nowMs={nowMs} /> : null}
-              </span>
-            </div>
-            {rows.length === 0 || (only !== undefined && only.snapshot.windows.length === 0) ? (
-              <p className="text-[11px] text-muted-foreground">
-                {rows.length === 0 && isSettling ? "Loading…" : "No limit data yet"}
-              </p>
-            ) : only !== undefined ? (
-              // Single group - the common case: same markup as one account.
-              only.snapshot.windows.map((window) => (
-                <HoverWindowRow
-                  key={window.id}
-                  window={window}
-                  color={only.instanceColor ?? presentation.color}
+          <div key={account.key} className="flex flex-col gap-0.5">
+            {named || credits > 0 ? (
+              <div className="flex items-center gap-1.5 pt-0.5 text-[10px] text-muted-foreground">
+                {named ? (
+                  <>
+                    <span
+                      aria-hidden
+                      className="size-1.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: color }}
+                    />
+                    <span className="truncate">{accountLabel(account)}</span>
+                  </>
+                ) : null}
+                {credits > 0 ? (
+                  <span className="ml-auto inline-flex items-center gap-0.5 font-semibold text-foreground tabular-nums">
+                    <TicketIcon className="size-3" aria-hidden />
+                    {gt("{count, plural, one {# reset} other {# resets}}", { count: credits })}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+            {windows.map((poolWindow) => {
+              const member = poolWindow.members.find((entry) => entry.account.key === account.key);
+              return member ? (
+                <HoverLimitRow
+                  key={`${poolWindow.kind}:${poolWindow.id}`}
+                  label={poolWindow.label}
+                  window={member.window}
+                  color={color}
                   nowMs={nowMs}
                 />
-              ))
-            ) : (
-              rows.map((row) => (
-                <div key={rowKey(row)} className="flex flex-col gap-1">
-                  <RowCaption
-                    row={row}
-                    nameEnvironment={reportingEnvironments > 1}
-                    nowMs={nowMs}
-                    className="text-[10px] text-muted-foreground"
-                  />
-                  {row.snapshot.windows.length === 0 ? (
-                    <p className="text-[11px] text-muted-foreground">No limit data yet</p>
-                  ) : (
-                    row.snapshot.windows.map((window) => (
-                      <HoverWindowRow
-                        key={window.id}
-                        window={window}
-                        color={row.instanceColor ?? presentation.color}
-                        nowMs={nowMs}
-                      />
-                    ))
-                  )}
-                </div>
-              ))
-            )}
+              ) : null;
+            })}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** Limits of the providers that report them, shown on hovering the Usage button. */
+export function AccountLimitsHoverCard() {
+  const presentations = useAtomValue(environmentPresentations.presentationsWithProvidersAtom);
+  const nowMs = useNowMs();
+  const pools = collectLimitPools(collectLimitAccounts(presentations), nowMs).filter((pool) =>
+    pool.windows.some((window) => window.members.length > 0),
+  );
+  return (
+    <div className="flex w-64 flex-col gap-2 p-1.5">
+      {pools.length === 0 ? (
+        <p className="text-[11px] text-muted-foreground">
+          <T>No provider reports limits yet.</T>
+        </p>
+      ) : (
+        pools.map((pool) => <HoverPool key={pool.driver} pool={pool} nowMs={nowMs} />)
+      )}
     </div>
   );
 }

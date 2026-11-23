@@ -11,11 +11,9 @@ import { UsageProviderKind } from "./usage.ts";
 
 /**
  * Bumped on incompatible {@link AccountLimitsSummary} changes. v2 keys snapshots per provider
- * instance and still accepts v1 (folded onto the default instance). Clients skip other versions:
- * showing nothing beats showing one instance's numbers as the whole provider's.
+ * instance.
  */
 export const ACCOUNT_LIMITS_CONTRACT_VERSION = 2 as const;
-export const ACCOUNT_LIMITS_ACCEPTED_VERSIONS: readonly number[] = [1, 2];
 
 export const AccountLimitsWindow = Schema.Struct({
   /**
