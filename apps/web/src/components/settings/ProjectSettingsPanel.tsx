@@ -69,6 +69,7 @@ import { ProjectActionsSettings } from "./ProjectActionsSettings";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import { useAccentColorStore } from "../../accentColorStore";
 import { ACCENT_COLOR_OPTIONS, accentColorLabel, resolveAccentHex } from "../../lib/accentColors";
+import { ProjectRepositoriesSettings } from "./ProjectRepositoriesSettings";
 import {
   defaultProjectIcon,
   hasDefaultProjectIcon,
@@ -832,6 +833,7 @@ function ProjectDetail({
         </SettingsSection>
         <ProjectDefaultsSettings category="project" />
         <ProjectActionsSettings />
+        <ProjectRepositoriesSettings members={group.memberProjects} />
         {checkoutChoices}
         <SettingsSection
           title={gt("Directories")}

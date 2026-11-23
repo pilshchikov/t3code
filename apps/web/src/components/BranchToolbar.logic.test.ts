@@ -1,4 +1,10 @@
-import { EnvironmentId, ProviderInstanceId, RunId, type VcsRef } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  GitCommandError,
+  ProviderInstanceId,
+  RunId,
+  type VcsRef,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 import { dedupeRemoteBranchesWithLocalMatches } from "@t3tools/shared/git";
 import {
@@ -20,7 +26,25 @@ import {
   sanitizeNewRefName,
   shouldIncludeBranchPickerItem,
   isBranchHoldCurrent,
+  offersWorkspaceModes,
+  toBranchActionErrorMessage,
 } from "./BranchToolbar.logic";
+
+describe("toBranchActionErrorMessage", () => {
+  it("shows a Git failure's detail without the operation and cwd", () => {
+    const error = new GitCommandError({
+      operation: "GitVcsDriver.switchRef.checkout",
+      command: "git",
+      cwd: "/tmp/repo",
+      detail: "Commit, stash, or discard them, then switch again.",
+    });
+
+    expect(toBranchActionErrorMessage(error)).toBe(
+      "Commit, stash, or discard them, then switch again.",
+    );
+    expect(toBranchActionErrorMessage(new Error("boom"))).toBe("boom");
+  });
+});
 
 describe("resolveDraftEnvModeAfterBranchChange", () => {
   it("switches to local mode when returning from an existing worktree to the main worktree", () => {
@@ -160,6 +184,19 @@ describe("resolveCurrentWorkspaceLabel", () => {
 
   it("describes the active checkout as a worktree when one is attached", () => {
     expect(resolveCurrentWorkspaceLabel("/repo/.t3/worktrees/feature-a")).toBe("Current worktree");
+  });
+});
+
+describe("offersWorkspaceModes", () => {
+  it("offers worktrees from a repository or tracked repositories, never in No project", () => {
+    const folder = { isScratchProject: false, isGitRepo: false, tracksGitRepositories: false };
+    expect(offersWorkspaceModes(folder)).toBe(false);
+    expect(offersWorkspaceModes({ ...folder, isGitRepo: true })).toBe(true);
+    expect(offersWorkspaceModes({ ...folder, tracksGitRepositories: true })).toBe(true);
+    // Git status assumes a repository until it loads.
+    expect(offersWorkspaceModes({ ...folder, isScratchProject: true, isGitRepo: true })).toBe(
+      false,
+    );
   });
 });
 

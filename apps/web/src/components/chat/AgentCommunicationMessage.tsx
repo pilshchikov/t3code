@@ -5,8 +5,7 @@ import {
   CornerUpRightIcon,
   MessageSquareIcon,
 } from "lucide-react";
-import ReactMarkdown, { type Components } from "react-markdown";
-import { CHAT_MARKDOWN_REMARK_PLUGINS } from "@t3tools/shared/markdownPipeline";
+import type { Components } from "hast-util-to-jsx-runtime";
 import {
   communicationStatusTone,
   type CommunicationMessage,
@@ -15,6 +14,7 @@ import { Button } from "../ui/button";
 import { cn } from "../../lib/utils";
 import { communicationStatusClasses } from "./agentCommunicationStyles";
 import { AgentCommunicationAvatar } from "./AgentCommunicationAvatar";
+import { createMarkdownRenderer, safeUrl } from "./markdownRenderer";
 
 export type CommunicationReadingMode = "compact" | "preview" | "full";
 export interface CommunicationMessageAgent {
@@ -42,7 +42,7 @@ const dateFormat = new Intl.DateTimeFormat(undefined, {
 });
 const PREVIEW_HEIGHT_REM = 10;
 
-const fullMarkdownComponents: Components = {
+const fullMarkdownComponents: Partial<Components> = {
   a: ({ children, href }) => (
     <a href={href} target="_blank" rel="noopener noreferrer">
       {children}
@@ -50,10 +50,27 @@ const fullMarkdownComponents: Components = {
   ),
   img: ({ alt }) => <span className="text-muted-foreground">{alt || "Image attachment"}</span>,
 };
-const previewMarkdownComponents: Components = {
+const previewMarkdownComponents: Partial<Components> = {
   ...fullMarkdownComponents,
   a: ({ children }) => <span>{children}</span>,
 };
+const markdownOptions = {
+  math: false,
+  breaks: false,
+  escapeHtml: true,
+  insights: false,
+  extensions: {},
+};
+const fullRenderer = createMarkdownRenderer({
+  markdown: markdownOptions,
+  components: fullMarkdownComponents,
+  urlTransform: safeUrl,
+});
+const previewRenderer = createMarkdownRenderer({
+  markdown: markdownOptions,
+  components: previewMarkdownComponents,
+  urlTransform: safeUrl,
+});
 
 function plainText(markdown: string) {
   return markdown
@@ -182,13 +199,9 @@ export const AgentCommunicationMessage = memo(function AgentCommunicationMessage
             )}
           >
             <div className="chat-markdown min-w-0 text-sm leading-relaxed text-foreground/85 [overflow-wrap:anywhere] [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto">
-              <ReactMarkdown
-                remarkPlugins={CHAT_MARKDOWN_REMARK_PLUGINS}
-                skipHtml
-                components={mode === "full" ? fullMarkdownComponents : previewMarkdownComponents}
-              >
-                {mode === "full" ? message.text : preview}
-              </ReactMarkdown>
+              {mode === "full"
+                ? fullRenderer.element(fullRenderer.parse(message.text))
+                : previewRenderer.element(previewRenderer.parse(preview))}
             </div>
           </div>
         )}

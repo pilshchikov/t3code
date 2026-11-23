@@ -1,11 +1,12 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { useAtomValue } from "@effect/atom-react";
 import { ACCENT_COLOR_OPTIONS, resolveAccentHex } from "@t3tools/shared/accentColors";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { Modal, Pressable, View } from "react-native";
 
 import { AppText } from "../../components/ui/AppText";
 import { SymbolView } from "../../components/ui/AppSymbol";
-import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
+import { mobilePreferencesAtom, saveMobilePreferences } from "../../state/preferences";
+import { useAtomCommand } from "../../state/use-atom-command";
 
 const threadColorAtom = Atom.family((threadKey: string) =>
   Atom.make((get) => {
@@ -27,9 +28,9 @@ export function ThreadColorPicker(props: {
   readonly onClose: () => void;
 }) {
   const selected = useAtomValue(threadColorAtom(props.threadKey));
-  const savePreferences = useAtomSet(updateMobilePreferencesAtom);
+  const savePreferences = useAtomCommand(saveMobilePreferences);
   const choose = (color: string | null) => {
-    savePreferences({
+    void savePreferences({
       transform: (current) => {
         const colors = { ...current.threadAccentColors };
         if (color === null) delete colors[props.threadKey];

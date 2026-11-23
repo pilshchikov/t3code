@@ -588,6 +588,7 @@ it("restores the selected PR tab when switching threads and remounting the right
         keybindings={[]}
         configuredPreviewUrls={[]}
         workspaceMutationId={null}
+        workspaceRevision={null}
         getShortcutContext={shortcutContext}
         onSendAnnotation={() => {}}
         onCloseSurface={() => {}}
@@ -612,7 +613,11 @@ it("restores the selected PR tab when switching threads and remounting the right
         }}
         gitHistory={null}
         issuesSupported={false}
-        sideChatParentPanel={{ openToolDiff: () => {}, runShellCommand: () => {} }}
+        sideChatParentPanel={{
+          hostRef: threadRef,
+          openToolDiff: () => {},
+          runShellCommand: () => {},
+        }}
       />
     );
   };

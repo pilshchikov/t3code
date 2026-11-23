@@ -68,20 +68,21 @@ it.layer(ProjectStore.layer.pipe(Layer.provideMerge(SqlitePersistence.layerMemor
           WHERE project_id = ${projectId}
         `;
         assert.strictEqual(rows[0]?.defaultModelSelection, JSON.stringify(modelSelection));
-        assert.deepStrictEqual(
-          Option.getOrNull(yield* projects.get(projectId))?.defaultModelSelection,
-          modelSelection,
-        );
+        const project = Option.getOrNull(yield* projects.get(projectId));
+        assert.deepStrictEqual(project?.defaultModelSelection, modelSelection);
+        // Events from before tracked folders have no list.
+        assert.deepStrictEqual(project?.trackedFolders, []);
       }),
     );
 
-    it.effect("keeps pin, archive and group across later updates", () =>
+    it.effect("keeps pin and archive times, group and tracked folders across later updates", () =>
       Effect.gen(function* () {
         const projects = yield* ProjectStore.ProjectStoreV2;
         const projectId = ProjectId.make("project-organized");
         const at = "2026-03-24T00:00:00.000Z";
         const event = { aggregateKind: "project", aggregateId: projectId, occurredAt: at } as const;
         const meta = { commandId: null, causationEventId: null, correlationId: null, metadata: {} };
+        const trackedFolders = [{ path: "/tmp/project-shared", name: "Shared" }];
         yield* projects.apply({
           ...event,
           ...meta,
@@ -105,7 +106,7 @@ it.layer(ProjectStore.layer.pipe(Layer.provideMerge(SqlitePersistence.layerMemor
           sequence: 2,
           eventId: EventId.make("event-organized-pinned"),
           type: "project.meta-updated",
-          payload: { projectId, pinnedAt: at, archivedAt: at, updatedAt: at },
+          payload: { projectId, pinnedAt: at, archivedAt: at, trackedFolders, updatedAt: at },
         });
         yield* projects.apply({
           ...event,
@@ -119,6 +120,7 @@ it.layer(ProjectStore.layer.pipe(Layer.provideMerge(SqlitePersistence.layerMemor
         assert.strictEqual(project?.pinnedAt, at);
         assert.strictEqual(project?.archivedAt, at);
         assert.strictEqual(project?.groupKey, "games");
+        assert.deepStrictEqual(project?.trackedFolders, trackedFolders);
       }),
     );
 

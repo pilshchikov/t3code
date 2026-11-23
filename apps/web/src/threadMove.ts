@@ -2,6 +2,7 @@ import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   createEnvironmentRpcCommand,
   isAtomCommandInterrupted,
+  runAtomCommand,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import {
@@ -86,7 +87,7 @@ export function threadMoveTargets(threadRef: ScopedThreadRef): ReadonlyArray<Thr
 }
 
 const moveThread = (threadRef: ScopedThreadRef, target: ThreadMoveTarget) =>
-  command.run(appAtomRegistry, {
+  runAtomCommand(appAtomRegistry, command, {
     environmentId: threadRef.environmentId,
     input: {
       threadId: threadRef.threadId,

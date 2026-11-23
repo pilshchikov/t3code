@@ -123,9 +123,12 @@ it.effect.each(["claudeAgent", "codex"] as const)(
       yield* sql`UPDATE orchestration_v2_projection_provider_threads SET status = 'not_loaded'`;
       expect(yield* policy.due()).toEqual([]);
       yield* sql`UPDATE orchestration_v2_projection_provider_threads SET status = 'idle'`;
-      yield* sql`UPDATE orchestration_v2_projection_subagents SET origin = 'app_owned'`;
+      yield* sql`UPDATE orchestration_v2_projection_subagents SET provider_instance_id = 'other'`;
       expect(yield* policy.due()).toEqual([]);
-      yield* sql`UPDATE orchestration_v2_projection_subagents SET origin = 'provider_native'`;
+      yield* sql`UPDATE orchestration_v2_projection_subagents SET origin = 'app_owned'`;
+      expect(yield* policy.due()).toHaveLength(1);
+      yield* sql`UPDATE orchestration_v2_projection_subagents SET origin = 'provider_native',
+        provider_instance_id = ${driver}`;
       yield* sql`UPDATE orchestration_v2_projection_turn_items SET type = 'dynamic_tool',
         payload_json = '{"toolName":"external_monitor"}'`;
       expect(yield* policy.due()).toEqual([]);
@@ -324,4 +327,28 @@ it.effect(
       yield* sql`UPDATE orchestration_v2_projection_turn_items SET provider_thread_id = 'other-provider'`;
       expect(yield* policy.due()).toEqual([]);
     }).pipe(Effect.provide(testLayer)),
+);
+
+it.effect("still compacts while a delegated child thread runs on its own", () =>
+  Effect.gen(function* () {
+    yield* seed("codex");
+    yield* TestClock.adjust("5 minutes");
+    const sql = yield* SqlClient.SqlClient;
+    const policy = yield* IdleCompaction.IdleCompaction;
+    yield* sql`INSERT INTO orchestration_v2_projection_turn_items ${sql.insert({
+      turn_item_id: "delegate-item",
+      thread_id: threadId,
+      run_id: "run",
+      provider_thread_id: "provider",
+      ordinal: 1,
+      type: "subagent",
+      status: "running",
+      updated_at: DateTime.formatIso(yield* DateTime.now),
+      payload_json: json({ origin: "app_owned", driver: "codex", providerInstanceId: "codex" }),
+    })}`;
+    expect(yield* policy.due()).toHaveLength(1);
+    yield* sql`UPDATE orchestration_v2_projection_turn_items SET payload_json =
+      ${json({ origin: "provider_native", driver: "claudeAgent", providerInstanceId: "claudeAgent" })}`;
+    expect(yield* policy.due()).toEqual([]);
+  }).pipe(Effect.provide(testLayer)),
 );

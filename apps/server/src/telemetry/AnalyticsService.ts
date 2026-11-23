@@ -7,10 +7,11 @@ import * as Layer from "effect/Layer";
 export class AnalyticsService extends Context.Service<
   AnalyticsService,
   {
+    /** Whether the event was queued to send; false when telemetry is off. */
     readonly record: (
       event: string,
       properties?: Readonly<Record<string, unknown>>,
-    ) => Effect.Effect<void>;
+    ) => Effect.Effect<boolean>;
     readonly flush: Effect.Effect<void>;
 
     // Compatibility with upstream callers; the fork discards owners without collecting them.
@@ -24,7 +25,7 @@ export class AnalyticsService extends Context.Service<
     AnalyticsService,
     AnalyticsService.of({
       record: Effect.fn("AnalyticsService.record")(function () {
-        return Effect.void;
+        return Effect.succeed(false);
       }),
       flush: Effect.void,
       recordOwners: Effect.fn("AnalyticsService.recordOwners")(function () {
@@ -36,7 +37,7 @@ export class AnalyticsService extends Context.Service<
 
 const make = Effect.succeed(
   AnalyticsService.of({
-    record: Effect.fn("AnalyticsService.record")(() => Effect.void),
+    record: Effect.fn("AnalyticsService.record")(() => Effect.succeed(false)),
     flush: Effect.void,
     recordOwners: Effect.fn("AnalyticsService.recordOwners")(() => Effect.void),
   }),

@@ -13,6 +13,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { queuedRunsInDeliveryOrder } from "../orchestration-v2/QueuedRunOrder.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
+import * as ThreadMessageIntake from "../orchestration-v2/ThreadMessageIntake.ts";
 import { McpInvocationContext, type McpInvocationScope } from "./McpInvocationContext.ts";
 import {
   readThread as readQueueThread,
@@ -126,12 +127,21 @@ const make = Effect.gen(function* () {
         let command: OrchestrationV2Command;
         switch (input.action) {
           case "edit":
-            command = {
+            command = yield* ThreadMessageIntake.withQueuedAttachmentsOnSignOutText({
               ...common,
               type: "queued-run.edit",
               runId,
               text: yield* required(input.text, "text"),
-            };
+            }).pipe(
+              Effect.mapError((error) =>
+                error._tag === "EnvironmentAuthorizationError"
+                  ? failure(
+                      "invalid_request",
+                      "A queued message cannot be edited into a provider sign-out.",
+                    )
+                  : dispatchFailure(error),
+              ),
+            );
             break;
           case "reorder":
             command = {

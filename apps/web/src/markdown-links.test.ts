@@ -2,7 +2,7 @@ import { shouldOpenMarkdownFileLinkInEditor } from "./markdown-links";
 import { describe, expect, it } from "vite-plus/test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import ReactMarkdown from "react-markdown";
+import { createMarkdownRenderer, safeUrl } from "./components/chat/markdownRenderer";
 
 import {
   extractMarkdownLinkHrefs,
@@ -110,20 +110,17 @@ describe("isWindowsDrivePathHref", () => {
 
 function renderMarkdownLinkHref(markdown: string): string | undefined {
   let renderedHref: string | undefined;
-  renderToStaticMarkup(
-    createElement(
-      ReactMarkdown,
-      {
-        components: {
-          a({ href }) {
-            renderedHref = href;
-            return createElement("a", { href });
-          },
-        },
+  const renderer = createMarkdownRenderer({
+    markdown: { math: false, breaks: false, escapeHtml: true, insights: false, extensions: {} },
+    components: {
+      a({ href }) {
+        renderedHref = href;
+        return createElement("a", { href });
       },
-      markdown,
-    ),
-  );
+    },
+    urlTransform: safeUrl,
+  });
+  renderToStaticMarkup(renderer.element(renderer.parse(markdown)));
   return renderedHref;
 }
 

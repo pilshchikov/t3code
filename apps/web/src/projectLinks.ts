@@ -1,3 +1,4 @@
+import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
 
 import { getClientSettings, persistClientSettingsPatch } from "./hooks/useSettings";
@@ -47,7 +48,7 @@ const newGroupKey = (title: string) => {
 async function storeGroupKey(projects: ReadonlyArray<LinkableProject>, groupKey: string | null) {
   for (const project of projects) {
     if ((project.groupKey ?? null) === groupKey) continue;
-    const result = await projectEnvironment.update.run(appAtomRegistry, {
+    const result = await runAtomCommand(appAtomRegistry, projectEnvironment.update, {
       environmentId: project.environmentId,
       input: { projectId: project.id, groupKey },
     });

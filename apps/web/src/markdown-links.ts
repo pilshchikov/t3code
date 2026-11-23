@@ -384,10 +384,40 @@ export function isLocalEditorFileHref(href: string): boolean {
   }
 }
 
+// Every message resolves its links and code spans more than once while rendering.
+const MAX_MEMOIZED = 4_000;
+const inlineCodeMetas = new Map<string, MarkdownFileLinkMeta | null>();
+const linkMetas = new Map<string, MarkdownFileLinkMeta | null>();
+
+function memoized(
+  cache: Map<string, MarkdownFileLinkMeta | null>,
+  key: string,
+  resolve: () => MarkdownFileLinkMeta | null,
+): MarkdownFileLinkMeta | null {
+  const cached = cache.get(key);
+  if (cached !== undefined) return cached;
+  if (cache.size >= MAX_MEMOIZED) cache.clear();
+  const meta = resolve();
+  cache.set(key, meta);
+  return meta;
+}
+
 export function resolveInlineCodeFileLinkMeta(
   codeText: string,
   cwd?: string,
   workspaceRoot: string | undefined = cwd,
+): MarkdownFileLinkMeta | null {
+  return memoized(
+    inlineCodeMetas,
+    `${cwd ?? ""}\u0000${workspaceRoot ?? ""}\u0000${codeText}`,
+    () => resolveInlineCodeFileLinkMetaUncached(codeText, cwd, workspaceRoot),
+  );
+}
+
+function resolveInlineCodeFileLinkMetaUncached(
+  codeText: string,
+  cwd: string | undefined,
+  workspaceRoot: string | undefined,
 ): MarkdownFileLinkMeta | null {
   const trimmed = codeText.trim();
   if (trimmed.length === 0 || INLINE_CODE_DISQUALIFIER_PATTERN.test(trimmed)) return null;
@@ -577,11 +607,22 @@ export function resolveMarkdownFileLinkMeta(
   cwd?: string,
   alternateDirectory: string | undefined = cwd,
 ): MarkdownFileLinkMeta | null {
+  if (href === undefined) return null;
+  return memoized(linkMetas, `${cwd ?? ""}\u0000${alternateDirectory ?? ""}\u0000${href}`, () =>
+    resolveMarkdownFileLinkMetaUncached(href, cwd, alternateDirectory),
+  );
+}
+
+function resolveMarkdownFileLinkMetaUncached(
+  href: string,
+  cwd: string | undefined,
+  alternateDirectory: string | undefined,
+): MarkdownFileLinkMeta | null {
   const { baseDir, workspaceRoot } = resolveMarkdownLinkDirectories(cwd, alternateDirectory);
   const targetPath = resolveMarkdownFileLinkTarget(href, cwd, baseDir);
   if (!targetPath) return null;
   const meta = buildFileLinkMetaFromTarget(targetPath, workspaceRoot);
-  const source = safeDecode(normalizeMarkdownLinkDestination(href ?? ""));
+  const source = safeDecode(normalizeMarkdownLinkDestination(href));
   const sourceLocation = stripSearchAndHash(source);
   const { endLine } = splitFilePathPosition(sourceLocation.path, sourceLocation.hash);
   if (endLine !== undefined) meta.endLine = endLine;

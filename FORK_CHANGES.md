@@ -1,5 +1,22 @@
 # Fork Changes
 
+## Upstream integration, 2026-11-23 (a369642c1c)
+
+- Merged 798 upstream commits. Recovery branch: `backup/pre-upstream-20261123`.
+- Migrations: upstream 101 to 110 run as fork 110 to 119 (`Migrations.ts`,
+  `reconcileV2PreviewMigration.test.ts`, the 102 and 103 migration tests).
+- Upstream now runs client commands as Effects. Fork callers moved to `runAtomCommand` or the
+  Effect directly (`threadMove.ts`, `projectLinks.ts`, `rpc/peer*.ts`).
+- Upstream removed `react-markdown`. Agent communication messages render through upstream's
+  `createMarkdownRenderer`, and the safe-URL check moved to `chat/markdownRenderer.ts`.
+- Kept the fork's side: no-op analytics (`record` returns false), SQL-based idle compaction with
+  upstream's delegated-task fix ported, its own file tree, diff viewer, sidebar and composer.
+  Upstream's tracked repositories, task folders, workflows, large-file preview and agy CLI quota
+  token reading are in. Fork's agy token renewal stays on top.
+- Dropped fork math rendering in chat in favor of upstream's renderer.
+- Validation: whole-repo typecheck, `vp check` (0 errors), i18n catalogs regenerated and checked,
+  focused tests for every conflicted file.
+
 ## Agents pull the latest default branch, 2026-11-20
 
 - Every agent turn in a project with repositories now carries a `<git-sync>` note: at the start

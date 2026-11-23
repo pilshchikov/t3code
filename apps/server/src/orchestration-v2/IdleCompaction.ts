@@ -113,6 +113,7 @@ const make = Effect.gen(function* () {
           FROM orchestration_v2_projection_turn_items item
           WHERE item.thread_id = t.thread_id AND item.status IN ('pending', 'running', 'waiting')
             AND item.type IN ('command_execution', 'dynamic_tool', 'subagent')
+            AND NOT (item.type = 'subagent' AND json_extract(item.payload_json, '$.origin') = 'app_owned')
             AND NOT EXISTS (SELECT 1 FROM orchestration_v2_projection_runs abandoned
               WHERE abandoned.run_id = item.run_id AND abandoned.status = 'rolled_back')), 0) AS item_work,
         COALESCE((SELECT max(CASE
@@ -120,7 +121,8 @@ const make = Effect.gen(function* () {
             AND child.provider_instance_id = p.provider_instance_id
           THEN 1 ELSE 2 END)
           FROM orchestration_v2_projection_subagents child
-          WHERE child.thread_id = t.thread_id AND child.status IN ('pending', 'running', 'waiting')), 0)
+          WHERE child.thread_id = t.thread_id AND child.status IN ('pending', 'running', 'waiting')
+            AND child.origin <> 'app_owned'), 0)
           AS subagent_work,
         -- Live usage is recorded on provider turns. The thread snapshot is
         -- carried across handoffs and can predate many subsequent turns.

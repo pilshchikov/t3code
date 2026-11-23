@@ -56,8 +56,18 @@ import * as EnvironmentTheme from "../../../environmentTheme.ts";
 import * as PullRequestService from "../../../pullRequest/PullRequestService.ts";
 import * as IssueService from "../../../issue/IssueService.ts";
 import * as ThreadIssueService from "../../../orchestration-v2/ThreadIssueService.ts";
+import { MilestoneHub } from "../../../milestones/MilestoneHub.ts";
+import { FeedbackStore } from "../../../feedback/FeedbackStore.ts";
+import { AnalyticsService } from "../../../telemetry/AnalyticsService.ts";
+import { TaskFolders } from "../../../workspace/TaskFolders.ts";
+import { Workflows } from "../../../workflows/Workflows.ts";
 
 const layerStubServices = Layer.mergeAll(
+  Layer.mock(FeedbackStore)({}),
+  Layer.mock(MilestoneHub)({}),
+  Layer.mock(AnalyticsService)({}),
+  Layer.mock(TaskFolders)({}),
+  Layer.mock(Workflows)({}),
   Layer.mock(AssetSigner.AssetSigner)({}),
   Layer.mock(ProjectCloneTracker.ProjectCloneTracker)({}),
   Layer.mock(RemoteDelegation)({}),
