@@ -3,7 +3,6 @@ import * as Struct from "effect/Struct";
 import { ProjectSearchCodeError } from "@t3tools/contracts";
 import * as ProjectMemory from "./project/ProjectMemory.ts";
 import { ResumableSessionDiscovery } from "./sessions/ResumableSessionDiscovery.ts";
-import * as AccountLimitsService from "./usage/AccountLimitsService.ts";
 import { UsageLimitHistory } from "./usage/UsageLimitHistory.ts";
 import { ProjectDeleteEntryError } from "@t3tools/contracts";
 import * as ThreadWorkspaces from "./workspace/ThreadWorkspaces.ts";
@@ -44,8 +43,10 @@ import {
   type AuthAccessStreamEvent,
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
+  AuthTerminalOperateScope,
   AuthProvidersManageScope,
   type AuthEnvironmentScope,
+  ProviderDriverKind,
   type ScheduledTaskListResult,
   WorkflowRequestError,
   AuthSessionId,
@@ -73,6 +74,7 @@ import {
   ORCHESTRATION_V2_WS_METHODS,
   ORCHESTRATION_PROTOCOL_QUERY_PARAM,
   CLIENT_CAPABILITIES_QUERY_PARAM,
+  HTTP_USAGE_LIMIT_SOURCES_CAPABILITY,
   SETTINGS_SECRET_REFERENCES_CAPABILITY,
   ORCHESTRATION_PROTOCOL_VERSION,
   OrchestrationV2DispatchCommandError,
@@ -205,9 +207,11 @@ import * as ProviderAuthService from "./provider/ProviderAuthService.ts";
 import * as ProviderInstallation from "./provider/providerInstallation.ts";
 import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
 import * as NpmRelease from "./cloud/npmRelease.ts";
+import * as RelayTracing from "./cloud/relayTracing.ts";
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
+import * as ManagedProviders from "./policy/managedProviders.ts";
 import * as ServerSettings from "./serverSettings.ts";
 import { invalidateSettingsSecrets } from "./sourceControl/sourceControlHostSecrets.ts";
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
@@ -231,6 +235,7 @@ import { deletePendingAttachment, issueAttachmentUploadUrl } from "./assets/Atta
 import * as PortScanner from "./preview/PortScanner.ts";
 import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFolders from "./workspace/WorkspaceFolders.ts";
+import * as LayoutCommandApprovalWrites from "./workspace/LayoutCommandApprovalWrites.ts";
 import * as TaskFolders from "./workspace/TaskFolders.ts";
 import * as PeerFiles from "./peers/PeerFiles.ts";
 import * as Peers from "./peers/Peers.ts";
@@ -869,13 +874,58 @@ const IssueWsRpcGroup = RpcGroup.make(
     issueRpcTags.has(rpc._tag),
   ),
 );
+const AUTOMATION_RPC_TAGS = [
+  WS_METHODS.workflowsSubscribe,
+  WS_METHODS.workflowsCounts,
+  WS_METHODS.workflowsGet,
+  WS_METHODS.workflowsAnswer,
+  WS_METHODS.workflowsResume,
+  WS_METHODS.workflowsCancel,
+  WS_METHODS.workflowsGetDefinition,
+  WS_METHODS.workflowsSaveDefinition,
+  WS_METHODS.workflowsDeleteDefinition,
+  WS_METHODS.scheduledTasksSubscribe,
+  WS_METHODS.scheduledTasksUpsert,
+  WS_METHODS.scheduledTasksSetEnabled,
+  WS_METHODS.scheduledTasksDelete,
+  WS_METHODS.scheduledTasksRunNow,
+  WS_METHODS.scheduledTasksRotateWebhookToken,
+  WS_METHODS.scheduledTasksListWebhookDeliveries,
+  WS_METHODS.scheduledTasksGetWebhookDelivery,
+] as const;
+const automationRpcTags: ReadonlySet<string> = new Set(AUTOMATION_RPC_TAGS);
+type AutomationRequests = Extract<
+  ServerRequests,
+  { readonly _tag: (typeof AUTOMATION_RPC_TAGS)[number] }
+>;
+const AutomationWsRpcGroup = RpcGroup.make(
+  ...Array.from(ServerWsRpcGroup.requests.values()).filter((rpc): rpc is AutomationRequests =>
+    automationRpcTags.has(rpc._tag),
+  ),
+);
 const SEPARATE_RPC_TAGS = [
   ...SOURCE_CONTROL_RPC_TAGS,
   ...STATUS_STREAM_RPC_TAGS,
   ...WORKSPACE_RPC_TAGS,
   ...ISSUE_RPC_TAGS,
+  ...AUTOMATION_RPC_TAGS,
 ] as const;
 const MainWsRpcGroup = ServerWsRpcGroup.omit(...SEPARATE_RPC_TAGS);
+// RpcGroup.toLayer type cost grows with handlers × RPCs; past ~200 methods the
+// requirements degrade to `any`, so the remaining methods register as two groups.
+type MainWsRpc = RpcGroup.Rpcs<typeof MainWsRpcGroup>;
+const SPLIT_MAIN_RPC_PREFIXES = ["server", "pullRequests", "provider", "orchestration"] as const;
+type SplitMainWsRpc = Extract<
+  MainWsRpc,
+  { readonly _tag: `${(typeof SPLIT_MAIN_RPC_PREFIXES)[number]}.${string}` }
+>;
+const isSplitMainWsRpc = (rpc: MainWsRpc): rpc is SplitMainWsRpc =>
+  SPLIT_MAIN_RPC_PREFIXES.some((prefix) => rpc._tag.startsWith(`${prefix}.`));
+const mainWsRpcs = Array.from(MainWsRpcGroup.requests.values());
+const SplitMainWsRpcGroup = RpcGroup.make(...mainWsRpcs.filter(isSplitMainWsRpc));
+const OtherMainWsRpcGroup = RpcGroup.make(
+  ...mainWsRpcs.filter((rpc): rpc is Exclude<MainWsRpc, SplitMainWsRpc> => !isSplitMainWsRpc(rpc)),
+);
 
 function toAuthAccessStreamEvent(
   change: Exclude<
@@ -939,7 +989,10 @@ function hasCompatibleOrchestrationProtocol(url: URL): boolean {
 
 function readSettingsClient(url: URL) {
   const capabilities = url.searchParams.get(CLIENT_CAPABILITIES_QUERY_PARAM)?.split(",") ?? [];
-  return { secretReferences: capabilities.includes(SETTINGS_SECRET_REFERENCES_CAPABILITY) };
+  return {
+    secretReferences: capabilities.includes(SETTINGS_SECRET_REFERENCES_CAPABILITY),
+    httpUsageLimitSources: capabilities.includes(HTTP_USAGE_LIMIT_SOURCES_CAPABILITY),
+  };
 }
 
 function shouldUseBoundedThreadSnapshot(input: {
@@ -1255,7 +1308,11 @@ export const subscribeOrchestrationV2Thread = Effect.fn("ws.orchestrationV2.subs
       ) {
         return yield* snapshotThenLive();
       }
-      const replay = coalesceLiveUpdatedEvents(replayed);
+      // A deleted thread reads as gone: its replay starts at the deletion.
+      const deletion = replayed.findLastIndex((item) => item.event.type === "thread.deleted");
+      const replay = coalesceLiveUpdatedEvents(
+        deletion === -1 ? replayed : replayed.slice(deletion),
+      );
       const plan = decideThreadResume({
         afterSequence: input.afterSequence,
         highWater,
@@ -1572,7 +1629,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
   clientAnalyticsProps: Readonly<Record<string, unknown>>,
   serverBrowser: ServerBrowser.ServerBrowser["Service"],
   reportProfiles: ServerBrowser.ProfileReporter,
-  settingsClient: { readonly secretReferences: boolean },
+  settingsClient: ServerSettings.SettingsClient,
 ) {
   const currentSessionId = currentSession.sessionId;
   const settingsForClient = (
@@ -1706,11 +1763,11 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
   const storageCleanup = yield* StorageCleanup.StorageCleanup;
   const databaseStorage = yield* DatabaseStorage.DatabaseStorage;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
+  const hostEnvironment = yield* HostProcess.Environment;
   const secretResolver = yield* SecretResolver.SecretResolver;
   const threadWorkspaces = yield* ThreadWorkspaces.ThreadWorkspaces;
   const memorySql = sql;
   const resumableSessions = yield* ResumableSessionDiscovery;
-  const accountLimits = yield* AccountLimitsService.AccountLimitsService;
   const usageLimitHistory = yield* UsageLimitHistory;
   const gitVcsDriver = yield* GitVcsDriver.GitVcsDriver;
   const peerFiles = yield* PeerFiles.PeerFiles;
@@ -1726,6 +1783,8 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
   const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
   const workspaceFolders = yield* WorkspaceFolders.WorkspaceFolders;
   const taskFolders = yield* TaskFolders.TaskFolders;
+  const layoutCommandApprovalWrites =
+    yield* LayoutCommandApprovalWrites.LayoutCommandApprovalWrites;
   const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
   const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
   const backgroundPolicy = yield* BackgroundPolicy.BackgroundPolicy;
@@ -1771,6 +1830,13 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
           ...result,
           tasks: result.tasks.map(({ webhook: _webhook, ...task }) => task),
         };
+  // A project's layout command is its owner's code: only a session that may already run
+  // commands on the host has it run from a worktree request.
+  const projectCommands: TaskFolders.ProjectCommands =
+    currentSession.scopes.includes(AuthOrchestrationOperateScope) ||
+    currentSession.scopes.includes(AuthTerminalOperateScope)
+      ? "permitted"
+      : "request-not-permitted";
   const authorizeEffect = <A, E, R>(
     requiredScope: AuthEnvironmentScope,
     effect: Effect.Effect<A, E, R>,
@@ -1784,6 +1850,14 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
   ) {
     const project = yield* acpRegistrySessions.project(input.projectId);
     const { instance, manager } = yield* acpRegistrySessions.sessionManager(input.instanceId);
+    // Only a probed agent advertises listing, so a read never installs or first-starts one.
+    const snapshot = yield* instance.snapshot.getSnapshot;
+    if (snapshot.nativeSessions?.canList !== true) {
+      return yield* new AcpRegistryOperationError({
+        reason: "session_list_unsupported",
+        message: "The ACP agent does not advertise session listing.",
+      });
+    }
     const listed = yield* manager.listSessions({
       cwd: project.workspaceRoot,
       ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
@@ -2049,6 +2123,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
             }
           : {}),
         otlpLogsEnabled: config.otlpLogsUrl !== undefined,
+        relayTracingAllowed: RelayTracing.allowedFor(hostEnvironment, serverSettings.managedPolicy),
       },
       settings,
       ...(serverSettings.managedPolicy === undefined
@@ -2494,17 +2569,32 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
       ),
     [ORCHESTRATION_V2_WS_METHODS.subscribePromptSuggestion]: (input) =>
       providerSessionManager.subscribePromptSuggestion(input.threadId),
-    [WS_METHODS.workflowsSubscribe]: (_input) => workflows.watch,
+    [WS_METHODS.workflowsSubscribe]: (input) =>
+      input.changes === true ? workflows.watch : Workflows.wholeLists(workflows.watch),
     [WS_METHODS.workflowsCounts]: (_input) => workflows.counts,
     [WS_METHODS.workflowsGet]: (input) =>
       workflows.get(input.runId).pipe(Effect.mapError(toWorkflowRequestError)),
     [WS_METHODS.workflowsAnswer]: (input) =>
-      workflows
-        .answer(input.runId, input.name, {
-          choice: input.choice,
-          ...(input.reason === undefined ? {} : { reason: input.reason }),
-        })
-        .pipe(Effect.mapError(toWorkflowRequestError)),
+      serverAuth.listClientSessions(currentSessionId).pipe(
+        Effect.map((sessions) =>
+          EnvironmentAuth.clientSessionLabel(sessions.find((session) => session.current)?.client),
+        ),
+        Effect.orElseSucceed(() => EnvironmentAuth.clientSessionLabel(undefined)),
+        // The label names it to others; the session tells its own client the answer is its own.
+        Effect.map((label) => ({ label, sessionId: currentSessionId })),
+        Effect.flatMap((answeredBy) =>
+          workflows.answer(
+            input.runId,
+            input.name,
+            {
+              choice: input.choice,
+              ...(input.reason === undefined ? {} : { reason: input.reason }),
+            },
+            answeredBy,
+          ),
+        ),
+        Effect.mapError(toWorkflowRequestError),
+      ),
     [WS_METHODS.workflowsResume]: (input) =>
       workflows.resume(input.runId).pipe(Effect.mapError(toWorkflowRequestError)),
     [WS_METHODS.workflowsCancel]: (input) =>
@@ -2564,9 +2654,19 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
     [WS_METHODS.serverPrepareAcpRegistryAgent]: (input) =>
       Effect.annotateCurrentSpan({ "acp_registry.agent_id": input.agentId }).pipe(
         Effect.andThen(
-          acpRegistryCatalog
-            .prepare(input)
-            .pipe(Effect.mapError(AcpRegistrySupport.toAcpRegistryOperationError)),
+          Effect.suspend(() => {
+            const blocked = ManagedProviders.disallowedDriverReason(
+              serverSettings.managedPolicy,
+              ProviderDriverKind.make("acpRegistry"),
+            );
+            return blocked === undefined
+              ? acpRegistryCatalog
+                  .prepare(input)
+                  .pipe(Effect.mapError(AcpRegistrySupport.toAcpRegistryOperationError))
+              : Effect.fail(
+                  new AcpRegistryOperationError({ reason: "install_failed", message: blocked }),
+                );
+          }),
         ),
       ),
     [WS_METHODS.serverUninstallAcpRegistryManagedBinary]: (input) =>
@@ -3265,6 +3365,14 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
     [WS_METHODS.workspaceTaskFolder]: (input) =>
       taskFolders.find(input.worktreePath).pipe(Effect.map((taskFolder) => ({ taskFolder }))),
     [WS_METHODS.workspaceAddTaskFolderRepository]: (input) => taskFolders.addRepository(input),
+    [WS_METHODS.workspaceLayoutCommands]: (input) => taskFolders.layoutCommands(input.projectId),
+    // The one place an approval is recorded: a person's client session, behind the scope.
+    [WS_METHODS.workspaceApproveLayoutCommands]: (input) =>
+      Effect.forEach(
+        input.approvals,
+        (approval) => layoutCommandApprovalWrites.set({ projectId: input.projectId, ...approval }),
+        { discard: true },
+      ).pipe(Effect.andThen(taskFolders.layoutCommands(input.projectId))),
     [WS_METHODS.attachmentsCreateUploadUrl]: (input) => issueAttachmentUploadUrl(input),
     [WS_METHODS.attachmentsDelete]: (input) => deletePendingAttachment(input.attachmentId),
     [WS_METHODS.agentSessionsScan]: () => agentSessionScanner.scan,
@@ -3421,7 +3529,7 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
     [WS_METHODS.vcsListRefs]: (input) => gitWorkflow.listRefs(input),
     [WS_METHODS.vcsCreateWorktree]: (input) =>
       // A project that tracks repositories gets a task folder, as its new worktree threads do.
-      taskFolders.createForProjectFolder(input).pipe(
+      taskFolders.createForProjectFolder(input, { projectCommands }).pipe(
         Effect.mapError(
           (cause) =>
             new GitCommandError({
@@ -3439,26 +3547,28 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
       ),
     [WS_METHODS.vcsRemoveWorktree]: (input) =>
       // A thread's worktree may be a task folder: its repositories' worktrees go with it.
-      taskFolders.removeIfTaskFolder({ path: input.path, force: input.force === true }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new GitCommandError({
-              operation: "TaskFolders.remove",
-              command: "git worktree remove",
-              cwd: input.cwd,
-              detail: cause.detail,
-            }),
+      taskFolders
+        .removeIfTaskFolder({ path: input.path, force: input.force === true, projectCommands })
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new GitCommandError({
+                operation: "TaskFolders.remove",
+                command: "git worktree remove",
+                cwd: input.cwd,
+                detail: cause.detail,
+              }),
+          ),
+          Effect.flatMap((removed) => (removed ? Effect.void : gitWorkflow.removeWorktree(input))),
+          // No project-root refresh here: the client awaits vcs.refreshStatus right after, and a
+          // second refresh would queue behind this one and reread an unchanged repository.
+          // Subscribers of the removed checkout learn it is no longer a repository.
+          Effect.tap(() =>
+            vcsStatusBroadcaster
+              .refreshLocalStatus(input.path)
+              .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid),
+          ),
         ),
-        Effect.flatMap((removed) => (removed ? Effect.void : gitWorkflow.removeWorktree(input))),
-        // No project-root refresh here: the client awaits vcs.refreshStatus right after, and a
-        // second refresh would queue behind this one and reread an unchanged repository.
-        // Subscribers of the removed checkout learn it is no longer a repository.
-        Effect.tap(() =>
-          vcsStatusBroadcaster
-            .refreshLocalStatus(input.path)
-            .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid),
-        ),
-      ),
     [WS_METHODS.vcsCreateRef]: (input) =>
       (input.switchRef
         ? assertCheckoutIdle("GitWorkflowService.createRef", input.cwd)
@@ -3557,7 +3667,6 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
             }),
         ),
       ),
-    [WS_METHODS.serverGetAccountLimits]: (_input) => accountLimits.readSummary(),
     [WS_METHODS.vcsFetch]: (input) =>
       gitWorkflow
         .fetchCurrentBranch(input.cwd, ...(input.scope ? [{ scope: input.scope }] : []))
@@ -3892,12 +4001,17 @@ const makeWsHandlers = Effect.fn("ws.makeHandlers")(function* (
         ),
       ),
   });
+  const splitMainHandlers: Pick<typeof handlers, SplitMainWsRpc["_tag"]> = handlers;
+  const otherMainHandlers: Pick<typeof handlers, Exclude<MainWsRpc, SplitMainWsRpc>["_tag"]> =
+    handlers;
   return Layer.mergeAll(
-    MainWsRpcGroup.toLayer(Struct.omit(handlers, SEPARATE_RPC_TAGS)),
+    SplitMainWsRpcGroup.toLayer(splitMainHandlers),
+    OtherMainWsRpcGroup.toLayer(otherMainHandlers),
     SourceControlWsRpcGroup.toLayer(Struct.pick(handlers, SOURCE_CONTROL_RPC_TAGS)),
     StatusStreamWsRpcGroup.toLayer(Struct.pick(handlers, STATUS_STREAM_RPC_TAGS)),
     WorkspaceWsRpcGroup.toLayer(Struct.pick(handlers, WORKSPACE_RPC_TAGS)),
     IssueWsRpcGroup.toLayer(Struct.pick(handlers, ISSUE_RPC_TAGS)),
+    AutomationWsRpcGroup.toLayer(Struct.pick(handlers, AUTOMATION_RPC_TAGS)),
   );
 });
 

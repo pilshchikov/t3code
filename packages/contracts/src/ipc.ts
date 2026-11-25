@@ -73,6 +73,7 @@ import type {
   PreviewResizeInput,
   PreviewSessionSnapshot,
 } from "./preview.ts";
+import type { DatabaseMigrationProgress } from "./server.ts";
 import type { PreviewCaptureFailureEncoded } from "./previewCapture.ts";
 
 import {
@@ -120,6 +121,8 @@ export interface ContextMenuItem<T extends string = string> {
   icon?: string;
   /** Color preview rendered by the in-app menu. */
   colorSwatch?: string;
+  /** PNG data URL; takes precedence over `icon`. */
+  iconImage?: string;
   /** Inserts a visual section divider immediately before this item. */
   separatorBefore?: boolean;
   checked?: boolean;
@@ -139,6 +142,7 @@ export interface ContextMenuItemSchemaType {
   readonly header?: boolean;
   readonly icon?: string;
   readonly colorSwatch?: string;
+  readonly iconImage?: string;
   readonly separatorBefore?: boolean;
   readonly checked?: boolean;
   readonly children?: readonly ContextMenuItemSchemaType[];
@@ -153,6 +157,7 @@ export const ContextMenuItemSchema: Schema.Codec<ContextMenuItemSchemaType> = Sc
   header: Schema.optionalKey(Schema.Boolean),
   icon: Schema.optionalKey(Schema.String),
   colorSwatch: Schema.optionalKey(Schema.String),
+  iconImage: Schema.optionalKey(Schema.String),
   separatorBefore: Schema.optionalKey(Schema.Boolean),
   checked: Schema.optionalKey(Schema.Boolean),
   children: Schema.optionalKey(
@@ -784,7 +789,7 @@ export interface DesktopPreviewRecordingInputEvent {
 
 export interface DesktopPreviewWebviewConfig {
   partition: string;
-  /** Sandboxed with contextIsolation off so the picker preload can read the React DevTools hook. */
+  /** Sandboxed and context-isolated; the picker preload reaches React through a function it runs in the page. */
   webPreferences: string;
   /** Absolute file:// preload URL; null requires disabling element picking. */
   preloadUrl: string | null;
@@ -1215,6 +1220,7 @@ export type SystemSettingsPane = typeof SystemSettingsPaneSchema.Type;
 
 export interface DesktopBridge {
   getAppBranding: () => DesktopAppBranding | null;
+  getDatabaseMigrationProgress?: () => Promise<DatabaseMigrationProgress | null>;
   /** `null` until the desktop host has read the login shell's environment; ask again later. */
   getRelayTelemetryEnabled: () => boolean | null;
   getPathForFile: (file: File) => string;

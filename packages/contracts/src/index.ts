@@ -79,7 +79,6 @@ export * from "./worktreeMcp.ts";
 export * from "./resourceTelemetry.ts";
 export * from "./rpc.ts";
 export * from "./worktreeSetup.ts";
-export * from "./accountLimits.ts";
 export * from "./usageLimitHistory.ts";
 export * from "./projectMemory.ts";
 export * from "./threadWorkspace.ts";

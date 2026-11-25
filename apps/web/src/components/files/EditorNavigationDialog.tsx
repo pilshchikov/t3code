@@ -515,8 +515,6 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
     }
   };
 
-  let previousSection: SearchResultItem["section"] | null = null;
-
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogPopup
@@ -571,8 +569,7 @@ export function EditorNavigationDialog(props: EditorNavigationDialogProps) {
             </div>
           ) : (
             results.map((item, index) => {
-              const showSection = item.section !== previousSection;
-              previousSection = item.section;
+              const showSection = index === 0 || results[index - 1]?.section !== item.section;
               return (
                 <div key={item.id}>
                   {showSection ? (

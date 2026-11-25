@@ -157,13 +157,19 @@ export const makeClaudeContinuationGroupKey = Effect.fn("makeClaudeContinuationG
   function* (
     config: ClaudeEnvironmentConfig,
     environment?: NodeJS.ProcessEnv,
-  ): Effect.fn.Return<string, never, Path.Path> {
+  ): Effect.fn.Return<string, never, Path.Path | FileSystem.FileSystem> {
+    const fileSystem = yield* FileSystem.FileSystem;
     const resolvedHomePath = yield* resolveClaudeHomePath(config, environment);
+    // Two instances that reach one Claude home through a symlink share sessions, so they can resume.
+    // Only the key uses the real path: the spawn keeps the literal path, which names the Keychain login.
+    const canonical = (value: string) =>
+      fileSystem.realPath(value).pipe(Effect.orElseSucceed(() => value));
+    const canonicalHomePath = yield* canonical(resolvedHomePath);
     const resolvedConfigDir = yield* resolveClaudeConfigDir(config);
     if (resolvedConfigDir) {
-      return `claude:config:${resolvedConfigDir}:home:${resolvedHomePath}`;
+      return `claude:config:${yield* canonical(resolvedConfigDir)}:home:${canonicalHomePath}`;
     }
-    return `claude:home:${resolvedHomePath}`;
+    return `claude:home:${canonicalHomePath}`;
   },
 );
 

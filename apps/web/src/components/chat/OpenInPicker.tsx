@@ -11,6 +11,7 @@ import { T, useGT, useMessages, Var } from "gt-react";
 import { memo, use, useRef } from "react";
 import { BackgroundThreadContext } from "./backgroundThread";
 import { shortcutLabelForCommand } from "../../keybindings";
+import type { FileManagerAction } from "./OpenInPicker.logic";
 import { OPEN_FAVORITE_EDITOR_ATTRIBUTE } from "./OpenInPickerShortcut";
 import { editorLaunchInput, usePreferredEditor } from "../../editorPreferences";
 import { editorLabelForPlatform } from "../../editorLabels";
@@ -29,7 +30,6 @@ import {
   SquareCodeIcon,
   TerminalIcon,
   SettingsIcon,
-  FolderClosedIcon,
   SquareArrowOutUpRightIcon,
 } from "lucide-react";
 
@@ -46,35 +46,9 @@ import {
   MenuTrigger,
 } from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import {
-  AntigravityIcon,
-  CursorIcon,
-  FileExplorerIcon,
-  FinderIcon,
-  Icon,
-  KiroIcon,
-  TraeIcon,
-  VisualStudioCode,
-  VisualStudioCodeInsiders,
-  VSCodium,
-  Zed,
-} from "../Icons";
-import {
-  AquaIcon,
-  CLionIcon,
-  DataGripIcon,
-  DataSpellIcon,
-  GoLandIcon,
-  IntelliJIdeaIcon,
-  PhpStormIcon,
-  PyCharmIcon,
-  RiderIcon,
-  RubyMineIcon,
-  RustRoverIcon,
-  WebStormIcon,
-} from "../JetBrainsIcons";
+import { type EditorIconOption, editorIconOptions } from "../editorIcons";
 import { announce } from "~/lib/announce";
-import { cn, isMacPlatform, isWindowsPlatform } from "~/lib/utils";
+import { cn } from "~/lib/utils";
 import { shellEnvironment } from "~/state/shell";
 import { useAtomCommand } from "~/state/use-atom-command";
 import {
@@ -87,133 +61,20 @@ import {
 import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
 import { useComposerMenuState } from "./useComposerMenuState";
 
-type OpenInOption = {
-  label: string;
-  Icon: Icon;
-  value: EditorId;
-  kind: "brand" | "generic";
-};
+type OpenInOption = EditorIconOption & { label: string };
+
+const FORK_EDITOR_OPTIONS: ReadonlyArray<EditorIconOption> = [
+  { Icon: SquareCodeIcon, value: "openidea", kind: "generic" },
+  { Icon: TerminalIcon, value: "custom", kind: "generic" },
+];
 
 const resolveOpenInOptions = (
   platform: string,
   availableEditors: ReadonlyArray<EditorId>,
   resolve: MessageResolver,
-) => {
-  const baseOptions: ReadonlyArray<Omit<OpenInOption, "label">> = [
-    { Icon: SquareCodeIcon, value: "openidea", kind: "generic" },
-    { Icon: TerminalIcon, value: "custom", kind: "generic" },
-    {
-      Icon: CursorIcon,
-      value: "cursor",
-      kind: "brand",
-    },
-    {
-      Icon: TraeIcon,
-      value: "trae",
-      kind: "brand",
-    },
-    {
-      Icon: KiroIcon,
-      value: "kiro",
-      kind: "brand",
-    },
-    {
-      Icon: VisualStudioCode,
-      value: "vscode",
-      kind: "brand",
-    },
-    {
-      Icon: VisualStudioCodeInsiders,
-      value: "vscode-insiders",
-      kind: "brand",
-    },
-    {
-      Icon: VSCodium,
-      value: "vscodium",
-      kind: "brand",
-    },
-    {
-      Icon: Zed,
-      value: "zed",
-      kind: "brand",
-    },
-    {
-      Icon: AntigravityIcon,
-      value: "antigravity",
-      kind: "brand",
-    },
-    {
-      Icon: IntelliJIdeaIcon,
-      value: "idea",
-      kind: "brand",
-    },
-    {
-      Icon: AquaIcon,
-      value: "aqua",
-      kind: "brand",
-    },
-    {
-      Icon: CLionIcon,
-      value: "clion",
-      kind: "brand",
-    },
-    {
-      Icon: DataGripIcon,
-      value: "datagrip",
-      kind: "brand",
-    },
-    {
-      Icon: DataSpellIcon,
-      value: "dataspell",
-      kind: "brand",
-    },
-    {
-      Icon: GoLandIcon,
-      value: "goland",
-      kind: "brand",
-    },
-    {
-      Icon: PhpStormIcon,
-      value: "phpstorm",
-      kind: "brand",
-    },
-    {
-      Icon: PyCharmIcon,
-      value: "pycharm",
-      kind: "brand",
-    },
-    {
-      Icon: RiderIcon,
-      value: "rider",
-      kind: "brand",
-    },
-    {
-      Icon: RubyMineIcon,
-      value: "rubymine",
-      kind: "brand",
-    },
-    {
-      Icon: RustRoverIcon,
-      value: "rustrover",
-      kind: "brand",
-    },
-    {
-      Icon: WebStormIcon,
-      value: "webstorm",
-      kind: "brand",
-    },
-    {
-      Icon: isMacPlatform(platform)
-        ? FinderIcon
-        : isWindowsPlatform(platform)
-          ? FileExplorerIcon
-          : FolderClosedIcon,
-      value: "file-manager",
-      kind: isMacPlatform(platform) || isWindowsPlatform(platform) ? "brand" : "generic",
-    },
-  ];
+): ReadonlyArray<OpenInOption> => {
   const availableEditorSet = new Set(availableEditors);
-  return baseOptions
+  return [...FORK_EDITOR_OPTIONS, ...editorIconOptions(platform)]
     .filter((option) => availableEditorSet.has(option.value))
     .map((option) => ({
       ...option,
@@ -235,7 +96,7 @@ export const OpenInPicker = memo(function OpenInPicker({
   compact = false,
   enableShortcut = true,
   displayMode = "toolbar",
-  revealFileManager = false,
+  fileManagerAction = "open",
 }: {
   environmentId: EnvironmentId;
   keybindings: ResolvedKeybindingsConfig;
@@ -246,7 +107,7 @@ export const OpenInPicker = memo(function OpenInPicker({
   compact?: boolean;
   enableShortcut?: boolean;
   displayMode?: "toolbar" | "panel";
-  revealFileManager?: boolean;
+  fileManagerAction?: FileManagerAction;
 }) {
   const gt = useGT();
   const messages = useMessages();
@@ -270,11 +131,13 @@ export const OpenInPicker = memo(function OpenInPicker({
       ? availableEditors.filter((id) => id !== "custom" || customCommand !== null)
       : remoteCapableEditors;
   const [preferredEditor, setPreferredEditor] = usePreferredEditor(effectiveEditors);
+  const isEditorUnavailable = (editor: EditorId | null) =>
+    editor === "file-manager" && fileManagerAction === "unavailable";
 
   const openInEditor = async (editorId: EditorId | null): Promise<boolean> => {
     if (!openInCwd) return false;
     const editor = editorId ?? preferredEditor;
-    if (!editor) return false;
+    if (!editor || isEditorUnavailable(editor)) return false;
     if (editor === "custom" && !readEnvironmentScope(environmentId, AuthTerminalOperateScope))
       return false;
     if (remote.mode === "remote-unavailable") return false;
@@ -299,7 +162,7 @@ export const OpenInPicker = memo(function OpenInPicker({
       environmentId,
       input: {
         ...editorLaunchInput(openInCwd, editor),
-        ...(revealFileManager && editor === "file-manager" ? { reveal: true } : {}),
+        ...(fileManagerAction === "reveal" && editor === "file-manager" ? { reveal: true } : {}),
       },
     });
     setPreferredEditor(editor);
@@ -349,7 +212,10 @@ export const OpenInPicker = memo(function OpenInPicker({
             <MenuItem
               density={presentation === "menu" ? "touch" : "default"}
               disabled={
-                !openInCwd || !canOpenEditor || (value === "custom" && !canRunCustomCommand)
+                !openInCwd ||
+                !canOpenEditor ||
+                (value === "custom" && !canRunCustomCommand) ||
+                (presentation === "menu" && isEditorUnavailable(value))
               }
               key={value}
               onClick={() => {
@@ -392,8 +258,7 @@ export const OpenInPicker = memo(function OpenInPicker({
         {primaryOption && (
           <MenuItem
             density={presentation === "menu" ? "touch" : "default"}
-
-            disabled={!openInCwd || !canOpenPreferred}
+            disabled={!openInCwd || !canOpenPreferred || isEditorUnavailable(preferredEditor)}
             onClick={() => openInEditor(preferredEditor)}
           >
             <primaryOption.Icon className={cn("size-4", getOpenInIconClass(primaryOption.kind))} />
@@ -430,7 +295,9 @@ export const OpenInPicker = memo(function OpenInPicker({
       variant={isPanel ? "ghost" : "outline"}
       part="primary"
       panel={isPanel}
-      disabled={!preferredEditor || !openInCwd || !canOpenPreferred}
+      disabled={
+        !preferredEditor || !openInCwd || !canOpenPreferred || isEditorUnavailable(preferredEditor)
+      }
       {...(enableShortcut && !backgroundThread ? { [OPEN_FAVORITE_EDITOR_ATTRIBUTE]: "" } : {})}
       onClick={() => {
         if (!preferredEditor) return;

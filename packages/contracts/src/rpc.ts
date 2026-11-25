@@ -126,6 +126,9 @@ import {
   TaskFolder,
   TaskFolderError,
   WorkspaceAddTaskFolderRepositoryInput,
+  WorkspaceApproveLayoutCommandsInput,
+  WorkspaceLayoutCommandsInput,
+  WorkspaceLayoutCommandsResult,
   WorkspaceListFoldersInput,
   WorkspaceListFoldersResult,
   WorkspaceScanFoldersInput,
@@ -453,7 +456,6 @@ import {
   ResourceTelemetryRetryResult,
   ResourceTelemetrySnapshot,
 } from "./resourceTelemetry.ts";
-import { AccountLimitsSummary } from "./accountLimits.ts";
 import { UsageLimitHistory, UsageLimitHistoryInput } from "./usageLimitHistory.ts";
 import { UsageLimitSourceError } from "./providerUsageLimits.ts";
 import { UsagePricing, UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
@@ -481,7 +483,7 @@ import {
   WorkflowRunGetInput,
   WorkflowRunResumeInput,
   WorkflowCounts,
-  WorkflowRunsSnapshot,
+  WorkflowRunsUpdate,
   WorkflowRunsSubscribeInput,
 } from "./workflow.ts";
 import {
@@ -577,6 +579,8 @@ export const WS_METHODS = {
   workspaceScanFolders: "workspace.scanFolders",
   workspaceTaskFolder: "workspace.taskFolder",
   workspaceAddTaskFolderRepository: "workspace.addTaskFolderRepository",
+  workspaceLayoutCommands: "workspace.layoutCommands",
+  workspaceApproveLayoutCommands: "workspace.approveLayoutCommands",
   filesystemGetMetadata: "filesystem.getMetadata",
   agentSessionsScan: "agentSessions.scan",
   agentSessionsImport: "agentSessions.import",
@@ -727,7 +731,6 @@ export const WS_METHODS = {
   serverSignalProcess: "server.signalProcess",
   serverReportClientActivity: "server.reportClientActivity",
   serverGetUsageSummary: "server.getUsageSummary",
-  serverGetAccountLimits: "server.getAccountLimits",
   serverGetUsageLimitHistory: "server.getUsageLimitHistory",
   serverRefreshUsageRates: "server.refreshUsageRates",
 
@@ -1287,12 +1290,6 @@ const WsServerGetUsageSummaryRpc = Rpc.make(WS_METHODS.serverGetUsageSummary, {
   payload: UsageSummaryInput,
   success: UsageSummary,
   error: Schema.Union([EnvironmentAuthorizationError, UsageReadError]),
-});
-
-const WsServerGetAccountLimitsRpc = Rpc.make(WS_METHODS.serverGetAccountLimits, {
-  payload: Schema.Struct({}),
-  success: AccountLimitsSummary,
-  error: EnvironmentAuthorizationError,
 });
 
 const WsServerGetUsageLimitHistoryRpc = Rpc.make(WS_METHODS.serverGetUsageLimitHistory, {
@@ -1954,6 +1951,18 @@ const WsWorkspaceAddTaskFolderRepositoryRpc = Rpc.make(
     error: Schema.Union([TaskFolderError, EnvironmentAuthorizationError]),
   },
 );
+
+const WsWorkspaceLayoutCommandsRpc = Rpc.make(WS_METHODS.workspaceLayoutCommands, {
+  payload: WorkspaceLayoutCommandsInput,
+  success: WorkspaceLayoutCommandsResult,
+  error: Schema.Union([TaskFolderError, EnvironmentAuthorizationError]),
+});
+
+const WsWorkspaceApproveLayoutCommandsRpc = Rpc.make(WS_METHODS.workspaceApproveLayoutCommands, {
+  payload: WorkspaceApproveLayoutCommandsInput,
+  success: WorkspaceLayoutCommandsResult,
+  error: Schema.Union([TaskFolderError, EnvironmentAuthorizationError]),
+});
 
 const WsAgentSessionsScanRpc = Rpc.make(WS_METHODS.agentSessionsScan, {
   payload: AgentSessionScanInput,
@@ -2657,7 +2666,7 @@ const WsSubscribeServerLifecycleRpc = Rpc.make(WS_METHODS.subscribeServerLifecyc
 
 const WsWorkflowsSubscribeRpc = Rpc.make(WS_METHODS.workflowsSubscribe, {
   payload: WorkflowRunsSubscribeInput,
-  success: WorkflowRunsSnapshot,
+  success: WorkflowRunsUpdate,
   error: EnvironmentAuthorizationError,
   stream: true,
 });
@@ -2881,7 +2890,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerListTextGeneratorModelsRpc,
   WsServerPrepareTriageRpc,
   WsServerGetUsageSummaryRpc,
-  WsServerGetAccountLimitsRpc,
   WsServerGetUsageLimitHistoryRpc,
   WsServerRefreshUsageRatesRpc,
   WsServerSignalProcessRpc,
@@ -2988,6 +2996,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsWorkspaceScanFoldersRpc,
   WsWorkspaceTaskFolderRpc,
   WsWorkspaceAddTaskFolderRepositoryRpc,
+  WsWorkspaceLayoutCommandsRpc,
+  WsWorkspaceApproveLayoutCommandsRpc,
   WsFilesystemGetMetadataRpc,
   WsAgentSessionsScanRpc,
   WsAgentSessionsImportRpc,

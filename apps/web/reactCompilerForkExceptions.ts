@@ -31,5 +31,4 @@ export const REACT_COMPILER_FORK_EXCEPTIONS = [
   "apps/web/src/components/usage/UsageLimitTrends.tsx",
   "apps/web/src/components/usage/UsageLimitsPooled.tsx",
   "apps/web/src/hooks/useSidebarOrderMigration.ts",
-  "apps/web/src/state/accountLimits.ts",
 ] as const;

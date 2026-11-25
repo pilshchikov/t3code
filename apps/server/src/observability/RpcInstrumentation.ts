@@ -12,7 +12,6 @@ type WsRpcMethod = RpcGroup.Rpcs<typeof WsRpcGroup>["_tag"];
 
 // Trace queries and dashboards depend on these labels, including deviations from method prefixes.
 const RPC_AGGREGATES = {
-  [WS_METHODS.serverGetAccountLimits]: "server",
   [WS_METHODS.serverGetUsageLimitHistory]: "server",
   [WS_METHODS.projectsWatchEntries]: "projects",
   [WS_METHODS.projectsWatchFile]: "projects",
@@ -239,6 +238,8 @@ const RPC_AGGREGATES = {
   [WS_METHODS.workspaceScanFolders]: "workspace",
   [WS_METHODS.workspaceTaskFolder]: "workspace",
   [WS_METHODS.workspaceAddTaskFolderRepository]: "workspace",
+  [WS_METHODS.workspaceLayoutCommands]: "workspace",
+  [WS_METHODS.workspaceApproveLayoutCommands]: "workspace",
   [WS_METHODS.filesystemGetMetadata]: "workspace",
   [WS_METHODS.agentSessionsScan]: "workspace",
   [WS_METHODS.agentSessionsImport]: "workspace",

@@ -61,7 +61,9 @@ import {
   SourceControlProviderKind,
   PRIMARY_LOCAL_ENVIRONMENT_ID,
   resolveEnvironmentMachineKind,
+  type ScopedProjectRef,
 } from "@t3tools/contracts";
+import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
@@ -112,6 +114,7 @@ import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstra
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { copyThreadReference } from "../lib/copyThreadReference";
+import { moveDraftToProject } from "../lib/moveDraftToProject";
 import {
   queueWorkspaceFocusFromPalette,
   restoreWorkspaceFocusFromPalette,
@@ -263,6 +266,7 @@ import {
   remoteProjectSourceIcon,
   sourceControlHostIcon,
 } from "./CommandPaletteAddProject";
+import { useCommandPaletteThreadActions } from "./CommandPaletteThreadActions";
 import { useCommandPaletteThreadItems } from "./CommandPaletteThreadItems";
 import { useCommandPaletteThemeItems } from "./CommandPaletteThemeItems";
 import {
@@ -371,6 +375,11 @@ export function CommandPalette({ children }: { children: ReactNode }) {
         <CommandDialog
           open={state.open}
           onOpenChange={(open, eventDetails) => {
+            // Held Escape emits repeat keydowns; only a fresh press should step back or close.
+            if (!open && eventDetails.reason === "escape-key" && eventDetails.event.repeat) {
+              eventDetails.cancel();
+              return;
+            }
             if (!open && eventDetails.reason === "escape-key" && state.mode !== "command") {
               eventDetails.cancel();
               dispatch({ _tag: "BackToCommand" });
@@ -625,7 +634,25 @@ function OpenCommandPaletteDialog(props: {
   const [isCreatingNewProject, setIsCreatingNewProject] = useState(false);
   // State lags a render behind, so a repeated Enter could start a second create.
   const newProjectSubmittingRef = useRef(false);
-  const createNewProject = useNewProject();
+  // "Add project" from a draft's project picker picks the new project for that draft.
+  const [addProjectDraftId] = useState(() =>
+    props.openIntent?.kind === "add-project" ? (props.openIntent.draftId ?? null) : null,
+  );
+  const moveDraftToAddedProject = async (project: EnvironmentProject): Promise<boolean> => {
+    if (addProjectDraftId === null || !moveDraftToProject(addProjectDraftId, project)) {
+      return false;
+    }
+    await navigate({ to: "/draft/$draftId", params: { draftId: addProjectDraftId } });
+    return true;
+  };
+  const openAddedProject = async (projectRef: ScopedProjectRef): Promise<void> => {
+    // A moved draft is keyed from the project record, so wait for it to reach this client.
+    const project =
+      addProjectDraftId === null ? null : await waitForProject(projectRef, 3_000).catch(() => null);
+    if (project !== null && (await moveDraftToAddedProject(project))) return;
+    await handleNewThread(projectRef);
+  };
+  const createNewProject = useNewProject(openAddedProject);
   const cloneLookupGeneration = useRef(0);
   const [isRemoteProjectLookingUp, setIsRemoteProjectLookingUp] = useState(false);
   const [isRemoteProjectCloning, setIsRemoteProjectCloning] = useState(false);
@@ -805,6 +832,10 @@ function OpenCommandPaletteDialog(props: {
     currentProjectId,
   );
   const currentProjectCwd = currentProject?.workspaceRoot ?? null;
+  const currentThreadActionItems = useCommandPaletteThreadActions({
+    threadRef: activeThread ? scopeThreadRef(activeThread.environmentId, activeThread.id) : null,
+    projectCwd: currentProjectCwd,
+  });
   const currentProjectCwdForBrowse =
     browseEnvironmentId && currentProjectEnvironmentId === browseEnvironmentId
       ? currentProjectCwd
@@ -891,7 +922,6 @@ function OpenCommandPaletteDialog(props: {
           ),
         )
       : null;
-    // oxlint-disable-next-line react/purity -- runs in an event handler (oxc#27309)
     const now = new Date().toISOString();
     const openableThreads = threads.filter(
       (thread) => thread.settledOverride !== "settled" && !effectiveSnoozed(thread, { now }),
@@ -1731,7 +1761,7 @@ function OpenCommandPaletteDialog(props: {
         toastManager.add({
           type: "success",
           title: gt("Agent session will restart"),
-          description: gt("Your next message starts a fresh session."),
+          description: gt("Your next message restarts the agent. This conversation is kept."),
         });
         const project = projectByKey.get(`${environmentId}:${thread.projectId}`);
         if (!project) return;
@@ -1747,6 +1777,8 @@ function OpenCommandPaletteDialog(props: {
       },
     });
   }
+
+  actionItems.push(...currentThreadActionItems);
 
   actionItems.push({
     kind: "action",
@@ -2214,6 +2246,10 @@ function OpenCommandPaletteDialog(props: {
       if (addProjectAttachTarget !== null) {
         await linkProjects([existing], addProjectAttachTarget.projectKey);
       }
+      if (await moveDraftToAddedProject(existing)) {
+        setOpen(false);
+        return;
+      }
       const latestThread = getLatestThreadForProject(
         threads.filter((thread) => thread.environmentId === existing.environmentId),
         existing.id,
@@ -2287,7 +2323,7 @@ function OpenCommandPaletteDialog(props: {
       const created = await waitForProject(createdRef, 5_000).catch(() => null);
       if (created !== null) await linkProjects([created], addProjectAttachTarget.projectKey);
     }
-    const navigationResult = await settlePromise(() => handleNewThread(createdRef));
+    const navigationResult = await settlePromise(() => openAddedProject(createdRef));
     if (navigationResult._tag === "Failure") {
       const error = squashAtomCommandFailure(navigationResult);
       toastManager.add(
@@ -2532,7 +2568,6 @@ function OpenCommandPaletteDialog(props: {
       input: {
         projectId: newProjectId(),
         title: inferProjectTitleFromPath(destinationPath),
-        // oxlint-disable-next-line react/purity -- runs in an event handler (oxc#27309)
         createdAt: new Date().toISOString(),
         remoteUrl: addProjectCloneFlow.remoteUrl,
         destinationPath,
@@ -2564,7 +2599,7 @@ function OpenCommandPaletteDialog(props: {
     if (cloned !== null && addProjectAttachTarget !== null) {
       await linkProjects([cloned], addProjectAttachTarget.projectKey);
     }
-    const navigationResult = await settlePromise(() => handleNewThread(projectRef));
+    const navigationResult = await settlePromise(() => openAddedProject(projectRef));
     if (navigationResult._tag === "Failure") {
       const error = squashAtomCommandFailure(navigationResult);
       toastManager.add(
@@ -2977,13 +3012,20 @@ function OpenCommandPaletteDialog(props: {
       return;
     }
 
-    if (event.key === "Backspace" && query === "" && isSubmenu) {
+    if (event.ctrlKey || event.shiftKey || event.altKey || event.metaKey) return;
+
+    if (
+      event.key === "Backspace" &&
+      query === "" &&
+      isSubmenu &&
+      !event.repeat &&
+      !event.nativeEvent.isComposing &&
+      event.keyCode !== 229
+    ) {
       event.preventDefault();
       popView();
       return;
     }
-
-    if (event.ctrlKey || event.shiftKey || event.altKey || event.metaKey) return;
 
     if (event.key === "Tab" && isBrowsing && !relativePathNeedsActiveProject) {
       if (event.nativeEvent.isComposing || event.keyCode === 229) return;

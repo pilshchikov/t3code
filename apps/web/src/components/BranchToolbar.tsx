@@ -2,6 +2,7 @@ import { measureRestingComposerControls } from "./chat/restingComposerControlsMe
 import { resolveRestingComposerControlsNaturalWidth } from "./composerFooterLayout";
 import { cn } from "~/lib/utils";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { contextMenuSourceOf } from "../contextMenuSource";
 import {
   ClipboardApiUnavailableError,
   ClipboardWriteError,
@@ -239,10 +240,11 @@ function showWorkspaceContextMenu(event: ReactMouseEvent, workspacePath: string)
   event.preventDefault();
   event.stopPropagation();
   void api.contextMenu
-    .show([{ id: "copy-path", label: resolveMessage(msg("Copy full path")), icon: "copy" }], {
-      x: event.clientX,
-      y: event.clientY,
-    })
+    .show(
+      [{ id: "copy-path", label: resolveMessage(msg("Copy full path")), icon: "copy" }],
+      { x: event.clientX, y: event.clientY },
+      contextMenuSourceOf(event),
+    )
     .then((action) => {
       if (action !== "copy-path") return;
       const clipboardPath = formatFilePathForClipboard(workspacePath);

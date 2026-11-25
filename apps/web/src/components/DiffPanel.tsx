@@ -88,7 +88,7 @@ import { AnnotatableCodeView, type AnnotatableCodeViewHandle } from "./diffs/Ann
 import { DiffFilesTreeNavigator } from "./diffs/DiffFilesTreeNavigator";
 import { ResizableColumns } from "./ui/resizable-columns";
 import { getDiffHeaderClickAction } from "./diffs/diffHeaderClick";
-import { Button } from "./ui/button";
+import { Button, InlineButton } from "./ui/button";
 import { ToggleGroup, Toggle } from "./ui/toggle-group";
 import { Switch } from "./ui/switch";
 import {
@@ -1342,6 +1342,18 @@ export default function DiffPanel({
             </p>
           </div>
         )
+      ) : diffTreeFiles.length === 0 && testFileCount > 0 ? (
+        <div className="flex h-full flex-wrap items-center justify-center gap-2 px-3 py-2 text-xs text-muted-foreground/70">
+          <p>
+            {gt(
+              "{count, plural, one {{count} test file hidden} other {{count} test files hidden}}",
+              { count: testFileCount },
+            )}
+          </p>
+          <InlineButton onClick={() => setHideTestFiles(false)}>
+            {gt("Show test files")}
+          </InlineButton>
+        </div>
       ) : lazySource || renderablePatch?.kind === "files" ? (
         diffCodeView
       ) : (

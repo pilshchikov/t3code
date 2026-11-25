@@ -88,6 +88,35 @@ it.layer(NodeServices.layer)("ClaudeHome", (it) => {
       expect(message).not.toContain("CLAUDE_CONFIG_DIR=");
       expect(message).toContain("then start a new thread");
     });
+    it.effect("gives a symlinked Claude home the continuation key of its target", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
+        const target = path.join(root, ".claude");
+        const link = path.join(root, ".claude-second-account");
+        yield* fileSystem.makeDirectory(target);
+        yield* fileSystem.symlink(target, link);
+
+        const direct = yield* makeClaudeContinuationGroupKey({ configDir: "", homePath: target });
+        expect(yield* makeClaudeContinuationGroupKey({ configDir: "", homePath: link })).toBe(
+          direct,
+        );
+        expect(
+          yield* makeClaudeContinuationGroupKey(
+            { configDir: "", homePath: "" },
+            { CLAUDE_CONFIG_DIR: link },
+          ),
+        ).toBe(direct);
+        expect(yield* makeClaudeContinuationGroupKey({ configDir: link, homePath: target })).toBe(
+          yield* makeClaudeContinuationGroupKey({ configDir: target, homePath: target }),
+        );
+        // The spawned process keeps the literal path, because Claude keys its login by that path.
+        const environment = yield* makeClaudeEnvironment({ configDir: link, homePath: link });
+        expect(environment.CLAUDE_CONFIG_DIR).toBe(link);
+        expect(environment.HOME).toBe(link);
+      }).pipe(Effect.scoped),
+    );
 
     it.effect("separates capability probes by cwd", () =>
       Effect.gen(function* () {

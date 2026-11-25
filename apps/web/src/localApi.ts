@@ -1,4 +1,9 @@
-import type { ConfirmDialogOptions, ContextMenuItem, LocalApi } from "@t3tools/contracts";
+import type {
+  ConfirmDialogOptions,
+  ContextMenuItem,
+  ContextMenuSource,
+  LocalApi,
+} from "@t3tools/contracts";
 import { msg } from "gt-react";
 
 import { isWebUrl } from "./browser/webUrl";
@@ -50,7 +55,8 @@ export function createLocalApi(): LocalApi {
       show: async <T extends string>(
         items: readonly ContextMenuItem<T>[],
         position?: { x: number; y: number },
-      ): Promise<T | null> => showContextMenuFallback(items, position),
+        source?: ContextMenuSource,
+      ): Promise<T | null> => showContextMenuFallback(items, position, source),
       // The in-app menu needs an explicit dismiss when the state behind it
       // goes away.
       close: async () => {

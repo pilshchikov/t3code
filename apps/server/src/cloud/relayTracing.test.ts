@@ -6,7 +6,7 @@ import { vi } from "vite-plus/test";
 
 import { withRelayClientTracing } from "@t3tools/shared/relayTracing";
 
-import { layerHeadlessRelayClient, layerServerRelayBroker } from "./relayTracing.ts";
+import { allowedFor, layerHeadlessRelayClient, layerServerRelayBroker } from "./relayTracing.ts";
 
 vi.mock("./publicConfig.ts", () => ({
   resolveRelayClientTracingConfig: () => ({
@@ -32,4 +32,9 @@ it.effect.each([
     Effect.scoped,
     Effect.andThen(Effect.sync(() => expect(fetchFn).not.toHaveBeenCalled())),
   );
+});
+
+it("reports relay tracing as disallowed to clients regardless of environment", () => {
+  expect(allowedFor({}, undefined)).toBe(false);
+  expect(allowedFor({ T3CODE_TELEMETRY_ENABLED: "true" }, undefined)).toBe(false);
 });

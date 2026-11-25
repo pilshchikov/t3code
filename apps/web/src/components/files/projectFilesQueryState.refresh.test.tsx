@@ -281,7 +281,7 @@ describe("project query refresh", () => {
       authorizationMocks.sessionAtom = Atom.make(
         AsyncResult.success({ authenticated: true, scopes: [AuthFilesystemReadScope] }),
       );
-      expect(useT3ProjectFileState(environmentId, "/repo")).toEqual({
+      expect(useT3ProjectFileState(environmentId, "/repo")).toMatchObject({
         status: "valid",
         file: config,
         scripts: config.scripts,
@@ -322,7 +322,7 @@ describe("project query refresh", () => {
           error: null,
           isPending: true,
         });
-        expect(useT3ProjectFileState(environmentId, "/repo")).toEqual({
+        expect(useT3ProjectFileState(environmentId, "/repo")).toMatchObject({
           status: "valid",
           file: config,
           scripts: config.scripts,

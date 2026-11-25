@@ -1,5 +1,29 @@
 # Fork Changes
 
+## Upstream integration, 2026-11-25 (60eed627d0)
+
+- Merged 550 upstream commits. Recovery branch: `backup/pre-upstream-20261125`.
+- Migrations: upstream 111 to 118 run as fork 120 to 127 (`Migrations.ts`, `Migrations.test.ts`,
+  `reconcileV2PreviewMigration.test.ts`).
+- The fork's extra RPCs pushed `RpcGroup.toLayer` past TypeScript's instantiation limit, so the
+  server layer's requirements degraded to `any`. `ws.ts` now registers workflow and scheduled
+  task RPCs as their own group and splits the rest by prefix, as upstream does.
+- Removed the server's `AccountLimitsService`, its `server.getAccountLimits` RPC and contract. No
+  client read them after the hover card moved to usage limit presentations.
+- Kept the fork's side: no-op analytics (`record` accepts upstream's `anonymous` option), relay
+  tracing off (`allowedFor` is always false, mobile connection traces never export), its own file
+  tree, diff viewer, sidebar, in-app context menu and the usage strips. Upstream's new cmd+k
+  thread actions, terminal cycling keys, HTML preview width, layout command approvals, workflow
+  pools and HTTP quota sources are in. Upstream's pooled "next refill" line is not, since the
+  strips replaced the pooled cards.
+- `docs/user/telemetry.md` keeps the fork's text plus upstream's mobile notification section.
+- Validation: whole-repo typecheck, `vp check` (0 errors), i18n catalogs regenerated (115 stale
+  keys dropped), focused server, web, package and mobile tests. Remaining failures also fail on
+  the pre-merge fork: migration tests 055/075/086/095/096 (upstream ids), `triage.test.ts`,
+  `pinnedRuntime`, `ManagedProjectFolders`, `ProjectSetupScriptRunner` syntax error exit code,
+  two Sidebar browser tests, four MessagesTimeline tests, `FilePreviewPanel` focus,
+  `paletteSearch`, `shell`, `t3ProjectFile` schema.
+
 ## Compact strip layout for Usage limits, 2026-11-23
 
 - Usage → Limits shows each provider as a strip instead of a card per window: a provider line

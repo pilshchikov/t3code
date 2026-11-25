@@ -75,6 +75,8 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+shift+d", command: "composer.dictation", when: "!terminalFocus" },
   { key: "mod+n", command: "terminal.new", when: "terminalFocus" },
   { key: "mod+w", command: "terminal.close", when: "terminalFocus" },
+  { key: "ctrl+alt+[", command: "terminal.previous", when: "terminalFocus && !isMac" },
+  { key: "ctrl+alt+]", command: "terminal.next", when: "terminalFocus && !isMac" },
   { key: "mod+w", command: "rightPanel.close", when: "!terminalFocus" },
   { key: "mod+shift+t", command: "view.reopenClosed" },
   { key: "mod+d", command: "diff.toggle", when: "!terminalFocus" },
@@ -136,6 +138,8 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+]", command: "editor.navigateForward", when: "!terminalFocus" },
   { key: "mod+shift+[", command: "thread.previous" },
   { key: "mod+shift+]", command: "thread.next" },
+  { key: "cmd+shift+[", command: "terminal.previous", when: "terminalFocus && isMac" },
+  { key: "cmd+shift+]", command: "terminal.next", when: "terminalFocus && isMac" },
   // Upstream's manual settle toggle does not conflict with the fork's project
   // slots. Keep it so auto-settlement can stay off without losing a quick
   // explicit action.
