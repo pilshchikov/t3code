@@ -54,6 +54,9 @@
   pools and HTTP quota sources are in. Upstream's pooled "next refill" line is not, since the
   strips replaced the pooled cards.
 - `docs/user/telemetry.md` keeps the fork's text plus upstream's mobile notification section.
+- Mobile thread rows: the fork's "Thread color" and "Copy thread ID" long-press entries stay, but
+  "Copy thread ID" is added only in triage-only rows, since upstream's row menu now has it
+  (`apps/mobile/src/features/threads/thread-list-v2-items.tsx`).
 - Validation: whole-repo typecheck, `vp check` (0 errors), i18n catalogs regenerated (115 stale
   keys dropped), focused server, web, package and mobile tests. Remaining failures also fail on
   the pre-merge fork: migration tests 055/075/086/095/096 (upstream ids), `triage.test.ts`,

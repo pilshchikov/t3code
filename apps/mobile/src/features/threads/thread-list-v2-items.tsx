@@ -1844,9 +1844,11 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
             accessibilityLabel={rowAccessibilityLabel}
             actions={[
               { id: "thread-color", title: gt("Thread color"), image: "paintpalette" },
-              { id: "copy-thread-id", title: gt("Copy thread ID"), image: "doc.on.doc" },
               ...(triageOnly
-                ? menuActions.filter((action) => TRIAGE_MENU_ACTION_IDS.has(action.id ?? ""))
+                ? [
+                    { id: "copy-thread-id", title: gt("Copy thread ID"), image: "doc.on.doc" },
+                    ...menuActions.filter((action) => TRIAGE_MENU_ACTION_IDS.has(action.id ?? "")),
+                  ]
                 : menuActions),
             ]}
             onPressAction={handleMenuAction}
