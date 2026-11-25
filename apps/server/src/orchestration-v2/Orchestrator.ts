@@ -4735,13 +4735,26 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         root;
       if (
         Option.isNone(project) ||
-        root === project.value.workspaceRoot ||
-        !project.value.workspaceRoots?.some((r) => r.path === root)
+        !project.value.trackedFolders.some((folder) => folder.path === root)
       ) {
         return yield* new OrchestratorDispatchError({
           commandId: command.commandId,
           commandType: command.type,
-          cause: "Select a configured additional repository.",
+          cause: "Select one of the project's tracked folders.",
+        });
+      }
+      const taskFolder =
+        thread.worktreePath === null
+          ? null
+          : yield* taskFolderStore
+              .findContaining(thread.worktreePath)
+              .pipe(mapDispatchError(command));
+      if (taskFolder?.repositories.some((repository) => repository.repositoryPath === root)) {
+        return yield* new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause:
+            "This repository follows the thread's task folder and cannot be selected on its own.",
         });
       }
       if (

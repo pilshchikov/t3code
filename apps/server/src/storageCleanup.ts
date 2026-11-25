@@ -1,6 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeFSP from "node:fs/promises";
-import type { ProjectWorkspace } from "@t3tools/contracts";
 import {
   CheckpointScopeId,
   CommandId,
@@ -563,7 +562,7 @@ const make = Effect.gen(function* () {
     worktreePaths: ReadonlyArray<string>,
     projects: ReadonlyArray<{
       readonly workspaceRoot: string;
-      readonly workspaceRoots?: ReadonlyArray<ProjectWorkspace> | undefined;
+      readonly trackedFolders?: ReadonlyArray<{ readonly path: string }> | undefined;
     }>,
   ) {
     const contains = (projectPath: string) =>
@@ -573,7 +572,7 @@ const make = Effect.gen(function* () {
       );
     for (const workspaceRoot of projects.flatMap((project) => [
       project.workspaceRoot,
-      ...(project.workspaceRoots ?? []).map((root) => root.path),
+      ...(project.trackedFolders ?? []).map((folder) => folder.path),
     ])) {
       const projectPath = path.resolve(workspaceRoot);
       if (contains(projectPath)) return true;

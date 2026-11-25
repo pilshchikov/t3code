@@ -88,13 +88,7 @@ export const make = Effect.gen(function* () {
 
       const projects = yield* projectStore.listShells().pipe(Effect.orElseSucceed(() => []));
       for (const project of projects) {
-        const roots = new Set([
-          project.workspaceRoot,
-          ...(project.workspaceRoots ?? []).map((root) => root.path),
-        ]);
-        for (const root of roots) {
-          if (within(yield* resolveRoot(root))) return true;
-        }
+        if (within(yield* resolveRoot(project.workspaceRoot))) return true;
       }
       // After every project folder: most tracked folders sit inside one and need no lookup.
       for (const project of projects) {
@@ -129,7 +123,7 @@ export const make = Effect.gen(function* () {
         const root = workspaceRoot ?? project.workspaceRoot;
         if (
           root !== project.workspaceRoot &&
-          !(project.workspaceRoots ?? []).some((entry) => entry.path === root)
+          !(project.trackedFolders ?? []).some((folder) => folder.path === root)
         )
           return false;
         let listed = projectWorktrees.get(root);

@@ -32,14 +32,8 @@ it.layer(ProjectStore.layer.pipe(Layer.provideMerge(SqlitePersistence.layerMemor
             projectId,
             title: "Null options project",
             workspaceRoot: "/tmp/project-null-options",
-            workspaceRoots: [
-              { path: "/tmp/project-null-options" },
-              {
-                path: "/tmp/backend",
-                label: "Backend",
-                color: "green",
-                agentGuidance: "Use backend checks",
-              },
+            folderSettings: [
+              { path: "/tmp/backend", color: "green", agentGuidance: "Use backend checks" },
             ],
             defaultModelSelection: modelSelection,
             scripts: [],
@@ -48,14 +42,8 @@ it.layer(ProjectStore.layer.pipe(Layer.provideMerge(SqlitePersistence.layerMemor
           },
         });
 
-        assert.deepStrictEqual(Option.getOrNull(yield* projects.get(projectId))?.workspaceRoots, [
-          { path: "/tmp/project-null-options" },
-          {
-            path: "/tmp/backend",
-            label: "Backend",
-            color: "green",
-            agentGuidance: "Use backend checks",
-          },
+        assert.deepStrictEqual(Option.getOrNull(yield* projects.get(projectId))?.folderSettings, [
+          { path: "/tmp/backend", color: "green", agentGuidance: "Use backend checks" },
         ]);
         yield* sql`UPDATE projection_projects SET default_thread_env_mode = 'multiwork' WHERE project_id = ${projectId}`;
         assert.strictEqual(

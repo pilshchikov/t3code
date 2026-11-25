@@ -1014,9 +1014,12 @@ export const make = Effect.gen(function* () {
           const registered = registry.get(kind);
           const api = registered?.servesHost?.(host) === false ? null : registered;
           if (api !== null) {
-            const projectRoots = project.workspaceRoots?.length
-              ? project.workspaceRoots.map((root) => root.path)
-              : [project.workspaceRoot];
+            const projectRoots = [
+              project.workspaceRoot,
+              ...(project.trackedFolders ?? []).flatMap((folder) =>
+                folder.discovered === true ? [] : [folder.path],
+              ),
+            ];
             const roots = viewerRoots.get(host);
             if (roots === undefined) viewerRoots.set(host, [...projectRoots]);
             else {

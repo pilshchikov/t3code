@@ -6,7 +6,7 @@ import {
   StoredProjectIcon,
   ProjectId,
   ProjectScript,
-  ProjectWorkspace,
+  ProjectFolderSettings,
   ProjectTrackedFolders,
   ThreadEnvMode,
 } from "@t3tools/contracts";
@@ -36,7 +36,6 @@ export const ProjectRow = Schema.Struct({
   title: Schema.String,
   hasCustomTitle: Schema.Boolean,
   workspaceRoot: Schema.String,
-  workspaceRoots: Schema.optional(Schema.Array(ProjectWorkspace)),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   defaultThreadEnvMode: Schema.NullOr(ThreadEnvMode),
   autoPull: Schema.Boolean,
@@ -44,6 +43,8 @@ export const ProjectRow = Schema.Struct({
   projectIcon: Schema.NullOr(StoredProjectIcon),
   scripts: Schema.Array(ProjectScript),
   trackedFolders: ProjectTrackedFolders,
+  // Optional so upstream fixtures that build rows by hand need not name it.
+  folderSettings: Schema.optional(Schema.Array(ProjectFolderSettings)),
   pinnedAt: Schema.NullOr(IsoDateTime),
   archivedAt: Schema.NullOr(IsoDateTime),
   groupKey: Schema.NullOr(Schema.String),
@@ -59,9 +60,10 @@ const ProjectDbRow = Schema.Struct({
   hasCustomTitle: Schema.BooleanFromBit,
   autoPull: Schema.BooleanFromBit,
   projectIcon: Schema.NullOr(Schema.fromJsonString(StoredProjectIcon)),
-  workspaceRoots: Schema.optional(Schema.fromJsonString(Schema.Array(ProjectWorkspace))),
   scripts: Schema.fromJsonString(Schema.Array(ProjectScript)),
   trackedFolders: Schema.fromJsonString(ProjectTrackedFolders),
+  // Stored in the fork's `workspace_roots_json` column, which migration 128 rewrote to this shape.
+  folderSettings: Schema.optional(Schema.fromJsonString(Schema.Array(ProjectFolderSettings))),
 });
 
 function toShell(row: ProjectRow): OrchestrationProjectShell {
@@ -70,7 +72,6 @@ function toShell(row: ProjectRow): OrchestrationProjectShell {
     title: row.title,
     hasCustomTitle: row.hasCustomTitle,
     workspaceRoot: row.workspaceRoot,
-    workspaceRoots: row.workspaceRoots,
     repositoryIdentity: null,
     defaultModelSelection: row.defaultModelSelection,
     defaultThreadEnvMode: row.defaultThreadEnvMode,
@@ -79,6 +80,7 @@ function toShell(row: ProjectRow): OrchestrationProjectShell {
     projectIcon: row.projectIcon,
     scripts: row.scripts,
     trackedFolders: row.trackedFolders,
+    ...(row.folderSettings?.length ? { folderSettings: row.folderSettings } : {}),
     pinnedAt: row.pinnedAt,
     archivedAt: row.archivedAt,
     groupKey: row.groupKey,
@@ -132,7 +134,7 @@ export const make = Effect.gen(function* () {
         title,
         has_custom_title AS "hasCustomTitle",
         workspace_root AS "workspaceRoot",
-        workspace_roots_json AS "workspaceRoots",
+        workspace_roots_json AS "folderSettings",
         default_model_selection_json AS "defaultModelSelection",
         default_thread_env_mode AS "defaultThreadEnvMode",
         auto_pull AS "autoPull",
@@ -188,7 +190,7 @@ export const make = Effect.gen(function* () {
             ${encoded.title},
             ${encoded.hasCustomTitle},
             ${encoded.workspaceRoot},
-            ${encoded.workspaceRoots ?? "[]"},
+            ${encoded.folderSettings ?? "[]"},
             ${encoded.defaultModelSelection},
             ${encoded.defaultThreadEnvMode},
             ${encoded.autoPull},
@@ -266,7 +268,6 @@ export const make = Effect.gen(function* () {
           title: payload.title,
           hasCustomTitle: false,
           workspaceRoot: payload.workspaceRoot,
-          workspaceRoots: payload.workspaceRoots,
           defaultModelSelection: payload.defaultModelSelection,
           defaultThreadEnvMode: payload.defaultThreadEnvMode ?? null,
           autoPull: false,
@@ -274,6 +275,7 @@ export const make = Effect.gen(function* () {
           projectIcon: payload.projectIcon ?? null,
           scripts: payload.scripts,
           trackedFolders: payload.trackedFolders ?? [],
+          folderSettings: payload.folderSettings ?? [],
           pinnedAt: null,
           archivedAt: null,
           groupKey: payload.groupKey ?? null,
@@ -297,7 +299,6 @@ export const make = Effect.gen(function* () {
         ...row,
         ...(payload.title === undefined ? {} : { title: payload.title, hasCustomTitle: true }),
         ...(payload.workspaceRoot === undefined ? {} : { workspaceRoot: payload.workspaceRoot }),
-        ...(payload.workspaceRoots === undefined ? {} : { workspaceRoots: payload.workspaceRoots }),
         ...(payload.defaultModelSelection === undefined
           ? {}
           : { defaultModelSelection: payload.defaultModelSelection }),
@@ -309,6 +310,7 @@ export const make = Effect.gen(function* () {
         ...(payload.projectIcon === undefined ? {} : { projectIcon: payload.projectIcon }),
         ...(payload.scripts === undefined ? {} : { scripts: payload.scripts }),
         ...(payload.trackedFolders === undefined ? {} : { trackedFolders: payload.trackedFolders }),
+        ...(payload.folderSettings === undefined ? {} : { folderSettings: payload.folderSettings }),
         ...(payload.pinnedAt === undefined ? {} : { pinnedAt: payload.pinnedAt }),
         ...(payload.archivedAt === undefined ? {} : { archivedAt: payload.archivedAt }),
         ...(payload.groupKey === undefined ? {} : { groupKey: payload.groupKey }),

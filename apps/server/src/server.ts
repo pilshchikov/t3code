@@ -821,7 +821,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
       ),
     ),
     Layer.provideMerge(Peers.layer.pipe(Layer.provideMerge(PeerFiles.layer))),
-    Layer.provideMerge(ThreadWorkspaces.layer),
+    Layer.provideMerge(ThreadWorkspaces.layer.pipe(Layer.provide(TaskFolderStore.layer))),
     Layer.provideMerge(ResumableSessionDiscovery.layer),
     Layer.provideMerge(UsageLimitHistory.layer),
     Layer.provideMerge(layerOrchestrationApplication),

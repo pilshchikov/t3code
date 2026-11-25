@@ -1,7 +1,12 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { useWorkspaceMutationRefresh } from "~/hooks/useWorkspaceMutationRefresh";
 import { breadcrumbPathOf, retainedBreadcrumbTrail, trailChildOf } from "./filePath";
-import type { ThreadWorkspaceSelection } from "@t3tools/contracts";
+import type {
+  ProjectFolderSettings,
+  ProjectTrackedFolder,
+  TaskFolder,
+  ThreadWorkspaceSelection,
+} from "@t3tools/contracts";
 import {
   resolveThreadWorkspaces,
   type SelectedProjectWorkspace,
@@ -20,7 +25,6 @@ import {
   type EditorId,
   type EnvironmentId,
   type ProjectCodeSearchMatch,
-  type ProjectWorkspace,
   type ProjectId,
   type ResolvedKeybindingsConfig,
   type ScopedThreadRef,
@@ -220,7 +224,9 @@ interface FilePreviewPanelProps {
   folderTrail?: string | undefined;
   selectedFilePending: boolean;
   workspaceMutationId: string | null;
-  workspaceRoots?: ReadonlyArray<ProjectWorkspace> | undefined;
+  trackedFolders?: ReadonlyArray<ProjectTrackedFolder> | undefined;
+  folderSettings?: ReadonlyArray<ProjectFolderSettings> | undefined;
+  taskFolder?: TaskFolder | null | undefined;
   workspaceSelections?: ReadonlyArray<ThreadWorkspaceSelection> | undefined;
 }
 
@@ -1438,8 +1444,8 @@ function MultiRootFileBrowser(props: {
   onOpenFile: (path: string, workspaceRoot: string) => void;
 }) {
   const gt = useGT();
-  const rootDisplayName = (root: ProjectWorkspace, index: number) =>
-    index === 0 ? props.projectName : root.label?.trim() || workspaceDirectoryName(root.path);
+  const rootDisplayName = (root: SelectedProjectWorkspace, index: number) =>
+    index === 0 ? props.projectName : root.name?.trim() || workspaceDirectoryName(root.path);
   const projectRoot = props.roots[0]?.workspaceRoot ?? "";
   const [layout, setLayout] = useLocalStorage(
     `t3code.files.layout.v1:${editorWorkspaceKey(props.environmentId, projectRoot)}`,
@@ -1580,11 +1586,13 @@ function MultiRootFileBrowser(props: {
                   </code>
                 </div>
               </button>
-              <FileWorktreeToolbar
-                environmentId={props.environmentId}
-                threadRef={props.threadRef}
-                root={root}
-              />
+              {root.followsTaskFolder ? null : (
+                <FileWorktreeToolbar
+                  environmentId={props.environmentId}
+                  threadRef={props.threadRef}
+                  root={root}
+                />
+              )}
               {!collapsed ? (
                 <div className="min-h-0 flex-1 border-t border-border/60">
                   <FileBrowserPanel
@@ -1657,7 +1665,9 @@ export default function FilePreviewPanel({
   onPendingChange: onWorkspacePendingChange,
   selectedFilePending,
   workspaceMutationId,
-  workspaceRoots,
+  trackedFolders,
+  folderSettings,
+  taskFolder,
   workspaceSelections,
 }: FilePreviewPanelProps) {
   const resolvedPath =
@@ -1701,10 +1711,11 @@ export default function FilePreviewPanel({
   const roots = useMemo(
     () =>
       resolveThreadWorkspaces(
-        { workspaceRoot: projectRoot, workspaceRoots },
+        { workspaceRoot: projectRoot, trackedFolders, folderSettings },
         { worktreePath: primaryCwd, branch: null, workspaceSelections },
+        taskFolder,
       ),
-    [primaryCwd, projectRoot, workspaceRoots, workspaceSelections],
+    [primaryCwd, projectRoot, trackedFolders, folderSettings, taskFolder, workspaceSelections],
   );
   const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
   const environmentHttpBaseUrl = useEnvironmentHttpBaseUrl(environmentId);

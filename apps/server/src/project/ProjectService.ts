@@ -1,4 +1,3 @@
-import type { ProjectWorkspace } from "@t3tools/contracts";
 import {
   CommandId,
   type OrchestrationProjectShell,
@@ -6,6 +5,7 @@ import {
   ProjectId,
   type Project,
   type ProjectCreatePayload,
+  type ProjectFolderSettings,
   type ProjectTrackedFolder,
   type ProjectUpdatePayload,
   type ProjectSnapshot,
@@ -220,7 +220,6 @@ export const make = Effect.gen(function* () {
     id: row.projectId,
     title: row.title,
     workspaceRoot: row.workspaceRoot,
-    workspaceRoots: row.workspaceRoots,
     repositoryIdentity: enrichment?.repositoryIdentity ?? null,
     faviconPath: row.faviconPath ?? enrichment?.faviconPath ?? null,
     defaultModelSelection: row.defaultModelSelection,
@@ -229,6 +228,7 @@ export const make = Effect.gen(function* () {
     projectIcon: row.projectIcon,
     scripts: row.scripts,
     trackedFolders: row.trackedFolders,
+    ...(row.folderSettings?.length ? { folderSettings: row.folderSettings } : {}),
     pinnedAt: row.pinnedAt,
     archivedAt: row.archivedAt,
     groupKey: row.groupKey,
@@ -541,21 +541,21 @@ export const make = Effect.gen(function* () {
     return Option.isNone(row) ? Option.none() : Option.some(yield* hydrate(row.value));
   });
 
-  const normalizeRoots = Effect.fn("ProjectService.normalizeRoots")(function* (
+  const normalizeFolderSettings = (
     projectId: ProjectId,
-    primary: string,
-    roots: ReadonlyArray<ProjectWorkspace>,
-  ) {
-    const normalized = yield* Effect.forEach(roots, (root) =>
-      normalizeWorkspaceRoot({ projectId, workspaceRoot: root.path }).pipe(
-        Effect.map((path) => ({ ...root, path })),
-      ),
-    );
-    const first = normalized.find((root) => root.path === primary) ?? { path: primary };
-    const byPath = new Map(normalized.map((root) => [root.path, root]));
-    byPath.delete(primary);
-    return [first, ...byPath.values()];
-  });
+    settings: ReadonlyArray<ProjectFolderSettings> | undefined,
+  ) => {
+    if (settings === undefined) return Effect.undefined;
+    const relative = settings.find((entry) => !path.isAbsolute(entry.path));
+    return relative === undefined
+      ? Effect.succeed(settings.map((entry) => ({ ...entry, path: path.resolve(entry.path) })))
+      : Effect.fail(
+          new ProjectInvalidError({
+            projectId,
+            detail: `Folder settings path '${relative.path}' must be absolute.`,
+          }),
+        );
+  };
 
   // Once project settings are folded, project defaults resolve from Settings only, where the app's editor saves them.
   const saveProjectSettings = (
@@ -616,6 +616,7 @@ export const make = Effect.gen(function* () {
         workspaceRoot,
         input.trackedFolders ?? [],
       );
+      const folderSettings = yield* normalizeFolderSettings(input.projectId, input.folderSettings);
       yield* commit(
         {
           type: "project.create",
@@ -623,15 +624,7 @@ export const make = Effect.gen(function* () {
           projectId: input.projectId,
           title: input.title,
           workspaceRoot,
-          ...(input.workspaceRoots === undefined
-            ? {}
-            : {
-                workspaceRoots: yield* normalizeRoots(
-                  input.projectId,
-                  workspaceRoot,
-                  input.workspaceRoots,
-                ),
-              }),
+          ...(folderSettings === undefined ? {} : { folderSettings }),
           ...(input.scripts === undefined ? {} : { scripts: input.scripts }),
           ...(input.groupKey === undefined ? {} : { groupKey: input.groupKey }),
           trackedFolders,
@@ -664,24 +657,14 @@ export const make = Effect.gen(function* () {
       if (workspaceRoot !== previousRoot) {
         yield* rejectWorktreeContainer(input.projectId, workspaceRoot);
       }
+      const folderSettings = yield* normalizeFolderSettings(input.projectId, input.folderSettings);
       const command = {
         type: "project.meta.update",
         commandId: input.commandId,
         projectId: input.projectId,
         ...(input.title === undefined ? {} : { title: input.title }),
         ...(workspaceRoot === previousRoot ? {} : { workspaceRoot }),
-        ...(input.workspaceRoots === undefined && workspaceRoot === previousRoot
-          ? {}
-          : {
-              workspaceRoots: yield* normalizeRoots(
-                input.projectId,
-                workspaceRoot,
-                input.workspaceRoots ??
-                  (existing.value.workspaceRoots ?? []).map((root) =>
-                    root.path === previousRoot ? { ...root, path: workspaceRoot } : root,
-                  ),
-              ),
-            }),
+        ...(folderSettings === undefined ? {} : { folderSettings }),
         ...(input.defaultModelSelection === undefined
           ? {}
           : { defaultModelSelection: input.defaultModelSelection }),

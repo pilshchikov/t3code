@@ -4,7 +4,7 @@ import {
 } from "@t3tools/shared/threadWorkspaces";
 import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
-import type { ProjectWorkspace, ScopedThreadRef, VcsRef } from "@t3tools/contracts";
+import type { ScopedThreadRef, VcsRef } from "@t3tools/contracts";
 import type { AppBarMenu } from "../../components/ui/AppBar.types";
 import { formatFilePathForClipboard } from "@t3tools/client-runtime/media-actions";
 import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
@@ -50,6 +50,7 @@ import { type MediaActionsSource } from "../../lib/mediaActionsSource";
 import { useThreadSelection } from "../../state/use-thread-selection";
 import { useSelectedThreadWorktree } from "../../state/use-selected-thread-worktree";
 import { useEnvironmentQuery } from "../../state/query";
+import { filesystemEnvironment } from "../../state/filesystem";
 import { useEnvironmentPresentation } from "../../state/presentation";
 import { projectEnvironment } from "../../state/projects";
 import type { AssetUrlFailureReason } from "../../state/asset-url-state";
@@ -414,22 +415,25 @@ function useThreadFilesWorkspace(params: {
       ? EnvironmentId.make(routeEnvironmentId)
       : (selectedThread?.environmentId ?? null);
   const threadId = routeThreadId !== null ? ThreadId.make(routeThreadId) : null;
-  const project = selectedThreadProject as {
-    readonly title?: string;
-    readonly workspaceRoot?: string;
-    readonly workspaceRoots?: ReadonlyArray<ProjectWorkspace>;
-  } | null;
+  const project = selectedThreadProject;
+  const worktreePath = selectedThread?.worktreePath ?? null;
+  const taskFolderQuery = useEnvironmentQuery(
+    environmentId !== null && worktreePath !== null && (project?.trackedFolders?.length ?? 0) > 0
+      ? filesystemEnvironment.taskFolder({ environmentId, input: { worktreePath } })
+      : null,
+  );
 
   return {
     cwd: routeCwd ?? selectedThreadCwd ?? project?.workspaceRoot ?? null,
     workspaces: project?.workspaceRoot
       ? resolveThreadWorkspaces(
-          { workspaceRoot: project.workspaceRoot, workspaceRoots: project.workspaceRoots },
+          project,
           {
             worktreePath: selectedThreadCwd ?? null,
             branch: selectedThread?.branch ?? null,
             workspaceSelections: selectedThread?.workspaceSelections,
           },
+          taskFolderQuery.data?.taskFolder ?? null,
         )
       : [],
     environmentId,
@@ -510,6 +514,44 @@ function WorkspaceFilesHeader(
   for (const ref of loadedRefs) if (ref.worktreePath) checkouts.set(ref.worktreePath, ref.name);
   if (root)
     checkouts.set(root.path, checkouts.get(root.path) ?? root.branch ?? "Selected checkout");
+  const checkoutGroups = [
+    {
+      id: "checkouts",
+      title: gt("Worktrees"),
+      items: [...checkouts].map(([path, title]) => ({
+        id: path,
+        title,
+        subtitle: path,
+        disabled: pending,
+        selected: path === root?.path,
+        onPress: () => {
+          void select({ path });
+        },
+      })),
+    },
+    {
+      id: "branches",
+      title: gt("Branches"),
+      items: loadedRefs.map((ref) => ({
+        id: ref.name,
+        title: ref.name,
+        disabled: pending,
+        selected: ref.name === root?.branch,
+        onPress: () => {
+          void select({ branch: ref.name });
+        },
+      })),
+    },
+    ...(inspect.data?.refs.nextCursor != null
+      ? [
+          {
+            id: "more-branches",
+            title: gt("Load more branches"),
+            onPress: () => setCursor(inspect.data?.refs.nextCursor ?? undefined),
+          },
+        ]
+      : []),
+  ];
   const menus: ReadonlyArray<AppBarMenu> = [
     {
       title: gt("Repositories and checkouts"),
@@ -520,48 +562,13 @@ function WorkspaceFilesHeader(
           title: gt("Repository"),
           items: props.workspaces.map((entry) => ({
             id: entry.workspaceRoot,
-            title: entry.label ?? entry.workspaceRoot.split("/").at(-1) ?? entry.workspaceRoot,
+            title: entry.name ?? entry.workspaceRoot.split("/").at(-1) ?? entry.workspaceRoot,
             subtitle: entry.path,
             selected: entry.workspaceRoot === root?.workspaceRoot,
             onPress: () => props.onSelectRoot(entry.workspaceRoot),
           })),
         },
-        {
-          id: "checkouts",
-          title: gt("Worktrees"),
-          items: [...checkouts].map(([path, title]) => ({
-            id: path,
-            title,
-            subtitle: path,
-            disabled: pending,
-            selected: path === root?.path,
-            onPress: () => {
-              void select({ path });
-            },
-          })),
-        },
-        {
-          id: "branches",
-          title: gt("Branches"),
-          items: loadedRefs.map((ref) => ({
-            id: ref.name,
-            title: ref.name,
-            disabled: pending,
-            selected: ref.name === root?.branch,
-            onPress: () => {
-              void select({ branch: ref.name });
-            },
-          })),
-        },
-        ...(inspect.data?.refs.nextCursor != null
-          ? [
-              {
-                id: "more-branches",
-                title: gt("Load more branches"),
-                onPress: () => setCursor(inspect.data?.refs.nextCursor ?? undefined),
-              },
-            ]
-          : []),
+        ...(root?.followsTaskFolder ? [] : checkoutGroups),
         {
           id: "refresh",
           title: gt("Refresh files and checkouts"),

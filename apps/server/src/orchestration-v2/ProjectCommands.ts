@@ -6,7 +6,7 @@ import {
   type ProjectIconOverride,
   ProjectId,
   type ProjectScript,
-  type ProjectWorkspace,
+  type ProjectFolderSettings,
   type ProjectTrackedFolder,
   SCRIPT_RUN_COMMAND_PATTERN,
   type ThreadEnvMode,
@@ -24,10 +24,10 @@ export interface ProjectCreateCommand {
   readonly projectId: ProjectId;
   readonly title: string;
   readonly workspaceRoot: string;
-  readonly workspaceRoots?: ReadonlyArray<ProjectWorkspace>;
   readonly scripts?: ReadonlyArray<ProjectScript>;
   readonly groupKey?: string;
   readonly trackedFolders?: ReadonlyArray<ProjectTrackedFolder>;
+  readonly folderSettings?: ReadonlyArray<ProjectFolderSettings>;
 }
 
 export interface ProjectMetaUpdateCommand {
@@ -36,7 +36,6 @@ export interface ProjectMetaUpdateCommand {
   readonly projectId: ProjectId;
   readonly title?: string;
   readonly workspaceRoot?: string;
-  readonly workspaceRoots?: ReadonlyArray<ProjectWorkspace>;
   readonly defaultModelSelection?: ModelSelection | null;
   readonly defaultThreadEnvMode?: ThreadEnvMode | null;
   readonly autoPull?: boolean;
@@ -44,6 +43,7 @@ export interface ProjectMetaUpdateCommand {
   readonly projectIcon?: ProjectIconOverride | null;
   readonly scripts?: ReadonlyArray<ProjectScript>;
   readonly trackedFolders?: ReadonlyArray<ProjectTrackedFolder>;
+  readonly folderSettings?: ReadonlyArray<ProjectFolderSettings>;
   readonly pinned?: boolean;
   readonly archived?: boolean;
   readonly groupKey?: string | null;
@@ -111,6 +111,18 @@ export interface ProjectCommandState {
   readonly workspaceOwner: ProjectRow | undefined;
 }
 
+const unknownFolderSetting = (
+  settings: ReadonlyArray<ProjectFolderSettings>,
+  workspaceRoot: string,
+  trackedFolders: ReadonlyArray<ProjectTrackedFolder>,
+) =>
+  settings.find(
+    (entry, index) =>
+      settings.findIndex((other) => other.path === entry.path) !== index ||
+      (entry.path !== workspaceRoot &&
+        !trackedFolders.some((folder) => folder.path === entry.path)),
+  );
+
 const monogramSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 const isScriptRunCommand = Schema.is(SCRIPT_RUN_COMMAND_PATTERN);
 
@@ -160,6 +172,16 @@ export function planProjectCommand(input: {
       }
       const conflict = requireWorkspaceAvailable(command.workspaceRoot);
       if (conflict !== undefined) return Result.fail(conflict);
+      const unknownSetting = unknownFolderSetting(
+        command.folderSettings ?? [],
+        command.workspaceRoot,
+        command.trackedFolders ?? [],
+      );
+      if (unknownSetting !== undefined) {
+        return invariant(
+          `Folder settings for '${unknownSetting.path}' must name the project's folder or a tracked folder, once.`,
+        );
+      }
       return Result.succeed({
         ...base,
         type: "project.created",
@@ -167,9 +189,6 @@ export function planProjectCommand(input: {
           projectId: command.projectId,
           title: command.title,
           workspaceRoot: command.workspaceRoot,
-          ...(command.workspaceRoots === undefined
-            ? {}
-            : { workspaceRoots: command.workspaceRoots }),
           // Project creation has no user model choice. Older clients sent an
           // automatic seed, but only a metadata update records an explicit default.
           defaultModelSelection: null,
@@ -180,6 +199,9 @@ export function planProjectCommand(input: {
           ...(command.trackedFolders === undefined || command.trackedFolders.length === 0
             ? {}
             : { trackedFolders: command.trackedFolders }),
+          ...(command.folderSettings === undefined || command.folderSettings.length === 0
+            ? {}
+            : { folderSettings: command.folderSettings }),
           createdAt: occurredAt,
           updatedAt: occurredAt,
         },
@@ -210,6 +232,32 @@ export function planProjectCommand(input: {
         const conflict = requireWorkspaceAvailable(command.workspaceRoot);
         if (conflict !== undefined) return Result.fail(conflict);
       }
+      const workspaceRoot = command.workspaceRoot ?? project.workspaceRoot;
+      const trackedFolders = command.trackedFolders ?? project.trackedFolders;
+      if (command.folderSettings !== undefined) {
+        const unknownSetting = unknownFolderSetting(
+          command.folderSettings,
+          workspaceRoot,
+          trackedFolders,
+        );
+        if (unknownSetting !== undefined) {
+          return invariant(
+            `Folder settings for '${unknownSetting.path}' must name the project's folder or a tracked folder, once.`,
+          );
+        }
+      }
+      // Settings follow a moved project folder and leave with a folder that is no longer tracked.
+      const previousSettings = project.folderSettings ?? [];
+      const keptSettings = previousSettings.flatMap((entry) => {
+        const path = entry.path === project.workspaceRoot ? workspaceRoot : entry.path;
+        return path === workspaceRoot || trackedFolders.some((folder) => folder.path === path)
+          ? [{ ...entry, path }]
+          : [];
+      });
+      const settingsChanged =
+        keptSettings.length !== previousSettings.length ||
+        keptSettings.some((entry, index) => entry.path !== previousSettings[index]!.path);
+      const folderSettings = command.folderSettings ?? (settingsChanged ? keptSettings : undefined);
       return Result.succeed({
         ...base,
         type: "project.meta-updated",
@@ -217,9 +265,6 @@ export function planProjectCommand(input: {
           projectId: command.projectId,
           ...(command.title === undefined ? {} : { title: command.title }),
           ...(command.workspaceRoot === undefined ? {} : { workspaceRoot: command.workspaceRoot }),
-          ...(command.workspaceRoots === undefined
-            ? {}
-            : { workspaceRoots: command.workspaceRoots }),
           ...(command.defaultModelSelection === undefined
             ? {}
             : { defaultModelSelection: command.defaultModelSelection }),
@@ -233,6 +278,7 @@ export function planProjectCommand(input: {
           ...(command.trackedFolders === undefined
             ? {}
             : { trackedFolders: command.trackedFolders }),
+          ...(folderSettings === undefined ? {} : { folderSettings }),
           // Repeating a pin or archive keeps the original time.
           ...(command.pinned === undefined
             ? {}

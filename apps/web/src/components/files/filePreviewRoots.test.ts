@@ -4,39 +4,7 @@ import {
   resolveThreadWorkspaces,
   threadWorkspaceInstructions,
 } from "@t3tools/shared/threadWorkspaces";
-import { resolveFilePreviewRoots, resolveFileWorktreeOptions } from "./filePreviewRoots";
-
-describe("resolveFilePreviewRoots", () => {
-  it("replaces the primary project checkout with the thread worktree", () => {
-    expect(
-      resolveFilePreviewRoots("/worktrees/project/task", [
-        { path: "/repos/project", label: "Primary directory", color: "blue" },
-        { path: "/repos/services", label: "Services", color: "green" },
-      ]),
-    ).toEqual([
-      { path: "/worktrees/project/task", label: "Primary directory", color: "blue" },
-      { path: "/repos/services", label: "Services", color: "green" },
-    ]);
-  });
-
-  it("keeps configured secondary roots when the primary checkout is already active", () => {
-    expect(
-      resolveFilePreviewRoots("/repos/project", [
-        { path: "/repos/project", label: "Primary directory" },
-        { path: "/repos/services", label: "Services" },
-      ]),
-    ).toEqual([
-      { path: "/repos/project", label: "Primary directory" },
-      { path: "/repos/services", label: "Services" },
-    ]);
-  });
-
-  it("uses the active checkout when the project has no configured root list", () => {
-    expect(resolveFilePreviewRoots("/repos/project", undefined)).toEqual([
-      { path: "/repos/project", label: "Primary directory" },
-    ]);
-  });
-});
+import { resolveFileWorktreeOptions } from "./filePreviewRoots";
 
 describe("resolveFileWorktreeOptions", () => {
   it("lists live worktrees by newest commit", () => {
@@ -119,11 +87,11 @@ describe("resolveFileWorktreeOptions", () => {
 describe("per-repository thread selections", () => {
   const project = {
     workspaceRoot: "/frontend",
-    workspaceRoots: [
-      { path: "/backend", label: "Backend", color: "green" as const },
-      { path: "/frontend", label: "Frontend" },
-      { path: "/tools" },
+    trackedFolders: [
+      { path: "/backend", name: "Backend" },
+      { path: "/tools", name: "tools" },
     ],
+    folderSettings: [{ path: "/backend", color: "green" as const }],
   };
   it("uses configured identities independently of the selected checkout", () => {
     const roots = resolveThreadWorkspaces(project, {
@@ -145,12 +113,31 @@ describe("per-repository thread selections", () => {
       "selected cwd /worktrees/backend; branch api",
     );
   });
-  it("synthesizes a missing primary root and uses configured roots as defaults", () => {
-    expect(
-      resolveThreadWorkspaces(
-        { workspaceRoot: "/main", workspaceRoots: [{ path: "/other" }] },
-        { worktreePath: null, branch: null },
-      ).map((r) => r.path),
-    ).toEqual(["/main", "/other"]);
+  it("lets repositories in the thread's task folder follow the thread", () => {
+    const roots = resolveThreadWorkspaces(
+      project,
+      {
+        worktreePath: "/tasks/feature/frontend",
+        branch: "feature",
+        workspaceSelections: [
+          { workspaceRoot: "/backend", cwd: "/worktrees/backend", branch: "api" },
+        ],
+      },
+      {
+        repositories: [
+          {
+            repositoryPath: "/backend",
+            worktreePath: "/tasks/feature/backend",
+            name: "backend",
+          },
+        ],
+      },
+    );
+    expect(roots.map((r) => [r.workspaceRoot, r.path, r.branch, r.followsTaskFolder])).toEqual([
+      ["/frontend", "/tasks/feature/frontend", "feature", false],
+      ["/backend", "/tasks/feature/backend", "feature", true],
+      ["/tools", "/tools", null, false],
+    ]);
+    expect(threadWorkspaceInstructions(roots, false)).toBe("");
   });
 });

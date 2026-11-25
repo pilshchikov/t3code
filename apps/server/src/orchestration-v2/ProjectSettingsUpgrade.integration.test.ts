@@ -198,11 +198,15 @@ it.live("keeps project settings through the V2 migrations and the first V2 boot"
         assert.deepEqual(yield* readSettings, expectedSettings);
         const project = yield* (yield* ProjectService.ProjectService).getById(projectId);
         assert.equal(project._tag, "Some");
-        if (project._tag === "Some")
-          assert.deepEqual(project.value.workspaceRoots, [
-            { path: "/work/upgrade" },
-            { path: "/work/backend", label: "Backend", agentGuidance: "Use backend checks" },
+        if (project._tag === "Some") {
+          assert.deepEqual(
+            project.value.trackedFolders?.filter((folder) => folder.discovered !== true),
+            [{ path: "/work/backend", name: "Backend" }],
+          );
+          assert.deepEqual(project.value.folderSettings, [
+            { path: "/work/backend", agentGuidance: "Use backend checks" },
           ]);
+        }
       }).pipe(Effect.provide(layerRuntime(dbPath)));
     }),
   ).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),

@@ -182,6 +182,7 @@ export const layerFromProjectStore: Layer.Layer<
           .forThread({
             projectId: input.thread.projectId,
             worktreePath: input.thread.worktreePath,
+            checkouts: input.thread.workspaceSelections ?? [],
           })
           .pipe(
             Effect.catch((cause) =>

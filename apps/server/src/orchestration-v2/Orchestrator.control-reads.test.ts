@@ -1,4 +1,5 @@
 import * as NodeSqlite from "node:sqlite";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 
 import { assert, it } from "@effect/vitest";
 import {
@@ -44,6 +45,7 @@ import {
   orchestrationCommandsTotal,
 } from "../observability/Metrics.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as TaskFolderStore from "../workspace/TaskFolderStore.ts";
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
 import * as DelegatedTaskQuestionReactor from "./DelegatedTaskQuestionReactor.ts";
 import * as EffectOutbox from "./EffectOutbox.ts";
@@ -76,6 +78,7 @@ const layerTest = Layer.mergeAll(
   layerDatabase,
   ProjectionStore.layer.pipe(Layer.provide(layerDatabase)),
   ProjectStore.layer.pipe(Layer.provide(layerDatabase)),
+  TaskFolderStore.layer.pipe(Layer.provide(Layer.merge(layerDatabase, NodeServices.layer))),
   EffectOutbox.layer.pipe(Layer.provide(layerDatabase)),
   ProviderReplayHarness.layerWithRegistry(
     { name: "control-reads" },
@@ -1348,7 +1351,11 @@ it.effect("persists independent workspace selections and rejects stale writes", 
         projectId,
         title: "Repos",
         workspaceRoot: "/frontend",
-        workspaceRoots: [{ path: "/frontend" }, { path: "/backend" }, { path: "/tools" }],
+        trackedFolders: [
+          { path: "/backend", name: "backend" },
+          { path: "/tools", name: "tools" },
+          { path: "/shared", name: "shared" },
+        ],
         defaultModelSelection: null,
         scripts: [],
         createdAt: occurredAt,
@@ -1411,6 +1418,26 @@ it.effect("persists independent workspace selections and rejects stale writes", 
       );
       assert.equal(result._tag, "Failure");
     }
+    yield* (yield* TaskFolderStore.TaskFolderStore).put({
+      root: "/worktrees",
+      projectId,
+      projectRoot: "/frontend",
+      anchor: "/",
+      projectPath: "/worktrees/frontend",
+      projectIsWorktree: true,
+      repositories: [
+        { repositoryPath: "/shared", worktreePath: "/worktrees/shared", name: "shared" },
+      ],
+    });
+    const inTaskFolder = yield* Effect.exit(
+      orchestrator.dispatch({
+        type: "thread.metadata.update",
+        commandId: CommandId.make("select-task-folder-repository"),
+        threadId,
+        workspaceSelection: { workspaceRoot: "/shared", cwd: "/elsewhere", branch: "other" },
+      }),
+    );
+    assert.equal(inTaskFolder._tag, "Failure");
     assert.deepStrictEqual(
       (yield* projections.getThreadShell(threadId))?.workspaceSelections,
       shell?.workspaceSelections,

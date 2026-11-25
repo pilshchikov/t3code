@@ -731,11 +731,9 @@ function useChatMarkdownState(
             candidate.id === threadShell.projectId,
         )
       : undefined;
-    const configuredRoots = project?.workspaceRoots?.length
-      ? project.workspaceRoots
-      : project
-        ? [{ path: project.workspaceRoot }]
-        : [];
+    const configuredRoots = project
+      ? [{ path: project.workspaceRoot }, ...(project.trackedFolders ?? [])]
+      : [];
     const candidates = [...(preferredRoot ? [{ path: preferredRoot }] : []), ...configuredRoots];
     const seen = new Set<string>();
     return candidates.filter((candidate) => {

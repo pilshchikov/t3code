@@ -1,4 +1,3 @@
-import { ProjectWorkspace } from "./project.ts";
 import * as Schema from "effect/Schema";
 
 import {
@@ -16,6 +15,7 @@ import { RepositoryIdentity, ThreadEnvMode } from "./environment.ts";
 import { ModelSelection } from "./modelSelection.ts";
 import type { OrchestrationV2StoredEvent } from "./orchestrationV2.ts";
 import {
+  ProjectFolderSettings,
   ProjectGroupKey,
   ProjectScript,
   ProjectTrackedFolders,
@@ -43,7 +43,6 @@ export const ApplicationProjectCreatedPayload = Schema.Struct({
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
-  workspaceRoots: Schema.optional(Schema.Array(ProjectWorkspace)),
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   defaultThreadEnvMode: Schema.optional(Schema.NullOr(ThreadEnvMode)),
@@ -51,6 +50,7 @@ export const ApplicationProjectCreatedPayload = Schema.Struct({
   projectIcon: Schema.optional(Schema.NullOr(StoredProjectIcon)),
   scripts: Schema.Array(ProjectScript),
   trackedFolders: Schema.optional(ProjectTrackedFolders),
+  folderSettings: Schema.optional(Schema.Array(ProjectFolderSettings)),
   groupKey: Schema.optional(ProjectGroupKey),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -61,7 +61,6 @@ export const ApplicationProjectMetaUpdatedPayload = Schema.Struct({
   projectId: ProjectId,
   title: Schema.optional(TrimmedNonEmptyString),
   workspaceRoot: Schema.optional(TrimmedNonEmptyString),
-  workspaceRoots: Schema.optional(Schema.Array(ProjectWorkspace)),
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
   // Absent = leave unchanged; null = clear the override.
@@ -71,6 +70,7 @@ export const ApplicationProjectMetaUpdatedPayload = Schema.Struct({
   projectIcon: Schema.optional(Schema.NullOr(StoredProjectIcon)),
   scripts: Schema.optional(Schema.Array(ProjectScript)),
   trackedFolders: Schema.optional(ProjectTrackedFolders),
+  folderSettings: Schema.optional(Schema.Array(ProjectFolderSettings)),
   pinnedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   archivedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   groupKey: Schema.optional(Schema.NullOr(ProjectGroupKey)),

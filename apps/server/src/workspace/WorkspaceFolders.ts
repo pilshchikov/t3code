@@ -3,6 +3,7 @@ import {
   type ProjectId,
   type ProjectTrackedFolder,
   type TaskFolder,
+  type ThreadWorkspaceSelection,
   type WorkspaceFolder,
   WorkspaceFoldersError,
   type WorkspaceListFoldersInput,
@@ -57,6 +58,11 @@ export class WorkspaceFolders extends Context.Service<
     readonly forThread: (input: {
       readonly projectId: ProjectId;
       readonly worktreePath: string | null;
+      /**
+       * Fork: the thread's chosen checkouts. Given, the tracked folders its task folder does not
+       * cover are reached too, at the chosen checkout or the folder itself.
+       */
+      readonly checkouts?: ReadonlyArray<ThreadWorkspaceSelection> | undefined;
     }) => Effect.Effect<ThreadWorkspace, WorkspaceFoldersError>;
     /**
      * Submodules checked out inside the thread's cwd or its folders. Their repository owns how
@@ -479,6 +485,8 @@ const make = Effect.gen(function* () {
   const forThread: WorkspaceFolders["Service"]["forThread"] = Effect.fn(
     "WorkspaceFolders.forThread",
   )(function* (input) {
+    let taskWorkspace = EMPTY_WORKSPACE;
+    let covered = new Set<string>();
     if (input.worktreePath !== null) {
       const taskFolder = yield* taskFolders
         .findContaining(input.worktreePath)
@@ -487,29 +495,44 @@ const make = Effect.gen(function* () {
             (cause) => new WorkspaceFoldersError({ operation: "list", detail: cause.detail }),
           ),
         );
-      return taskFolder === null
-        ? EMPTY_WORKSPACE
-        : yield* forTaskFolder(input.worktreePath, taskFolder);
+      if (taskFolder !== null) {
+        taskWorkspace = yield* forTaskFolder(input.worktreePath, taskFolder);
+        covered = new Set(taskFolder.repositories.map((repository) => repository.repositoryPath));
+      }
+      if (input.checkouts === undefined) return taskWorkspace;
     }
-    const project = yield* readProject(input.projectId);
-    const tracked = yield* foldersOf(project);
-    if (tracked.length === 0) return EMPTY_WORKSPACE;
-    const folders = (yield* classifyAll(tracked)).flatMap((folder) =>
-      folder.state === "missing"
-        ? []
-        : [{ name: folder.name, path: folder.path, isGitRepository: folder.state === "git" }],
+    const project = yield* readProject(input.projectId).pipe(
+      input.worktreePath === null ? Effect.map(Option.some) : Effect.option,
     );
-    const projectRoot = yield* realPath(project.workspaceRoot);
+    if (Option.isNone(project)) return taskWorkspace;
+    const tracked = (yield* foldersOf(project.value)).filter((folder) => !covered.has(folder.path));
+    if (tracked.length === 0) return taskWorkspace;
+    const folders = (yield* classifyAll(tracked)).flatMap((folder): Array<ThreadFolder> => {
+      if (folder.state === "missing") return [];
+      const checkout = input.checkouts?.find((entry) => entry.workspaceRoot === folder.path);
+      return [
+        {
+          name: folder.name,
+          path: checkout?.cwd ?? folder.path,
+          isGitRepository: folder.state === "git",
+          ...(checkout === undefined ? {} : { repositoryPath: folder.path }),
+        },
+      ];
+    });
+    const threadRoot = yield* realPath(input.worktreePath ?? project.value.workspaceRoot);
     // Both spellings are granted: agents are told the stored path, sandboxes check the real one.
     const outside = yield* Effect.forEach(
       folders,
       (folder) =>
         realPath(folder.path).pipe(
-          Effect.map((real) => (isWithinRoot(path, real, projectRoot) ? [] : [folder.path, real])),
+          Effect.map((real) => (isWithinRoot(path, real, threadRoot) ? [] : [folder.path, real])),
         ),
       { concurrency: DETECTION_CONCURRENCY },
     );
-    return { folders, extraRoots: [...new Set(outside.flat())] };
+    return {
+      folders: [...taskWorkspace.folders, ...folders],
+      extraRoots: [...new Set([...taskWorkspace.extraRoots, ...outside.flat()])],
+    };
   });
 
   const submodules: WorkspaceFolders["Service"]["submodules"] = Effect.fn(

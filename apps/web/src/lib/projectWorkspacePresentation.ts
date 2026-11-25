@@ -1,4 +1,4 @@
-import type { ProjectWorkspace, ProjectWorkspaceColor } from "@t3tools/contracts";
+import type { ProjectFolderSettings, ProjectWorkspaceColor } from "@t3tools/contracts";
 
 import { cn } from "~/lib/utils";
 
@@ -67,14 +67,17 @@ export function workspaceDirectoryName(path: string): string {
   );
 }
 
-export function workspaceDisplayName(workspace: ProjectWorkspace, index: number): string {
-  const label = workspace.label?.trim();
-  if (label && label.toLowerCase() !== "primary directory") return label;
-  return workspaceDirectoryName(workspace.path) || `Directory ${index + 1}`;
+export function workspaceDisplayName(
+  workspace: { readonly path: string; readonly name?: string | undefined },
+  index: number,
+): string {
+  return (
+    workspace.name?.trim() || workspaceDirectoryName(workspace.path) || `Directory ${index + 1}`
+  );
 }
 
 export function resolveWorkspaceColor(
-  workspace: Pick<ProjectWorkspace, "color">,
+  workspace: Pick<ProjectFolderSettings, "color">,
   index: number,
 ): ProjectWorkspaceColor {
   return (
@@ -92,4 +95,32 @@ export function workspaceBadgeClassName(color: ProjectWorkspaceColor, className?
     workspaceColorOption(color).badgeClassName,
     className,
   );
+}
+
+/** The project's folder settings with one folder's color or guidance changed; null clears it. */
+export function withFolderSetting(
+  settings: ReadonlyArray<ProjectFolderSettings> | undefined,
+  path: string,
+  change: {
+    readonly color?: ProjectWorkspaceColor | null;
+    readonly agentGuidance?: string | null;
+  },
+): ReadonlyArray<ProjectFolderSettings> {
+  const current = settings?.find((entry) => entry.path === path);
+  const color = change.color === undefined ? current?.color : (change.color ?? undefined);
+  const agentGuidance =
+    change.agentGuidance === undefined
+      ? current?.agentGuidance
+      : change.agentGuidance?.trim() || undefined;
+  const others = (settings ?? []).filter((entry) => entry.path !== path);
+  return color === undefined && agentGuidance === undefined
+    ? others
+    : [
+        ...others,
+        {
+          path,
+          ...(color === undefined ? {} : { color }),
+          ...(agentGuidance === undefined ? {} : { agentGuidance }),
+        },
+      ];
 }

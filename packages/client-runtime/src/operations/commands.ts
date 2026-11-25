@@ -1,4 +1,4 @@
-import type { ProjectWorkspace } from "@t3tools/contracts";
+import type { ProjectFolderSettings } from "@t3tools/contracts";
 import { msg } from "gt-i18n";
 import { translatableMessage } from "../errors/translatable.ts";
 import { remapComposerContextAttachments } from "@t3tools/shared/composerContextReferences";
@@ -61,7 +61,6 @@ export interface CreateProjectInput extends CommandMetadata {
   readonly projectId: ProjectId;
   readonly title: string;
   readonly workspaceRoot: string;
-  readonly workspaceRoots?: ReadonlyArray<ProjectWorkspace>;
   readonly createWorkspaceRootIfMissing?: boolean;
   readonly defaultModelSelection?: ModelSelection | null;
   readonly scripts?: ReadonlyArray<ProjectScript>;
@@ -72,7 +71,6 @@ export interface UpdateProjectInput extends CommandMetadata {
   readonly projectId: ProjectId;
   readonly title?: string;
   readonly workspaceRoot?: string;
-  readonly workspaceRoots?: ReadonlyArray<ProjectWorkspace>;
   readonly defaultModelSelection?: ModelSelection | null;
   readonly autoPull?: boolean;
   readonly projectIcon?: ProjectIconOverride | null;
@@ -84,6 +82,8 @@ export interface UpdateProjectInput extends CommandMetadata {
   /** Added to, and removed by path from, the list as the server has it. */
   readonly trackFolders?: ReadonlyArray<ProjectTrackedFolder>;
   readonly untrackFolders?: ReadonlyArray<string>;
+  /** Replaces the whole list; paths name the project folder or a tracked folder. */
+  readonly folderSettings?: ReadonlyArray<ProjectFolderSettings>;
   readonly pinned?: boolean;
   readonly archived?: boolean;
   readonly groupKey?: string | null;
@@ -432,7 +432,7 @@ const mutateProject = Effect.fn("EnvironmentCommands.mutateProject")(function* (
         readonly projectId: ProjectId;
         readonly title?: string;
         readonly workspaceRoot?: string;
-        readonly workspaceRoots?: ReadonlyArray<ProjectWorkspace>;
+        readonly folderSettings?: ReadonlyArray<ProjectFolderSettings>;
         readonly defaultModelSelection?: ModelSelection | null;
         readonly scripts?: ReadonlyArray<ProjectScript>;
         readonly trackedFolders?: ReadonlyArray<ProjectTrackedFolder>;
@@ -458,7 +458,6 @@ export const createProject = Effect.fn("EnvironmentCommands.createProject")(func
     projectId: input.projectId,
     title: input.title,
     workspaceRoot: input.workspaceRoot,
-    ...(input.workspaceRoots === undefined ? {} : { workspaceRoots: input.workspaceRoots }),
     ...(input.createWorkspaceRootIfMissing === undefined
       ? {}
       : { createWorkspaceRootIfMissing: input.createWorkspaceRootIfMissing }),
@@ -479,7 +478,6 @@ export const updateProject = Effect.fn("EnvironmentCommands.updateProject")(func
     projectId: input.projectId,
     ...(input.title === undefined ? {} : { title: input.title }),
     ...(input.workspaceRoot === undefined ? {} : { workspaceRoot: input.workspaceRoot }),
-    ...(input.workspaceRoots === undefined ? {} : { workspaceRoots: input.workspaceRoots }),
     ...(input.defaultModelSelection === undefined
       ? {}
       : { defaultModelSelection: input.defaultModelSelection }),
@@ -493,6 +491,7 @@ export const updateProject = Effect.fn("EnvironmentCommands.updateProject")(func
     ...(input.trackedFolders === undefined ? {} : { trackedFolders: input.trackedFolders }),
     ...(input.trackFolders === undefined ? {} : { trackFolders: input.trackFolders }),
     ...(input.untrackFolders === undefined ? {} : { untrackFolders: input.untrackFolders }),
+    ...(input.folderSettings === undefined ? {} : { folderSettings: input.folderSettings }),
     ...(input.pinned === undefined ? {} : { pinned: input.pinned }),
     ...(input.archived === undefined ? {} : { archived: input.archived }),
     ...(input.groupKey === undefined ? {} : { groupKey: input.groupKey }),

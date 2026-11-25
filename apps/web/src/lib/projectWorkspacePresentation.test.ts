@@ -4,15 +4,28 @@ import {
   resolveWorkspaceColor,
   workspaceDirectoryName,
   workspaceDisplayName,
+  withFolderSetting,
 } from "./projectWorkspacePresentation";
 
 describe("project workspace presentation", () => {
-  it("uses directory names instead of the legacy primary label", () => {
+  it("names a folder by its tracked name, then by its directory", () => {
     expect(workspaceDirectoryName("/Users/example/projects/meko/")).toBe("meko");
-    expect(
-      workspaceDisplayName({ path: "/Users/example/projects/meko", label: "Primary directory" }, 0),
-    ).toBe("meko");
-    expect(workspaceDisplayName({ path: "/tmp/qa-services", label: "QA" }, 1)).toBe("QA");
+    expect(workspaceDisplayName({ path: "/Users/example/projects/meko" }, 0)).toBe("meko");
+    expect(workspaceDisplayName({ path: "/tmp/qa-services", name: "QA" }, 1)).toBe("QA");
+  });
+
+  it("changes one folder's settings and drops an entry left empty", () => {
+    const settings = [
+      { path: "/app", color: "blue" as const },
+      { path: "/api", agentGuidance: "Run checks" },
+    ];
+    expect(withFolderSetting(settings, "/api", { color: "red" })).toEqual([
+      { path: "/app", color: "blue" },
+      { path: "/api", color: "red", agentGuidance: "Run checks" },
+    ]);
+    expect(withFolderSetting(settings, "/api", { agentGuidance: "  " })).toEqual([
+      { path: "/app", color: "blue" },
+    ]);
   });
 
   it("assigns stable defaults and honors a saved color", () => {

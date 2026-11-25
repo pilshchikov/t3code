@@ -21,10 +21,7 @@ import {
 } from "./markdownFileHostPath";
 
 describe("resolveMarkdownFilePanelTarget", () => {
-  const roots = [
-    { path: "/work/app", label: "Primary directory" },
-    { path: "/work/qa-services", label: "QA" },
-  ];
+  const roots = [{ path: "/work/app" }, { path: "/work/qa-services", name: "QA" }];
 
   it("opens an absolute secondary-directory link against its owning root", () => {
     expect(
@@ -520,7 +517,7 @@ it("does not reinterpret an explicit absolute file as a secondary-directory alia
       filePath: meta.filePath,
       panelPath: meta.absoluteReference ? meta.filePath : meta.workspaceRelativePath!,
       preferredWorkspaceRoot: "/Users/me/app",
-      workspaceRoots: [{ path: "/Users/me/app" }, { path: "/Users/me/backend", label: "backend" }],
+      workspaceRoots: [{ path: "/Users/me/app" }, { path: "/Users/me/backend", name: "backend" }],
     }),
   ).toEqual({ path: "backend/report.md", workspaceRoot: "/Users/me/app" });
   expect(meta.line).toBe(4);

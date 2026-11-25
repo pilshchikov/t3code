@@ -1,6 +1,7 @@
 import { PullRequestGlyph } from "./pullRequest/pullRequestIcons";
 import type { CodeViewDiffItem } from "@pierre/diffs";
-import type { EnvironmentId, GitHistoryCommit, ProjectWorkspace } from "@t3tools/contracts";
+import type { EnvironmentId, GitHistoryCommit } from "@t3tools/contracts";
+import type { SelectedProjectWorkspace } from "@t3tools/shared/threadWorkspaces";
 import {
   ChevronDownIcon,
   CircleDotIcon,
@@ -122,13 +123,12 @@ function CommitRow(props: { commit: GitHistoryCommit; selected: boolean; onSelec
 export default function GitHistoryPanel(props: {
   environmentId: EnvironmentId;
   primaryCwd: string;
-  workspaceRoots?: ReadonlyArray<ProjectWorkspace>;
+  workspaceRoots?: ReadonlyArray<SelectedProjectWorkspace>;
 }) {
   const { resolvedTheme } = useTheme();
   const roots = useMemo(() => {
-    const configured = props.workspaceRoots?.length
-      ? props.workspaceRoots
-      : [{ path: props.primaryCwd }];
+    const configured: ReadonlyArray<{ readonly path: string; readonly name?: string | undefined }> =
+      props.workspaceRoots?.length ? props.workspaceRoots : [{ path: props.primaryCwd }];
     return [
       { ...configured[0], path: props.primaryCwd },
       ...configured.slice(1).filter((root) => root.path !== props.primaryCwd),

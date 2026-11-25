@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import { retainFilePreview } from "./files/filePreviewRetention";
 import { resolveThreadWorkspaces } from "@t3tools/shared/threadWorkspaces";
+import { useThreadTaskFolder } from "../hooks/useThreadTaskFolder";
 import { fileSurfaceId } from "../rightPanelStore";
 import { ComposerContextStripCollapsedByProjectSchema } from "./ChatView.logic";
 import { COMPOSER_CONTEXT_STRIP_COLLAPSED_BY_PROJECT_KEY } from "./ChatView.logic";
@@ -1881,6 +1882,11 @@ export default function ChatView(props: ChatViewProps) {
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
+  const activeTaskFolder = useThreadTaskFolder({
+    environmentId: activeProject?.environmentId,
+    worktreePath: activeThreadWorktreePath,
+    tracksFolders: (activeProject?.trackedFolders?.length ?? 0) > 0,
+  });
   const activeTerminalLaunchContext =
     terminalUiLaunchContext?.threadId === activeThreadId ? terminalUiLaunchContext : null;
   const liveIsGitRepo = gitStatusQuery.data?.isRepo;
@@ -3452,7 +3458,11 @@ export default function ChatView(props: ChatViewProps) {
           ? {
               environmentId: activeProject.environmentId,
               primaryCwd: gitCwd ?? activeProject.workspaceRoot,
-              workspaceRoots: resolveThreadWorkspaces(activeProject, activeThread),
+              workspaceRoots: resolveThreadWorkspaces(
+                activeProject,
+                activeThread,
+                activeTaskFolder,
+              ),
             }
           : null
       }
@@ -3490,7 +3500,9 @@ export default function ChatView(props: ChatViewProps) {
                     cwd={cwd}
                     projectName={activeProject.title}
                     projectId={activeProject.id}
-                    workspaceRoots={activeProject.workspaceRoots}
+                    trackedFolders={activeProject.trackedFolders}
+                    folderSettings={activeProject.folderSettings}
+                    taskFolder={activeTaskFolder}
                     workspaceSelections={activeThread.workspaceSelections}
                     threadRef={activeThreadRef}
                     composerDraftTarget={composerDraftTarget}

@@ -1,10 +1,10 @@
 import { useGT } from "gt-react";
+import type { SelectedProjectWorkspace } from "@t3tools/shared/threadWorkspaces";
 import type {
   EnvironmentId,
   IssueTrackerKind,
   PreviewAnnotationPayload,
   ProjectId,
-  ProjectWorkspace,
   ResolvedKeybindingsConfig,
   ScopedThreadRef,
   ThreadLinkedPullRequest,
@@ -56,7 +56,7 @@ interface RightPanelPullRequestProps {
 export interface RightPanelGitHistoryProps {
   readonly environmentId: EnvironmentId;
   readonly primaryCwd: string;
-  readonly workspaceRoots: ReadonlyArray<ProjectWorkspace>;
+  readonly workspaceRoots: ReadonlyArray<SelectedProjectWorkspace>;
 }
 
 export function RightPanelSurfaceContent(props: {

@@ -3,6 +3,7 @@ import {
   type OrchestrationProjectShell,
   type PeerEnvironmentReadInput,
   type PeerEnvironmentSnapshot,
+  type PeerWorkspace,
   type ServerConfig,
 } from "@t3tools/contracts";
 import { resolveProjectSettings } from "./projectSettings.ts";
@@ -11,6 +12,16 @@ type Source = Pick<
   ServerConfig,
   "environment" | "cwd" | "newProjectsRoot" | "scratchWorkspaceRoot" | "settings" | "providers"
 >;
+
+/** Older fork peers read a project's folders from `workspaceRoots`: the project folder first. */
+export function peerWorkspaceRoots(
+  project: Pick<OrchestrationProjectShell, "workspaceRoot" | "trackedFolders">,
+): ReadonlyArray<PeerWorkspace> {
+  return [
+    { path: project.workspaceRoot },
+    ...(project.trackedFolders ?? []).map((folder) => ({ path: folder.path, label: folder.name })),
+  ];
+}
 
 /** A deliberate allowlist: provider settings, credentials and per-directory guidance stay out. */
 export function peerEnvironmentSnapshot(
@@ -60,14 +71,7 @@ export function peerEnvironmentSnapshot(
         projectId: project.id,
         title: project.title,
         workspaceRoot: project.workspaceRoot,
-        workspaceRoots: (project.workspaceRoots?.length
-          ? project.workspaceRoots
-          : [{ path: project.workspaceRoot }]
-        ).map(({ path, label, defaultThreadEnvMode }) => ({
-          path,
-          ...(label === undefined ? {} : { label }),
-          ...(defaultThreadEnvMode === undefined ? {} : { defaultThreadEnvMode }),
-        })),
+        workspaceRoots: peerWorkspaceRoots(project),
         defaultModelSelection: effective.defaultModelSelection,
         defaultRuntimeMode: effective.defaultRuntimeMode,
         defaultThreadEnvMode: effective.defaultThreadEnvMode,

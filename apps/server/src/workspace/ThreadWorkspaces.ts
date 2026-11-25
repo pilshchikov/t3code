@@ -25,6 +25,7 @@ import { GitWorkflowService } from "../git/GitWorkflowService.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import * as TaskFolderStore from "./TaskFolderStore.ts";
 
 // MCP supplies its session id so a replaced agent cannot attach a prepared checkout.
 type Guard = { readonly providerSessionId?: string };
@@ -53,6 +54,7 @@ const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const mutations = yield* Semaphore.make(1);
   const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
+  const taskFolders = yield* TaskFolderStore.TaskFolderStore;
   const fail = (message: string) => Effect.fail(new ThreadWorkspaceError({ message }));
   const wrap = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
@@ -84,7 +86,9 @@ const make = Effect.gen(function* () {
     if (thread === null) return yield* fail("Thread not found.");
     const project = yield* projects.getById(thread.projectId);
     if (Option.isNone(project)) return yield* fail("Project not found.");
-    const workspaces = resolveThreadWorkspaces(project.value, thread);
+    const taskFolder =
+      thread.worktreePath === null ? null : yield* taskFolders.findContaining(thread.worktreePath);
+    const workspaces = resolveThreadWorkspaces(project.value, thread, taskFolder);
     const workspace = workspaces.find(
       (root) =>
         path.resolve(root.workspaceRoot) ===
@@ -95,6 +99,7 @@ const make = Effect.gen(function* () {
         "Unknown project directory. Inspect without workspaceRoot to list the configured repositories.",
       );
     return {
+      taskFolder,
       input,
       thread,
       project: project.value,
@@ -105,6 +110,12 @@ const make = Effect.gen(function* () {
     };
   });
   type WorkspaceContext = Effect.Success<ReturnType<typeof context>>;
+  const requireSelectable = (ctx: WorkspaceContext) =>
+    ctx.workspace.followsTaskFolder
+      ? fail(
+          "This repository's worktree is in the thread's task folder and follows the thread. Change the thread's own checkout instead.",
+        )
+      : Effect.void;
   const requirePrimaryIdle = (ctx: WorkspaceContext) =>
     ctx.workspace.primary && threadHasWorkspaceBoundWork(ctx.thread)
       ? fail(PRIMARY_WORKSPACE_BUSY_MESSAGE)
@@ -123,7 +134,7 @@ const make = Effect.gen(function* () {
     ) {
       return yield* fail(PRIMARY_WORKSPACE_BUSY_MESSAGE);
     }
-    const currentWorkspace = resolveThreadWorkspaces(ctx.project, current).find(
+    const currentWorkspace = resolveThreadWorkspaces(ctx.project, current, ctx.taskFolder).find(
       (root) => root.workspaceRoot === ctx.root,
     );
     if (
@@ -177,7 +188,7 @@ const make = Effect.gen(function* () {
               cwd: root.path,
               branch: root.branch,
               primary: root.primary,
-              ...(root.label === undefined ? {} : { label: root.label }),
+              ...(root.name === undefined ? {} : { name: root.name }),
             })),
             status: yield* git.localStatus({ cwd: ctx.cwd }),
             refs: yield* git.listRefs({
@@ -193,6 +204,7 @@ const make = Effect.gen(function* () {
         mutations.withPermit(
           Effect.gen(function* () {
             const ctx = yield* context(input);
+            yield* requireSelectable(ctx);
             // Reject before creating a worktree: this tool must not terminate its own caller.
             yield* requirePrimaryIdle(ctx);
             const cwd = (yield* git.createWorktree({
@@ -211,6 +223,7 @@ const make = Effect.gen(function* () {
         mutations.withPermit(
           Effect.gen(function* () {
             const ctx = yield* context(input);
+            yield* requireSelectable(ctx);
             if ((input.path === undefined) === (input.branch === undefined))
               return yield* fail("Provide exactly one of path or branch.");
             const alreadySelected =

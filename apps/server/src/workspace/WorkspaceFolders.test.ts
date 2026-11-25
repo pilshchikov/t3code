@@ -478,4 +478,77 @@ it.layer(NodeServices.layer)("WorkspaceFolders", (it) => {
       }).pipe(Effect.provide(layerFor({ workspaceRoot: ctx, trackedFolders })));
     }),
   );
+  it.effect("reaches the folders a task folder leaves out at the checkouts a thread chose", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const tmp = yield* makeTempDir;
+      const workspaceRoot = path.join(tmp, "app");
+      const api = path.join(tmp, "api");
+      const tools = path.join(tmp, "tools");
+      const apiTask = path.join(tmp, "worktrees", "api-task");
+      const single = path.join(tmp, "worktrees", "single");
+      const taskRoot = path.join(tmp, "worktrees", "task");
+      for (const directory of [
+        workspaceRoot,
+        path.join(api, ".git"),
+        path.join(tools, ".git"),
+        apiTask,
+        single,
+        path.join(taskRoot, "app"),
+        path.join(taskRoot, "api"),
+      ]) {
+        yield* fileSystem.makeDirectory(directory, { recursive: true });
+      }
+      const trackedFolders = [
+        { name: "api", path: api },
+        { name: "tools", path: tools },
+      ];
+      const checkouts = [{ workspaceRoot: api, cwd: apiTask, branch: "task" }];
+
+      yield* Effect.gen(function* () {
+        const workspaceFolders = yield* WorkspaceFolders.WorkspaceFolders;
+        assert.deepEqual(
+          yield* workspaceFolders.forThread({ projectId, worktreePath: single, checkouts }),
+          {
+            folders: [
+              { name: "api", path: apiTask, isGitRepository: true, repositoryPath: api },
+              { name: "tools", path: tools, isGitRepository: true },
+            ],
+            extraRoots: [apiTask, tools],
+          },
+        );
+        yield* (yield* TaskFolderStore.TaskFolderStore).put({
+          root: taskRoot,
+          projectId,
+          projectRoot: workspaceRoot,
+          anchor: tmp,
+          projectPath: path.join(taskRoot, "app"),
+          projectIsWorktree: true,
+          repositories: [
+            { repositoryPath: api, worktreePath: path.join(taskRoot, "api"), name: "api" },
+          ],
+        });
+        assert.deepEqual(
+          yield* workspaceFolders.forThread({
+            projectId,
+            worktreePath: path.join(taskRoot, "app"),
+            checkouts,
+          }),
+          {
+            folders: [
+              {
+                name: "api",
+                path: path.join(taskRoot, "api"),
+                isGitRepository: true,
+                repositoryPath: api,
+              },
+              { name: "tools", path: tools, isGitRepository: true },
+            ],
+            extraRoots: [path.join(taskRoot, "api"), tools],
+          },
+        );
+      }).pipe(Effect.provide(layerFor({ workspaceRoot, trackedFolders })));
+    }),
+  );
 });

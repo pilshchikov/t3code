@@ -61,7 +61,7 @@ export interface MarkdownFileLinkMeta {
 
 export interface MarkdownWorkspaceRootCandidate {
   path: string;
-  label?: string | undefined;
+  name?: string | undefined;
 }
 
 export interface MarkdownFilePanelTarget {
@@ -536,7 +536,7 @@ function orderedWorkspaceRoots(
 
 /**
  * Chooses the project directory that owns a chat file link. A link may be absolute, relative to
- * the active checkout, or prefixed by the name/label of a secondary project directory.
+ * the active checkout, or prefixed by the name of a secondary project directory.
  */
 export function resolveMarkdownFilePanelTarget(input: {
   filePath: string;
@@ -557,7 +557,7 @@ export function resolveMarkdownFilePanelTarget(input: {
   ) {
     const prefix = panelSegments[0]!.toLowerCase();
     const aliasedRoot = roots.find((root) => {
-      const aliases = [basenameOfPath(root.path), root.label]
+      const aliases = [basenameOfPath(root.path), root.name]
         .filter((alias): alias is string => typeof alias === "string" && alias.length > 0)
         .map((alias) => alias.toLowerCase());
       return aliases.includes(prefix);

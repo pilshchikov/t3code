@@ -1234,34 +1234,38 @@ it.effect("rejects an update that waited on the lock while its project was delet
   }).pipe(Effect.provide(layerProjectServiceDependencies)),
 );
 
-it.effect("normalizes repository roots and retains them when the primary directory changes", () =>
-  Effect.gen(function* () {
-    const projects = yield* ProjectService.ProjectService;
-    const projectId = ProjectId.make("project:multiple-roots");
-    const created = yield* projects.create({
-      commandId: CommandId.make("create-multiple-roots"),
-      projectId,
-      title: "Repos",
-      workspaceRoot: "/frontend/",
-      workspaceRoots: [
-        { path: "/backend/", label: "Backend", color: "green" },
-        { path: "/frontend/", label: "Frontend" },
-        { path: "/backend", label: "Backend", color: "green" },
-      ],
-      scripts: [],
-    });
-    assert.deepEqual(
-      created.workspaceRoots?.map((root) => root.path),
-      ["/frontend", "/backend"],
-    );
-    const updated = yield* projects.update({
-      commandId: CommandId.make("move-primary-root"),
-      projectId,
-      workspaceRoot: "/new-frontend/",
-    });
-    assert.deepEqual(updated.workspaceRoots, [
-      { path: "/new-frontend", label: "Frontend" },
-      { path: "/backend", label: "Backend", color: "green" },
-    ]);
-  }).pipe(Effect.provide(layerTest)),
+it.effect(
+  "keeps folder settings on the project folder when it moves and rejects untracked paths",
+  () =>
+    Effect.gen(function* () {
+      const projects = yield* ProjectService.ProjectService;
+      const projectId = ProjectId.make("project:folder-settings");
+      const created = yield* projects.create({
+        commandId: CommandId.make("create-folder-settings"),
+        projectId,
+        title: "Repos",
+        workspaceRoot: "/frontend/",
+        folderSettings: [{ path: "/frontend/", color: "green", agentGuidance: "Run checks" }],
+        scripts: [],
+      });
+      assert.deepEqual(created.folderSettings, [
+        { path: "/frontend", color: "green", agentGuidance: "Run checks" },
+      ]);
+      const updated = yield* projects.update({
+        commandId: CommandId.make("move-primary-root"),
+        projectId,
+        workspaceRoot: "/new-frontend/",
+      });
+      assert.deepEqual(updated.folderSettings, [
+        { path: "/new-frontend", color: "green", agentGuidance: "Run checks" },
+      ]);
+      const rejected = yield* Effect.flip(
+        projects.update({
+          commandId: CommandId.make("untracked-folder-settings"),
+          projectId,
+          folderSettings: [{ path: "/backend", color: "red" }],
+        }),
+      );
+      assert.equal(rejected._tag, "ProjectInvalidError");
+    }).pipe(Effect.provide(layerTest)),
 );

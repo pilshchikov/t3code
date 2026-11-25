@@ -64,6 +64,7 @@ import {
 import { ProviderWorkspaceMissingError } from "../provider/Errors.ts";
 import * as ProviderInstallationGate from "../provider/ProviderInstallationGate.ts";
 import * as ProjectService from "../project/ProjectService.ts";
+import * as TaskFolderStore from "../workspace/TaskFolderStore.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import * as ServerSettings from "../serverSettings.ts";
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
@@ -489,6 +490,7 @@ export const layerWithOptions = (
       const serverSettings = yield* Effect.serviceOption(ServerSettings.ServerSettingsService);
       const projectService = yield* Effect.serviceOption(ProjectService.ProjectService);
       const projectMemorySql = yield* Effect.serviceOption(SqlClient.SqlClient);
+      const taskFolderStore = yield* Effect.serviceOption(TaskFolderStore.TaskFolderStore);
       const eventSink = yield* EventSink.EventSinkV2;
       const commandOutput = yield* CommandOutputHub.CommandOutputHub;
       const promptSuggestionStore = yield* SubscriptionRef.make<
@@ -2756,8 +2758,15 @@ export const layerWithOptions = (
                       .getById(input.appThread.projectId)
                       .pipe(Effect.orElseSucceed(() => Option.none()))
                   : Option.none();
+                const worktreePath = input.appThread.worktreePath;
+                const taskFolder =
+                  Option.isSome(taskFolderStore) && worktreePath !== null
+                    ? yield* taskFolderStore.value
+                        .findContaining(worktreePath)
+                        .pipe(Effect.orElseSucceed(() => null))
+                    : null;
                 const roots = Option.isSome(project)
-                  ? resolveThreadWorkspaces(project.value, input.appThread)
+                  ? resolveThreadWorkspaces(project.value, input.appThread, taskFolder)
                   : [];
                 const workspaceContext =
                   threadWorkspaceInstructions(roots, options.configureMcp !== false) +
@@ -2767,7 +2776,7 @@ export const layerWithOptions = (
                   .flatMap((root) =>
                     root.agentGuidance?.trim()
                       ? [
-                          `### ${root.label ?? root.workspaceRoot}: ${root.path}\n${root.agentGuidance}`,
+                          `### ${root.name ?? root.workspaceRoot}: ${root.path}\n${root.agentGuidance}`,
                         ]
                       : [],
                   )

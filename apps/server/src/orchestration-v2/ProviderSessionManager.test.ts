@@ -6113,10 +6113,8 @@ it.effect("injects updated repository selections and agent controls on every tur
     const project = {
       ...makeBrowserAccessProject(projectId),
       workspaceRoot: "/frontend",
-      workspaceRoots: [
-        { path: "/frontend" },
-        { path: "/backend", label: "Backend", agentGuidance: "Run backend checks" },
-      ],
+      trackedFolders: [{ path: "/backend", name: "Backend" }],
+      folderSettings: [{ path: "/backend", agentGuidance: "Run backend checks" }],
     };
     const projectServiceLayer = Layer.mock(ProjectService.ProjectService)({
       getById: () => Effect.succeedSome(project),

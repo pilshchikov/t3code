@@ -1,4 +1,3 @@
-import { FolderPlusIcon } from "lucide-react";
 import { ProjectMemorySettings } from "./ProjectMemorySettings";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { useComposerMenuState } from "../chat/useComposerMenuState";
@@ -9,12 +8,7 @@ import { useEnvironmentsWithScope } from "../../state/session";
 import { mapAtomCommandResult, settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { planProjectRemoval } from "@t3tools/client-runtime/state/projects";
-import {
-  type ProjectWorkspace,
-  type EnvironmentId,
-  type SidebarProjectGroupingMode,
-} from "@t3tools/contracts";
-import { resolveEnvModeLabel } from "../BranchToolbar.logic";
+import { type EnvironmentId, type SidebarProjectGroupingMode } from "@t3tools/contracts";
 import {
   reportProjectFailure,
   checkProjectAccess,
@@ -27,7 +21,6 @@ import { lazy, Suspense, useRef, useState, type ReactNode } from "react";
 import { T, useGT, useMessages } from "gt-react";
 
 import { useComposerDraftStore } from "../../composerDraftStore";
-import { useOpenDirectoryCommandPalette } from "../../commandPaletteContext";
 import { cn } from "../../lib/utils";
 import { releaseProjectDraftUploads } from "../../lib/composerDraftUploads";
 import { persistClientSettingsUpdate, useClientSettings } from "../../hooks/useSettings";
@@ -51,9 +44,6 @@ import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
-function pathIsPrimary(path: string, primaryPath: string): boolean {
-  return path === primaryPath;
-}
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   SettingResetButton,
@@ -394,52 +384,6 @@ function ProjectDetail({
     }
     savingFaviconRef.current = false;
     setIsSavingFavicon(false);
-  };
-
-  const workspaceRoots: ReadonlyArray<ProjectWorkspace> = filePickerProject.workspaceRoots?.length
-    ? filePickerProject.workspaceRoots
-    : [{ path: filePickerProject.workspaceRoot }];
-  const [isAddingWorkspaceRoot, setIsAddingWorkspaceRoot] = useState(false);
-  const openDirectoryPicker = useOpenDirectoryCommandPalette();
-  const addWorkspaceRoot = () => {
-    if (isAddingWorkspaceRoot) return;
-    openDirectoryPicker({
-      environmentId: filePickerProject.environmentId,
-      initialPath: filePickerProject.workspaceRoot,
-      onSelect: async (path) => {
-        const normalizedPath = path.replace(/[\\/]+$/, "") || path;
-        if (workspaceRoots.some((root) => root.path === normalizedPath)) {
-          toastManager.add({ type: "warning", title: gt("Directory is already in this project") });
-          return;
-        }
-        setIsAddingWorkspaceRoot(true);
-        await updateAllMembers(
-          { workspaceRoots: [...workspaceRoots, { path: normalizedPath }] },
-          "Failed to add project directory",
-        );
-        setIsAddingWorkspaceRoot(false);
-      },
-    });
-  };
-  const removeWorkspaceRoot = (path: string) => {
-    if (workspaceRoots.length <= 1 || path === filePickerProject.workspaceRoot) return;
-    void updateAllMembers(
-      { workspaceRoots: workspaceRoots.filter((root) => root.path !== path) },
-      "Failed to remove project directory",
-    );
-  };
-  const setWorkspaceRootMode = (
-    path: string,
-    mode: NonNullable<ProjectWorkspace["defaultThreadEnvMode"]> | null,
-  ) => {
-    void updateAllMembers(
-      {
-        workspaceRoots: workspaceRoots.map((root) =>
-          root.path === path ? { ...root, defaultThreadEnvMode: mode } : root,
-        ),
-      },
-      "Failed to update directory workspace",
-    );
   };
 
   const hasMultipleCheckouts = group.memberProjects.length > 1;
@@ -838,96 +782,6 @@ function ProjectDetail({
         <ProjectRepositoriesSettings members={group.memberProjects} />
         <ProjectWorktreeLayoutSettings members={group.memberProjects} />
         {checkoutChoices}
-        <SettingsSection
-          title={gt("Directories")}
-          headerAction={
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              disabled={isAddingWorkspaceRoot}
-              onClick={addWorkspaceRoot}
-            >
-              <FolderPlusIcon />
-              <T>Add directory</T>
-            </Button>
-          }
-        >
-          <div className="space-y-1 px-3 py-2 sm:px-4">
-            <p className="text-xs text-muted-foreground">
-              <T>
-                Directories share this project context. The primary directory remains the default
-                checkout for existing threads.
-              </T>
-            </p>
-            {workspaceRoots.map((root, index) => (
-              <div
-                key={root.path}
-                className="flex min-w-0 items-center gap-2 rounded-lg bg-muted/30 px-2 py-1.5"
-              >
-                <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/60" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium">
-                    {root.label ??
-                      (index === 0
-                        ? gt("Primary directory")
-                        : gt("Directory {number}", { number: index + 1 }))}
-                  </div>
-                  <code className="block truncate text-[11px] text-muted-foreground">
-                    {root.path}
-                  </code>
-                </div>
-                <Select
-                  value={root.defaultThreadEnvMode ?? "inherit"}
-                  onValueChange={(value) => {
-                    if (value === "local" || value === "worktree") {
-                      setWorkspaceRootMode(root.path, value);
-                    } else if (value === "inherit") {
-                      setWorkspaceRootMode(root.path, null);
-                    }
-                  }}
-                >
-                  <SelectTrigger
-                    className="h-7 w-28 text-[11px]"
-                    aria-label={gt("Workspace for {path}", { path: root.path })}
-                  >
-                    <SelectValue>
-                      {root.defaultThreadEnvMode
-                        ? resolveEnvModeLabel(root.defaultThreadEnvMode)
-                        : gt("Default")}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectPopup align="end" alignItemWithTrigger={false}>
-                    <SelectItem value="inherit">
-                      <T>Default</T>
-                    </SelectItem>
-                    <SelectItem value="local">
-                      <T>Current checkout</T>
-                    </SelectItem>
-                    <SelectItem value="worktree">
-                      <T>Worktree</T>
-                    </SelectItem>
-                  </SelectPopup>
-                </Select>
-                {pathIsPrimary(root.path, filePickerProject.workspaceRoot) ? (
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
-                    <T>Primary</T>
-                  </span>
-                ) : (
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    aria-label={gt("Remove {path}", { path: root.path })}
-                    onClick={() => removeWorkspaceRoot(root.path)}
-                  >
-                    <Trash2Icon />
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        </SettingsSection>
         <ProjectMemorySettings
           environmentId={filePickerProject.environmentId}
           projectId={filePickerProject.id}

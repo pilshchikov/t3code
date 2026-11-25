@@ -1,5 +1,42 @@
 # Fork Changes
 
+## Folder settings on top of upstream tracked folders, 2026-11-25
+
+- Upstream's `trackedFolders` is now the only list of a project's folders. The fork's
+  `workspaceRoots` and `ProjectWorkspace` are gone from contracts, events, projections and
+  clients. What the fork keeps per folder is color and agent guidance, stored beside upstream's
+  list as `folderSettings` (`{ path, color?, agentGuidance? }`, `packages/contracts/src/project.ts`).
+  An entry names the project folder or a tracked folder. The column stays `workspace_roots_json`.
+- Migration fork 128 (`fork_128_WorkspaceRootsToTrackedFolders.ts`) moves each extra root outside
+  the project folder into `tracked_folders_json` (label becomes `name`, otherwise the basename,
+  up to the tracked-folder limit) and rewrites `workspace_roots_json` to the color and guidance
+  entries. Per-folder `defaultThreadEnvMode` and `label` are dropped.
+- `ProjectCommands.ts` rejects settings for a path that is neither the project folder nor tracked,
+  moves the project folder's entry when the folder moves, and prunes entries of folders that are
+  no longer tracked. `ProjectService.ts` resolves the paths.
+- The per-folder checkout picker stays (`workspaceSelections`, `thread_workspace_*` tools, the
+  composer and Files selectors), but only for tracked folders outside the thread's task folder.
+  A repository inside the task folder follows the thread: `Orchestrator.ts` and
+  `ThreadWorkspaces.ts` reject selecting it, and `packages/shared/src/threadWorkspaces.ts` marks
+  it `followsTaskFolder`. Selection also requires a tracked folder.
+- Agent context: `<project-workspaces>` no longer lists every folder (upstream's
+  `<workspace_folders>` does). It keeps per-folder guidance and the checkouts a thread selected.
+- Upstream file patch: `WorkspaceFolders.forThread` takes optional `checkouts`. When given, folders
+  the task folder leaves out resolve to the selected checkout, so sandboxes reach them.
+  `RuntimePolicy.ts` passes the thread's selections. Without `checkouts` the result is upstream's.
+- Web: the Settings "Directories" section is gone. Repositories rows (and the project folder row)
+  get color and agent guidance buttons (`ProjectRepositoriesSettings.tsx`,
+  `FolderSettingsControls.tsx`). The composer strip lists the primary and non-discovered tracked
+  folders, without the add-directory button or per-folder workspace mode, and hides extra rows when
+  a new worktree thread picks repositories in the task folder control. Diff's directory picker is
+  gone. Files, Git history, chat links and native mobile Files read tracked folders.
+- Peers still send `workspaceRoots` in environment snapshots, built from the project folder and
+  tracked folders (`peerEnvironmentSnapshot.ts`). Project shells from older fork peers that carry
+  only `workspaceRoots` do not show their extra folders.
+- Validation: migration 128 test, and migrations run on a copy of the live database (`meko` kept its
+  three folders: `qa-services` and `meko-devops` became tracked, guidance stayed on `meko` and
+  `qa-services`). Server, shared, web and mobile typecheck, focused tests.
+
 ## Upstream integration, 2026-11-25 (60eed627d0)
 
 - Merged 550 upstream commits. Recovery branch: `backup/pre-upstream-20261125`.
@@ -3706,13 +3743,7 @@ fork-specific behavior so future upstream syncs are easier to review.
 
 ## Multi-directory composer chips, September 9
 
-- Multi-directory projects use one horizontally scrollable row of colored directory chips in
-  `apps/web/src/components/BranchToolbar.tsx`, in both expanded and collapsed composer layouts.
-  Each chip opens its directory's path, color, workspace mode, branch, and agent guidance controls.
-  Directory ordering and primary-directory permissions remain unchanged. Single-directory layout
-  is unchanged. This applies to web, desktop, and mobile web, not the native mobile client.
-- Validation: 76 toolbar logic tests and the web typecheck pass. Targeted lint reports existing
-  toolbar warnings. Browser verification awaits permission. No reinstall performed for this change.
+- Superseded by "Folder settings on top of upstream tracked folders, 2026-11-25".
 
 ## Project memory and multiwork selectors, September 8
 
@@ -3856,32 +3887,8 @@ fork-specific behavior so future upstream syncs are easier to review.
 
 ## Multi-directory Projects
 
-- A project can retain several filesystem roots, including a root that is also used by another
-  project. The lightweight shell snapshot preserves the complete root list so live chat surfaces do
-  not fall back to the primary directory after an update.
-- Composer workspace and branch controls render one aligned stacked row per root. Root badges use a
-  stable project palette; clicking a badge opens the predefined color picker and persists the
-  selection in project metadata.
-- Files renders every root across the full available height, titles sections with their directory
-  names, and supports collapsing roots and dragging the horizontal dividers to rebalance their
-  heights. Each tree toolbar also has a one-click collapse-all-directories control beside Refresh.
-  Ignored entries remain visible with muted styling, and open file tabs are keyed by both root and
-  relative path.
-- Diffs exposes a directory selector for working-tree and branch comparisons and a collapsible
-  directory-tree navigator for changed files instead of relying on a flat sequence of file headers.
-  The tree/detail divider is draggable and persisted; selecting a tree file renders that file alone
-  in the adjacent diff viewer.
-- Each directory's branch row has an Agent guidance button. Its note is persisted with that
-  directory, appears only in the configuration dialog, and is injected as private context on every
-  agent turn. This supports different branch policies across directories (for example, commit
-  directly to `main` in a private repo versus creating a task branch for larger work).
-- Source: `packages/contracts/src/orchestration.ts`,
-  `apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts`,
-  `apps/web/src/components/BranchToolbar.tsx`, `apps/web/src/components/DiffPanel.tsx`,
-  `apps/web/src/components/files/FileBrowserPanel.tsx`,
-  `apps/web/src/components/files/FilePreviewPanel.tsx`, `apps/web/src/rightPanelStore.ts`.
-- Validation: focused projection snapshot, right-panel, diff-file action, and file-preview tests;
-  web typecheck.
+- Superseded by "Folder settings on top of upstream tracked folders, 2026-11-25". Files keeps one
+  resizable, collapsible section per folder, and open tabs are keyed by folder and path.
 
 ## Git History Surface
 

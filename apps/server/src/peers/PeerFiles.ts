@@ -343,7 +343,7 @@ const make = Effect.gen(function* () {
     return [
       ...snapshot.projects.flatMap((project) =>
         project.deletedAt === null
-          ? [project.workspaceRoot, ...(project.workspaceRoots ?? []).map((root) => root.path)]
+          ? [project.workspaceRoot, ...(project.trackedFolders ?? []).map((folder) => folder.path)]
           : [],
       ),
       ...shells.threads.flatMap((thread) =>

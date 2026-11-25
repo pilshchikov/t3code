@@ -5,7 +5,7 @@ import { RepositoryIdentity, ThreadEnvMode } from "./environment.ts";
 import { ModelSelection } from "./modelSelection.ts";
 import {
   ProjectGroupKey,
-  ProjectWorkspace,
+  ProjectFolderSettings,
   ProjectScript,
   ProjectTrackedFolders,
   ReceivedProjectIcon,
@@ -18,7 +18,6 @@ export const OrchestrationProjectShell = Schema.Struct({
   // repository name, so grouped labels need this to tell a chosen name apart.
   hasCustomTitle: Schema.optional(Schema.Boolean),
   workspaceRoot: TrimmedNonEmptyString,
-  workspaceRoots: Schema.optional(Schema.Array(ProjectWorkspace)),
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   defaultThreadEnvMode: Schema.optional(Schema.NullOr(ThreadEnvMode)),
@@ -29,6 +28,7 @@ export const OrchestrationProjectShell = Schema.Struct({
   scripts: Schema.Array(ProjectScript),
   // Absent from older servers; that means a single-folder project.
   trackedFolders: Schema.optional(ProjectTrackedFolders),
+  folderSettings: Schema.optional(Schema.Array(ProjectFolderSettings)),
   // Pinned projects lead project pickers; archived ones leave them. Optional so older servers decode.
   pinnedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   archivedAt: Schema.optional(Schema.NullOr(IsoDateTime)),

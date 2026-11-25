@@ -19,6 +19,7 @@ import type { Tool } from "effect/ai";
 import { GitWorkflowService } from "../../git/GitWorkflowService.ts";
 import { ThreadManagementService } from "../../orchestration-v2/ThreadManagementService.ts";
 import { ProjectService } from "../../project/ProjectService.ts";
+import * as TaskFolderStore from "../../workspace/TaskFolderStore.ts";
 import * as ThreadWorkspaces from "../../workspace/ThreadWorkspaces.ts";
 import * as DateTime from "effect/DateTime";
 import { ServerSettingsService } from "../../serverSettings.ts";
@@ -87,6 +88,7 @@ const projectId = ProjectId.make("workspace-project");
 const providerInstanceId = ProviderInstanceId.make("claude");
 const makeHarness = Effect.fn("makeWorkspaceHarness")(function* (
   overrides: Partial<OrchestrationV2ThreadShell>,
+  taskFolderRepositories: ReadonlyArray<string> = [],
 ) {
   const commands: Array<OrchestrationV2ServerCommand> = [];
   const creations: Array<unknown> = [];
@@ -133,13 +135,33 @@ const makeHarness = Effect.fn("makeWorkspaceHarness")(function* (
           id: projectId,
           title: "Project",
           workspaceRoot: "/repo",
-          workspaceRoots: [{ path: "/repo" }, { path: "/backend", label: "Backend" }],
+          trackedFolders: [{ path: "/backend", name: "Backend" }],
           defaultModelSelection: null,
           scripts: [],
           createdAt: now,
           updatedAt: now,
           deletedAt: null,
         }),
+    }),
+    Layer.mock(TaskFolderStore.TaskFolderStore)({
+      findContaining: () =>
+        Effect.succeed(
+          taskFolderRepositories.length === 0
+            ? null
+            : {
+                root: "/tasks/one",
+                projectId,
+                projectRoot: "/repo",
+                anchor: "/",
+                projectPath: "/tasks/one/repo",
+                projectIsWorktree: true,
+                repositories: taskFolderRepositories.map((repositoryPath) => ({
+                  repositoryPath,
+                  worktreePath: `/tasks/one${repositoryPath}`,
+                  name: "Backend",
+                })),
+              },
+        ),
     }),
     Layer.mock(ThreadManagementService)({
       getThreadShell: (id) => Effect.sync(() => (id === threadId ? thread : null)),
@@ -315,6 +337,19 @@ describe("thread workspace MCP", () => {
       expect((yield* h.call("thread_workspace_inspect", { workspaceRoot: "/backend" })).cwd).toBe(
         "/backend/task",
       );
+    }).pipe(Effect.scoped),
+  );
+  it.effect("keeps a repository in the thread's task folder with the thread", () =>
+    Effect.gen(function* () {
+      const h = yield* makeHarness({ worktreePath: "/tasks/one/repo" }, ["/backend"]);
+      const inspect = yield* h.call("thread_workspace_inspect", { workspaceRoot: "/backend" });
+      expect(inspect.cwd).toBe("/tasks/one/backend");
+      expect(inspect.workspaces.find((root) => !root.primary)?.name).toBe("Backend");
+      const error = yield* h
+        .call("thread_workspace_select", { workspaceRoot: "/backend", branch: "task" })
+        .pipe(Effect.flip);
+      expect(error.message).toContain("task folder");
+      expect(h.commands).toEqual([]);
     }).pipe(Effect.scoped),
   );
   it.effect("rejects ambiguous selection without changes", () =>

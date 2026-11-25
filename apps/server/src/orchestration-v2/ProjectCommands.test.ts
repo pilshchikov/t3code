@@ -61,6 +61,51 @@ const failureOf = (result: ReturnType<typeof plan>) => {
 };
 
 describe("planProjectCommand", () => {
+  it("drops folder settings with the folder they name and rejects unknown paths", () => {
+    const project = row({
+      trackedFolders: [
+        { path: "/tmp/api", name: "api" },
+        { path: "/tmp/tools", name: "tools" },
+      ],
+      folderSettings: [
+        { path: "/tmp/scripts", color: "blue" },
+        { path: "/tmp/api", agentGuidance: "Run api checks" },
+      ],
+    });
+    const untracked = plan(
+      {
+        type: "project.meta.update",
+        commandId: CommandId.make("cmd-untrack"),
+        projectId,
+        trackedFolders: [{ path: "/tmp/tools", name: "tools" }],
+      },
+      { project },
+    );
+    assert.deepEqual(payloadOf(untracked).folderSettings, [
+      { path: "/tmp/scripts", color: "blue" },
+    ]);
+    const renamed = plan(
+      {
+        type: "project.meta.update",
+        commandId: CommandId.make("cmd-rename"),
+        projectId,
+        title: "Renamed",
+      },
+      { project },
+    );
+    assert.notProperty(payloadOf(renamed), "folderSettings");
+    const unknown = plan(
+      {
+        type: "project.meta.update",
+        commandId: CommandId.make("cmd-unknown-settings"),
+        projectId,
+        folderSettings: [{ path: "/tmp/elsewhere", color: "red" }],
+      },
+      { project },
+    );
+    assert.equal(failureOf(unknown)._tag, "ProjectCommandInvariantError");
+  });
+
   it("keeps legacy scripts editable and removable while rejecting new invalid ones", () => {
     const legacy = script("install-javascript-dependencies");
     const withLegacy = (scripts: ReadonlyArray<ProjectScript>) =>

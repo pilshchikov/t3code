@@ -48,7 +48,7 @@ export const ThreadWorkspaceInspectResult = Schema.Struct({
     Schema.Struct({
       workspaceRoot: Schema.String,
       cwd: Schema.String,
-      label: Schema.optional(Schema.String),
+      name: Schema.optional(Schema.String),
       primary: Schema.Boolean,
       branch: Schema.NullOr(Schema.String),
     }),

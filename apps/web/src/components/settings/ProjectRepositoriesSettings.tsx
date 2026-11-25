@@ -13,6 +13,7 @@ import {
   PROJECT_TRACKED_FOLDERS_MAX,
   type EnvironmentId,
   type ProjectTrackedFolder,
+  type ProjectWorkspaceColor,
   type WorkspaceFolderState,
 } from "@t3tools/contracts";
 import { FolderIcon, PlusIcon } from "lucide-react";
@@ -28,6 +29,16 @@ import { useEnvironmentQuery } from "../../state/query";
 import { useEnvironmentScope } from "../../state/session";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 import { getEnvironmentBrowsePlatform } from "../CommandPalette.logic";
+import {
+  AgentGuidanceButton,
+  AgentGuidanceDialog,
+  FolderColorButton,
+} from "../FolderSettingsControls";
+import {
+  resolveWorkspaceColor,
+  withFolderSetting,
+  workspaceDirectoryName,
+} from "../../lib/projectWorkspacePresentation";
 import { resolveTrackedFolderInput, trackedFolderDisplayPath } from "./trackedFolders.logic";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -133,6 +144,46 @@ function CheckoutRepositories({ member }: { member: SidebarProjectGroupMember })
     return true;
   };
 
+  const [guidancePath, setGuidancePath] = useState<string | null>(null);
+  const settingsFor = (path: string) => member.folderSettings?.find((entry) => entry.path === path);
+  const saveSetting = async (
+    path: string,
+    change: { readonly color?: ProjectWorkspaceColor; readonly agentGuidance?: string },
+  ) => {
+    const failureTitle = gt("Failed to update folder settings");
+    if (checkProjectAccess([member], failureTitle)) return;
+    setIsSaving(true);
+    const result = await updateProject({
+      environmentId,
+      input: {
+        projectId: member.id,
+        folderSettings: withFolderSetting(member.folderSettings, path, change),
+      },
+    });
+    setIsSaving(false);
+    if (result._tag === "Failure") reportProjectFailure(failureTitle, result);
+  };
+  const folderControls = (path: string, name: string, index: number) => {
+    const entry = settingsFor(path);
+    return (
+      <span className="flex shrink-0 items-center gap-0.5">
+        <FolderColorButton
+          color={resolveWorkspaceColor(entry ?? {}, index)}
+          folderName={name}
+          disabled={disabled}
+          onChange={(color) => void saveSetting(path, { color })}
+        />
+        <AgentGuidanceButton
+          folderName={name}
+          hasGuidance={Boolean(entry?.agentGuidance)}
+          disabled={disabled}
+          onClick={() => setGuidancePath(path)}
+        />
+      </span>
+    );
+  };
+  const projectFolderName = workspaceDirectoryName(member.workspaceRoot);
+
   const addFolder = async (folder: ProjectTrackedFolder) => {
     if (await save({ track: folder }, gt("Failed to add folder"))) setIsAddingFolder(false);
   };
@@ -143,15 +194,18 @@ function CheckoutRepositories({ member }: { member: SidebarProjectGroupMember })
         title={member.environmentLabel ?? gt("Environment")}
         description={member.workspaceRoot}
         control={
-          <Button
-            size="xs"
-            variant="outline"
-            disabled={disabled || folders.length >= PROJECT_TRACKED_FOLDERS_MAX}
-            onClick={() => setIsAddingFolder(true)}
-          >
-            <PlusIcon className="size-3.5" />
-            <T>Add folder</T>
-          </Button>
+          <span className="flex items-center gap-1">
+            {folderControls(member.workspaceRoot, projectFolderName, 0)}
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={disabled || folders.length >= PROJECT_TRACKED_FOLDERS_MAX}
+              onClick={() => setIsAddingFolder(true)}
+            >
+              <PlusIcon className="size-3.5" />
+              <T>Add folder</T>
+            </Button>
+          </span>
         }
       />
       {folders.length === 0 ? (
@@ -162,7 +216,7 @@ function CheckoutRepositories({ member }: { member: SidebarProjectGroupMember })
           </T>
         </p>
       ) : (
-        folders.map((folder) => (
+        folders.map((folder, folderIndex) => (
           <SettingsRow
             key={folder.path}
             className="py-2"
@@ -182,18 +236,23 @@ function CheckoutRepositories({ member }: { member: SidebarProjectGroupMember })
               </code>
             }
             control={
-              // A repository inside the project folder is there for as long as it is on disk.
-              folder.discovered === true ? null : (
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  disabled={disabled}
-                  aria-label={gt("Remove {name} from the project", { name: folder.name })}
-                  onClick={() => void save({ untrack: folder.path }, gt("Failed to remove folder"))}
-                >
-                  <T>Remove</T>
-                </Button>
-              )
+              <span className="flex items-center gap-1">
+                {folderControls(folder.path, folder.name, folderIndex + 1)}
+                {/* A repository inside the project folder is there for as long as it is on disk. */}
+                {folder.discovered === true ? null : (
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    disabled={disabled}
+                    aria-label={gt("Remove {name} from the project", { name: folder.name })}
+                    onClick={() =>
+                      void save({ untrack: folder.path }, gt("Failed to remove folder"))
+                    }
+                  >
+                    <T>Remove</T>
+                  </Button>
+                )}
+              </span>
             }
           />
         ))
@@ -232,6 +291,18 @@ function CheckoutRepositories({ member }: { member: SidebarProjectGroupMember })
         <p role="alert" className="px-3 py-2 text-xs text-warning-foreground sm:px-4">
           {listQuery.error}
         </p>
+      ) : null}
+      {guidancePath !== null ? (
+        <AgentGuidanceDialog
+          key={guidancePath}
+          path={guidancePath}
+          guidance={settingsFor(guidancePath)?.agentGuidance ?? ""}
+          onClose={() => setGuidancePath(null)}
+          onSave={(agentGuidance) => {
+            void saveSetting(guidancePath, { agentGuidance });
+            setGuidancePath(null);
+          }}
+        />
       ) : null}
       {isAddingFolder ? (
         <AddTrackedFolderDialog

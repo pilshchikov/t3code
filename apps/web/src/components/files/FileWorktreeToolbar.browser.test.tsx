@@ -33,9 +33,10 @@ const threadRef = { environmentId, threadId: ThreadId.make("multi-repo") };
 const root = (name: string) => ({
   path: `/${name}`,
   workspaceRoot: `/${name}`,
-  label: name,
+  name,
   branch: "main",
   primary: name === "frontend",
+  followsTaskFolder: false,
 });
 async function openMenu(name: string) {
   await userEvent.click(

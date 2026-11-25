@@ -22,8 +22,8 @@ export type PeerEnvironmentReadInput = typeof PeerEnvironmentReadInput.Type;
 export const PeerWorkspace = Schema.Struct({
   path: Schema.String,
   label: Schema.optional(Schema.String),
-  defaultThreadEnvMode: Schema.optional(Schema.NullOr(ThreadEnvMode)),
 });
+export type PeerWorkspace = typeof PeerWorkspace.Type;
 export const PeerEnvironmentSnapshot = Schema.Struct({
   environment: ExecutionEnvironmentDescriptor,
   observedAt: IsoDateTime,

@@ -1,4 +1,4 @@
-import type { ProjectWorkspace, VcsRef } from "@t3tools/contracts";
+import type { VcsRef } from "@t3tools/contracts";
 
 export interface FileWorktreeOption {
   readonly path: string;
@@ -51,22 +51,4 @@ export function resolveFileWorktreeOptions(
       Number(right.current) - Number(left.current) ||
       (left.refName ?? left.path).localeCompare(right.refName ?? right.path),
   );
-}
-
-/**
- * The first project directory follows the thread's active checkout. Secondary
- * directories keep their configured roots because they may be unrelated repos.
- */
-export function resolveFilePreviewRoots(
-  activePrimaryRoot: string,
-  configuredRoots: ReadonlyArray<ProjectWorkspace> | undefined,
-): ReadonlyArray<ProjectWorkspace> {
-  if (!configuredRoots?.length) {
-    return [{ path: activePrimaryRoot, label: "Primary directory" }];
-  }
-
-  return [
-    { ...configuredRoots[0], path: activePrimaryRoot },
-    ...configuredRoots.slice(1).filter((root) => root.path !== activePrimaryRoot),
-  ];
 }

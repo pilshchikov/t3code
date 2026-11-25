@@ -47,7 +47,9 @@ const layerTest = Peers.layer.pipe(
                 : [
                     {
                       workspaceRoot: projectFolders[0],
-                      workspaceRoots: projectFolders.map((path) => ({ path })),
+                      trackedFolders: projectFolders
+                        .slice(1)
+                        .map((path) => ({ path, name: "folder" })),
                       deletedAt: null,
                     },
                   ],

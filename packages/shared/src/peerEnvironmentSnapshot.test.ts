@@ -50,10 +50,8 @@ const project: OrchestrationProjectShell = {
   id: ProjectId.make("api"),
   title: "API",
   workspaceRoot: "/lab/api",
-  workspaceRoots: [
-    { path: "/lab/api" },
-    { path: "/lab/shared", label: "Shared", agentGuidance: "private guidance" },
-  ],
+  trackedFolders: [{ path: "/lab/shared", name: "Shared" }],
+  folderSettings: [{ path: "/lab/shared", agentGuidance: "private guidance" }],
   defaultModelSelection: { instanceId, model: "beta" },
   scripts: [],
   createdAt: now,

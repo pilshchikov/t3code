@@ -78,20 +78,14 @@ export const ProjectWorkspaceColor = Schema.Literals([
 ]);
 export type ProjectWorkspaceColor = typeof ProjectWorkspaceColor.Type;
 
-/**
- * A directory participating in a project. `workspaceRoot` remains the
- * primary directory for backwards compatibility with existing threads and
- * integrations; this list describes the complete project workspace.
- */
-export const ProjectWorkspace = Schema.Struct({
+/** Per-folder presentation and agent guidance for the project folder or one of its tracked folders. */
+export const ProjectFolderSettings = Schema.Struct({
   path: TrimmedNonEmptyString,
-  label: Schema.optional(TrimmedNonEmptyString),
   color: Schema.optional(ProjectWorkspaceColor),
-  /** Private, persistent operating guidance injected into agent turns for this directory. */
+  /** Private, persistent operating guidance injected into agent turns for this folder. */
   agentGuidance: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(8_000))),
-  defaultThreadEnvMode: Schema.optional(Schema.NullOr(ThreadEnvMode)),
 });
-export type ProjectWorkspace = typeof ProjectWorkspace.Type;
+export type ProjectFolderSettings = typeof ProjectFolderSettings.Type;
 
 export const ProjectScriptWorkingDirectory = TrimmedNonEmptyString.check(
   Schema.isMaxLength(4_096),
@@ -255,7 +249,6 @@ export const Project = Schema.Struct({
   id: ProjectId,
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
-  workspaceRoots: Schema.optional(Schema.Array(ProjectWorkspace)),
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
   faviconPath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   projectIcon: Schema.optional(Schema.NullOr(ReceivedProjectIcon)),
@@ -266,6 +259,7 @@ export const Project = Schema.Struct({
   scripts: Schema.Array(ProjectScript),
   // Absent from older servers; that means a single-folder project.
   trackedFolders: Schema.optional(ProjectTrackedFolders),
+  folderSettings: Schema.optional(Schema.Array(ProjectFolderSettings)),
   pinnedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   archivedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   groupKey: Schema.optional(Schema.NullOr(ProjectGroupKey)),
@@ -284,11 +278,11 @@ export type ProjectSnapshot = typeof ProjectSnapshot.Type;
 export const ProjectCreatePayload = Schema.Struct({
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
-  workspaceRoots: Schema.optional(Schema.Array(ProjectWorkspace)),
   createWorkspaceRootIfMissing: Schema.optional(Schema.Boolean),
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
   scripts: Schema.optional(Schema.Array(ProjectScript)),
   trackedFolders: Schema.optional(ProjectAddedFolders),
+  folderSettings: Schema.optional(Schema.Array(ProjectFolderSettings)),
   groupKey: Schema.optional(ProjectGroupKey),
 });
 export type ProjectCreatePayload = typeof ProjectCreatePayload.Type;
@@ -296,7 +290,6 @@ export type ProjectCreatePayload = typeof ProjectCreatePayload.Type;
 export const ProjectUpdatePayload = Schema.Struct({
   title: Schema.optional(TrimmedNonEmptyString),
   workspaceRoot: Schema.optional(TrimmedNonEmptyString),
-  workspaceRoots: Schema.optional(Schema.Array(ProjectWorkspace)),
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
   autoPull: Schema.optional(Schema.Boolean),
   projectIcon: Schema.optional(Schema.NullOr(ProjectIconOverride)),
@@ -306,6 +299,12 @@ export const ProjectUpdatePayload = Schema.Struct({
   trackedFolders: Schema.optional(
     ProjectAddedFolders.annotate({
       description: "Extra folders by absolute path. Replaces the whole list.",
+    }),
+  ),
+  folderSettings: Schema.optional(
+    Schema.Array(ProjectFolderSettings).annotate({
+      description:
+        "Color and agent guidance by folder path: the project folder or a tracked folder. Replaces the whole list.",
     }),
   ),
   pinned: Schema.optional(Schema.Boolean),

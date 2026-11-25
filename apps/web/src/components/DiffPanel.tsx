@@ -23,7 +23,6 @@ import {
   CheckIcon,
   ChevronDownIcon,
   Columns2Icon,
-  FolderGit2Icon,
   FlaskConicalOffIcon,
   FolderTreeIcon,
   PilcrowIcon,
@@ -49,7 +48,6 @@ import { useFileContextMenuHandler } from "../fileContextMenu";
 import { type DraftId } from "../composerDraftStore";
 import { openDiffFilePrimaryAction } from "../diffFileActions";
 import { useCheckpointDiff, useTurnItemDetail } from "~/state/queries";
-import { workspaceDisplayName } from "~/lib/projectWorkspacePresentation";
 import type { DiffTreeFile } from "~/lib/turnDiffTree";
 import { cn } from "~/lib/utils";
 import {
@@ -277,24 +275,7 @@ export default function DiffPanel({
         }
       : null,
   );
-  const primaryCwd = activeThread?.worktreePath ?? activeProject?.workspaceRoot;
-  const diffRoots = useMemo(() => {
-    if (!primaryCwd) return [];
-    const configuredRoots = activeProject?.workspaceRoots?.length
-      ? activeProject.workspaceRoots
-      : [{ path: activeProject?.workspaceRoot ?? primaryCwd, label: gt("Primary directory") }];
-    return [
-      { ...configuredRoots[0], path: primaryCwd },
-      ...configuredRoots.slice(1).filter((root) => root.path !== primaryCwd),
-    ];
-  }, [activeProject?.workspaceRoot, activeProject?.workspaceRoots, gt, primaryCwd]);
-  const [selectedWorkspaceRoot, setSelectedWorkspaceRoot] = useState<string | null>(null);
-  const selectedGitCwd =
-    selectedWorkspaceRoot && diffRoots.some((root) => root.path === selectedWorkspaceRoot)
-      ? selectedWorkspaceRoot
-      : primaryCwd;
-  const selectedDiffRootIndex = diffRoots.findIndex((root) => root.path === selectedGitCwd);
-  const selectedDiffRoot = diffRoots[selectedDiffRootIndex];
+  const activeCwd = activeThread?.worktreePath ?? activeProject?.workspaceRoot;
   const requestedDiffSelection = useDiffPanelStore((state) =>
     selectThreadDiffPanelSelection(state.byThreadKey, routeThreadRef),
   );
@@ -310,9 +291,6 @@ export default function DiffPanel({
       : null,
   );
   const toolCallItem = toolCallDetail.data?.item;
-  const selectedTurnId =
-    requestedDiffSelection.kind === "turn" ? requestedDiffSelection.turnId : null;
-  const activeCwd = selectedTurnId === null ? selectedGitCwd : primaryCwd;
   const toolCallPreview =
     toolCallSelection && toolCallItem?.type === "file_change"
       ? toolCallDiff(toolCallItem, activeCwd, messages)
@@ -1382,41 +1360,6 @@ export default function DiffPanel({
   const headerRow = (
     <>
       <div className="flex min-w-0 flex-1 items-center gap-3 [-webkit-app-region:no-drag]">
-        {isGitSelection && diffRoots.length > 1 ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className="inline-flex h-6 min-w-0 max-w-44 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              aria-label={gt("Diff directory: {directory}", {
-                directory: activeCwd ?? gt("unknown"),
-              })}
-              title={activeCwd}
-            >
-              <FolderGit2Icon className="size-3.5 shrink-0" />
-              <span className="truncate">
-                {selectedDiffRoot
-                  ? workspaceDisplayName(selectedDiffRoot, selectedDiffRootIndex)
-                  : gt("Directory")}
-              </span>
-              <ChevronDownIcon className="size-3.5 shrink-0 opacity-70" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-80 max-w-[calc(100vw-1rem)]">
-              {diffRoots.map((root, index) => (
-                <DropdownMenuItem
-                  key={root.path}
-                  className={root.path === activeCwd ? "bg-foreground/[0.08]" : undefined}
-                  onClick={() => setSelectedWorkspaceRoot(index === 0 ? null : root.path)}
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-xs font-medium">
-                      {workspaceDisplayName(root, index)}
-                    </div>
-                    <div className="truncate text-[10px] text-muted-foreground">{root.path}</div>
-                  </div>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
         <DropdownMenu>
           <DropdownMenuTrigger
             render={<Button size="xs" variant="secondary" />}

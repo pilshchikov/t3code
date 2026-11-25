@@ -24,7 +24,7 @@ import * as ThreadWorkspaces from "../../workspace/ThreadWorkspaces.ts";
 const dependencies = [McpInvocationContext, ThreadManagementService.ThreadManagementService];
 const inspect = Tool.make("thread_workspace_inspect", {
   description:
-    "Inspect this thread's selected checkout, all project directories and their chosen checkouts, local changes, branches/worktrees. Set workspaceRoot to a configured repository root; omit it for the primary. Follow refs.nextCursor to list more refs. Does not change anything.",
+    "Inspect this thread's selected checkout, all project directories and their chosen checkouts, local changes, branches/worktrees. Set workspaceRoot to a tracked folder path; omit it for the primary. Follow refs.nextCursor to list more refs. Does not change anything.",
   parameters: ThreadWorkspaceInspectInput.mapFields(Struct.omit(["threadId"])),
   success: ThreadWorkspaceInspectResult,
   failure: Schema.Union([ThreadWorkspaceError, OrchestratorMcpFailure]),
